@@ -1,128 +1,68 @@
 import { createClient } from '@supabase/supabase-js'
 
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────
 // Supabase client
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || ''
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-// ──────────────────────────────────────────────
-// Si ya hay sesión activa → redirigir al dashboard
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────
+// Session guard — redirect if already logged in
+// ─────────────────────────────────────────
 ;(async () => {
   const { data: { session } } = await supabase.auth.getSession()
-  if (session) {
-    window.location.href = '/app.html'
-  }
+  if (session) window.location.href = '/app.html'
 })()
 
-// ──────────────────────────────────────────────
-// Demo animado en el hero
-// ──────────────────────────────────────────────
-const demoLines = [
-  { text: '#tarea Revisar el PRD de Nexus',    result: '→ Nodo [kanban] creado' },
-  { text: '-$500 Renta oficina',               result: '→ Nodo [expense] $500 registrado' },
-  { text: '+$1500 Proyecto freelance',          result: '→ Nodo [income] $1500 registrado' },
-  { text: 'Idea: integrar API de OpenAI',       result: '→ Nodo [note] guardado' },
-]
-
-let demoIndex = 0
-let charIndex  = 0
-const demoTextEl   = document.getElementById('demo-text')
-const demoResultEl = document.getElementById('demo-result')
-
-function typeLine() {
-  const line = demoLines[demoIndex]
-  if (charIndex < line.text.length) {
-    demoTextEl.textContent += line.text[charIndex]
-    charIndex++
-    setTimeout(typeLine, 55)
-  } else {
-    demoResultEl.textContent = line.result
-    demoResultEl.classList.remove('hidden')
-    setTimeout(() => {
-      demoTextEl.textContent   = ''
-      demoResultEl.classList.add('hidden')
-      charIndex  = 0
-      demoIndex  = (demoIndex + 1) % demoLines.length
-      setTimeout(typeLine, 600)
-    }, 1800)
-  }
-}
-setTimeout(typeLine, 800)
-
-// ──────────────────────────────────────────────
-// Modal — abrir / cerrar
-// ──────────────────────────────────────────────
-const modal         = document.getElementById('auth-modal')
-const btnShowLogin  = document.getElementById('btn-show-login')
-const btnHeroReg    = document.getElementById('btn-hero-register')
-const btnPricingFree= document.getElementById('btn-pricing-free')
-const btnClose      = document.getElementById('btn-close-modal')
-
-function openModal(tab = 'login') {
-  modal.classList.remove('hidden')
-  switchTab(tab)
-}
-function closeModal() {
-  modal.classList.add('hidden')
-  clearMessage()
-}
-
-btnShowLogin?.addEventListener('click', () => openModal('login'))
-btnHeroReg?.addEventListener('click',   () => openModal('register'))
-btnPricingFree?.addEventListener('click',() => openModal('register'))
-btnClose?.addEventListener('click', closeModal)
-modal?.addEventListener('click', (e) => { if (e.target === modal) closeModal() })
-
-// ──────────────────────────────────────────────
-// Tabs Login / Register
-// ──────────────────────────────────────────────
-const tabLogin    = document.getElementById('tab-login')
-const tabRegister = document.getElementById('tab-register')
-const formLogin   = document.getElementById('form-login')
-const formReg     = document.getElementById('form-register')
-
-function switchTab(tab) {
-  const isLogin = tab === 'login'
-  tabLogin.classList.toggle('text-cyan-neon',   isLogin)
-  tabLogin.classList.toggle('border-b-2',       isLogin)
-  tabLogin.classList.toggle('border-cyan-neon', isLogin)
-  tabLogin.classList.toggle('text-cyan-muted',  !isLogin)
-
-  tabRegister.classList.toggle('text-cyan-neon',   !isLogin)
-  tabRegister.classList.toggle('border-b-2',       !isLogin)
-  tabRegister.classList.toggle('border-cyan-neon', !isLogin)
-  tabRegister.classList.toggle('text-cyan-muted',  isLogin)
-
-  formLogin.classList.toggle('hidden', !isLogin)
-  formReg.classList.toggle('hidden',    isLogin)
-  clearMessage()
-}
-
-tabLogin?.addEventListener('click',    () => switchTab('login'))
-tabRegister?.addEventListener('click', () => switchTab('register'))
-
-// ──────────────────────────────────────────────
-// Mensajes de estado
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────
+// Auth message helper
+// ─────────────────────────────────────────
 const authMessage = document.getElementById('auth-message')
 
 function showMessage(text, isError = false) {
   authMessage.textContent = text
-  authMessage.className   = `mt-4 text-xs text-center ${isError ? 'text-red-400' : 'text-cyan-neon'}`
-  authMessage.classList.remove('hidden')
+  authMessage.className   = isError ? 'error' : 'success'
+  authMessage.style.display = 'block'
 }
 function clearMessage() {
-  authMessage.classList.add('hidden')
-  authMessage.textContent = ''
+  authMessage.style.display = 'none'
+  authMessage.textContent   = ''
+  authMessage.className     = ''
 }
 
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────
+// Tab switching (used internally)
+// ─────────────────────────────────────────
+const formLogin = document.getElementById('form-login')
+const formReg   = document.getElementById('form-register')
+
+function switchTab(tab) {
+  clearMessage()
+  if (tab === 'login') {
+    document.getElementById('tab-login').classList.add('active')
+    document.getElementById('tab-register').classList.remove('active')
+    formLogin.classList.remove('hidden')
+    formLogin.style.display = ''
+    formReg.classList.add('hidden')
+    formReg.style.display = 'none'
+  } else {
+    document.getElementById('tab-register').classList.add('active')
+    document.getElementById('tab-login').classList.remove('active')
+    formReg.classList.remove('hidden')
+    formReg.style.display = ''
+    formLogin.classList.add('hidden')
+    formLogin.style.display = 'none'
+  }
+}
+
+// Override the inline tab listeners with Supabase-aware ones
+document.getElementById('tab-login')?.addEventListener('click', () => switchTab('login'))
+document.getElementById('tab-register')?.addEventListener('click', () => switchTab('register'))
+
+// ─────────────────────────────────────────
 // LOGIN
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────
 formLogin?.addEventListener('submit', async (e) => {
   e.preventDefault()
   const email    = document.getElementById('login-email').value.trim()
@@ -141,9 +81,9 @@ formLogin?.addEventListener('submit', async (e) => {
   setTimeout(() => { window.location.href = '/app.html' }, 800)
 })
 
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────
 // REGISTRO
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────
 formReg?.addEventListener('submit', async (e) => {
   e.preventDefault()
   const email    = document.getElementById('reg-email').value.trim()
@@ -158,5 +98,5 @@ formReg?.addEventListener('submit', async (e) => {
     return
   }
 
-  showMessage('Cuenta creada. Revisa tu email para confirmar.')
+  showMessage('¡Cuenta creada! Revisa tu email para confirmar.')
 })

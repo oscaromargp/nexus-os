@@ -3,216 +3,1036 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nexus OS — Inteligencia Situacional Absoluta</title>
+  <title>Nexus OS — Everything is a Node</title>
+  <meta name="description" content="Tu sistema operativo personal. Unifica tareas, finanzas y notas desde una sola línea de texto con parser semántico inteligente." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── RESET & BASE ─── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary:    #000000;
+      --bg-secondary:  #09090B;
+      --bg-tertiary:   #18181B;
+      --bg-card:       #0d0d0f;
+
+      --p50:  #e0fffe;
+      --p100: #b3fbff;
+      --p200: #66f7ff;
+      --p300: #1af3ff;
+      --p400: #00f0ff;
+      --p500: #00d4e8;
+      --p600: #00a8b8;
+      --p700: #007d88;
+      --p800: #005360;
+      --p900: #002a30;
+
+      --text-primary:   #FFFFFF;
+      --text-secondary: #E4E4E7;
+      --text-tertiary:  #A1A1AA;
+      --text-quaternary:#71717A;
+
+      --success: #22C55E;
+      --info:    #3B82F6;
+      --warning: #F59E0B;
+
+      --primary-rgb: 0, 240, 255;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      font-family: 'Inter', sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    /* ─── TYPOGRAPHY ─── */
+    h1 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(48px, 7vw, 76px); font-weight: 800; line-height: 1.08; letter-spacing: -0.02em; color: var(--text-primary); }
+    h2 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(32px, 4vw, 48px); font-weight: 700; line-height: 1.2; color: var(--text-primary); }
+    h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 22px; font-weight: 600; line-height: 1.3; color: var(--text-primary); }
+    p  { color: var(--text-tertiary); }
+    a  { text-decoration: none; color: inherit; }
+    code { font-family: 'JetBrains Mono', monospace; }
+
+    /* ─── UTILITIES ─── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .section-pad { padding: 120px 0; }
+
+    .gradient-text {
+      background: linear-gradient(135deg, var(--p400) 0%, #ffffff 50%, var(--p300) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .glow-text {
+      color: var(--p400);
+      text-shadow: 0 0 20px rgba(var(--primary-rgb), 0.7), 0 0 40px rgba(var(--primary-rgb), 0.4);
+    }
+
+    /* ─── GLASS CARD ─── */
+    .glass-card {
+      background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.07) 0%, rgba(var(--primary-rgb), 0.03) 50%, rgba(var(--primary-rgb), 0.07) 100%);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid rgba(var(--primary-rgb), 0.13);
+      border-radius: 24px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.4), 0 2px 4px -2px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .glass-card:hover {
+      border-color: rgba(var(--primary-rgb), 0.3);
+      box-shadow: 0 25px 50px -12px rgba(var(--primary-rgb), 0.2), inset 0 1px 0 rgba(255,255,255,0.06);
+      transform: translateY(-4px);
+    }
+
+    /* ─── BUTTONS ─── */
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: linear-gradient(135deg, var(--p600) 0%, var(--p400) 40%, var(--p300) 70%, var(--p400) 100%);
+      background-size: 200% 200%;
+      animation: gradient-shift 4s ease infinite;
+      color: #000;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 700; font-size: 15px;
+      padding: 14px 28px; border-radius: 12px; border: none; cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(var(--primary-rgb), 0.5), 0 4px 24px rgba(var(--primary-rgb), 0.4), inset 0 1px 0 rgba(255,255,255,0.2);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-primary:hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.1); box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.8), 0 8px 40px rgba(var(--primary-rgb), 0.6); }
+
+    .btn-outline {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 600; font-size: 15px;
+      padding: 14px 28px; border-radius: 12px;
+      border: 1px solid rgba(var(--primary-rgb), 0.25); cursor: pointer;
+      transition: all 0.3s ease;
+    }
+    .btn-outline:hover { border-color: rgba(var(--primary-rgb), 0.7); color: var(--p400); background: rgba(var(--primary-rgb), 0.06); transform: translateY(-2px); }
+
+    /* ─── LABEL CHIP ─── */
+    .label-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid rgba(var(--primary-rgb), 0.3);
+      background: rgba(var(--primary-rgb), 0.06);
+      color: var(--p400);
+      font-size: 12px; font-weight: 500; letter-spacing: 0.08em;
+      padding: 6px 14px; border-radius: 100px;
+    }
+    .label-chip::before { content: ''; width: 6px; height: 6px; background: var(--p400); border-radius: 50%; box-shadow: 0 0 8px rgba(var(--primary-rgb), 0.8); }
+
+    /* ─── PARTICLES BG ─── */
+    #particles-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; opacity: 0.4; }
+
+    /* ─── BG GLOW ─── */
+    .bg-glow-top { position: absolute; top: -200px; left: 50%; transform: translateX(-50%); width: 800px; height: 600px; background: radial-gradient(ellipse at center, rgba(var(--primary-rgb), 0.08) 0%, transparent 70%); pointer-events: none; }
+    .bg-glow-left { position: absolute; top: 30%; left: -200px; width: 500px; height: 500px; background: radial-gradient(ellipse at center, rgba(var(--primary-rgb), 0.05) 0%, transparent 70%); pointer-events: none; }
+
+    /* ─── NAVBAR ─── */
+    #navbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      padding: 20px 0; transition: all 0.3s ease;
+    }
+    #navbar.scrolled {
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(24px);
+      border-bottom: 1px solid rgba(var(--primary-rgb), 0.1);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+      padding: 14px 0;
+    }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 20px; color: var(--text-primary); display: flex; align-items: center; gap: 10px; letter-spacing: -0.01em; }
+    .nav-logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--p600), var(--p400)); border-radius: 9px; display: grid; place-items: center; font-size: 18px; box-shadow: 0 0 20px rgba(var(--primary-rgb), 0.4); }
+    .nav-links { display: flex; align-items: center; gap: 32px; }
+    .nav-link { font-size: 14px; font-weight: 500; color: var(--text-tertiary); position: relative; transition: color 0.2s; padding-bottom: 2px; }
+    .nav-link::after { content: ''; position: absolute; bottom: -2px; left: 0; width: 0; height: 2px; background: var(--p400); transition: width 0.3s ease; border-radius: 2px; }
+    .nav-link:hover { color: var(--text-primary); }
+    .nav-link:hover::after { width: 100%; }
+    @media (max-width: 768px) { .nav-links { display: none; } }
+
+    /* ─── HERO ─── */
+    #hero { position: relative; min-height: 100vh; display: flex; align-items: center; padding: 120px 0 80px; overflow: hidden; }
+    .hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+    @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; text-align: center; } .hero-visual { display: none; } }
+    .hero-label { margin-bottom: 24px; }
+    .hero-title { margin-bottom: 24px; }
+    .hero-title span { display: block; }
+    .hero-subtitle { font-size: 20px; line-height: 1.6; color: var(--text-tertiary); margin-bottom: 40px; max-width: 480px; }
+    .hero-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+    .hero-stats { display: flex; gap: 32px; margin-top: 48px; padding-top: 40px; border-top: 1px solid rgba(var(--primary-rgb), 0.1); }
+    .hero-stat-num { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 28px; font-weight: 800; color: var(--p400); }
+    .hero-stat-label { font-size: 13px; color: var(--text-quaternary); margin-top: 2px; }
+
+    /* ─── HERO VISUAL ─── */
+    .hero-visual { position: relative; display: flex; align-items: center; justify-content: center; }
+    .hex-ring { position: relative; width: 420px; height: 420px; animation: float 6s ease-in-out infinite; }
+    .hex-ring svg { width: 100%; height: 100%; filter: drop-shadow(0 0 30px rgba(var(--primary-rgb), 0.5)) drop-shadow(0 0 60px rgba(var(--primary-rgb), 0.2)); }
+    .hex-nodes { position: absolute; inset: 0; }
+    .hex-node { position: absolute; width: 56px; height: 56px; border-radius: 12px; background: var(--bg-tertiary); border: 1px solid rgba(var(--primary-rgb), 0.2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 18px; animation: float-node 4s ease-in-out infinite; box-shadow: 0 0 20px rgba(var(--primary-rgb), 0.1); }
+    .hex-node span { font-family: 'JetBrains Mono', monospace; font-size: 8px; color: var(--p400); }
+    .hex-node:nth-child(1) { top: 5%;  left: 50%; transform: translateX(-50%); animation-delay: 0s; }
+    .hex-node:nth-child(2) { top: 25%; right: 5%; animation-delay: 0.5s; }
+    .hex-node:nth-child(3) { bottom: 25%; right: 5%; animation-delay: 1s; }
+    .hex-node:nth-child(4) { bottom: 5%; left: 50%; transform: translateX(-50%); animation-delay: 1.5s; }
+    .hex-node:nth-child(5) { bottom: 25%; left: 5%; animation-delay: 2s; }
+    .hex-node:nth-child(6) { top: 25%; left: 5%; animation-delay: 2.5s; }
+    .hex-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 120px; height: 120px; background: linear-gradient(135deg, var(--bg-tertiary), #000); border: 1px solid rgba(var(--primary-rgb), 0.3); border-radius: 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 0 40px rgba(var(--primary-rgb), 0.3), inset 0 0 20px rgba(var(--primary-rgb), 0.05); }
+    .hex-center-icon { font-size: 36px; }
+    .hex-center-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--p400); margin-top: 4px; letter-spacing: 0.1em; }
+
+    /* ─── DEMO TERMINAL ─── */
+    .demo-terminal { margin-top: 40px; }
+    .terminal-header { display: flex; align-items: center; gap: 8px; padding: 12px 20px; background: var(--bg-tertiary); border-radius: 12px 12px 0 0; border: 1px solid rgba(var(--primary-rgb), 0.13); border-bottom: none; }
+    .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .terminal-label { font-size: 12px; color: var(--text-quaternary); margin-left: auto; font-family: 'JetBrains Mono', monospace; }
+    .terminal-body { background: rgba(0,0,0,0.7); border: 1px solid rgba(var(--primary-rgb), 0.13); border-radius: 0 0 12px 12px; padding: 20px; }
+    .terminal-line { display: flex; align-items: center; gap: 10px; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+    .terminal-prompt { color: var(--p400); }
+    #demo-text { color: var(--text-primary); }
+    #demo-cursor { color: var(--p400); animation: blink 1s step-end infinite; }
+    #demo-result { margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 13px; display: none; }
+    .demo-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-left: 8px; }
+    .tag-kanban  { background: rgba(168,85,247,0.2); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); }
+    .tag-income  { background: rgba(34,197,94,0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+    .tag-expense { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+    .tag-note    { background: rgba(var(--primary-rgb),0.15); color: var(--p400); border: 1px solid rgba(var(--primary-rgb),0.3); }
+
+    /* ─── MARQUEE STRIP ─── */
+    .marquee-section { padding: 32px 0; border-top: 1px solid rgba(var(--primary-rgb), 0.08); border-bottom: 1px solid rgba(var(--primary-rgb), 0.08); background: rgba(var(--primary-rgb), 0.02); overflow: hidden; }
+    .marquee-track { display: flex; gap: 48px; animation: marquee 25s linear infinite; white-space: nowrap; }
+    .marquee-item { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; color: var(--text-quaternary); }
+    .marquee-item svg, .marquee-item span.icon { font-size: 20px; opacity: 0.6; }
+
+    /* ─── STATS ─── */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    @media (max-width: 768px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat-card { padding: 32px; text-align: center; border-radius: 20px; background: var(--bg-secondary); border: 1px solid rgba(var(--primary-rgb), 0.1); }
+    .stat-number { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 42px; font-weight: 800; color: var(--p400); line-height: 1; }
+    .stat-suffix { font-size: 24px; }
+    .stat-label { font-size: 14px; color: var(--text-quaternary); margin-top: 8px; }
+
+    /* ─── SECTION HEADER ─── */
+    .section-header { text-align: center; margin-bottom: 64px; }
+    .section-header .label-chip { margin-bottom: 20px; }
+    .section-header p { font-size: 18px; max-width: 560px; margin: 16px auto 0; }
+
+    /* ─── FLIP CARDS ─── */
+    .features-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    @media (max-width: 768px) { .features-grid { grid-template-columns: 1fr; } }
+    .service-card-flip { perspective: 1000px; height: 360px; cursor: pointer; }
+    .service-card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.8s cubic-bezier(0.68, -0.05, 0.27, 1.05); transform-style: preserve-3d; }
+    .service-card-flip:hover .service-card-inner { transform: rotateY(180deg); }
+    .service-card-front, .service-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 20px; overflow: hidden; }
+    .service-card-front { background: var(--bg-secondary); border: 1px solid rgba(var(--primary-rgb), 0.12); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 32px; }
+    .service-card-visual { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .service-bg { position: absolute; inset: 0; }
+    .service-icon-big { font-size: 80px; position: relative; z-index: 1; filter: drop-shadow(0 0 30px rgba(var(--primary-rgb), 0.4)); animation: float 6s ease-in-out infinite; }
+    .service-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 24px; background: linear-gradient(0deg, rgba(0,0,0,0.95) 0%, transparent 100%); z-index: 2; }
+    .service-card-back { background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.08) 0%, rgba(var(--primary-rgb), 0.03) 50%, rgba(var(--primary-rgb), 0.08) 100%); border: 1px solid rgba(var(--primary-rgb), 0.2); transform: rotateY(180deg); display: flex; flex-direction: column; justify-content: center; padding: 36px; backdrop-filter: blur(24px); }
+    .service-card-back h3 { color: var(--p400); margin-bottom: 16px; font-size: 24px; }
+    .service-card-back p { font-size: 15px; line-height: 1.7; color: var(--text-tertiary); margin-bottom: 24px; }
+    .feature-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .feature-tag { padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; background: rgba(var(--primary-rgb), 0.1); color: var(--p400); border: 1px solid rgba(var(--primary-rgb), 0.25); font-family: 'JetBrains Mono', monospace; }
+
+    /* ─── HOW IT WORKS ─── */
+    .steps-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+    @media (max-width: 768px) { .steps-grid { grid-template-columns: 1fr; } }
+    .step-card { padding: 36px 28px; border-radius: 20px; background: var(--bg-secondary); border: 1px solid rgba(var(--primary-rgb), 0.1); position: relative; }
+    .step-number { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 64px; font-weight: 800; color: rgba(var(--primary-rgb), 0.08); line-height: 1; margin-bottom: -8px; }
+    .step-icon { font-size: 32px; margin-bottom: 16px; }
+    .step-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; }
+    .step-desc { font-size: 14px; color: var(--text-tertiary); line-height: 1.7; }
+    .step-connector { display: none; }
+
+    /* ─── PARSER DEMO ─── */
+    .parser-demo { background: var(--bg-secondary); border: 1px solid rgba(var(--primary-rgb), 0.13); border-radius: 24px; padding: 40px; margin-top: 48px; }
+    .parser-examples { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 32px; }
+    @media (max-width: 640px) { .parser-examples { grid-template-columns: 1fr; } }
+    .parser-example { padding: 16px 20px; border-radius: 12px; background: rgba(0,0,0,0.4); border: 1px solid rgba(var(--primary-rgb), 0.1); display: flex; align-items: center; justify-content: space-between; gap: 12px; transition: border-color 0.2s; }
+    .parser-example:hover { border-color: rgba(var(--primary-rgb), 0.3); }
+    .parser-input { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-secondary); }
+    .parser-arrow { color: var(--text-quaternary); font-size: 16px; flex-shrink: 0; }
+
+    /* ─── TESTIMONIALS ─── */
+    .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    @media (max-width: 900px) { .testimonials-grid { grid-template-columns: 1fr; } }
+    .testimonial-card { padding: 32px; border-radius: 20px; background: var(--bg-secondary); border: 1px solid rgba(var(--primary-rgb), 0.1); transition: all 0.3s ease; }
+    .testimonial-card:hover { border-color: rgba(var(--primary-rgb), 0.25); transform: translateY(-4px); }
+    .stars { color: var(--p400); font-size: 14px; margin-bottom: 16px; letter-spacing: 2px; }
+    .testimonial-quote { font-size: 15px; line-height: 1.7; color: var(--text-secondary); margin-bottom: 24px; font-style: italic; }
+    .testimonial-quote::before { content: '"'; color: var(--p400); font-size: 24px; font-style: normal; line-height: 0; vertical-align: -8px; margin-right: 4px; }
+    .testimonial-author { display: flex; align-items: center; gap: 12px; }
+    .author-avatar { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; border: 2px solid rgba(var(--primary-rgb), 0.3); background: var(--bg-tertiary); box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.2); }
+    .author-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+    .author-role { font-size: 12px; color: var(--text-quaternary); margin-top: 2px; }
+
+    /* ─── PRICING ─── */
+    .pricing-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; max-width: 800px; margin: 0 auto; }
+    @media (max-width: 640px) { .pricing-grid { grid-template-columns: 1fr; } }
+    .pricing-card { padding: 40px; border-radius: 24px; background: var(--bg-secondary); border: 1px solid rgba(var(--primary-rgb), 0.1); position: relative; }
+    .pricing-card.featured { border-color: rgba(var(--primary-rgb), 0.4); background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.06) 0%, rgba(var(--primary-rgb), 0.02) 100%); box-shadow: 0 0 40px rgba(var(--primary-rgb), 0.1); }
+    .pricing-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--p400); color: #000; font-size: 11px; font-weight: 700; padding: 4px 16px; border-radius: 20px; letter-spacing: 0.08em; white-space: nowrap; }
+    .pricing-name { font-size: 14px; font-weight: 600; color: var(--text-quaternary); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+    .pricing-price { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 52px; font-weight: 800; color: var(--text-primary); line-height: 1; margin-bottom: 4px; }
+    .pricing-price span { font-size: 20px; color: var(--text-quaternary); font-weight: 400; }
+    .pricing-desc { font-size: 14px; color: var(--text-quaternary); margin-bottom: 32px; }
+    .pricing-features { list-style: none; space-y: 12px; margin-bottom: 36px; }
+    .pricing-features li { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-tertiary); padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .pricing-features li:last-child { border-bottom: none; }
+    .pricing-features li .check { color: var(--success); font-size: 16px; flex-shrink: 0; }
+    .pricing-features li .cross { color: var(--text-quaternary); font-size: 16px; flex-shrink: 0; }
+    .btn-disabled { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 14px; border-radius: 12px; border: 1px solid rgba(var(--primary-rgb), 0.2); background: transparent; color: var(--text-quaternary); font-size: 15px; font-weight: 600; cursor: not-allowed; }
+
+    /* ─── CTA FINAL ─── */
+    #cta { position: relative; overflow: hidden; }
+    .cta-glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 600px; height: 600px; background: radial-gradient(ellipse, rgba(var(--primary-rgb), 0.12) 0%, transparent 70%); pointer-events: none; }
+    .cta-inner { text-align: center; position: relative; z-index: 1; }
+    .cta-inner h2 { font-size: clamp(36px, 5vw, 56px); margin-bottom: 20px; }
+    .cta-inner p { font-size: 18px; max-width: 500px; margin: 0 auto 40px; }
+    .cta-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+    .pulse-btn { animation: pulse-glow 3s ease-in-out infinite; }
+
+    /* ─── FOOTER ─── */
+    footer { border-top: 1px solid rgba(var(--primary-rgb), 0.08); background: var(--bg-secondary); }
+    .footer-inner { padding: 64px 0 40px; }
+    .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 48px; margin-bottom: 48px; }
+    @media (max-width: 900px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr; } }
+    .footer-brand p { font-size: 14px; color: var(--text-quaternary); margin-top: 16px; max-width: 260px; line-height: 1.7; }
+    .footer-col h4 { font-size: 13px; font-weight: 600; color: var(--text-primary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 20px; }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+    .footer-col ul li a { font-size: 14px; color: var(--text-quaternary); transition: color 0.2s; }
+    .footer-col ul li a:hover { color: var(--p400); }
+    .footer-bottom { display: flex; align-items: center; justify-content: space-between; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.06); }
+    .footer-bottom p { font-size: 13px; color: var(--text-quaternary); }
+    .footer-socials { display: flex; gap: 16px; }
+    .social-link { width: 36px; height: 36px; border-radius: 8px; background: var(--bg-tertiary); border: 1px solid rgba(var(--primary-rgb), 0.1); display: grid; place-items: center; font-size: 16px; color: var(--text-quaternary); transition: all 0.2s; }
+    .social-link:hover { border-color: rgba(var(--primary-rgb), 0.4); color: var(--p400); background: rgba(var(--primary-rgb), 0.08); }
+
+    /* ─── MODAL ─── */
+    #auth-modal { position: fixed; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); backdrop-filter: blur(12px); }
+    #auth-modal.hidden { display: none; }
+    .modal-box { background: var(--bg-secondary); border: 1px solid rgba(var(--primary-rgb), 0.2); border-radius: 24px; padding: 40px; width: 100%; max-width: 420px; box-shadow: 0 0 80px rgba(var(--primary-rgb), 0.1); animation: scale-in 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55); }
+    .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
+    .modal-close { background: none; border: none; color: var(--text-quaternary); font-size: 20px; cursor: pointer; padding: 4px; transition: color 0.2s; }
+    .modal-close:hover { color: var(--text-primary); }
+    .modal-tabs { display: flex; margin-bottom: 28px; border-bottom: 1px solid rgba(var(--primary-rgb), 0.12); }
+    .modal-tab { flex: 1; padding: 10px; font-size: 14px; font-weight: 500; background: none; border: none; cursor: pointer; color: var(--text-quaternary); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.2s; font-family: 'Plus Jakarta Sans', sans-serif; }
+    .modal-tab.active { color: var(--p400); border-bottom-color: var(--p400); }
+    .form-group { margin-bottom: 20px; }
+    .form-label { display: block; font-size: 12px; font-weight: 500; color: var(--text-quaternary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .form-input { width: 100%; background: rgba(0,0,0,0.5); border: 1px solid rgba(var(--primary-rgb), 0.15); color: var(--text-primary); font-family: 'Inter', sans-serif; font-size: 15px; padding: 12px 16px; border-radius: 10px; outline: none; transition: border-color 0.2s; }
+    .form-input:focus { border-color: var(--p400); box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1); }
+    .form-input::placeholder { color: var(--text-quaternary); }
+    .form-submit { width: 100%; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; margin-top: 8px; font-family: 'Plus Jakarta Sans', sans-serif; }
+    #auth-message { margin-top: 16px; font-size: 13px; text-align: center; padding: 10px; border-radius: 8px; }
+    #auth-message.success { background: rgba(34,197,94,0.1); color: var(--success); border: 1px solid rgba(34,197,94,0.2); }
+    #auth-message.error   { background: rgba(239,68,68,0.1); color: #f87171; border: 1px solid rgba(239,68,68,0.2); }
+
+    /* ─── ANIMATIONS ─── */
+    @keyframes float { 0%,100%{transform:translateY(0) rotate(0deg)} 25%{transform:translateY(-18px) rotate(1.5deg)} 50%{transform:translateY(-8px) rotate(-1.5deg)} 75%{transform:translateY(-24px) rotate(1deg)} }
+    @keyframes float-node { 0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-8px) scale(1.05)} }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    @keyframes gradient-shift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+    @keyframes pulse-glow { 0%,100%{box-shadow:0 0 0 1px rgba(var(--primary-rgb),.5),0 4px 24px rgba(var(--primary-rgb),.4),0 0 60px rgba(var(--primary-rgb),.2)} 50%{box-shadow:0 0 0 2px rgba(var(--primary-rgb),.8),0 8px 40px rgba(var(--primary-rgb),.6),0 0 80px rgba(var(--primary-rgb),.4)} }
+    @keyframes marquee { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+    @keyframes fade-in-up { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes scale-in { from{opacity:0;transform:scale(0.9)} to{opacity:1;transform:scale(1)} }
+    @keyframes count-up { from{opacity:0;transform:scale(0.7)} to{opacity:1;transform:scale(1)} }
+    @keyframes spin-slow { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+    .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.7s ease, transform 0.7s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+  </style>
 </head>
-<body class="grid-bg">
+<body>
 
-  <!-- Scan line decoration -->
-  <div class="scan-line"></div>
+<!-- Particles canvas -->
+<canvas id="particles-canvas"></canvas>
 
-  <!-- ═══════════════════════════════════════
-       NAVBAR
-  ═══════════════════════════════════════ -->
-  <nav class="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 glass border-b border-cyan-500/20">
-    <span class="neon-text text-lg font-bold tracking-widest">⬡ NEXUS OS</span>
-    <div class="flex gap-4 items-center">
-      <a href="#features" class="text-cyan-muted hover:text-cyan-neon text-sm transition-colors">Funciones</a>
-      <a href="#pricing" class="text-cyan-muted hover:text-cyan-neon text-sm transition-colors">Precios</a>
-      <button id="btn-show-login" class="btn-neon">Iniciar Sesión</button>
+<!-- ═══════════════════════ NAVBAR ═══════════════════════ -->
+<nav id="navbar">
+  <div class="container nav-inner">
+    <a href="#" class="nav-logo">
+      <div class="nav-logo-icon">⬡</div>
+      Nexus OS
+    </a>
+    <div class="nav-links">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#how-it-works" class="nav-link">Cómo funciona</a>
+      <a href="#pricing" class="nav-link">Precios</a>
+      <button id="btn-login-nav" class="btn-outline" style="padding:10px 20px;font-size:14px;">Iniciar sesión</button>
+      <button id="btn-register-nav" class="btn-primary" style="padding:10px 20px;font-size:14px;">Empezar gratis →</button>
     </div>
-  </nav>
+    <button id="btn-login-mobile" class="btn-primary" style="padding:10px 20px;font-size:14px;display:none;" onclick="document.getElementById('auth-modal').classList.remove('hidden')">Empezar →</button>
+  </div>
+</nav>
 
-  <!-- ═══════════════════════════════════════
-       HERO
-  ═══════════════════════════════════════ -->
-  <section class="min-h-screen flex flex-col items-center justify-center text-center px-6 pt-24 pb-16 fade-in">
-    <div class="mb-6">
-      <span class="text-xs font-mono text-cyan-muted border border-cyan-neon/30 px-3 py-1 rounded-full tracking-widest">
-        v1.0 — EVERYTHING IS A NODE
-      </span>
-    </div>
-
-    <h1 class="text-5xl md:text-7xl font-bold leading-tight mb-6 max-w-4xl">
-      De la
-      <span class="neon-text"> Fragmentación</span><br/>
-      a la
-      <span class="neon-text"> Inteligencia</span><br/>
-      <span class="text-white">Situacional Absoluta</span>
-    </h1>
-
-    <p class="text-cyan-muted text-lg max-w-2xl mb-10 leading-relaxed">
-      Nexus OS unifica tus tareas, finanzas y notas en un único
-      flujo de conciencia. Un texto. Un nodo. Todo conectado.
-    </p>
-
-    <div class="flex gap-4 flex-wrap justify-center">
-      <button id="btn-hero-register" class="btn-neon text-base px-8 py-3">
-        Empezar gratis →
-      </button>
-      <a href="#features" class="text-cyan-muted border border-cyan-neon/20 hover:border-cyan-neon/60 px-8 py-3 rounded-md text-sm transition-all">
-        Ver cómo funciona
-      </a>
-    </div>
-
-    <!-- Mini demo visual -->
-    <div class="mt-16 glass p-6 max-w-xl w-full text-left">
-      <p class="text-cyan-muted text-xs mb-3 tracking-widest">// NEXUS INPUT — escribe cualquier cosa</p>
-      <div class="flex gap-2 items-center">
-        <span class="text-cyan-neon">›</span>
-        <span id="demo-text" class="text-white text-sm font-mono"></span>
-        <span class="text-cyan-neon animate-pulse">_</span>
-      </div>
-      <div id="demo-result" class="mt-3 text-xs text-cyan-muted hidden"></div>
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════
-       FEATURES
-  ═══════════════════════════════════════ -->
-  <section id="features" class="py-24 px-6 max-w-6xl mx-auto">
-    <h2 class="text-3xl font-bold text-center neon-text mb-4">Todo es un Nodo</h2>
-    <p class="text-center text-cyan-muted mb-16 text-sm">Una arquitectura. Infinite posibilidades.</p>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-      <div class="glass p-6 hover:border-cyan-neon/50 transition-all">
-        <div class="text-3xl mb-4">📌</div>
-        <h3 class="text-cyan-neon font-semibold mb-2">Kanban Inteligente</h3>
-        <p class="text-cyan-muted text-sm leading-relaxed">
-          Escribe <code class="text-white">#tarea Revisar informe</code> y Nexus
-          lo convierte en una tarjeta Kanban automáticamente.
+<!-- ═══════════════════════ HERO ═══════════════════════ -->
+<section id="hero">
+  <div class="bg-glow-top"></div>
+  <div class="container">
+    <div class="hero-grid">
+      <!-- Left -->
+      <div>
+        <div class="hero-label">
+          <span class="label-chip">v1.0 · Everything is a Node</span>
+        </div>
+        <h1 class="hero-title">
+          <span>Tu Sistema</span>
+          <span class="gradient-text">Operativo</span>
+          <span>Personal</span>
+        </h1>
+        <p class="hero-subtitle">
+          Un solo input. Nexus clasifica automáticamente tareas, finanzas y notas. Sin fricción. Sin apps múltiples.
         </p>
-        <div class="mt-4 p-3 bg-ocean-dark/60 rounded text-xs text-cyan-muted font-mono">
-          #tarea Revisar informe → <span class="text-cyan-neon">kanban</span>
+        <div class="hero-actions">
+          <button id="btn-hero-register" class="btn-primary pulse-btn">Empezar gratis →</button>
+          <a href="#how-it-works" class="btn-outline">Ver demo ↓</a>
+        </div>
+        <div class="hero-stats">
+          <div>
+            <div class="hero-stat-num" data-target="4">0</div>
+            <div class="hero-stat-label">Vistas unificadas</div>
+          </div>
+          <div>
+            <div class="hero-stat-num" data-target="1">0</div>
+            <div class="hero-stat-label">Solo un input</div>
+          </div>
+          <div>
+            <div class="hero-stat-num" data-target="100" data-suffix="%">0</div>
+            <div class="hero-stat-label">Open source</div>
+          </div>
         </div>
       </div>
-
-      <div class="glass p-6 hover:border-cyan-neon/50 transition-all">
-        <div class="text-3xl mb-4">💸</div>
-        <h3 class="text-cyan-neon font-semibold mb-2">Flujo Financiero</h3>
-        <p class="text-cyan-muted text-sm leading-relaxed">
-          Registra gastos e ingresos con símbolos naturales.
-          Balance en tiempo real, sin formularios.
-        </p>
-        <div class="mt-4 p-3 bg-ocean-dark/60 rounded text-xs text-cyan-muted font-mono">
-          -$500 Renta → <span class="text-red-400">expense</span><br/>
-          +$1500 Freelance → <span class="text-green-400">income</span>
+      <!-- Right: Animated Visual -->
+      <div class="hero-visual">
+        <div class="hex-ring">
+          <!-- Orbit SVG -->
+          <svg viewBox="0 0 420 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="210" cy="210" r="190" stroke="rgba(0,240,255,0.08)" stroke-width="1" stroke-dasharray="4 8"/>
+            <circle cx="210" cy="210" r="140" stroke="rgba(0,240,255,0.12)" stroke-width="1" stroke-dasharray="2 6"/>
+            <circle cx="210" cy="210" r="90"  stroke="rgba(0,240,255,0.18)" stroke-width="1"/>
+            <!-- Spinning element -->
+            <g style="transform-origin:210px 210px;animation:spin-slow 20s linear infinite">
+              <circle cx="400" cy="210" r="5" fill="rgba(0,240,255,0.6)"/>
+            </g>
+          </svg>
+          <!-- Nodes around orbit -->
+          <div class="hex-nodes">
+            <div class="hex-node">📌<span>TASK</span></div>
+            <div class="hex-node">💸<span>EXP</span></div>
+            <div class="hex-node">💰<span>INC</span></div>
+            <div class="hex-node">🧠<span>NOTE</span></div>
+            <div class="hex-node">📊<span>FEED</span></div>
+            <div class="hex-node">🔖<span>TAG</span></div>
+          </div>
+          <!-- Center -->
+          <div class="hex-center">
+            <div class="hex-center-icon">⬡</div>
+            <div class="hex-center-label">NEXUS</div>
+          </div>
         </div>
-      </div>
-
-      <div class="glass p-6 hover:border-cyan-neon/50 transition-all">
-        <div class="text-3xl mb-4">🧠</div>
-        <h3 class="text-cyan-neon font-semibold mb-2">Segunda Mente</h3>
-        <p class="text-cyan-muted text-sm leading-relaxed">
-          Notas, ideas y contexto almacenados en Supabase
-          con Supertags para conexiones semánticas.
-        </p>
-        <div class="mt-4 p-3 bg-ocean-dark/60 rounded text-xs text-cyan-muted font-mono">
-          Idea producto → <span class="text-cyan-neon">note</span> + metadata
-        </div>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- ═══════════════════════════════════════
-       PRICING
-  ═══════════════════════════════════════ -->
-  <section id="pricing" class="py-24 px-6 max-w-4xl mx-auto text-center">
-    <h2 class="text-3xl font-bold neon-text mb-4">Simple y transparente</h2>
-    <p class="text-cyan-muted mb-16 text-sm">Sin trampa, sin letra pequeña.</p>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-      <div class="glass p-8">
-        <h3 class="text-white font-semibold text-xl mb-2">Free</h3>
-        <div class="text-4xl font-bold neon-text mb-4">$0<span class="text-sm text-cyan-muted">/mes</span></div>
-        <ul class="text-cyan-muted text-sm space-y-2 text-left mb-8">
-          <li>✓ 500 nodos / mes</li>
-          <li>✓ Kanban básico</li>
-          <li>✓ Registro financiero</li>
-          <li>✗ IA semántica</li>
-        </ul>
-        <button id="btn-pricing-free" class="btn-neon w-full">Empezar gratis</button>
-      </div>
-
-      <div class="glass p-8 border-cyan-neon/50">
-        <div class="text-xs text-cyan-neon tracking-widest mb-2">RECOMENDADO</div>
-        <h3 class="text-white font-semibold text-xl mb-2">Pro</h3>
-        <div class="text-4xl font-bold neon-text mb-4">$9<span class="text-sm text-cyan-muted">/mes</span></div>
-        <ul class="text-cyan-muted text-sm space-y-2 text-left mb-8">
-          <li>✓ Nodos ilimitados</li>
-          <li>✓ Kanban avanzado</li>
-          <li>✓ Dashboard financiero</li>
-          <li>✓ IA semántica (próximo)</li>
-        </ul>
-        <button class="btn-neon w-full opacity-60 cursor-not-allowed">Próximamente</button>
       </div>
     </div>
-  </section>
 
-  <!-- ═══════════════════════════════════════
-       FOOTER
-  ═══════════════════════════════════════ -->
-  <footer class="text-center py-10 text-cyan-muted text-xs border-t border-cyan-neon/10">
-    <p>⬡ NEXUS OS v1.0 — Built with Vite + Supabase + Tailwind CSS</p>
-    <p class="mt-2 opacity-50">© 2026 Nexus OS. Everything is a Node.</p>
-  </footer>
-
-  <!-- ═══════════════════════════════════════
-       MODAL: LOGIN / REGISTRO
-  ═══════════════════════════════════════ -->
-  <div id="auth-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-ocean-dark/80 backdrop-blur-sm hidden">
-    <div class="glass p-8 w-full max-w-md fade-in">
-      <div class="flex justify-between items-center mb-6">
-        <h2 class="neon-text font-bold text-xl">⬡ NEXUS OS</h2>
-        <button id="btn-close-modal" class="text-cyan-muted hover:text-white text-xl">✕</button>
+    <!-- Parser Terminal Demo -->
+    <div class="demo-terminal reveal" id="how-it-works" style="max-width:640px;margin-top:60px;">
+      <div class="terminal-header">
+        <div class="terminal-dot" style="background:#ff5f57"></div>
+        <div class="terminal-dot" style="background:#ffbd2e"></div>
+        <div class="terminal-dot" style="background:#28c940"></div>
+        <span class="terminal-label">nexus-parser · live</span>
       </div>
-
-      <!-- Tabs -->
-      <div class="flex mb-6 border-b border-cyan-neon/20">
-        <button id="tab-login" class="flex-1 py-2 text-sm font-mono text-cyan-neon border-b-2 border-cyan-neon">
-          Iniciar Sesión
-        </button>
-        <button id="tab-register" class="flex-1 py-2 text-sm font-mono text-cyan-muted">
-          Registrarse
-        </button>
+      <div class="terminal-body">
+        <div class="terminal-line">
+          <span class="terminal-prompt">›</span>
+          <span id="demo-text"></span>
+          <span id="demo-cursor">_</span>
+        </div>
+        <div id="demo-result"></div>
       </div>
-
-      <!-- Login Form -->
-      <form id="form-login" class="space-y-4">
-        <div>
-          <label class="text-xs text-cyan-muted block mb-1">Email</label>
-          <input type="email" id="login-email" class="input-neon" placeholder="usuario@nexus.io" required />
-        </div>
-        <div>
-          <label class="text-xs text-cyan-muted block mb-1">Contraseña</label>
-          <input type="password" id="login-password" class="input-neon" placeholder="••••••••" required />
-        </div>
-        <button type="submit" class="btn-neon w-full py-3">Entrar al Nexus →</button>
-      </form>
-
-      <!-- Register Form (oculto por defecto) -->
-      <form id="form-register" class="space-y-4 hidden">
-        <div>
-          <label class="text-xs text-cyan-muted block mb-1">Email</label>
-          <input type="email" id="reg-email" class="input-neon" placeholder="usuario@nexus.io" required />
-        </div>
-        <div>
-          <label class="text-xs text-cyan-muted block mb-1">Contraseña</label>
-          <input type="password" id="reg-password" class="input-neon" placeholder="mín. 8 caracteres" required minlength="8" />
-        </div>
-        <button type="submit" class="btn-neon w-full py-3">Crear cuenta →</button>
-      </form>
-
-      <!-- Mensajes de estado -->
-      <p id="auth-message" class="mt-4 text-xs text-center hidden"></p>
     </div>
   </div>
+</section>
 
-  <script type="module" src="./main.js"></script>
+<!-- ═══════════════════════ MARQUEE ═══════════════════════ -->
+<div class="marquee-section">
+  <div class="marquee-track" id="marquee-track">
+    <span class="marquee-item"><span class="icon">⚡</span> Parser Semántico</span>
+    <span class="marquee-item"><span class="icon">🔐</span> Supabase Auth</span>
+    <span class="marquee-item"><span class="icon">📋</span> Kanban Drag & Drop</span>
+    <span class="marquee-item"><span class="icon">💹</span> Balance en Tiempo Real</span>
+    <span class="marquee-item"><span class="icon">🏷️</span> Supertags Semánticos</span>
+    <span class="marquee-item"><span class="icon">🌊</span> Deep Ocean Design</span>
+    <span class="marquee-item"><span class="icon">🚀</span> Deployed on Vercel</span>
+    <span class="marquee-item"><span class="icon">🔒</span> Row Level Security</span>
+    <span class="marquee-item"><span class="icon">⚡</span> Parser Semántico</span>
+    <span class="marquee-item"><span class="icon">🔐</span> Supabase Auth</span>
+    <span class="marquee-item"><span class="icon">📋</span> Kanban Drag & Drop</span>
+    <span class="marquee-item"><span class="icon">💹</span> Balance en Tiempo Real</span>
+    <span class="marquee-item"><span class="icon">🏷️</span> Supertags Semánticos</span>
+    <span class="marquee-item"><span class="icon">🌊</span> Deep Ocean Design</span>
+    <span class="marquee-item"><span class="icon">🚀</span> Deployed on Vercel</span>
+    <span class="marquee-item"><span class="icon">🔒</span> Row Level Security</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════ STATS ═══════════════════════ -->
+<section class="section-pad" style="padding:80px 0;">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-card reveal">
+        <div class="stat-number"><span class="count" data-target="1">0</span></div>
+        <div class="stat-label">Input Unificado</div>
+      </div>
+      <div class="stat-card reveal" style="transition-delay:.1s">
+        <div class="stat-number"><span class="count" data-target="4">0</span></div>
+        <div class="stat-label">Vistas Inteligentes</div>
+      </div>
+      <div class="stat-card reveal" style="transition-delay:.2s">
+        <div class="stat-number"><span class="count" data-target="0">0</span><span class="stat-suffix" style="font-size:28px;color:var(--p400)">ms</span></div>
+        <div class="stat-label">Fricción al Registrar</div>
+      </div>
+      <div class="stat-card reveal" style="transition-delay:.3s">
+        <div class="stat-number">∞</div>
+        <div class="stat-label">Nodos posibles</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ FEATURES FLIP CARDS ═══════════════════════ -->
+<section id="features" class="section-pad">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="label-chip">Features</span>
+      <h2>Todo es un <span class="gradient-text">Nodo</span></h2>
+      <p>Una arquitectura unificada. Cuatro vistas de tu realidad. Infinite posibilidades.</p>
+    </div>
+
+    <div class="features-grid">
+      <!-- Feed -->
+      <div class="service-card-flip reveal">
+        <div class="service-card-inner">
+          <div class="service-card-front">
+            <div class="service-card-visual">
+              <div class="service-bg" style="background:linear-gradient(135deg,#001a1f 0%,#003340 50%,#001a1f 100%)"></div>
+              <div class="service-icon-big" style="animation-delay:0s">📊</div>
+            </div>
+            <div class="service-overlay">
+              <h3 style="color:#fff;font-size:20px;">Feed Central</h3>
+              <p style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">Hover para ver más →</p>
+            </div>
+          </div>
+          <div class="service-card-back">
+            <h3>Feed Central</h3>
+            <p>Todos tus nodos en un stream cronológico. Visualiza el flujo completo de tu productividad en tiempo real.</p>
+            <div class="feature-tags">
+              <span class="feature-tag">Tiempo real</span>
+              <span class="feature-tag">Cronológico</span>
+              <span class="feature-tag">Todos los tipos</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kanban -->
+      <div class="service-card-flip reveal" style="transition-delay:.1s">
+        <div class="service-card-inner">
+          <div class="service-card-front">
+            <div class="service-card-visual">
+              <div class="service-bg" style="background:linear-gradient(135deg,#0d001a 0%,#1a0033 50%,#0d001a 100%)"></div>
+              <div class="service-icon-big" style="animation-delay:1s">📌</div>
+            </div>
+            <div class="service-overlay">
+              <h3 style="color:#fff;font-size:20px;">Kanban Inteligente</h3>
+              <p style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">Hover para ver más →</p>
+            </div>
+          </div>
+          <div class="service-card-back">
+            <h3>Kanban Inteligente</h3>
+            <p>Escribe <code style="color:var(--p400)">#tarea</code> y Nexus crea la tarjeta automáticamente. Drag & drop entre columnas To Do, Doing y Done.</p>
+            <div class="feature-tags">
+              <span class="feature-tag">#tarea prefix</span>
+              <span class="feature-tag">Drag & Drop</span>
+              <span class="feature-tag">3 columnas</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Finance -->
+      <div class="service-card-flip reveal" style="transition-delay:.2s">
+        <div class="service-card-inner">
+          <div class="service-card-front">
+            <div class="service-card-visual">
+              <div class="service-bg" style="background:linear-gradient(135deg,#001a00 0%,#003300 50%,#001a00 100%)"></div>
+              <div class="service-icon-big" style="animation-delay:2s">💹</div>
+            </div>
+            <div class="service-overlay">
+              <h3 style="color:#fff;font-size:20px;">Flujo Financiero</h3>
+              <p style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">Hover para ver más →</p>
+            </div>
+          </div>
+          <div class="service-card-back">
+            <h3>Flujo Financiero</h3>
+            <p>Registra gastos con <code style="color:#f87171">-$50</code> e ingresos con <code style="color:#4ade80">+$500</code>. Balance visual en tiempo real. Sin formularios.</p>
+            <div class="feature-tags">
+              <span class="feature-tag">+$ ingresos</span>
+              <span class="feature-tag">-$ gastos</span>
+              <span class="feature-tag">Balance live</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="service-card-flip reveal" style="transition-delay:.3s">
+        <div class="service-card-inner">
+          <div class="service-card-front">
+            <div class="service-card-visual">
+              <div class="service-bg" style="background:linear-gradient(135deg,#0a0a00 0%,#1a1500 50%,#0a0a00 100%)"></div>
+              <div class="service-icon-big" style="animation-delay:3s">🧠</div>
+            </div>
+            <div class="service-overlay">
+              <h3 style="color:#fff;font-size:20px;">Segunda Mente</h3>
+              <p style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">Hover para ver más →</p>
+            </div>
+          </div>
+          <div class="service-card-back">
+            <h3>Segunda Mente</h3>
+            <p>Notas, ideas y contexto con Supertags semánticos. Búsqueda instantánea por contenido y etiquetas. Tu base de conocimiento personal.</p>
+            <div class="feature-tags">
+              <span class="feature-tag">Supertags</span>
+              <span class="feature-tag">Búsqueda live</span>
+              <span class="feature-tag">JSONB metadata</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ HOW IT WORKS ═══════════════════════ -->
+<section class="section-pad" style="background:var(--bg-secondary);">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="label-chip">Parser Semántico</span>
+      <h2>Un texto, <span class="gradient-text">infinitas intenciones</span></h2>
+      <p>Nexus analiza tu entrada y la enruta automáticamente al módulo correcto.</p>
+    </div>
+
+    <div class="steps-grid">
+      <div class="step-card reveal">
+        <div class="step-number">01</div>
+        <div class="step-icon">⌨️</div>
+        <div class="step-title">Escribe libremente</div>
+        <div class="step-desc">No hay formularios ni menús. Solo escribe en el campo de entrada universal de Nexus, como si pensaras en voz alta.</div>
+      </div>
+      <div class="step-card reveal" style="transition-delay:.15s">
+        <div class="step-number">02</div>
+        <div class="step-icon">🔍</div>
+        <div class="step-title">Parser clasifica</div>
+        <div class="step-desc">El motor semántico detecta prefijos y patrones: <code style="color:var(--p400)">#tarea</code>, <code style="color:#4ade80">+$</code>, <code style="color:#f87171">-$</code> o texto libre para notas.</div>
+      </div>
+      <div class="step-card reveal" style="transition-delay:.3s">
+        <div class="step-number">03</div>
+        <div class="step-icon">✨</div>
+        <div class="step-title">Aparece en su vista</div>
+        <div class="step-desc">El nodo se guarda en Supabase con RLS y aparece instantáneamente en Kanban, Finance o Notes según su tipo.</div>
+      </div>
+    </div>
+
+    <!-- Parser examples -->
+    <div class="parser-demo reveal" style="transition-delay:.15s">
+      <h3 style="margin-bottom:8px;">Sintaxis del Parser</h3>
+      <p style="font-size:14px;">Ejemplos de entradas y cómo las interpreta Nexus:</p>
+      <div class="parser-examples">
+        <div class="parser-example">
+          <code class="parser-input">#tarea Revisar el informe Q1</code>
+          <span class="parser-arrow">→</span>
+          <span class="demo-tag tag-kanban">KANBAN</span>
+        </div>
+        <div class="parser-example">
+          <code class="parser-input">+$2500 Pago proyecto cliente</code>
+          <span class="parser-arrow">→</span>
+          <span class="demo-tag tag-income">INCOME</span>
+        </div>
+        <div class="parser-example">
+          <code class="parser-input">-$180 Suscripciones SaaS</code>
+          <span class="parser-arrow">→</span>
+          <span class="demo-tag tag-expense">EXPENSE</span>
+        </div>
+        <div class="parser-example">
+          <code class="parser-input">Idea: conectar IA al parser</code>
+          <span class="parser-arrow">→</span>
+          <span class="demo-tag tag-note">NOTE</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ TESTIMONIALS ═══════════════════════ -->
+<section class="section-pad">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="label-chip">Testimonios</span>
+      <h2>Lo que dicen los <span class="gradient-text">early adopters</span></h2>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testimonial-card reveal">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-quote">Dejé de usar 4 apps distintas. Nexus centraliza todo mi flujo de trabajo en un solo lugar. El parser semántico es mágico.</p>
+        <div class="testimonial-author">
+          <div class="author-avatar">👨‍💻</div>
+          <div>
+            <div class="author-name">Carlos M.</div>
+            <div class="author-role">Desarrollador Freelance</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card reveal" style="transition-delay:.1s">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-quote">La vista financiera me cambió la vida. Registro mis gastos en 2 segundos con <code style="color:var(--p400)">-$</code>. Sin abrir otra app.</p>
+        <div class="testimonial-author">
+          <div class="author-avatar">👩‍🎨</div>
+          <div>
+            <div class="author-name">Ana R.</div>
+            <div class="author-role">Diseñadora UX</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card reveal" style="transition-delay:.2s">
+        <div class="stars">★★★★★</div>
+        <p class="testimonial-quote">El Kanban drag & drop con auto-clasificación de tareas es lo que necesitaba. Simple, rápido, elegante.</p>
+        <div class="testimonial-author">
+          <div class="author-avatar">🧑‍🚀</div>
+          <div>
+            <div class="author-name">Diego L.</div>
+            <div class="author-role">Product Manager</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ PRICING ═══════════════════════ -->
+<section id="pricing" class="section-pad" style="background:var(--bg-secondary);">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="label-chip">Precios</span>
+      <h2>Simple y <span class="gradient-text">transparente</span></h2>
+      <p>Sin trampa. Sin letra pequeña. Empieza gratis hoy mismo.</p>
+    </div>
+
+    <div class="pricing-grid">
+      <!-- Free -->
+      <div class="pricing-card reveal">
+        <div class="pricing-name">Free</div>
+        <div class="pricing-price">$0<span>/mes</span></div>
+        <div class="pricing-desc">Para empezar a organizar tu vida.</div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> 500 nodos / mes</li>
+          <li><span class="check">✓</span> Kanban básico (3 columnas)</li>
+          <li><span class="check">✓</span> Registro financiero</li>
+          <li><span class="check">✓</span> Notas con búsqueda</li>
+          <li><span class="cross">✗</span> IA semántica avanzada</li>
+          <li><span class="cross">✗</span> Exportar datos</li>
+        </ul>
+        <button class="btn-primary form-submit" id="btn-pricing-free">Empezar gratis →</button>
+      </div>
+
+      <!-- Pro -->
+      <div class="pricing-card featured reveal" style="transition-delay:.15s">
+        <div class="pricing-badge">PRÓXIMAMENTE</div>
+        <div class="pricing-name">Pro</div>
+        <div class="pricing-price">$9<span>/mes</span></div>
+        <div class="pricing-desc">Para quienes viven en productividad.</div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> Nodos ilimitados</li>
+          <li><span class="check">✓</span> Kanban avanzado + etiquetas</li>
+          <li><span class="check">✓</span> Dashboard financiero completo</li>
+          <li><span class="check">✓</span> Notas con supertags avanzados</li>
+          <li><span class="check">✓</span> IA semántica (próximo)</li>
+          <li><span class="check">✓</span> Exportar CSV / JSON</li>
+        </ul>
+        <button class="btn-disabled">Próximamente</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ CTA FINAL ═══════════════════════ -->
+<section id="cta" class="section-pad">
+  <div class="cta-glow"></div>
+  <div class="container">
+    <div class="cta-inner reveal">
+      <span class="label-chip" style="margin-bottom:24px;display:inline-flex;">¿Listo para empezar?</span>
+      <h2>Convierte tu caos en<br/><span class="gradient-text">claridad absoluta</span></h2>
+      <p>Únete a Nexus OS hoy. Un solo input para gobernarlos a todos.</p>
+      <div class="cta-actions">
+        <button id="btn-cta-register" class="btn-primary pulse-btn" style="font-size:17px;padding:16px 36px;">Crear cuenta gratis →</button>
+        <a href="https://github.com/oscaromargp/nexus-os" target="_blank" rel="noopener" class="btn-outline" style="font-size:17px;padding:16px 36px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          Ver en GitHub
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ FOOTER ═══════════════════════ -->
+<footer>
+  <div class="container footer-inner">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="#" class="nav-logo" style="font-size:18px;">
+          <div class="nav-logo-icon" style="width:32px;height:32px;font-size:16px;">⬡</div>
+          Nexus OS
+        </a>
+        <p>Tu sistema operativo personal. Unifica tareas, finanzas y notas en un solo flujo de conciencia.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Producto</h4>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#pricing">Precios</a></li>
+          <li><a href="#how-it-works">Cómo funciona</a></li>
+          <li><a href="/app">Dashboard</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Tech Stack</h4>
+        <ul>
+          <li><a href="https://vitejs.dev" target="_blank" rel="noopener">Vite 6</a></li>
+          <li><a href="https://supabase.com" target="_blank" rel="noopener">Supabase</a></li>
+          <li><a href="https://tailwindcss.com" target="_blank" rel="noopener">Tailwind CSS</a></li>
+          <li><a href="https://vercel.com" target="_blank" rel="noopener">Vercel</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="#">Privacidad</a></li>
+          <li><a href="#">Términos</a></li>
+          <li><a href="https://github.com/oscaromargp/nexus-os" target="_blank" rel="noopener">MIT License</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 Nexus OS · Everything is a Node · <em style="font-style:italic;color:rgba(0,240,255,0.4)">"Porque Dios es el que en vosotros produce así el querer como el hacer" — Fil. 2:13</em></p>
+      <div class="footer-socials">
+        <a href="https://github.com/oscaromargp/nexus-os" target="_blank" rel="noopener" class="social-link" title="GitHub">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        </a>
+        <a href="https://twitter.com/oscaromargp" target="_blank" rel="noopener" class="social-link" title="Twitter / X">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ═══════════════════════ AUTH MODAL ═══════════════════════ -->
+<div id="auth-modal" class="hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <a href="#" class="nav-logo" style="font-size:17px;">
+        <div class="nav-logo-icon" style="width:30px;height:30px;font-size:14px;">⬡</div>
+        Nexus OS
+      </a>
+      <button id="btn-close-modal" class="modal-close">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <button id="tab-login" class="modal-tab active">Iniciar sesión</button>
+      <button id="tab-register" class="modal-tab">Registrarse</button>
+    </div>
+
+    <!-- Login -->
+    <form id="form-login">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" id="login-email" class="form-input" placeholder="usuario@nexus.io" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <input type="password" id="login-password" class="form-input" placeholder="••••••••" required />
+      </div>
+      <button type="submit" class="btn-primary form-submit">Entrar al Nexus →</button>
+    </form>
+
+    <!-- Register -->
+    <form id="form-register" class="hidden">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" id="reg-email" class="form-input" placeholder="usuario@nexus.io" required />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <input type="password" id="reg-password" class="form-input" placeholder="mínimo 8 caracteres" required minlength="8" />
+      </div>
+      <button type="submit" class="btn-primary form-submit">Crear cuenta →</button>
+    </form>
+
+    <p id="auth-message" style="display:none;" class="mt-4"></p>
+  </div>
+</div>
+
+<script type="module" src="./main.js"></script>
+<script>
+/* ═══════════════ PARTICLES ═══════════════ */
+(function(){
+  const canvas = document.getElementById('particles-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [];
+  const COUNT = 60;
+  function resize(){ W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+  for(let i=0;i<COUNT;i++) particles.push({
+    x: Math.random()*window.innerWidth,
+    y: Math.random()*window.innerHeight,
+    r: Math.random()*1.5+0.3,
+    vx: (Math.random()-0.5)*0.3,
+    vy: (Math.random()-0.5)*0.3,
+    o: Math.random()*0.5+0.1
+  });
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    particles.forEach(p=>{
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,240,255,${p.o})`;
+      ctx.fill();
+      p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0||p.x>W) p.vx*=-1;
+      if(p.y<0||p.y>H) p.vy*=-1;
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ═══════════════ NAVBAR SCROLL ═══════════════ */
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', ()=>{
+  navbar.classList.toggle('scrolled', window.scrollY > 40);
+});
+
+/* ═══════════════ REVEAL ON SCROLL ═══════════════ */
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach((e,i)=>{
+    if(e.isIntersecting){ e.target.classList.add('visible'); io.unobserve(e.target); }
+  });
+},{ threshold:0.1, rootMargin:'0px 0px -60px 0px' });
+revealEls.forEach(el=>io.observe(el));
+
+/* ═══════════════ COUNTER ANIMATION ═══════════════ */
+const counters = document.querySelectorAll('.count, [data-target]');
+const cio = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    if(!e.isIntersecting) return;
+    const el = e.target;
+    const target = +el.dataset.target;
+    const suffix = el.dataset.suffix || '';
+    let current = 0;
+    const step = Math.max(1, Math.ceil(target/40));
+    const timer = setInterval(()=>{
+      current = Math.min(current + step, target);
+      el.textContent = current + suffix;
+      if(current >= target) clearInterval(timer);
+    }, 40);
+    cio.unobserve(el);
+  });
+},{ threshold:0.5 });
+counters.forEach(c=>cio.observe(c));
+
+/* ═══════════════ DEMO TYPEWRITER ═══════════════ */
+const demos = [
+  { text:'#tarea Revisar propuesta de diseño', result:'→ <span style="color:#c084fc;font-weight:600">KANBAN</span> · columna: To Do', tag:'tag-kanban' },
+  { text:'+$3000 Pago proyecto landing page',   result:'→ <span style="color:#4ade80;font-weight:600">INCOME</span> · +$3,000.00', tag:'tag-income' },
+  { text:'-$85 Suscripción Figma',              result:'→ <span style="color:#f87171;font-weight:600">EXPENSE</span> · -$85.00', tag:'tag-expense' },
+  { text:'Idea: añadir IA al parser semántico', result:'→ <span style="color:var(--p400);font-weight:600">NOTE</span> · saved to brain', tag:'tag-note' },
+];
+let dIdx=0, cIdx=0, deleting=false;
+const dText=document.getElementById('demo-text');
+const dResult=document.getElementById('demo-result');
+function typeLoop(){
+  const d = demos[dIdx];
+  if(!deleting){
+    if(cIdx <= d.text.length){
+      dText.textContent = d.text.substring(0,cIdx++);
+      if(cIdx === d.text.length+1){
+        dResult.innerHTML = d.result;
+        dResult.style.display='block';
+        dResult.style.borderLeft=`3px solid ${d.tag==='tag-kanban'?'#c084fc':d.tag==='tag-income'?'#4ade80':d.tag==='tag-expense'?'#f87171':'var(--p400)'}`;
+        setTimeout(()=>{ deleting=true; }, 2400);
+      }
+      setTimeout(typeLoop, 55);
+    }
+  } else {
+    if(cIdx > 0){
+      dText.textContent = d.text.substring(0,--cIdx);
+      if(cIdx===0){ dResult.style.display='none'; deleting=false; dIdx=(dIdx+1)%demos.length; }
+      setTimeout(typeLoop, 28);
+    }
+  }
+}
+setTimeout(typeLoop, 800);
+
+/* ═══════════════ MODAL LOGIC ═══════════════ */
+function openModal(tab){
+  document.getElementById('auth-modal').classList.remove('hidden');
+  if(tab==='register'){
+    document.getElementById('tab-register').click();
+  }
+}
+['btn-login-nav','btn-login-mobile'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('click',()=>openModal('login'));
+});
+['btn-register-nav','btn-hero-register','btn-pricing-free','btn-cta-register'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el) el.addEventListener('click',()=>openModal('register'));
+});
+document.getElementById('btn-close-modal').addEventListener('click',()=>{
+  document.getElementById('auth-modal').classList.add('hidden');
+});
+document.getElementById('auth-modal').addEventListener('click',function(e){
+  if(e.target===this) this.classList.add('hidden');
+});
+
+/* ── Tabs ── */
+document.getElementById('tab-login').addEventListener('click',function(){
+  this.classList.add('active');
+  document.getElementById('tab-register').classList.remove('active');
+  document.getElementById('form-login').style.display='';
+  document.getElementById('form-register').classList.add('hidden');
+  document.getElementById('form-register').style.display='none';
+  document.getElementById('form-login').classList.remove('hidden');
+});
+document.getElementById('tab-register').addEventListener('click',function(){
+  this.classList.add('active');
+  document.getElementById('tab-login').classList.remove('active');
+  document.getElementById('form-register').style.display='';
+  document.getElementById('form-login').classList.add('hidden');
+  document.getElementById('form-login').style.display='none';
+  document.getElementById('form-register').classList.remove('hidden');
+});
+</script>
 </body>
 </html>
