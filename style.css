@@ -1,0 +1,121 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&display=swap');
+
+:root {
+  --ocean-dark: #0B132B;
+  --ocean-mid:  #0B1D3A;
+  --cyan-neon:  #00F0FF;
+  --cyan-muted: #4A9EBF;
+  --glass-bg:   rgba(11, 29, 58, 0.6);
+  --glass-border: rgba(0, 240, 255, 0.2);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--ocean-dark);
+  color: #e0f7fa;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  min-height: 100vh;
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+
+/* Neon glow text */
+.neon-text {
+  color: var(--cyan-neon);
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.6),
+               0 0 20px rgba(0, 240, 255, 0.3);
+}
+
+/* Neon button */
+.btn-neon {
+  background: transparent;
+  border: 1px solid var(--cyan-neon);
+  color: var(--cyan-neon);
+  padding: 0.6rem 1.4rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+}
+
+.btn-neon:hover {
+  background: var(--cyan-neon);
+  color: var(--ocean-dark);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.5);
+}
+
+/* Neon input */
+.input-neon {
+  background: rgba(11, 29, 58, 0.8);
+  border: 1px solid var(--glass-border);
+  color: #e0f7fa;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875rem;
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.input-neon:focus {
+  border-color: var(--cyan-neon);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+}
+
+.input-neon::placeholder {
+  color: var(--cyan-muted);
+  opacity: 0.6;
+}
+
+/* Grid background pattern */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0,240,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Scanning line animation */
+@keyframes scan {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.scan-line {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--cyan-neon), transparent);
+  opacity: 0.15;
+  animation: scan 8s linear infinite;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease forwards;
+}

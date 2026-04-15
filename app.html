@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus OS — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body class="grid-bg min-h-screen flex flex-col">
+
+  <div class="scan-line"></div>
+
+  <!-- ═══════════════════════════════════════
+       NAVBAR
+  ═══════════════════════════════════════ -->
+  <nav class="flex items-center justify-between px-6 py-4 glass border-b border-cyan-500/20">
+    <span class="neon-text font-bold tracking-widest">⬡ NEXUS OS</span>
+    <div class="flex items-center gap-4">
+      <span id="user-email" class="text-cyan-muted text-xs"></span>
+      <button id="btn-logout" class="btn-neon text-xs px-3 py-1">Salir</button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════
+       OMNIPRESENT INPUT (Botón Central)
+  ═══════════════════════════════════════ -->
+  <section class="px-6 py-8 max-w-4xl mx-auto w-full">
+    <div class="glass p-6">
+      <p class="text-xs text-cyan-muted tracking-widest mb-3">
+        // NEXUS INPUT — todo empieza aquí
+      </p>
+      <div class="flex gap-3">
+        <span class="text-cyan-neon text-xl mt-1">›</span>
+        <input
+          id="nexus-input"
+          type="text"
+          class="input-neon text-base flex-1"
+          placeholder="#tarea   |   -$monto   |   +$monto   |   texto libre"
+          autofocus
+        />
+        <button id="btn-add-node" class="btn-neon px-6 whitespace-nowrap">
+          + Nodo
+        </button>
+      </div>
+      <div id="parse-preview" class="mt-3 text-xs text-cyan-muted font-mono hidden"></div>
+      <p id="node-message" class="mt-2 text-xs hidden"></p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       STATS BAR
+  ═══════════════════════════════════════ -->
+  <section class="px-6 max-w-4xl mx-auto w-full mb-6">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="glass p-4 text-center">
+        <div id="stat-total" class="text-2xl font-bold neon-text">0</div>
+        <div class="text-xs text-cyan-muted mt-1">Nodos totales</div>
+      </div>
+      <div class="glass p-4 text-center">
+        <div id="stat-tasks" class="text-2xl font-bold text-yellow-400">0</div>
+        <div class="text-xs text-cyan-muted mt-1">Tareas</div>
+      </div>
+      <div class="glass p-4 text-center">
+        <div id="stat-balance" class="text-2xl font-bold text-green-400">$0</div>
+        <div class="text-xs text-cyan-muted mt-1">Balance</div>
+      </div>
+      <div class="glass p-4 text-center">
+        <div id="stat-notes" class="text-2xl font-bold text-purple-400">0</div>
+        <div class="text-xs text-cyan-muted mt-1">Notas</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       NODES FEED
+  ═══════════════════════════════════════ -->
+  <section class="px-6 pb-12 max-w-4xl mx-auto w-full flex-1">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-mono text-cyan-muted tracking-widest">// NODOS RECIENTES</h2>
+      <div class="flex gap-2">
+        <button class="filter-btn btn-neon text-xs px-3 py-1 active" data-filter="all">Todos</button>
+        <button class="filter-btn btn-neon text-xs px-3 py-1 opacity-50" data-filter="kanban">Tareas</button>
+        <button class="filter-btn btn-neon text-xs px-3 py-1 opacity-50" data-filter="expense">Gastos</button>
+        <button class="filter-btn btn-neon text-xs px-3 py-1 opacity-50" data-filter="income">Ingresos</button>
+        <button class="filter-btn btn-neon text-xs px-3 py-1 opacity-50" data-filter="note">Notas</button>
+      </div>
+    </div>
+    <div id="nodes-feed" class="space-y-3">
+      <div class="text-center text-cyan-muted text-sm py-12 opacity-50">
+        Cargando nodos...
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nexus OS — Inteligencia Situacional Absoluta</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body class="grid-bg">
+
+  <!-- Scan line decoration -->
+  <div class="scan-line"></div>
+
+  <!-- ═══════════════════════════════════════
+       NAVBAR
+  ═══════════════════════════════════════ -->
+  <nav class="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 glass border-b border-cyan-500/20">
+    <span class="neon-text text-lg font-bold tracking-widest">⬡ NEXUS OS</span>
+    <div class="flex gap-4 items-center">
+      <a href="#features" class="text-cyan-muted hover:text-cyan-neon text-sm transition-colors">Funciones</a>
+      <a href="#pricing" class="text-cyan-muted hover:text-cyan-neon text-sm transition-colors">Precios</a>
+      <button id="btn-show-login" class="btn-neon">Iniciar Sesión</button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════
+       HERO
+  ═══════════════════════════════════════ -->
+  <section class="min-h-screen flex flex-col items-center justify-center text-center px-6 pt-24 pb-16 fade-in">
+    <div class="mb-6">
+      <span class="text-xs font-mono text-cyan-muted border border-cyan-neon/30 px-3 py-1 rounded-full tracking-widest">
+        v1.0 — EVERYTHING IS A NODE
+      </span>
+    </div>
+
+    <h1 class="text-5xl md:text-7xl font-bold leading-tight mb-6 max-w-4xl">
+      De la
+      <span class="neon-text"> Fragmentación</span><br/>
+      a la
+      <span class="neon-text"> Inteligencia</span><br/>
+      <span class="text-white">Situacional Absoluta</span>
+    </h1>
+
+    <p class="text-cyan-muted text-lg max-w-2xl mb-10 leading-relaxed">
+      Nexus OS unifica tus tareas, finanzas y notas en un único
+      flujo de conciencia. Un texto. Un nodo. Todo conectado.
+    </p>
+
+    <div class="flex gap-4 flex-wrap justify-center">
+      <button id="btn-hero-register" class="btn-neon text-base px-8 py-3">
+        Empezar gratis →
+      </button>
+      <a href="#features" class="text-cyan-muted border border-cyan-neon/20 hover:border-cyan-neon/60 px-8 py-3 rounded-md text-sm transition-all">
+        Ver cómo funciona
+      </a>
+    </div>
+
+    <!-- Mini demo visual -->
+    <div class="mt-16 glass p-6 max-w-xl w-full text-left">
+      <p class="text-cyan-muted text-xs mb-3 tracking-widest">// NEXUS INPUT — escribe cualquier cosa</p>
+      <div class="flex gap-2 items-center">
+        <span class="text-cyan-neon">›</span>
+        <span id="demo-text" class="text-white text-sm font-mono"></span>
+        <span class="text-cyan-neon animate-pulse">_</span>
+      </div>
+      <div id="demo-result" class="mt-3 text-xs text-cyan-muted hidden"></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       FEATURES
+  ═══════════════════════════════════════ -->
+  <section id="features" class="py-24 px-6 max-w-6xl mx-auto">
+    <h2 class="text-3xl font-bold text-center neon-text mb-4">Todo es un Nodo</h2>
+    <p class="text-center text-cyan-muted mb-16 text-sm">Una arquitectura. Infinite posibilidades.</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+      <div class="glass p-6 hover:border-cyan-neon/50 transition-all">
+        <div class="text-3xl mb-4">📌</div>
+        <h3 class="text-cyan-neon font-semibold mb-2">Kanban Inteligente</h3>
+        <p class="text-cyan-muted text-sm leading-relaxed">
+          Escribe <code class="text-white">#tarea Revisar informe</code> y Nexus
+          lo convierte en una tarjeta Kanban automáticamente.
+        </p>
+        <div class="mt-4 p-3 bg-ocean-dark/60 rounded text-xs text-cyan-muted font-mono">
+          #tarea Revisar informe → <span class="text-cyan-neon">kanban</span>
+        </div>
+      </div>
+
+      <div class="glass p-6 hover:border-cyan-neon/50 transition-all">
+        <div class="text-3xl mb-4">💸</div>
+        <h3 class="text-cyan-neon font-semibold mb-2">Flujo Financiero</h3>
+        <p class="text-cyan-muted text-sm leading-relaxed">
+          Registra gastos e ingresos con símbolos naturales.
+          Balance en tiempo real, sin formularios.
+        </p>
+        <div class="mt-4 p-3 bg-ocean-dark/60 rounded text-xs text-cyan-muted font-mono">
+          -$500 Renta → <span class="text-red-400">expense</span><br/>
+          +$1500 Freelance → <span class="text-green-400">income</span>
+        </div>
+      </div>
+
+      <div class="glass p-6 hover:border-cyan-neon/50 transition-all">
+        <div class="text-3xl mb-4">🧠</div>
+        <h3 class="text-cyan-neon font-semibold mb-2">Segunda Mente</h3>
+        <p class="text-cyan-muted text-sm leading-relaxed">
+          Notas, ideas y contexto almacenados en Supabase
+          con Supertags para conexiones semánticas.
+        </p>
+        <div class="mt-4 p-3 bg-ocean-dark/60 rounded text-xs text-cyan-muted font-mono">
+          Idea producto → <span class="text-cyan-neon">note</span> + metadata
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       PRICING
+  ═══════════════════════════════════════ -->
+  <section id="pricing" class="py-24 px-6 max-w-4xl mx-auto text-center">
+    <h2 class="text-3xl font-bold neon-text mb-4">Simple y transparente</h2>
+    <p class="text-cyan-muted mb-16 text-sm">Sin trampa, sin letra pequeña.</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+      <div class="glass p-8">
+        <h3 class="text-white font-semibold text-xl mb-2">Free</h3>
+        <div class="text-4xl font-bold neon-text mb-4">$0<span class="text-sm text-cyan-muted">/mes</span></div>
+        <ul class="text-cyan-muted text-sm space-y-2 text-left mb-8">
+          <li>✓ 500 nodos / mes</li>
+          <li>✓ Kanban básico</li>
+          <li>✓ Registro financiero</li>
+          <li>✗ IA semántica</li>
+        </ul>
+        <button id="btn-pricing-free" class="btn-neon w-full">Empezar gratis</button>
+      </div>
+
+      <div class="glass p-8 border-cyan-neon/50">
+        <div class="text-xs text-cyan-neon tracking-widest mb-2">RECOMENDADO</div>
+        <h3 class="text-white font-semibold text-xl mb-2">Pro</h3>
+        <div class="text-4xl font-bold neon-text mb-4">$9<span class="text-sm text-cyan-muted">/mes</span></div>
+        <ul class="text-cyan-muted text-sm space-y-2 text-left mb-8">
+          <li>✓ Nodos ilimitados</li>
+          <li>✓ Kanban avanzado</li>
+          <li>✓ Dashboard financiero</li>
+          <li>✓ IA semántica (próximo)</li>
+        </ul>
+        <button class="btn-neon w-full opacity-60 cursor-not-allowed">Próximamente</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════
+       FOOTER
+  ═══════════════════════════════════════ -->
+  <footer class="text-center py-10 text-cyan-muted text-xs border-t border-cyan-neon/10">
+    <p>⬡ NEXUS OS v1.0 — Built with Vite + Supabase + Tailwind CSS</p>
+    <p class="mt-2 opacity-50">© 2026 Nexus OS. Everything is a Node.</p>
+  </footer>
+
+  <!-- ═══════════════════════════════════════
+       MODAL: LOGIN / REGISTRO
+  ═══════════════════════════════════════ -->
+  <div id="auth-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-ocean-dark/80 backdrop-blur-sm hidden">
+    <div class="glass p-8 w-full max-w-md fade-in">
+      <div class="flex justify-between items-center mb-6">
+        <h2 class="neon-text font-bold text-xl">⬡ NEXUS OS</h2>
+        <button id="btn-close-modal" class="text-cyan-muted hover:text-white text-xl">✕</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex mb-6 border-b border-cyan-neon/20">
+        <button id="tab-login" class="flex-1 py-2 text-sm font-mono text-cyan-neon border-b-2 border-cyan-neon">
+          Iniciar Sesión
+        </button>
+        <button id="tab-register" class="flex-1 py-2 text-sm font-mono text-cyan-muted">
+          Registrarse
+        </button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="form-login" class="space-y-4">
+        <div>
+          <label class="text-xs text-cyan-muted block mb-1">Email</label>
+          <input type="email" id="login-email" class="input-neon" placeholder="usuario@nexus.io" required />
+        </div>
+        <div>
+          <label class="text-xs text-cyan-muted block mb-1">Contraseña</label>
+          <input type="password" id="login-password" class="input-neon" placeholder="••••••••" required />
+        </div>
+        <button type="submit" class="btn-neon w-full py-3">Entrar al Nexus →</button>
+      </form>
+
+      <!-- Register Form (oculto por defecto) -->
+      <form id="form-register" class="space-y-4 hidden">
+        <div>
+          <label class="text-xs text-cyan-muted block mb-1">Email</label>
+          <input type="email" id="reg-email" class="input-neon" placeholder="usuario@nexus.io" required />
+        </div>
+        <div>
+          <label class="text-xs text-cyan-muted block mb-1">Contraseña</label>
+          <input type="password" id="reg-password" class="input-neon" placeholder="mín. 8 caracteres" required minlength="8" />
+        </div>
+        <button type="submit" class="btn-neon w-full py-3">Crear cuenta →</button>
+      </form>
+
+      <!-- Mensajes de estado -->
+      <p id="auth-message" class="mt-4 text-xs text-center hidden"></p>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
