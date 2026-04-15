@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Términos de Servicio — Nexus OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-primary: #000000; --bg-secondary: #09090B; --bg-tertiary: #18181B;
+      --p400: #00f0ff; --p300: #1af3ff; --primary-rgb: 0,240,255;
+      --text-primary: #FFFFFF; --text-secondary: #E4E4E7;
+      --text-tertiary: #A1A1AA; --text-quaternary: #71717A;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg-primary); color: var(--text-secondary); font-family: 'Inter', sans-serif; font-size: 16px; line-height: 1.7; }
+    a { color: var(--p400); text-decoration: none; transition: opacity 0.2s; }
+    a:hover { opacity: 0.8; }
+    .container { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+    nav { position: sticky; top: 0; z-index: 100; padding: 16px 0;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(24px);
+      border-bottom: 1px solid rgba(var(--primary-rgb), 0.1); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; }
+    .logo { display: flex; align-items: center; gap: 10px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 18px; color: var(--text-primary); }
+    .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #00a8b8, #00f0ff); border-radius: 8px; display: grid; place-items: center; font-size: 16px; box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.4); }
+    .back-btn { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-tertiary); border: 1px solid rgba(var(--primary-rgb), 0.2); padding: 8px 16px; border-radius: 8px; transition: all 0.2s; }
+    .back-btn:hover { color: var(--p400); border-color: rgba(var(--primary-rgb), 0.5); background: rgba(var(--primary-rgb), 0.05); }
+
+    .page-hero { padding: 64px 0 48px; text-align: center; border-bottom: 1px solid rgba(var(--primary-rgb), 0.08); }
+    .page-hero .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(var(--primary-rgb), 0.3); background: rgba(var(--primary-rgb), 0.06); color: var(--p400); font-size: 12px; font-weight: 500; letter-spacing: 0.08em; padding: 6px 14px; border-radius: 100px; margin-bottom: 20px; }
+    .page-hero h1 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(28px, 5vw, 42px); font-weight: 800; color: var(--text-primary); margin-bottom: 12px; }
+    .page-hero p { font-size: 15px; color: var(--text-tertiary); }
+
+    .content { padding: 56px 0 80px; }
+    .toc { background: rgba(var(--primary-rgb), 0.04); border: 1px solid rgba(var(--primary-rgb), 0.1); border-radius: 16px; padding: 24px 28px; margin-bottom: 48px; }
+    .toc h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--text-quaternary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+    .toc ol { padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+    .toc ol li { font-size: 14px; color: var(--text-tertiary); }
+    .toc ol li a { color: var(--text-tertiary); }
+    .toc ol li a:hover { color: var(--p400); }
+
+    .section { margin-bottom: 48px; }
+    .section-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
+    .section-title::before { content: ''; width: 4px; height: 24px; background: var(--p400); border-radius: 4px; flex-shrink: 0; box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.6); }
+    .section p { color: var(--text-tertiary); margin-bottom: 14px; font-size: 15px; line-height: 1.8; }
+    .section ul, .section ol { padding-left: 20px; color: var(--text-tertiary); font-size: 15px; line-height: 1.8; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .section ul li::marker { color: var(--p400); }
+    .highlight-box { background: rgba(var(--primary-rgb), 0.04); border-left: 3px solid var(--p400); border-radius: 0 12px 12px 0; padding: 16px 20px; margin: 20px 0; font-size: 14px; color: var(--text-secondary); }
+    .highlight-box strong { color: var(--p400); }
+    .mit-box { background: var(--bg-tertiary); border: 1px solid rgba(var(--primary-rgb), 0.15); border-radius: 12px; padding: 24px; margin: 20px 0; font-family: 'Courier New', monospace; font-size: 13px; color: var(--text-tertiary); line-height: 1.8; white-space: pre-wrap; }
+
+    footer { background: var(--bg-secondary); border-top: 1px solid rgba(var(--primary-rgb), 0.08); padding: 32px 0; text-align: center; }
+    footer p { font-size: 13px; color: var(--text-quaternary); }
+    footer .footer-links { display: flex; gap: 24px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+    footer .footer-links a { font-size: 13px; color: var(--text-quaternary); }
+    footer .footer-links a:hover { color: var(--p400); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon">⬡</div>
+      Nexus OS
+    </a>
+    <a href="/" class="back-btn">← Volver al inicio</a>
+  </div>
+</nav>
+
+<div class="page-hero">
+  <div class="container">
+    <div class="chip">Legal</div>
+    <h1>Términos de Servicio</h1>
+    <p>Última actualización: 15 de abril de 2026</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <div class="toc">
+      <h3>Contenido</h3>
+      <ol>
+        <li><a href="#s1">Aceptación de los términos</a></li>
+        <li><a href="#s2">Descripción del servicio</a></li>
+        <li><a href="#s3">Cuenta de usuario</a></li>
+        <li><a href="#s4">Uso aceptable</a></li>
+        <li><a href="#s5">Propiedad intelectual y Licencia MIT</a></li>
+        <li><a href="#s6">Contenido del usuario</a></li>
+        <li><a href="#s7">Limitación de responsabilidad</a></li>
+        <li><a href="#s8">Disponibilidad del servicio</a></li>
+        <li><a href="#s9">Modificaciones</a></li>
+        <li><a href="#s10">Contacto</a></li>
+      </ol>
+    </div>
+
+    <div class="highlight-box">
+      <strong>Aviso importante:</strong> Al usar Nexus OS, aceptas estos términos de servicio. Si no estás de acuerdo con alguna parte, no debes usar el servicio. Léelos con atención.
+    </div>
+
+    <div class="section" id="s1">
+      <h2 class="section-title">1. Aceptación de los términos</h2>
+      <p>Al acceder o utilizar Nexus OS (el "Servicio"), usted ("Usuario") acepta quedar vinculado por estos Términos de Servicio y nuestra <a href="/privacy.html">Política de Privacidad</a>. Si accede al Servicio en nombre de una organización, declara tener autoridad para vincular a dicha organización.</p>
+      <p>La edad mínima para usar Nexus OS es de 13 años. Al registrarte, confirmas que cumples este requisito.</p>
+    </div>
+
+    <div class="section" id="s2">
+      <h2 class="section-title">2. Descripción del servicio</h2>
+      <p>Nexus OS es una aplicación web de productividad personal que permite a los usuarios gestionar tareas, finanzas personales y notas a través de un sistema unificado de "nodos". El servicio incluye:</p>
+      <ul>
+        <li>Panel de control con parser semántico para clasificación automática de contenido.</li>
+        <li>Vista Kanban con gestión de tareas estilo Trello.</li>
+        <li>Módulo de finanzas personales con registro de ingresos y gastos.</li>
+        <li>Sistema de notas con búsqueda por supertags.</li>
+        <li>Vista de calendario para organización temporal.</li>
+        <li>Almacenamiento seguro en la nube con Row Level Security.</li>
+      </ul>
+    </div>
+
+    <div class="section" id="s3">
+      <h2 class="section-title">3. Cuenta de usuario</h2>
+      <p>Para acceder al Servicio es necesario crear una cuenta con una dirección de correo electrónico válida y una contraseña. El Usuario es responsable de:</p>
+      <ul>
+        <li>Mantener la confidencialidad de sus credenciales de acceso.</li>
+        <li>Todas las actividades que ocurran bajo su cuenta.</li>
+        <li>Notificarnos inmediatamente ante cualquier uso no autorizado.</li>
+        <li>Proporcionar información veraz y actualizada.</li>
+      </ul>
+      <p>Nos reservamos el derecho de suspender o eliminar cuentas que violen estos términos, sin previo aviso y sin responsabilidad.</p>
+    </div>
+
+    <div class="section" id="s4">
+      <h2 class="section-title">4. Uso aceptable</h2>
+      <p>Al usar Nexus OS, el Usuario se compromete a NO:</p>
+      <ul>
+        <li>Utilizar el Servicio para fines ilegales o que violen derechos de terceros.</li>
+        <li>Intentar acceder a cuentas o datos de otros usuarios.</li>
+        <li>Realizar ataques de fuerza bruta, inyección SQL u otros intentos de vulnerar la seguridad.</li>
+        <li>Cargar contenido que contenga malware, virus o código malicioso.</li>
+        <li>Hacer scraping automatizado o uso abusivo de la API.</li>
+        <li>Redistribuir o revender el servicio sin autorización expresa.</li>
+        <li>Cargar material que infrinja derechos de autor, marcas registradas u otros derechos de propiedad intelectual.</li>
+      </ul>
+    </div>
+
+    <div class="section" id="s5">
+      <h2 class="section-title">5. Propiedad intelectual y Licencia MIT</h2>
+      <p>Nexus OS es software de código abierto publicado bajo la <strong>Licencia MIT</strong>. Esto significa que el código fuente es libremente disponible, modificable y redistribuible, sujeto a los términos de dicha licencia:</p>
+      <div class="mit-box">MIT License
+
+Copyright (c) 2026 Oscar Omar González Pérez (oscaromargp)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</div>
+      <p>El código fuente completo está disponible en <a href="https://github.com/oscaromargp/nexus-os" target="_blank" rel="noopener">github.com/oscaromargp/nexus-os</a>.</p>
+    </div>
+
+    <div class="section" id="s6">
+      <h2 class="section-title">6. Contenido del usuario</h2>
+      <p>El Usuario retiene todos los derechos sobre el contenido que crea dentro de Nexus OS (notas, tareas, datos financieros, archivos adjuntos). Al usar el Servicio, otorgas a Nexus OS una licencia limitada, no exclusiva y revocable para almacenar y procesar dicho contenido únicamente con el fin de prestarte el servicio.</p>
+      <p>Puedes eliminar tu cuenta y todos tus datos en cualquier momento. Tras la eliminación, los datos serán borrados de nuestros sistemas en un plazo máximo de 30 días, salvo que la ley requiera su conservación.</p>
+    </div>
+
+    <div class="section" id="s7">
+      <h2 class="section-title">7. Limitación de responsabilidad</h2>
+      <p>En la máxima medida permitida por la ley aplicable:</p>
+      <ul>
+        <li>Nexus OS se proporciona "tal cual" y "según disponibilidad", sin garantías de ningún tipo.</li>
+        <li>No garantizamos que el Servicio sea ininterrumpido, libre de errores o completamente seguro.</li>
+        <li>No somos responsables de pérdidas de datos, interrupciones del servicio o daños derivados del uso del Servicio.</li>
+        <li>Nuestra responsabilidad total no superará en ningún caso el importe pagado por el Usuario en los 12 meses anteriores al evento que genera la reclamación.</li>
+      </ul>
+    </div>
+
+    <div class="section" id="s8">
+      <h2 class="section-title">8. Disponibilidad del servicio</h2>
+      <p>Nos esforzamos por mantener Nexus OS disponible 24/7, pero no garantizamos una disponibilidad específica. Podemos interrumpir temporalmente el servicio para mantenimiento, actualizaciones o por causas de fuerza mayor.</p>
+      <p>Nos reservamos el derecho de modificar, suspender o descontinuar cualquier aspecto del Servicio con un aviso razonable de al menos 30 días, excepto en casos de emergencia de seguridad.</p>
+    </div>
+
+    <div class="section" id="s9">
+      <h2 class="section-title">9. Modificaciones de los términos</h2>
+      <p>Podemos modificar estos Términos de Servicio en cualquier momento. Las modificaciones significativas serán comunicadas por correo electrónico con al menos 30 días de antelación. El uso continuado del Servicio tras dicha notificación constituye la aceptación de los nuevos términos.</p>
+      <p>Te recomendamos revisar esta página periódicamente para estar al tanto de cualquier cambio.</p>
+    </div>
+
+    <div class="section" id="s10">
+      <h2 class="section-title">10. Contacto</h2>
+      <p>Para consultas sobre estos Términos de Servicio:</p>
+      <div class="highlight-box">
+        <strong>Nexus OS</strong><br />
+        Email: <a href="mailto:oscaromargp@gmail.com">oscaromargp@gmail.com</a><br />
+        GitHub: <a href="https://github.com/oscaromargp/nexus-os" target="_blank" rel="noopener">github.com/oscaromargp/nexus-os</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <p>© 2026 Nexus OS · Everything is a Node</p>
+    <div class="footer-links">
+      <a href="/">Inicio</a>
+      <a href="/privacy.html">Privacidad</a>
+      <a href="/terms.html">Términos</a>
+      <a href="https://github.com/oscaromargp/nexus-os" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

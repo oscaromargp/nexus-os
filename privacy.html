@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Política de Privacidad — Nexus OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-primary: #000000; --bg-secondary: #09090B; --bg-tertiary: #18181B;
+      --p400: #00f0ff; --p300: #1af3ff; --primary-rgb: 0,240,255;
+      --text-primary: #FFFFFF; --text-secondary: #E4E4E7;
+      --text-tertiary: #A1A1AA; --text-quaternary: #71717A;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg-primary); color: var(--text-secondary); font-family: 'Inter', sans-serif; font-size: 16px; line-height: 1.7; }
+    a { color: var(--p400); text-decoration: none; transition: opacity 0.2s; }
+    a:hover { opacity: 0.8; }
+    .container { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+    /* Navbar */
+    nav { position: sticky; top: 0; z-index: 100; padding: 16px 0;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(24px);
+      border-bottom: 1px solid rgba(var(--primary-rgb), 0.1); }
+    .nav-inner { display: flex; align-items: center; justify-content: space-between; }
+    .logo { display: flex; align-items: center; gap: 10px; font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 18px; color: var(--text-primary); }
+    .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, #00a8b8, #00f0ff); border-radius: 8px; display: grid; place-items: center; font-size: 16px; box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.4); }
+    .back-btn { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-tertiary); border: 1px solid rgba(var(--primary-rgb), 0.2); padding: 8px 16px; border-radius: 8px; transition: all 0.2s; }
+    .back-btn:hover { color: var(--p400); border-color: rgba(var(--primary-rgb), 0.5); background: rgba(var(--primary-rgb), 0.05); }
+
+    /* Hero strip */
+    .page-hero { padding: 64px 0 48px; text-align: center; border-bottom: 1px solid rgba(var(--primary-rgb), 0.08); }
+    .page-hero .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(var(--primary-rgb), 0.3); background: rgba(var(--primary-rgb), 0.06); color: var(--p400); font-size: 12px; font-weight: 500; letter-spacing: 0.08em; padding: 6px 14px; border-radius: 100px; margin-bottom: 20px; }
+    .page-hero h1 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(28px, 5vw, 42px); font-weight: 800; color: var(--text-primary); margin-bottom: 12px; }
+    .page-hero p { font-size: 15px; color: var(--text-tertiary); }
+
+    /* Content */
+    .content { padding: 56px 0 80px; }
+    .toc { background: rgba(var(--primary-rgb), 0.04); border: 1px solid rgba(var(--primary-rgb), 0.1); border-radius: 16px; padding: 24px 28px; margin-bottom: 48px; }
+    .toc h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 13px; font-weight: 600; color: var(--text-quaternary); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+    .toc ol { padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+    .toc ol li { font-size: 14px; color: var(--text-tertiary); }
+    .toc ol li a { color: var(--text-tertiary); }
+    .toc ol li a:hover { color: var(--p400); }
+
+    .section { margin-bottom: 48px; }
+    .section-title { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
+    .section-title::before { content: ''; width: 4px; height: 24px; background: var(--p400); border-radius: 4px; flex-shrink: 0; box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.6); }
+    .section p { color: var(--text-tertiary); margin-bottom: 14px; font-size: 15px; line-height: 1.8; }
+    .section ul, .section ol { padding-left: 20px; color: var(--text-tertiary); font-size: 15px; line-height: 1.8; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .section ul li::marker { color: var(--p400); }
+    .highlight-box { background: rgba(var(--primary-rgb), 0.04); border-left: 3px solid var(--p400); border-radius: 0 12px 12px 0; padding: 16px 20px; margin: 20px 0; font-size: 14px; color: var(--text-secondary); }
+    .highlight-box strong { color: var(--p400); }
+
+    /* Footer */
+    footer { background: var(--bg-secondary); border-top: 1px solid rgba(var(--primary-rgb), 0.08); padding: 32px 0; text-align: center; }
+    footer p { font-size: 13px; color: var(--text-quaternary); }
+    footer .footer-links { display: flex; gap: 24px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+    footer .footer-links a { font-size: 13px; color: var(--text-quaternary); }
+    footer .footer-links a:hover { color: var(--p400); }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="container nav-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon">⬡</div>
+      Nexus OS
+    </a>
+    <a href="/" class="back-btn">← Volver al inicio</a>
+  </div>
+</nav>
+
+<div class="page-hero">
+  <div class="container">
+    <div class="chip">Legal</div>
+    <h1>Política de Privacidad</h1>
+    <p>Última actualización: 15 de abril de 2026</p>
+  </div>
+</div>
+
+<div class="content">
+  <div class="container">
+
+    <div class="toc">
+      <h3>Contenido</h3>
+      <ol>
+        <li><a href="#s1">Información que recopilamos</a></li>
+        <li><a href="#s2">Cómo usamos tu información</a></li>
+        <li><a href="#s3">Almacenamiento y seguridad</a></li>
+        <li><a href="#s4">Cookies y tecnologías similares</a></li>
+        <li><a href="#s5">Compartir información con terceros</a></li>
+        <li><a href="#s6">Tus derechos</a></li>
+        <li><a href="#s7">Cambios a esta política</a></li>
+        <li><a href="#s8">Contacto</a></li>
+      </ol>
+    </div>
+
+    <div class="highlight-box">
+      <strong>Resumen:</strong> Nexus OS recopila solo los datos necesarios para prestarte el servicio. No vendemos ni compartimos tu información personal con terceros con fines publicitarios. Tus datos son tuyos.
+    </div>
+
+    <div class="section" id="s1">
+      <h2 class="section-title">1. Información que recopilamos</h2>
+      <p>Al usar Nexus OS, recopilamos los siguientes tipos de información:</p>
+      <ul>
+        <li><strong>Información de cuenta:</strong> dirección de correo electrónico y contraseña (almacenada de forma segura con hash) cuando te registras.</li>
+        <li><strong>Contenido del usuario:</strong> los nodos que creas (tareas, notas, movimientos financieros, archivos adjuntos) son almacenados en nuestra base de datos para prestarte el servicio.</li>
+        <li><strong>Datos de uso:</strong> información técnica como dirección IP, tipo de navegador, páginas visitadas y tiempos de sesión, con fines de seguridad y mejora del servicio.</li>
+        <li><strong>Metadatos de nodos:</strong> etiquetas, fechas de vencimiento, prioridades y otros datos estructurados asociados a tu contenido.</li>
+      </ul>
+      <p>No recopilamos información de pago directamente. Si en el futuro ofrecemos planes de pago, utilizaremos procesadores de pago certificados (PCI DSS) que manejan esos datos de forma independiente.</p>
+    </div>
+
+    <div class="section" id="s2">
+      <h2 class="section-title">2. Cómo usamos tu información</h2>
+      <p>Utilizamos la información recopilada exclusivamente para:</p>
+      <ul>
+        <li>Proveer, mantener y mejorar el servicio de Nexus OS.</li>
+        <li>Autenticar tu identidad y proteger la seguridad de tu cuenta.</li>
+        <li>Enviarte comunicaciones transaccionales esenciales (confirmación de cuenta, alertas de seguridad).</li>
+        <li>Detectar y prevenir actividades fraudulentas o abusivas.</li>
+        <li>Cumplir con obligaciones legales aplicables.</li>
+      </ul>
+      <p><strong>No utilizamos tu contenido personal para entrenar modelos de inteligencia artificial ni para ningún propósito distinto a la prestación del servicio.</strong></p>
+    </div>
+
+    <div class="section" id="s3">
+      <h2 class="section-title">3. Almacenamiento y seguridad</h2>
+      <p>Nexus OS utiliza <strong>Supabase</strong> (PostgreSQL) como base de datos. Los datos se almacenan en servidores seguros en la Unión Europea o Estados Unidos, con las siguientes protecciones:</p>
+      <ul>
+        <li>Encriptación en tránsito mediante TLS 1.3.</li>
+        <li>Encriptación en reposo (AES-256).</li>
+        <li>Políticas de Row Level Security (RLS) que garantizan que cada usuario solo puede acceder a sus propios datos.</li>
+        <li>Contraseñas almacenadas con hash bcrypt, nunca en texto plano.</li>
+        <li>Backups automáticos diarios.</li>
+      </ul>
+      <p>Aunque implementamos medidas de seguridad razonables, ningún sistema es 100% seguro. Te recomendamos utilizar una contraseña fuerte y única para tu cuenta.</p>
+    </div>
+
+    <div class="section" id="s4">
+      <h2 class="section-title">4. Cookies y tecnologías similares</h2>
+      <p>Nexus OS utiliza un número mínimo de cookies estrictamente necesarias para el funcionamiento del servicio:</p>
+      <ul>
+        <li><strong>Cookies de sesión:</strong> para mantener tu sesión iniciada entre páginas.</li>
+        <li><strong>Cookies de preferencias:</strong> para recordar ajustes de la interfaz.</li>
+      </ul>
+      <p>No utilizamos cookies de seguimiento publicitario ni compartimos datos de cookies con redes de publicidad.</p>
+    </div>
+
+    <div class="section" id="s5">
+      <h2 class="section-title">5. Compartir información con terceros</h2>
+      <p>No vendemos, alquilamos ni compartimos tu información personal con terceros, salvo en los siguientes casos excepcionales:</p>
+      <ul>
+        <li><strong>Proveedores de servicios:</strong> Supabase (base de datos) y Vercel (infraestructura de hosting), sujetos a sus propias políticas de privacidad.</li>
+        <li><strong>Requerimientos legales:</strong> cuando una autoridad competente lo requiera mediante orden judicial válida.</li>
+        <li><strong>Protección de derechos:</strong> cuando sea necesario para proteger los derechos, propiedad o seguridad de Nexus OS o sus usuarios.</li>
+      </ul>
+    </div>
+
+    <div class="section" id="s6">
+      <h2 class="section-title">6. Tus derechos</h2>
+      <p>Como usuario de Nexus OS, tienes los siguientes derechos sobre tus datos:</p>
+      <ul>
+        <li><strong>Acceso:</strong> puedes solicitar una copia de todos los datos que almacenamos sobre ti.</li>
+        <li><strong>Rectificación:</strong> puedes corregir datos inexactos desde tu perfil o contactándonos.</li>
+        <li><strong>Eliminación:</strong> puedes eliminar tu cuenta y todos tus datos en cualquier momento desde la configuración de tu cuenta.</li>
+        <li><strong>Portabilidad:</strong> puedes exportar tus datos en formato JSON o CSV.</li>
+        <li><strong>Oposición:</strong> puedes oponerte al procesamiento de tus datos para ciertos propósitos.</li>
+      </ul>
+      <p>Para ejercer cualquiera de estos derechos, contáctanos en <a href="mailto:oscaromargp@gmail.com">oscaromargp@gmail.com</a>.</p>
+    </div>
+
+    <div class="section" id="s7">
+      <h2 class="section-title">7. Cambios a esta política</h2>
+      <p>Podemos actualizar esta política periódicamente. Cuando realicemos cambios significativos, te notificaremos por correo electrónico o mediante un aviso destacado en la aplicación al menos 30 días antes de que los cambios entren en vigor.</p>
+      <p>El uso continuado del servicio tras la notificación de cambios constituye tu aceptación de la política actualizada.</p>
+    </div>
+
+    <div class="section" id="s8">
+      <h2 class="section-title">8. Contacto</h2>
+      <p>Si tienes preguntas, inquietudes o solicitudes relacionadas con esta política de privacidad, contáctanos:</p>
+      <div class="highlight-box">
+        <strong>Nexus OS</strong><br />
+        Email: <a href="mailto:oscaromargp@gmail.com">oscaromargp@gmail.com</a><br />
+        GitHub: <a href="https://github.com/oscaromargp/nexus-os" target="_blank" rel="noopener">github.com/oscaromargp/nexus-os</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="container">
+    <p>© 2026 Nexus OS · Everything is a Node</p>
+    <div class="footer-links">
+      <a href="/">Inicio</a>
+      <a href="/privacy.html">Privacidad</a>
+      <a href="/terms.html">Términos</a>
+      <a href="https://github.com/oscaromargp/nexus-os" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
