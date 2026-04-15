@@ -8,92 +8,216 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
+  <style>
+    /* ── Kanban columns ── */
+    .kanban-col { min-height: 200px; }
+    .kanban-card { cursor: default; }
+    .kanban-card:hover { border-color: rgba(0,240,255,0.5); }
+
+    /* ── Finance ── */
+    .bar-income  { background: #22c55e; }
+    .bar-expense { background: #ef4444; }
+
+    /* ── Tab active ── */
+    .view-tab.active {
+      color: #00F0FF;
+      border-bottom: 2px solid #00F0FF;
+    }
+
+    /* ── Node type pill ── */
+    .pill {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+    .pill-kanban  { background: rgba(250,204,21,.15); color: #fbbf24; border:1px solid rgba(251,191,36,.3); }
+    .pill-expense { background: rgba(239,68,68,.15);  color: #f87171; border:1px solid rgba(248,113,113,.3);}
+    .pill-income  { background: rgba(34,197,94,.15);  color: #4ade80; border:1px solid rgba(74,222,128,.3); }
+    .pill-note    { background: rgba(167,139,250,.15);color: #a78bfa; border:1px solid rgba(167,139,250,.3);}
+
+    /* ── Drag ── */
+    .kanban-col.drag-over { border-color: #00F0FF; background: rgba(0,240,255,0.05); }
+    .kanban-card[draggable="true"] { cursor: grab; }
+  </style>
 </head>
 <body class="grid-bg min-h-screen flex flex-col">
-
   <div class="scan-line"></div>
 
-  <!-- ═══════════════════════════════════════
-       NAVBAR
-  ═══════════════════════════════════════ -->
-  <nav class="flex items-center justify-between px-6 py-4 glass border-b border-cyan-500/20">
-    <span class="neon-text font-bold tracking-widest">⬡ NEXUS OS</span>
+  <!-- ═══ NAVBAR ═══ -->
+  <nav class="sticky top-0 z-50 flex items-center justify-between px-6 py-3 glass border-b border-cyan-500/20">
+    <div class="flex items-center gap-3">
+      <span class="neon-text font-bold tracking-widest text-lg">⬡ NEXUS OS</span>
+      <span class="text-cyan-muted text-xs opacity-50">v1.0 MVP</span>
+    </div>
     <div class="flex items-center gap-4">
-      <span id="user-email" class="text-cyan-muted text-xs"></span>
+      <span id="user-email" class="text-cyan-muted text-xs hidden md:block"></span>
       <button id="btn-logout" class="btn-neon text-xs px-3 py-1">Salir</button>
     </div>
   </nav>
 
-  <!-- ═══════════════════════════════════════
-       OMNIPRESENT INPUT (Botón Central)
-  ═══════════════════════════════════════ -->
-  <section class="px-6 py-8 max-w-4xl mx-auto w-full">
-    <div class="glass p-6">
-      <p class="text-xs text-cyan-muted tracking-widest mb-3">
-        // NEXUS INPUT — todo empieza aquí
-      </p>
-      <div class="flex gap-3">
-        <span class="text-cyan-neon text-xl mt-1">›</span>
-        <input
-          id="nexus-input"
-          type="text"
-          class="input-neon text-base flex-1"
-          placeholder="#tarea   |   -$monto   |   +$monto   |   texto libre"
-          autofocus
-        />
-        <button id="btn-add-node" class="btn-neon px-6 whitespace-nowrap">
-          + Nodo
-        </button>
+  <!-- ═══ OMNIPRESENT INPUT ═══ -->
+  <div class="px-4 py-4 max-w-5xl mx-auto w-full">
+    <div class="glass p-4">
+      <p class="text-xs text-cyan-muted tracking-widest mb-2">// NEXUS INPUT — todo empieza aquí</p>
+      <div class="flex gap-2">
+        <span class="text-cyan-neon text-xl mt-1 shrink-0">›</span>
+        <input id="nexus-input" type="text" class="input-neon text-sm flex-1"
+          placeholder="#tarea texto  |  -$monto label  |  +$monto label  |  nota libre"
+          autofocus />
+        <button id="btn-add" class="btn-neon px-4 text-sm shrink-0">+ Nodo</button>
       </div>
-      <div id="parse-preview" class="mt-3 text-xs text-cyan-muted font-mono hidden"></div>
-      <p id="node-message" class="mt-2 text-xs hidden"></p>
+      <p id="parse-preview" class="mt-2 text-xs font-mono text-cyan-muted hidden"></p>
+      <p id="node-msg" class="mt-1 text-xs hidden"></p>
     </div>
-  </section>
+  </div>
 
-  <!-- ═══════════════════════════════════════
-       STATS BAR
-  ═══════════════════════════════════════ -->
-  <section class="px-6 max-w-4xl mx-auto w-full mb-6">
+  <!-- ═══ STATS BAR ═══ -->
+  <div class="px-4 max-w-5xl mx-auto w-full mb-4">
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <div class="glass p-4 text-center">
-        <div id="stat-total" class="text-2xl font-bold neon-text">0</div>
-        <div class="text-xs text-cyan-muted mt-1">Nodos totales</div>
+      <div class="glass p-3 text-center">
+        <div id="s-total"   class="text-xl font-bold neon-text">0</div>
+        <div class="text-xs text-cyan-muted mt-1">Nodos</div>
       </div>
-      <div class="glass p-4 text-center">
-        <div id="stat-tasks" class="text-2xl font-bold text-yellow-400">0</div>
+      <div class="glass p-3 text-center">
+        <div id="s-tasks"   class="text-xl font-bold text-yellow-400">0</div>
         <div class="text-xs text-cyan-muted mt-1">Tareas</div>
       </div>
-      <div class="glass p-4 text-center">
-        <div id="stat-balance" class="text-2xl font-bold text-green-400">$0</div>
+      <div class="glass p-3 text-center">
+        <div id="s-balance" class="text-xl font-bold text-green-400">$0</div>
         <div class="text-xs text-cyan-muted mt-1">Balance</div>
       </div>
-      <div class="glass p-4 text-center">
-        <div id="stat-notes" class="text-2xl font-bold text-purple-400">0</div>
+      <div class="glass p-3 text-center">
+        <div id="s-notes"   class="text-xl font-bold text-purple-400">0</div>
         <div class="text-xs text-cyan-muted mt-1">Notas</div>
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- ═══════════════════════════════════════
-       NODES FEED
-  ═══════════════════════════════════════ -->
-  <section class="px-6 pb-12 max-w-4xl mx-auto w-full flex-1">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-sm font-mono text-cyan-muted tracking-widest">// NODOS RECIENTES</h2>
-      <div class="flex gap-2">
-        <button class="filter-btn btn-neon text-xs px-3 py-1 active" data-filter="all">Todos</button>
+  <!-- ═══ VIEWS TABS ═══ -->
+  <div class="px-4 max-w-5xl mx-auto w-full mb-4">
+    <div class="flex gap-0 border-b border-cyan-neon/20">
+      <button class="view-tab active px-5 py-2 text-sm font-mono text-cyan-muted transition-colors" data-view="feed">
+        📋 Feed
+      </button>
+      <button class="view-tab px-5 py-2 text-sm font-mono text-cyan-muted transition-colors" data-view="kanban">
+        📌 Kanban
+      </button>
+      <button class="view-tab px-5 py-2 text-sm font-mono text-cyan-muted transition-colors" data-view="finance">
+        💸 Finanzas
+      </button>
+      <button class="view-tab px-5 py-2 text-sm font-mono text-cyan-muted transition-colors" data-view="notes">
+        🧠 Notas
+      </button>
+    </div>
+  </div>
+
+  <!-- ═══ VIEWS CONTAINER ═══ -->
+  <main class="px-4 pb-12 max-w-5xl mx-auto w-full flex-1">
+
+    <!-- ── VIEW: FEED ── -->
+    <div id="view-feed" class="view-content space-y-2">
+      <div class="flex gap-2 mb-3 flex-wrap">
+        <button class="filter-btn btn-neon text-xs px-3 py-1" data-filter="all">Todos</button>
         <button class="filter-btn btn-neon text-xs px-3 py-1 opacity-50" data-filter="kanban">Tareas</button>
         <button class="filter-btn btn-neon text-xs px-3 py-1 opacity-50" data-filter="expense">Gastos</button>
         <button class="filter-btn btn-neon text-xs px-3 py-1 opacity-50" data-filter="income">Ingresos</button>
         <button class="filter-btn btn-neon text-xs px-3 py-1 opacity-50" data-filter="note">Notas</button>
       </div>
+      <div id="feed-list"></div>
     </div>
-    <div id="nodes-feed" class="space-y-3">
-      <div class="text-center text-cyan-muted text-sm py-12 opacity-50">
-        Cargando nodos...
+
+    <!-- ── VIEW: KANBAN ── -->
+    <div id="view-kanban" class="view-content hidden">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- TODO -->
+        <div class="glass p-4 kanban-col rounded-lg border border-cyan-neon/10" data-status="todo"
+             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleDrop(event, 'todo')">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-2 h-2 rounded-full bg-yellow-400"></div>
+            <h3 class="text-sm font-mono text-yellow-400 tracking-widest uppercase">Por hacer</h3>
+            <span id="k-todo-count" class="ml-auto text-xs text-cyan-muted">0</span>
+          </div>
+          <div id="k-todo" class="space-y-2 min-h-24"></div>
+        </div>
+        <!-- IN PROGRESS -->
+        <div class="glass p-4 kanban-col rounded-lg border border-cyan-neon/10" data-status="in_progress"
+             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleDrop(event, 'in_progress')">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-2 h-2 rounded-full bg-cyan-400"></div>
+            <h3 class="text-sm font-mono text-cyan-400 tracking-widest uppercase">En progreso</h3>
+            <span id="k-progress-count" class="ml-auto text-xs text-cyan-muted">0</span>
+          </div>
+          <div id="k-progress" class="space-y-2 min-h-24"></div>
+        </div>
+        <!-- DONE -->
+        <div class="glass p-4 kanban-col rounded-lg border border-cyan-neon/10" data-status="done"
+             ondragover="event.preventDefault(); this.classList.add('drag-over')"
+             ondragleave="this.classList.remove('drag-over')"
+             ondrop="handleDrop(event, 'done')">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-2 h-2 rounded-full bg-green-400"></div>
+            <h3 class="text-sm font-mono text-green-400 tracking-widest uppercase">Hecho</h3>
+            <span id="k-done-count" class="ml-auto text-xs text-cyan-muted">0</span>
+          </div>
+          <div id="k-done" class="space-y-2 min-h-24"></div>
+        </div>
       </div>
     </div>
-  </section>
+
+    <!-- ── VIEW: FINANZAS ── -->
+    <div id="view-finance" class="view-content hidden">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="glass p-5 text-center">
+          <div class="text-xs text-cyan-muted mb-2 tracking-widest">INGRESOS</div>
+          <div id="f-income"  class="text-3xl font-bold text-green-400">$0</div>
+        </div>
+        <div class="glass p-5 text-center">
+          <div class="text-xs text-cyan-muted mb-2 tracking-widest">GASTOS</div>
+          <div id="f-expense" class="text-3xl font-bold text-red-400">$0</div>
+        </div>
+        <div class="glass p-5 text-center">
+          <div class="text-xs text-cyan-muted mb-2 tracking-widest">BALANCE NETO</div>
+          <div id="f-balance" class="text-3xl font-bold text-cyan-neon">$0</div>
+        </div>
+      </div>
+
+      <!-- Barra visual income vs expense -->
+      <div class="glass p-4 mb-4">
+        <p class="text-xs text-cyan-muted mb-3 tracking-widest">// DISTRIBUCIÓN</p>
+        <div class="flex h-4 rounded-full overflow-hidden gap-0.5" id="f-bar">
+          <div class="bar-income h-full rounded-l-full transition-all" id="f-bar-income" style="width:50%"></div>
+          <div class="bar-expense h-full rounded-r-full transition-all" id="f-bar-expense" style="width:50%"></div>
+        </div>
+        <div class="flex justify-between mt-1 text-xs text-cyan-muted">
+          <span>Ingresos</span><span>Gastos</span>
+        </div>
+      </div>
+
+      <!-- Lista de movimientos -->
+      <div class="glass p-4">
+        <p class="text-xs text-cyan-muted mb-3 tracking-widest">// MOVIMIENTOS</p>
+        <div id="f-list" class="space-y-2"></div>
+      </div>
+    </div>
+
+    <!-- ── VIEW: NOTAS ── -->
+    <div id="view-notes" class="view-content hidden">
+      <div class="mb-4 flex gap-2 items-center">
+        <input id="note-search" type="text" class="input-neon text-sm flex-1"
+          placeholder="Buscar en tus notas..." />
+      </div>
+      <div id="notes-grid" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+    </div>
+
+  </main>
 
   <script type="module" src="./app.js"></script>
 </body>
