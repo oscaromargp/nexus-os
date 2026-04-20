@@ -316,10 +316,20 @@ function renderActivity(comments) {
 function renderChecklist(items) {
   const container = document.getElementById('tm-checklist-container')
   if (!container) return
-  container.innerHTML = items.map((it, idx) => `
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
-      <input type="checkbox" ${it.done ? 'checked' : ''} onchange="toggleCheckItem(${idx})" />
-      <span style="font-size:14px; color:${it.done ? 'var(--text-muted)' : '#fff'}; ${it.done ? 'text-decoration:line-through' : ''}">${esc(it.text)}</span>
+  const done = items.filter(i => i.done).length
+  const pct  = items.length ? Math.round(done / items.length * 100) : 0
+  container.innerHTML = (items.length ? `
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span style="font-size:11px; color:var(--text-muted); min-width:28px;">${pct}%</span>
+      <div style="flex:1; height:6px; background:rgba(255,255,255,0.1); border-radius:3px; overflow:hidden;">
+        <div style="height:100%; width:${pct}%; background:var(--accent-cyan); border-radius:3px; transition:width 0.3s;"></div>
+      </div>
+    </div>` : '') +
+  items.map((it, idx) => `
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; group">
+      <input type="checkbox" ${it.done ? 'checked' : ''} onchange="toggleCheckItem(${idx})" style="accent-color:var(--accent-cyan); width:16px; height:16px; cursor:pointer;" />
+      <span style="flex:1; font-size:14px; color:${it.done ? 'var(--text-muted)' : '#fff'}; ${it.done ? 'text-decoration:line-through' : ''}">${esc(it.text)}</span>
+      <span onclick="deleteCheckItem(${idx})" style="color:var(--text-muted); font-size:14px; cursor:pointer; padding:2px 6px; border-radius:4px; opacity:0.5;" onmouseover="this.style.opacity='1'; this.style.color='#f87171';" onmouseout="this.style.opacity='0.5'; this.style.color='var(--text-muted)';">✕</span>
     </div>
   `).join('')
 }
@@ -348,6 +358,15 @@ window.toggleCheckItem = async (idx) => {
   const node = allNodes.find(n => n.id === editingCardId)
   if (node && node.metadata.checklist) {
     node.metadata.checklist[idx].done = !node.metadata.checklist[idx].done
+    await updateNodeMetadata(editingCardId, node.metadata)
+    renderChecklist(node.metadata.checklist)
+  }
+}
+
+window.deleteCheckItem = async (idx) => {
+  const node = allNodes.find(n => n.id === editingCardId)
+  if (node && node.metadata.checklist) {
+    node.metadata.checklist.splice(idx, 1)
     await updateNodeMetadata(editingCardId, node.metadata)
     renderChecklist(node.metadata.checklist)
   }
@@ -896,10 +915,13 @@ function renderFinance(nodes) {
     <div class="fin-tabs" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
       <button class="fin-tab ${activeAccount==='all'?'fin-tab-active':''}" onclick="setActiveAccount('all')">Todas las Cuentas</button>
       ${accounts.map(a=>`
-        <button class="fin-tab ${activeAccount===a.id?'fin-tab-active':''}" onclick="setActiveAccount('${a.id}')">
-          <span style="width:8px;height:8px;border-radius:50%;background:${esc(a.metadata?.color||'#4ade80')};display:inline-block;margin-right:6px;"></span>
-          ${esc(a.metadata?.label||a.content)}
-        </button>
+        <div style="display:inline-flex; align-items:center; gap:0; background:${activeAccount===a.id?'rgba(0,246,255,0.15)':'rgba(255,255,255,0.04)'}; border:1px solid ${activeAccount===a.id?'var(--accent-cyan)':'var(--glass-border)'}; border-radius:10px; overflow:hidden;">
+          <button class="fin-tab" style="border:none; background:transparent; border-radius:0; padding:8px 12px;" onclick="setActiveAccount('${a.id}')">
+            <span style="width:8px;height:8px;border-radius:50%;background:${esc(a.metadata?.color||'#4ade80')};display:inline-block;margin-right:6px;"></span>
+            ${esc(a.metadata?.label||a.content)}
+          </button>
+          <button onclick="openAccountModal('${a.id}')" style="background:transparent; border:none; border-left:1px solid var(--glass-border); padding:8px 10px; cursor:pointer; color:var(--text-muted); font-size:13px;" title="Editar cuenta" onmouseover="this.style.color='var(--accent-cyan)'" onmouseout="this.style.color='var(--text-muted)'">✏️</button>
+        </div>
       `).join('')}
       <button class="fin-tab" onclick="openAccountModal()" style="border-style:dashed;">+ Cuenta</button>
     </div>
@@ -1009,7 +1031,8 @@ document.getElementById('am-save')?.addEventListener('click', async () => {
     if (localStorage.getItem('nexus_admin_bypass') === 'true') {
       allNodes.unshift({ id: Math.random().toString(36).substr(2,9), type:'account', content:label, metadata:meta, created_at:new Date().toISOString() })
     } else {
-      await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'account', content:label, metadata:meta })
+      const { data: inserted } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'account', content:label, metadata:meta }).select()
+      if (inserted?.[0]) allNodes.unshift(inserted[0])
     }
   }
   closeAccountModal(); renderAll()
@@ -1431,7 +1454,15 @@ function compressImage(file, cb) {
 window.attachImageFromFile = (input, context) => {
   const file = input.files[0]
   if (!file) return
-  compressImage(file, base64 => addAttachment(base64, context))
+  if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+    // PDFs: store as base64 data URL directly (no compression)
+    if (file.size > 3 * 1024 * 1024) { showToast('PDF muy grande — máximo 3 MB'); input.value = ''; return }
+    const reader = new FileReader()
+    reader.onload = e => addAttachment(e.target.result, context)
+    reader.readAsDataURL(file)
+  } else {
+    compressImage(file, base64 => addAttachment(base64, context))
+  }
   input.value = ''
 }
 
@@ -1453,12 +1484,30 @@ function renderAttachments(images, context) {
   const containerId = context === 'card' ? 'tm-attachments' : context === 'note' ? 'ne-attachments' : 'fd-attachments'
   const container = document.getElementById(containerId)
   if (!container) return
-  container.innerHTML = (images || []).map((src, i) => `
-    <div style="position:relative; display:inline-block;">
-      <img src="${src}" onclick="viewImage('${src}')" style="width:80px; height:80px; object-fit:cover; border-radius:10px; border:1px solid var(--glass-border); cursor:pointer;" />
-      <span onclick="removeAttachment(${i}, '${context}')" style="position:absolute; top:-6px; right:-6px; background:#f87171; border-radius:50%; width:18px; height:18px; display:grid; place-items:center; font-size:10px; cursor:pointer; color:#000; font-weight:800;">✕</span>
-    </div>
-  `).join('')
+  container.innerHTML = (images || []).map((src, i) => {
+    const isPdf = src.startsWith('data:application/pdf') || src.includes(';base64,JVBER')
+    const thumb = isPdf
+      ? `<div onclick="viewAttachment('${encodeURIComponent(src.slice(0,50))}_PDF_${i}','${context}')" style="width:80px;height:80px;border-radius:10px;border:1px solid var(--glass-border);background:rgba(248,113,113,0.1);display:grid;place-items:center;cursor:pointer;flex-direction:column;font-size:10px;color:#f87171;gap:4px;">
+           <span style="font-size:28px;">📄</span>
+           <span>PDF</span>
+         </div>`
+      : `<img src="${src}" onclick="viewImage('${src}')" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid var(--glass-border);cursor:pointer;" />`
+    return `
+      <div style="position:relative; display:inline-block;">
+        ${thumb}
+        <span onclick="removeAttachment(${i}, '${context}')" style="position:absolute;top:-6px;right:-6px;background:#f87171;border-radius:50%;width:18px;height:18px;display:grid;place-items:center;font-size:10px;cursor:pointer;color:#000;font-weight:800;">✕</span>
+      </div>`
+  }).join('')
+}
+
+window.viewAttachment = (encodedKey, context) => {
+  // For PDFs: open full base64 data URL in new tab
+  const idx = parseInt(encodedKey.split('_PDF_')[1])
+  const id = context === 'card' ? editingCardId : context === 'note' ? editingNoteId : editingFinanceId
+  const node = allNodes.find(n => n.id === id)
+  if (!node?.metadata?.images?.[idx]) return
+  const win = window.open()
+  win.document.write(`<iframe src="${node.metadata.images[idx]}" style="width:100%;height:100%;border:none;"></iframe>`)
 }
 
 window.viewImage = (src) => {
