@@ -356,7 +356,83 @@
     @keyframes fade-in-up { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
     @keyframes scale-in { from{opacity:0;transform:scale(0.9)} to{opacity:1;transform:scale(1)} }
     @keyframes count-up { from{opacity:0;transform:scale(0.7)} to{opacity:1;transform:scale(1)} }
-    @keyframes spin-slow { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    @keyframes spin-slow   { from{transform:rotate(0deg)}   to{transform:rotate(360deg)} }
+    @keyframes orbit-spin  { from{transform:rotate(0deg)}   to{transform:rotate(360deg)} }
+    @keyframes counter-spin{ from{transform:rotate(0deg) translateX(-50%) translateY(-50%)} to{transform:rotate(-360deg) translateX(-50%) translateY(-50%)} }
+    @keyframes node-pulse  { 0%,100%{box-shadow:0 0 10px rgba(var(--primary-rgb),0.3)} 50%{box-shadow:0 0 22px rgba(var(--primary-rgb),0.7)} }
+
+    /* ── HERO ORBIT ── */
+    .hex-ring {
+      position: relative;
+      width: 420px;
+      height: 420px;
+      flex-shrink: 0;
+    }
+    .hex-ring svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .hex-nodes {
+      position: absolute;
+      inset: 0;
+      animation: orbit-spin 18s linear infinite;
+      transform-origin: center center;
+    }
+    .hex-node {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      background: rgba(13,20,29,0.9);
+      border: 1px solid rgba(var(--primary-rgb),0.3);
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 18px;
+      width: 56px;
+      animation: node-pulse 3s ease-in-out infinite;
+      /* counter-rotate so icon stays upright */
+      transform-origin: center center;
+    }
+    /* Counter-rotate each node so text stays upright while container spins */
+    .hex-nodes .hex-node { animation: orbit-spin 18s linear infinite reverse, node-pulse 3s ease-in-out infinite; }
+    .hex-node span { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; color: var(--p400); font-family: 'JetBrains Mono', monospace; }
+    /* Position 6 nodes on a circle r=158px, center=210px */
+    .hex-node:nth-child(1) { top: calc(50% - 28px); left: calc(50% + 130px); }
+    .hex-node:nth-child(2) { top: calc(50% + 95px);  left: calc(50% + 65px);  animation-delay: -0.5s; }
+    .hex-node:nth-child(3) { top: calc(50% + 95px);  left: calc(50% - 121px); animation-delay: -1s; }
+    .hex-node:nth-child(4) { top: calc(50% - 28px);  left: calc(50% - 185px); animation-delay: -1.5s; }
+    .hex-node:nth-child(5) { top: calc(50% - 151px); left: calc(50% - 121px); animation-delay: -2s; }
+    .hex-node:nth-child(6) { top: calc(50% - 151px); left: calc(50% + 65px);  animation-delay: -2.5s; }
+    .hex-center {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      z-index: 2;
+    }
+    .hex-center-icon {
+      width: 72px; height: 72px;
+      background: radial-gradient(circle, rgba(var(--primary-rgb),0.2), rgba(var(--primary-rgb),0.05));
+      border: 2px solid rgba(var(--primary-rgb),0.5);
+      border-radius: 18px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px;
+      box-shadow: 0 0 30px rgba(var(--primary-rgb),0.3), inset 0 0 20px rgba(var(--primary-rgb),0.1);
+      animation: node-pulse 2s ease-in-out infinite;
+    }
+    .hex-center-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--p400);
+      letter-spacing: 0.15em;
+    }
 
     .reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.7s ease, transform 0.7s ease; }
     .reveal.visible { opacity: 1; transform: translateY(0); }
@@ -434,27 +510,26 @@
   <div class="container">
     <div class="hero-grid">
       <div>
-        <div class="hero-label" style="display:flex; gap:12px;">
-          <span class="label-chip">100% Online · Sin Instalaciones</span>
-          <span class="pwa-badge">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-            PWA Ready
-          </span>
+        <div class="hero-label" style="display:flex; gap:12px; flex-wrap:wrap;">
+          <span class="label-chip">🔒 Tus datos son tuyos, siempre</span>
+          <span class="label-chip" style="background:rgba(34,197,94,0.1); border-color:rgba(34,197,94,0.3); color:#22c55e;">✓ 100% Gratis · Open Source</span>
         </div>
         <h1 class="hero-title">
-          <span>¿Cansado de la</span>
-          <span class="gradient-text">fatiga de apps?</span>
+          <span>Todo lo que piensas,</span>
+          <span class="gradient-text">en un solo lugar.</span>
         </h1>
         <p class="hero-subtitle" style="max-width: 580px;">
-          Tus ideas en Notion, tus tareas en Trello, tus finanzas en Excel. Tu información está fragmentada. <strong>Nexus OS la unifica en un solo flujo de conciencia instantáneo.</strong>
+          Tareas, finanzas y notas unificadas en <strong>una sola línea de texto</strong>. Sin suscripciones. Sin tarjeta. Sin apps múltiples. <strong>Tu información está protegida — solo tú puedes verla.</strong>
         </p>
         <div class="hero-actions">
           <button id="btn-hero-register" class="btn-primary pulse-btn">Empezar Gratis - Sin Tarjeta →</button>
           <button id="btn-quick-demo" class="btn-outline" style="border-color: var(--p400); color: var(--p400);">Explorar Demo Instantánea ⬡</button>
           <a href="https://github.com/oscaromargp/nexus-os" target="_blank" class="btn-outline">Ver Código</a>
         </div>
-        <p style="margin-top:20px; font-size:13px; color:var(--text-quaternary);">
-          ⚡ Acceso instantáneo. Sin configuraciones complejas. 100% Open Source.
+        <p style="margin-top:20px; font-size:13px; color:var(--text-quaternary); line-height:1.8;">
+          🔒 Encriptación + Row Level Security — <strong style="color:var(--text-tertiary)">nadie más puede ver tus datos</strong><br/>
+          💸 Gratis para siempre · Sin tarjeta · Sin planes ocultos<br/>
+          🌐 Open Source MIT — el código es tuyo también
         </p>
       </div>
       <!-- Right: Animated Visual -->
