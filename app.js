@@ -97,7 +97,7 @@ function setupRealtimeSubscription() {
         const idx = allNodes.findIndex(n => n.id === payload.new.id)
         if (idx !== -1) allNodes[idx] = payload.new
       } else if (payload.eventType === 'DELETE') {
-        allNodes = allNodes.filter(n => n.id === payload.old.id)
+        allNodes = allNodes.filter(n => n.id !== payload.old.id)
       }
       renderAll()
     })
@@ -121,8 +121,19 @@ function renderKanban(nodes) {
   const root = document.getElementById('kanban-root')
   if (!root) return
 
+  const today = new Date().toISOString().split('T')[0]
   root.innerHTML = boardLists.map(list => {
-    const cards = nodes.filter(n => n.type === 'kanban' && (n.metadata?.status === list.id || (!n.metadata?.status && list.id === 'todo')))
+    const cards = nodes.filter(n => {
+      if (n.type !== 'kanban') return false
+      const status = n.metadata?.status || 'todo'
+      if (status !== list.id) return false
+      // Hide 'done' cards from previous days — they live in Crónica
+      if (list.id === 'done') {
+        const doneAt = n.metadata?.done_at
+        if (doneAt && doneAt !== today) return false
+      }
+      return true
+    })
     return `
       <div class="trello-list" 
            id="list-${list.id}" 
@@ -219,6 +230,12 @@ window.cardDrop = async (e, listId) => {
   const node = allNodes.find(n => n.id === id)
   if (node) {
     node.metadata = { ...(node.metadata || {}), status: listId }
+    // Stamp the date when a card is moved to done so we can hide it next day
+    if (listId === 'done') {
+      node.metadata.done_at = new Date().toISOString().split('T')[0]
+    } else {
+      delete node.metadata.done_at
+    }
     if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
       await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
     }
@@ -432,13 +449,29 @@ async function updateNodeMetadata(id, metadata) {
 }
 
 document.getElementById('tm-btn-archive')?.addEventListener('click', async () => {
-  if (!confirm('¿Archivar tarjeta?')) return
-  if (localStorage.getItem('nexus_admin_bypass') === 'true') { 
-    allNodes = allNodes.filter(n=>n.id!==editingCardId); 
-    renderAll(); closeCardModal(); return; 
+  if (!confirm('¿Archivar tarjeta? Se ocultará del tablero pero podrás verla en Crónica.')) return
+  const node = allNodes.find(n => n.id === editingCardId)
+  if (node) {
+    node.metadata = { ...(node.metadata || {}), status: 'archived' }
+    if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+      await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', editingCardId)
+    }
   }
+  allNodes = allNodes.filter(n => n.id !== editingCardId)
+  renderAll()
+  closeCardModal()
+})
+
+document.getElementById('tm-btn-delete')?.addEventListener('click', async () => {
+  if (!confirm('¿Eliminar esta tarjeta permanentemente? Esta acción no se puede deshacer.')) return
+  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+    allNodes = allNodes.filter(n => n.id !== editingCardId)
+    renderAll(); closeCardModal(); return
+  }
+  allNodes = allNodes.filter(n => n.id !== editingCardId)
+  renderAll()
+  closeCardModal()
   await supabase.from('nodes').delete().eq('id', editingCardId)
-  closeCardModal();
 })
 
 // ─────────────────────────────────────────
@@ -525,16 +558,19 @@ async function insertNodeRaw(raw, metadataOverrides={}) {
      return
   }
 
-  const { error } = await supabase.from('nodes').insert({ 
-    owner_id: currentUser.id, 
-    content: content || raw, 
-    type, 
-    metadata: finalMetadata 
-  })
-  
+  const { data: inserted, error } = await supabase.from('nodes').insert({
+    owner_id: currentUser.id,
+    content: content || raw,
+    type,
+    metadata: finalMetadata
+  }).select()
+
   if (error) {
     console.error("Error inserting node:", error)
+    showToast('Error al guardar el nodo')
   } else {
+    if (inserted?.[0]) allNodes.unshift(inserted[0])
+    renderAll()
     showToast(`NODO INYECTADO: ${type.toUpperCase()}`)
   }
 }

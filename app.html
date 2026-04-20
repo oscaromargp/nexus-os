@@ -286,7 +286,7 @@
     }
     
     .note-keep-title { font-size: 16px; font-weight: 700; color: #fff; }
-    .note-keep-body { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+    .note-keep-body { font-size: 14px; color: var(--text-muted); line-height: 1.6; max-height: 120px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
 
     /* ── CALENDARIO GOOGLE STYLE ── */
     .cal-grid {
@@ -1047,6 +1047,7 @@
       <button class="t-side-btn" id="tm-btn-move">➡ Mover</button>
       <button class="t-side-btn" id="tm-btn-copy">❏ Copiar</button>
       <button class="t-side-btn" id="tm-btn-archive" style="color:#f87171;">✖ Archivar</button>
+      <button class="t-side-btn" id="tm-btn-delete" style="color:#ef4444; background:rgba(239,68,68,0.1); border-color:rgba(239,68,68,0.3);">🗑 Eliminar</button>
     </div>
   </div>
 </div>
