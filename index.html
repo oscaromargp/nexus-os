@@ -290,6 +290,16 @@
     .pricing-features li .cross { color: var(--text-quaternary); font-size: 16px; flex-shrink: 0; }
     .btn-disabled { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 14px; border-radius: 12px; border: 1px solid rgba(var(--primary-rgb), 0.2); background: transparent; color: var(--text-quaternary); font-size: 15px; font-weight: 600; cursor: not-allowed; }
 
+    /* ─── SCREENSHOT SHOWCASE ─── */
+    .ss-section { padding: 80px 0 120px; background: var(--bg-secondary); }
+    .ss-tabs { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 36px; }
+    .ss-tab { padding: 9px 18px; border-radius: 100px; border: 1px solid rgba(var(--primary-rgb), 0.15); background: transparent; color: var(--text-quaternary); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; }
+    .ss-tab:hover { border-color: rgba(var(--primary-rgb), 0.4); color: var(--text-secondary); }
+    .ss-tab.active { background: rgba(var(--primary-rgb), 0.12); border-color: rgba(var(--primary-rgb), 0.5); color: var(--p400); }
+    .ss-frame { position: relative; max-width: 960px; margin: 0 auto; border-radius: 16px; overflow: hidden; border: 1px solid rgba(var(--primary-rgb), 0.25); box-shadow: 0 40px 80px rgba(0,0,0,0.8), 0 0 60px rgba(var(--primary-rgb), 0.12); }
+    .ss-frame img { width: 100%; display: none; }
+    .ss-frame img.active { display: block; }
+
     /* ─── CTA FINAL ─── */
     #cta { position: relative; overflow: hidden; }
     .cta-glow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 600px; height: 600px; background: radial-gradient(ellipse, rgba(var(--primary-rgb), 0.12) 0%, transparent 70%); pointer-events: none; }
@@ -717,12 +727,32 @@
   </div>
 </section>
 
-<!-- ═══════════════════════ VISUAL SHOWCASE ═══════════════════════ -->
-<section class="section-pad" style="padding-top: 0;">
-  <div class="container" style="text-align: center;">
-     <div class="reveal">
-       <img src="/assets/nexus_dashboard_mockup.png" alt="Nexus OS Dashboard Mockup Interface" style="width:100%; max-width:900px; border-radius:16px; border: 1px solid rgba(var(--primary-rgb),0.3); box-shadow: 0 40px 80px rgba(0,0,0,0.8), 0 0 80px rgba(var(--primary-rgb),0.2); animation: float 6s ease-in-out infinite; margin-top:-20px;" />
-     </div>
+<!-- ═══════════════════════ SCREENSHOT SHOWCASE ═══════════════════════ -->
+<section class="ss-section">
+  <div class="container">
+    <div class="section-header reveal" style="margin-bottom:40px;">
+      <span class="label-chip">Vista real de la app</span>
+      <h2>7 módulos. <span class="gradient-text">Un solo sistema.</span></h2>
+      <p>Explora cada vista — así se ve Nexus OS en acción.</p>
+    </div>
+    <div class="ss-tabs reveal">
+      <button class="ss-tab active" data-ss="01-panel-comandos">📊 Panel</button>
+      <button class="ss-tab" data-ss="02-muro-tactico">📌 Kanban</button>
+      <button class="ss-tab" data-ss="03-bio-finanzas">💹 Finanzas</button>
+      <button class="ss-tab" data-ss="04-boveda-neural">🧠 Notas</button>
+      <button class="ss-tab" data-ss="05-linea-de-tiempo">📅 Calendario</button>
+      <button class="ss-tab" data-ss="06-cronica">📖 Crónica</button>
+      <button class="ss-tab" data-ss="07-ayuda">❓ Ayuda</button>
+    </div>
+    <div class="ss-frame reveal">
+      <img src="assets/screenshots/01-panel-comandos.png" alt="Panel de Comandos" class="active" id="ss-img-01-panel-comandos"/>
+      <img src="assets/screenshots/02-muro-tactico.png"   alt="Muro Táctico"       id="ss-img-02-muro-tactico"/>
+      <img src="assets/screenshots/03-bio-finanzas.png"   alt="Bio-Finanzas"        id="ss-img-03-bio-finanzas"/>
+      <img src="assets/screenshots/04-boveda-neural.png"  alt="Bóveda Neural"       id="ss-img-04-boveda-neural"/>
+      <img src="assets/screenshots/05-linea-de-tiempo.png" alt="Línea de Tiempo"   id="ss-img-05-linea-de-tiempo"/>
+      <img src="assets/screenshots/06-cronica.png"        alt="Crónica"             id="ss-img-06-cronica"/>
+      <img src="assets/screenshots/07-ayuda.png"          alt="Ayuda"               id="ss-img-07-ayuda"/>
+    </div>
   </div>
 </section>
 
@@ -1217,6 +1247,17 @@ document.getElementById('btn-close-modal').addEventListener('click',()=>{
 });
 document.getElementById('auth-modal').addEventListener('click',function(e){
   if(e.target===this) this.classList.add('hidden');
+});
+
+/* ── Screenshot Showcase Tabs ── */
+document.querySelectorAll('.ss-tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    const key = this.dataset.ss;
+    document.querySelectorAll('.ss-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.ss-frame img').forEach(img => img.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('ss-img-' + key)?.classList.add('active');
+  });
 });
 
 /* ── Tabs ── */
