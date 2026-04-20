@@ -789,24 +789,24 @@ function renderNotes(nodes) {
     const isPinned = n.metadata?.pinned
     return `
     <div class="note-keep" style="${colorStyle}" ondblclick="openNoteEdit('${n.id}')" title="Doble clic para editar">
-      <div style="display:flex; justify-content:space-between; align-items:center;">
-        <div style="font-size:9px; font-weight:800; color:var(--accent-cyan);">#${n.type.toUpperCase()}</div>
-        <div style="display:flex; gap:8px;">
+      <div class="note-keep-inner">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
+          <div style="font-size:9px; font-weight:800; color:var(--accent-cyan);">#${n.type.toUpperCase()}</div>
           <span title="${isPinned ? 'Desfijar' : 'Fijar'}"
                 onclick="event.stopPropagation(); togglePin('${n.id}')"
-                style="cursor:pointer; font-size:14px; opacity:${isPinned ? '1' : '0.3'};">📌</span>
+                style="cursor:pointer; font-size:12px; opacity:${isPinned ? '1' : '0.3'};">📌</span>
         </div>
-      </div>
-      <div class="note-keep-title">${esc(n.metadata?.label || n.content)}</div>
-      <div class="note-keep-body">${esc(n.content)}</div>
-      <div style="display:flex; gap:5px; flex-wrap:wrap; margin-top:4px;">
-        ${(n.metadata?.tags || []).map(t => `<span class="tag-pill" onclick="event.stopPropagation(); setFilter('${t}')" style="background:var(--accent-cyan-dim); color:var(--accent-cyan); font-size:9px; padding:2px 6px; border-radius:4px; cursor:pointer;">${t}</span>`).join('')}
-      </div>
-      <div class="note-color-bar" onclick="event.stopPropagation()">
-        ${Object.keys(NOTE_COLORS).filter(c=>c).map(c=>`
-          <div class="nc-swatch nc-${c}" title="${c}" onclick="setNoteColor('${n.id}','${c}')" style="${NOTE_COLORS[c]} width:18px; height:18px; border-radius:50%; border:2px solid ${color===c?'white':'transparent'}; cursor:pointer; display:inline-block; box-sizing:border-box;"></div>
-        `).join('')}
-        <div title="Sin color" onclick="setNoteColor('${n.id}','')" style="width:18px; height:18px; border-radius:50%; border:2px solid ${color===''?'white':'rgba(255,255,255,0.2)'}; cursor:pointer; display:inline-block; background:transparent;"></div>
+        <div class="note-keep-title">${esc(n.metadata?.label || n.content)}</div>
+        <div class="note-keep-body">${esc(n.content)}</div>
+        <div style="display:flex; gap:4px; flex-wrap:wrap; flex-shrink:0;">
+          ${(n.metadata?.tags || []).map(t => `<span class="tag-pill" onclick="event.stopPropagation(); setFilter('${t}')" style="background:var(--accent-cyan-dim); color:var(--accent-cyan); font-size:9px; padding:1px 5px; border-radius:4px; cursor:pointer;">${t}</span>`).join('')}
+        </div>
+        <div class="note-color-bar" onclick="event.stopPropagation()">
+          ${Object.keys(NOTE_COLORS).filter(c=>c).map(c=>`
+            <div title="${c}" onclick="setNoteColor('${n.id}','${c}')" style="${NOTE_COLORS[c]} width:14px; height:14px; border-radius:50%; border:2px solid ${color===c?'white':'transparent'}; cursor:pointer; display:inline-block; box-sizing:border-box;"></div>
+          `).join('')}
+          <div title="Sin color" onclick="setNoteColor('${n.id}','')" style="width:14px; height:14px; border-radius:50%; border:2px solid ${color===''?'white':'rgba(255,255,255,0.2)'}; cursor:pointer; display:inline-block; background:transparent;"></div>
+        </div>
       </div>
     </div>
   `}).join('')
