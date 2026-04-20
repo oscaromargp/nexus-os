@@ -1274,7 +1274,7 @@ function renderCronica(nodes) {
   }
 }
 
-window.renderCronicaView = () => {
+function renderCronicaView() {
   const date = document.getElementById('cronica-date')?.value || new Date().toISOString().split('T')[0]
   const allN = allNodes
   const tasksToday = allN.filter(n => n.type === 'kanban' && (n.created_at?.startsWith(date) || n.metadata?.due_date === date))

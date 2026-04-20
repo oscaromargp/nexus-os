@@ -1,22 +1,31 @@
-/** @type {import('tailwindcss').Config} */
-export default {
+/** @type {import('tailwind').Config} */
+module.exports = {
   content: [
     "./index.html",
     "./app.html",
-    "./main.js",
     "./app.js",
+    "./main.js",
   ],
   theme: {
     extend: {
       colors: {
-        "ocean-dark": "#0B132B",
-        "ocean-mid": "#0B1D3A",
-        "cyan-neon": "#00F0FF",
-        "cyan-muted": "#4A9EBF",
+        'nexus-cyan': '#00F0FF',
+        'nexus-dark': '#0B132B',
       },
-      fontFamily: {
-        mono: ["'JetBrains Mono'", "'Courier New'", "monospace"],
+      animation: {
+        'gradient-shift': 'gradient-shift 4s ease infinite',
+        'nexus-glow': 'cyan-glow 2s ease-in-out infinite',
       },
+      keyframes: {
+        'gradient-shift': {
+          '0%, 100%': { 'background-position': '0% 50%' },
+          '50%': { 'background-position': '100% 50%' },
+        },
+        'cyan-glow': {
+          '0%, 100%': { 'box-shadow': '0 0 10px rgba(0, 240, 255, 0.2)' },
+          '50%': { 'box-shadow': '0 0 25px rgba(0, 240, 255, 0.6)' },
+        }
+      }
     },
   },
   plugins: [],

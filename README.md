@@ -39,8 +39,30 @@ La solución es radical: **Todo es un Nodo.**
 Una sola barra de comandos. Un solo sistema. Todo clasificado automáticamente por un **Parser Semántico** en tiempo real que detecta el tipo de información por su contenido y sintaxis.
 
 <p align="center">
-  <img src="https://via.placeholder.com/800x450/02040a/00F6FF?text=🎬+Demo+GIF+—+Próximamente" alt="Demo Nexus OS" width="800"/>
+  <img src="assets/screenshots/01-panel-comandos.png" alt="Panel de Comandos — Feed unificado con color-coding por tipo de nodo" width="800"/>
 </p>
+
+---
+
+## 🖼️ Capturas de Pantalla
+
+<table>
+  <tr>
+    <td align="center"><strong>📊 Panel de Comandos</strong><br/><img src="assets/screenshots/01-panel-comandos.png" width="380"/></td>
+    <td align="center"><strong>📌 Muro Táctico</strong><br/><img src="assets/screenshots/02-muro-tactico.png" width="380"/></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>💹 Bio-Finanzas</strong><br/><img src="assets/screenshots/03-bio-finanzas.png" width="380"/></td>
+    <td align="center"><strong>🧠 Bóveda Neural</strong><br/><img src="assets/screenshots/04-boveda-neural.png" width="380"/></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>📅 Línea de Tiempo</strong><br/><img src="assets/screenshots/05-linea-de-tiempo.png" width="380"/></td>
+    <td align="center"><strong>📖 Crónica</strong><br/><img src="assets/screenshots/06-cronica.png" width="380"/></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2"><strong>❓ Ayuda Integrada</strong><br/><img src="assets/screenshots/07-ayuda.png" width="380"/></td>
+  </tr>
+</table>
 
 ---
 

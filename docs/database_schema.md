@@ -20,60 +20,60 @@ como un nodo unificado, diferenciado únicamente por `node_type` y `metadata`.
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ------------------------------------------------------------
--- TABLA PRINCIPAL: nexus_nodos
+-- TABLA PRINCIPAL: nodes
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.nexus_nodos (
+CREATE TABLE IF NOT EXISTS public.nodes (
   id           UUID          PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id      UUID          NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  raw_content  TEXT          NOT NULL,
-  node_type    TEXT          NOT NULL DEFAULT 'note'
-                             CHECK (node_type IN ('note', 'task', 'income', 'expense', 'kanban')),
+  owner_id     UUID          NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  content      TEXT          NOT NULL,
+  type         TEXT          NOT NULL DEFAULT 'note'
+                             CHECK (type IN ('note', 'task', 'income', 'expense', 'kanban', 'persona', 'proyecto')),
   metadata     JSONB         NOT NULL DEFAULT '{}'::jsonb,
   created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 -- Índice para consultas por usuario (más usadas)
-CREATE INDEX IF NOT EXISTS idx_nexus_nodos_user_id
-  ON public.nexus_nodos (user_id);
+CREATE INDEX IF NOT EXISTS idx_nodes_owner_id
+  ON public.nodes (owner_id);
 
 -- Índice para filtrar por tipo de nodo
-CREATE INDEX IF NOT EXISTS idx_nexus_nodos_node_type
-  ON public.nexus_nodos (node_type);
+CREATE INDEX IF NOT EXISTS idx_nodes_type
+  ON public.nodes (type);
 
 -- Índice GIN para búsquedas dentro de metadata JSONB
-CREATE INDEX IF NOT EXISTS idx_nexus_nodos_metadata
-  ON public.nexus_nodos USING gin (metadata);
+CREATE INDEX IF NOT EXISTS idx_nodes_metadata
+  ON public.nodes USING gin (metadata);
 
 -- ------------------------------------------------------------
 -- ROW LEVEL SECURITY (RLS)
 -- Cada usuario solo puede ver y modificar sus propios nodos
 -- ------------------------------------------------------------
-ALTER TABLE public.nexus_nodos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.nodes ENABLE ROW LEVEL SECURITY;
 
 -- Política: SELECT — solo nodos propios
-CREATE POLICY "nexus_select_own"
-  ON public.nexus_nodos
+CREATE POLICY "nodes_select_own"
+  ON public.nodes
   FOR SELECT
-  USING (auth.uid() = user_id);
+  USING (auth.uid() = owner_id);
 
 -- Política: INSERT — solo nodos propios
-CREATE POLICY "nexus_insert_own"
-  ON public.nexus_nodos
+CREATE POLICY "nodes_insert_own"
+  ON public.nodes
   FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (auth.uid() = owner_id);
 
 -- Política: UPDATE — solo nodos propios
-CREATE POLICY "nexus_update_own"
-  ON public.nexus_nodos
+CREATE POLICY "nodes_update_own"
+  ON public.nodes
   FOR UPDATE
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
+  USING (auth.uid() = owner_id)
+  WITH CHECK (auth.uid() = owner_id);
 
 -- Política: DELETE — solo nodos propios
-CREATE POLICY "nexus_delete_own"
-  ON public.nexus_nodos
+CREATE POLICY "nodes_delete_own"
+  ON public.nodes
   FOR DELETE
-  USING (auth.uid() = user_id);
+  USING (auth.uid() = owner_id);
 ```
 
 ---
@@ -117,11 +117,36 @@ CREATE POLICY "nexus_delete_own"
 
 ---
 
-### Variables de entorno requeridas en `.env`
 
-```env
-VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
-VITE_SUPABASE_ANON_KEY=tu-anon-key-publica
+---
+
+## 🧹 Política de Retención de Datos
+
+Para mantener el sistema optimizado y respetar la higiene de datos,Nexus OS implementa una política de limpieza automática para cuentas inactivas.
+
+### Regla: Borrado tras 6 meses de inactividad
+Si un usuario no ha iniciado sesión en los últimos 6 meses, su contenido (nodos) será eliminado de forma permanente.
+
+#### SQL para Programar Limpieza (Supabase > SQL Editor)
+
+```sql
+-- 1. Crear la función de limpieza
+CREATE OR REPLACE FUNCTION public.limpiar_nodos_inactivos()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM public.nodes
+  WHERE owner_id IN (
+    SELECT id FROM auth.users
+    WHERE last_sign_in_at < NOW() - INTERVAL '6 months'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- 2. Programar la ejecución (requiere pg_cron habitado en Supabase)
+--    Se ejecuta cada domingo a las 00:00
+SELECT cron.schedule('limpieza-semanal-inactivos', '0 0 * * 0', 'SELECT public.limpiar_nodos_inactivos();');
+
+-- Nota: Si no tienes pg_cron habilitado, puedes ejecutar
+-- SELECT public.limpiar_nodos_inactivos();
+-- manualmente de forma periódica.
 ```
-
-> **Nota**: Obtén estos valores en tu proyecto Supabase → Settings → API.
