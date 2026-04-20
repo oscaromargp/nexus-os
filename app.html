@@ -310,6 +310,50 @@
     .note-keep .note-color-bar { opacity: 0; transition: opacity 0.2s; flex-shrink: 0; }
     .note-keep:hover .note-color-bar { opacity: 1; }
 
+    /* ── CONTACTOS ── */
+    .contact-filter-btn {
+      background: rgba(255,255,255,0.04); border:1px solid var(--glass-border);
+      border-radius:20px; padding:5px 14px; color:var(--text-muted); font-size:12px;
+      cursor:pointer; transition:all 0.2s; font-family:inherit;
+    }
+    .contact-filter-btn.active, .contact-filter-btn:hover {
+      background:rgba(0,246,255,0.1); border-color:var(--accent-cyan); color:var(--accent-cyan);
+    }
+    .contact-card {
+      background:var(--bg-panel); border:1px solid var(--glass-border); border-radius:14px;
+      padding:18px; cursor:pointer; transition:all 0.2s; position:relative; overflow:hidden;
+    }
+    .contact-card:hover { border-color:var(--accent-cyan); transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,0.3); }
+    .contact-avatar {
+      width:48px; height:48px; border-radius:50%; display:grid; place-items:center;
+      font-size:18px; font-weight:800; color:#000; margin-bottom:12px; flex-shrink:0;
+    }
+    /* Contact sheet modal */
+    .csheet-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:3000;
+      display:flex; align-items:stretch; justify-content:flex-end;
+      backdrop-filter:blur(4px);
+    }
+    .csheet-panel {
+      width:min(600px, 100vw); background:#0d1117; border-left:1px solid rgba(0,246,255,0.15);
+      display:flex; flex-direction:column; overflow:hidden; animation:slideInRight 0.25s ease;
+    }
+    @keyframes slideInRight { from{transform:translateX(100%)} to{transform:translateX(0)} }
+    .csheet-header {
+      padding:24px 28px 20px; border-bottom:1px solid rgba(255,255,255,0.06);
+      display:flex; align-items:center; gap:16px; flex-shrink:0;
+    }
+    .csheet-tabs {
+      display:flex; gap:0; border-bottom:1px solid rgba(255,255,255,0.06); flex-shrink:0;
+    }
+    .csheet-tab {
+      padding:12px 20px; font-size:13px; font-weight:600; color:var(--text-muted);
+      cursor:pointer; border-bottom:2px solid transparent; transition:all 0.2s;
+      background:none; border-top:none; border-left:none; border-right:none;
+      font-family:inherit;
+    }
+    .csheet-tab.active { color:var(--accent-cyan); border-bottom-color:var(--accent-cyan); }
+    .csheet-body { flex:1; overflow-y:auto; padding:24px 28px; }
     /* ── CALENDARIO GOOGLE STYLE ── */
     .cal-grid {
       display: grid;
@@ -688,6 +732,7 @@
       <button class="nav-item" data-view="notes"><span class="nav-icon">🧠</span> Bóveda Neural</button>
       <button class="nav-item" data-view="calendar"><span class="nav-icon">📅</span> Línea de Tiempo</button>
       <button class="nav-item" data-view="cronica"><span class="nav-icon">📖</span> Crónica</button>
+      <button class="nav-item" data-view="contacts"><span class="nav-icon">👥</span> Contactos</button>
       <button class="nav-item" data-view="settings"><span class="nav-icon">⚙️</span> Configuración</button>
       <button class="nav-item" data-view="ayuda"><span class="nav-icon">❓</span> Ayuda</button>
     </div>
@@ -755,6 +800,25 @@
         <span id="cronica-stats" style="font-size:12px; color:var(--text-muted);"></span>
       </div>
       <div id="cronica-root" style="display:grid; grid-template-columns:repeat(3,1fr); gap:20px; align-items:start;"></div>
+    </div>
+
+    <!-- CONTACTOS -->
+    <div id="view-contacts" class="view-section">
+      <div class="view-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <h1 class="view-title">Contactos & Cuentas</h1>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input id="contact-search" type="text" placeholder="🔍 Buscar..." class="input-field" style="width:220px; padding:8px 14px; font-size:13px;" oninput="renderContacts()" />
+          <button onclick="openContactModal()" style="background:linear-gradient(135deg,var(--accent-cyan),var(--p300)); color:#000; border:none; border-radius:10px; padding:9px 18px; font-weight:800; font-size:13px; cursor:pointer; white-space:nowrap;">+ Nuevo</button>
+        </div>
+      </div>
+      <!-- Filter pills -->
+      <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
+        <button class="contact-filter-btn active" data-ctype="all"   onclick="setContactFilter('all',this)">Todos</button>
+        <button class="contact-filter-btn"         data-ctype="persona" onclick="setContactFilter('persona',this)">👤 Personas</button>
+        <button class="contact-filter-btn"         data-ctype="bank"    onclick="setContactFilter('bank',this)">🏦 Bancos</button>
+        <button class="contact-filter-btn"         data-ctype="crypto"  onclick="setContactFilter('crypto',this)">₿ Cripto</button>
+      </div>
+      <div id="contacts-root" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px;"></div>
     </div>
 
     <!-- SETTINGS -->
@@ -1225,6 +1289,76 @@
       <button class="btn-ghost" onclick="closeFinanceDetail()">Cancelar</button>
       <button class="btn-primary" id="fd-save" onclick="saveFinanceDetail()">Guardar</button>
     </div>
+  </div>
+</div>
+
+<!-- CONTACT CREATE/EDIT MODAL -->
+<div id="contact-modal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:500px;">
+    <div class="modal-title" id="contact-modal-title">Nuevo Contacto</div>
+    <!-- Type selector -->
+    <div style="display:flex; gap:8px; margin-bottom:20px;">
+      <button class="contact-filter-btn active" data-ct="persona" onclick="selectContactType('persona',this)">👤 Persona</button>
+      <button class="contact-filter-btn" data-ct="bank"   onclick="selectContactType('bank',this)">🏦 Banco</button>
+      <button class="contact-filter-btn" data-ct="crypto" onclick="selectContactType('crypto',this)">₿ Cripto</button>
+    </div>
+    <!-- Common fields -->
+    <div class="modal-field">
+      <label class="modal-label">Nombre / Apodo *</label>
+      <input type="text" id="cm-name" class="modal-input" placeholder="Ej: Nacho, BBVA, Bitcoin Wallet" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Color de avatar</label>
+      <input type="color" id="cm-color" value="#00f0ff" style="width:48px; height:32px; border:none; border-radius:8px; cursor:pointer; background:none;" />
+    </div>
+    <!-- Persona fields -->
+    <div id="cm-persona-fields">
+      <div class="modal-field"><label class="modal-label">Teléfono</label><input type="tel" id="cm-phone" class="modal-input" placeholder="+52 000 000 0000" /></div>
+      <div class="modal-field"><label class="modal-label">Email</label><input type="email" id="cm-email" class="modal-input" placeholder="correo@ejemplo.com" /></div>
+      <div class="modal-field"><label class="modal-label">Empresa / Rol</label><input type="text" id="cm-company" class="modal-input" placeholder="Ej: CEO en Startup XYZ" /></div>
+    </div>
+    <!-- Bank fields -->
+    <div id="cm-bank-fields" style="display:none;">
+      <div class="modal-field"><label class="modal-label">Institución</label><input type="text" id="cm-bank-name" class="modal-input" placeholder="BBVA, Santander, HSBC..." /></div>
+      <div class="modal-field"><label class="modal-label">CLABE / Número de cuenta</label><input type="text" id="cm-clabe" class="modal-input" placeholder="18 dígitos CLABE" /></div>
+      <div class="modal-field"><label class="modal-label">Titular</label><input type="text" id="cm-holder" class="modal-input" placeholder="Nombre del titular" /></div>
+    </div>
+    <!-- Crypto fields -->
+    <div id="cm-crypto-fields" style="display:none;">
+      <div class="modal-field"><label class="modal-label">Red / Moneda</label><input type="text" id="cm-network" class="modal-input" placeholder="Bitcoin, Ethereum, XRP, SOL..." /></div>
+      <div class="modal-field"><label class="modal-label">Dirección / Wallet</label><input type="text" id="cm-wallet" class="modal-input" placeholder="0x... / r..." style="font-family:monospace;" /></div>
+    </div>
+    <!-- Notes -->
+    <div class="modal-field">
+      <label class="modal-label">Notas</label>
+      <textarea id="cm-notes" class="modal-input" rows="2" placeholder="Información adicional..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeContactModal()">Cancelar</button>
+      <button class="btn-danger" id="cm-delete" style="display:none;" onclick="deleteContact()">Eliminar</button>
+      <button class="btn-primary" onclick="saveContact()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTACT SHEET (slide-in panel) -->
+<div id="contact-sheet" class="csheet-overlay hidden" onclick="closeContactSheet(event)">
+  <div class="csheet-panel" onclick="event.stopPropagation()">
+    <div class="csheet-header">
+      <div id="csh-avatar" class="contact-avatar" style="font-size:22px;"></div>
+      <div style="flex:1;">
+        <div id="csh-name" style="font-size:20px; font-weight:800; color:#fff; font-family:'Plus Jakarta Sans',sans-serif;"></div>
+        <div id="csh-type-badge" style="font-size:11px; margin-top:3px;"></div>
+      </div>
+      <button onclick="openContactModal(currentContactId)" style="background:rgba(255,255,255,0.07); border:1px solid var(--glass-border); border-radius:8px; padding:6px 12px; color:var(--text-muted); cursor:pointer; font-size:12px;">✏️ Editar</button>
+      <button onclick="closeContactSheet()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:20px; padding:4px 8px;">✕</button>
+    </div>
+    <div class="csheet-tabs">
+      <button class="csheet-tab active" onclick="switchCSheetTab('perfil',this)">Perfil</button>
+      <button class="csheet-tab" onclick="switchCSheetTab('historial',this)">Historial</button>
+      <button class="csheet-tab" onclick="switchCSheetTab('finanzas',this)">Finanzas</button>
+    </div>
+    <div class="csheet-body" id="csh-body"></div>
   </div>
 </div>
 

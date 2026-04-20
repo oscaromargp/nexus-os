@@ -21,6 +21,9 @@ let editingAccountId = null
 let calView = 'month'
 let pendingTransformType = null
 let editingFinanceId = null
+let currentContactId = null
+let activeContactFilter = 'all'
+let currentCSheetTab = 'perfil'
 
 // Kanban board state — must be before the boot IIFE
 let boardLists = [
@@ -564,13 +567,18 @@ async function insertNodeRaw(raw, metadataOverrides={}) {
     delete finalMetadata.account_hint
   }
 
+  // Resolve #contactname references in transactions
+  if (type === 'income' || type === 'expense') {
+    resolveContactInMetadata(finalMetadata, raw)
+  }
+
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
-     const newNode = { 
-       id: Math.random().toString(36).substr(2, 9), 
-       type, 
-       content: content || raw, 
-       metadata: finalMetadata, 
-       created_at: new Date().toISOString() 
+     const newNode = {
+       id: Math.random().toString(36).substr(2, 9),
+       type,
+       content: content || raw,
+       metadata: finalMetadata,
+       created_at: new Date().toISOString()
      }
      allNodes.unshift(newNode)
      renderAll()
@@ -706,6 +714,7 @@ function renderAll() {
   renderFinance(nodes)
   renderCalendar(nodes)
   renderCronica(nodes)
+  renderContacts()
   renderFilterBar()
 }
 
@@ -991,6 +1000,7 @@ function renderFinance(nodes) {
             <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
               ${new Date(n.created_at).toLocaleDateString('es-MX')}
               ${acc ? `· <span style="color:${esc(acc.metadata?.color||'#4ade80')}">${esc(acc.metadata?.label||acc.content)}</span>` : ''}
+              ${n.metadata?.contact_name ? `· <span style="color:var(--accent-cyan);cursor:pointer;text-decoration:underline;" onclick="event.stopPropagation(); openContactByName('${esc(n.metadata.contact_name)}')">#${esc(n.metadata.contact_name)}</span>` : ''}
             </div>
           </div>
           <div style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${isIncome?'#4ade80':'#f87171'};">
@@ -1581,6 +1591,355 @@ document.addEventListener('paste', (e) => {
 })
 
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ─────────────────────────────────────────
+// Contacts / CRM Module
+// ─────────────────────────────────────────
+
+function getContacts() {
+  return allNodes.filter(n => n.type === 'contact')
+}
+
+function contactInitials(name) {
+  return (name || '?').split(/\s+/).slice(0,2).map(w=>w[0]?.toUpperCase()||'').join('') || '?'
+}
+
+function contactTypeIcon(cType) {
+  return cType === 'bank' ? '🏦' : cType === 'crypto' ? '₿' : '👤'
+}
+
+window.setContactFilter = (type, btn) => {
+  activeContactFilter = type
+  document.querySelectorAll('.contact-filter-btn[data-ctype]').forEach(b => b.classList.remove('active'))
+  btn?.classList.add('active')
+  renderContacts()
+}
+
+function renderContacts() {
+  const root = document.getElementById('contacts-root')
+  if (!root) return
+  const search = document.getElementById('contact-search')?.value?.toLowerCase() || ''
+  let contacts = getContacts()
+  if (activeContactFilter !== 'all') contacts = contacts.filter(c => c.metadata?.cType === activeContactFilter)
+  if (search) contacts = contacts.filter(c =>
+    (c.metadata?.name || c.content).toLowerCase().includes(search) ||
+    (c.metadata?.phone || '').includes(search) ||
+    (c.metadata?.email || '').toLowerCase().includes(search) ||
+    (c.metadata?.company || '').toLowerCase().includes(search)
+  )
+
+  if (contacts.length === 0) {
+    root.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:60px 20px;">
+      <div style="font-size:40px;margin-bottom:12px;">👥</div>
+      <div style="font-size:14px;">Sin contactos aún.<br>Crea uno con el botón <b>+ Nuevo</b> o usa <code>#persona Nombre</code> en la barra.</div>
+    </div>`
+    return
+  }
+
+  root.innerHTML = contacts.map(c => {
+    const m = c.metadata || {}
+    const name  = m.name || c.content
+    const cType = m.cType || 'persona'
+    const color = m.color || '#00f0ff'
+    const inits = cType === 'persona' ? contactInitials(name) : contactTypeIcon(cType)
+    // Count transactions linked to this contact
+    const txCount = allNodes.filter(n =>
+      (n.type === 'income' || n.type === 'expense') && n.metadata?.contact_id === c.id
+    ).length
+    const totalPaid = allNodes
+      .filter(n => n.type === 'expense' && n.metadata?.contact_id === c.id)
+      .reduce((s,n) => s + (n.metadata?.amount||0), 0)
+
+    return `<div class="contact-card" onclick="openContactSheet('${c.id}')">
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <div class="contact-avatar" style="background:${color}20; color:${color}; border:1.5px solid ${color}40; font-size:${cType==='persona'?'16':'20'}px;">${inits}</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:14px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(name)}</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${esc(m.company || m.bank_name || m.network || '')}</div>
+          ${m.phone ? `<div style="font-size:11px; color:var(--text-muted); margin-top:1px;">📞 ${esc(m.phone)}</div>` : ''}
+        </div>
+      </div>
+      ${txCount > 0 ? `<div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
+        <span>${txCount} transacción${txCount!==1?'es':''}</span>
+        ${totalPaid > 0 ? `<span style="color:#f87171;">-$${totalPaid.toLocaleString()}</span>` : ''}
+      </div>` : ''}
+    </div>`
+  }).join('')
+}
+
+// ── Contact Sheet (slide-in) ──────────────
+window.openContactSheet = (id) => {
+  const c = allNodes.find(n => n.id === id)
+  if (!c) return
+  currentContactId = id
+  const m = c.metadata || {}
+  const name  = m.name || c.content
+  const cType = m.cType || 'persona'
+  const color = m.color || '#00f0ff'
+  const inits = cType === 'persona' ? contactInitials(name) : contactTypeIcon(cType)
+
+  const avatarEl = document.getElementById('csh-avatar')
+  if (avatarEl) {
+    avatarEl.textContent = inits
+    avatarEl.style.cssText = `width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-size:${cType==='persona'?'18':'24'}px;font-weight:800;background:${color}20;color:${color};border:2px solid ${color}50;`
+  }
+  document.getElementById('csh-name').textContent = name
+  document.getElementById('csh-type-badge').innerHTML = `<span style="background:${color}18;color:${color};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">${contactTypeIcon(cType)} ${cType.toUpperCase()}</span>`
+
+  currentCSheetTab = 'perfil'
+  document.querySelectorAll('.csheet-tab').forEach((t,i) => t.classList.toggle('active', i===0))
+  renderCSheetTab('perfil', c)
+
+  const sheet = document.getElementById('contact-sheet')
+  if (sheet) sheet.classList.remove('hidden')
+}
+
+window.closeContactSheet = (e) => {
+  if (e && e.target !== document.getElementById('contact-sheet')) return
+  document.getElementById('contact-sheet')?.classList.add('hidden')
+  currentContactId = null
+}
+
+window.switchCSheetTab = (tab, btn) => {
+  currentCSheetTab = tab
+  document.querySelectorAll('.csheet-tab').forEach(t => t.classList.remove('active'))
+  btn?.classList.add('active')
+  const c = allNodes.find(n => n.id === currentContactId)
+  if (c) renderCSheetTab(tab, c)
+}
+
+function renderCSheetTab(tab, c) {
+  const body = document.getElementById('csh-body')
+  if (!body) return
+  const m = c.metadata || {}
+  const name = m.name || c.content
+  const cType = m.cType || 'persona'
+
+  if (tab === 'perfil') {
+    const fields = cType === 'persona' ? `
+      <div class="csh-field"><span class="csh-label">📞 Teléfono</span><span>${esc(m.phone||'—')}</span></div>
+      <div class="csh-field"><span class="csh-label">✉️ Email</span><span>${esc(m.email||'—')}</span></div>
+      <div class="csh-field"><span class="csh-label">🏢 Empresa</span><span>${esc(m.company||'—')}</span></div>
+    ` : cType === 'bank' ? `
+      <div class="csh-field"><span class="csh-label">🏦 Banco</span><span>${esc(m.bank_name||'—')}</span></div>
+      <div class="csh-field"><span class="csh-label">🔢 CLABE</span><code style="font-family:monospace;font-size:13px;">${esc(m.clabe||'—')}</code></div>
+      <div class="csh-field"><span class="csh-label">👤 Titular</span><span>${esc(m.holder||'—')}</span></div>
+    ` : `
+      <div class="csh-field"><span class="csh-label">🌐 Red</span><span>${esc(m.network||'—')}</span></div>
+      <div class="csh-field"><span class="csh-label">💳 Wallet</span><code style="font-family:monospace;font-size:11px;word-break:break-all;">${esc(m.wallet||'—')}</code></div>
+    `
+    body.innerHTML = `<div style="display:flex;flex-direction:column;gap:0;">${fields}
+      <div class="csh-field" style="align-items:flex-start;"><span class="csh-label">📝 Notas</span><span style="white-space:pre-wrap;">${esc(m.notes||'—')}</span></div>
+    </div>
+    <style>
+      .csh-field { display:flex; gap:16px; padding:14px 0; border-bottom:1px solid rgba(255,255,255,0.05); align-items:center; }
+      .csh-label { font-size:11px; font-weight:700; color:var(--text-muted); min-width:90px; text-transform:uppercase; letter-spacing:0.04em; }
+    </style>`
+  }
+
+  else if (tab === 'historial') {
+    const related = allNodes.filter(n =>
+      n.id !== c.id && (
+        n.metadata?.contact_id === c.id ||
+        (n.content || '').toLowerCase().includes('#' + name.toLowerCase().replace(/\s+/g,''))
+      )
+    ).sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+
+    if (related.length === 0) {
+      body.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px 0;font-size:14px;">Sin actividad registrada aún.<br>Los nodos que mencionen a <b>${esc(name)}</b> aparecerán aquí.</div>`
+      return
+    }
+    const TYPE_ICONS = { income:'↑', expense:'↓', kanban:'📌', note:'💡', persona:'👤', proyecto:'📁' }
+    const TYPE_COLORS = { income:'#4ade80', expense:'#f87171', kanban:'#60a5fa', note:'#a855f7', persona:'#fbbf24', proyecto:'#fb923c' }
+    body.innerHTML = related.map(n => {
+      const icon  = TYPE_ICONS[n.type] || '·'
+      const color = TYPE_COLORS[n.type] || '#94a3b8'
+      const label = n.metadata?.label || n.content
+      const date  = new Date(n.created_at).toLocaleDateString('es-MX', {day:'numeric',month:'short',year:'numeric'})
+      const amount = (n.type==='income'||n.type==='expense') ? ` <b style="color:${color}">${n.type==='income'?'+':'-'}$${(n.metadata?.amount||0).toLocaleString()}</b>` : ''
+      return `<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;" onclick="handleContactHistoryClick('${n.id}','${n.type}')">
+        <div style="width:32px;height:32px;border-radius:8px;background:${color}18;color:${color};display:grid;place-items:center;font-size:14px;flex-shrink:0;">${icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(label)}${amount}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${date}</div>
+        </div>
+      </div>`
+    }).join('')
+  }
+
+  else if (tab === 'finanzas') {
+    const txs = allNodes.filter(n =>
+      (n.type==='income'||n.type==='expense') && n.metadata?.contact_id === c.id
+    )
+    const totalIn  = txs.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+    const totalOut = txs.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+    const net = totalIn - totalOut
+
+    body.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px;">
+      <div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:12px;padding:16px;text-align:center;">
+        <div style="font-size:10px;color:#6ee7b7;font-weight:700;margin-bottom:6px;">RECIBIDO</div>
+        <div style="font-size:20px;font-weight:800;color:#4ade80;">+$${totalIn.toLocaleString()}</div>
+      </div>
+      <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:12px;padding:16px;text-align:center;">
+        <div style="font-size:10px;color:#fca5a5;font-weight:700;margin-bottom:6px;">PAGADO</div>
+        <div style="font-size:20px;font-weight:800;color:#f87171;">-$${totalOut.toLocaleString()}</div>
+      </div>
+      <div style="background:rgba(0,246,255,0.06);border:1px solid rgba(0,246,255,0.15);border-radius:12px;padding:16px;text-align:center;">
+        <div style="font-size:10px;color:var(--accent-cyan);font-weight:700;margin-bottom:6px;">BALANCE</div>
+        <div style="font-size:20px;font-weight:800;color:${net>=0?'#4ade80':'#f87171'};">${net>=0?'+':''}\$${net.toLocaleString()}</div>
+      </div>
+    </div>
+    ${txs.length === 0
+      ? `<div style="text-align:center;color:var(--text-muted);padding:20px;">Sin transacciones vinculadas.<br>Usa <code>#${name.replace(/\s+/g,'').toLowerCase()}</code> al registrar un pago.</div>`
+      : txs.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).map(n=>{
+          const isIn = n.type==='income'
+          return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <div style="width:32px;height:32px;border-radius:8px;background:${isIn?'rgba(74,222,128,0.1)':'rgba(248,113,113,0.1)'};color:${isIn?'#4ade80':'#f87171'};display:grid;place-items:center;">${isIn?'↑':'↓'}</div>
+            <div style="flex:1;"><div style="font-size:13px;color:#fff;">${esc(n.metadata?.label||n.content)}</div>
+            <div style="font-size:11px;color:var(--text-muted);">${new Date(n.created_at).toLocaleDateString('es-MX')}</div></div>
+            <div style="font-size:15px;font-weight:800;color:${isIn?'#4ade80':'#f87171'};">${isIn?'+':'-'}$${(n.metadata?.amount||0).toLocaleString()}</div>
+          </div>`
+        }).join('')
+    }`
+  }
+}
+
+window.handleContactHistoryClick = (id, type) => {
+  if (type === 'kanban') { openCardModal(id); return }
+  if (type === 'note' || type === 'persona' || type === 'proyecto') { openNoteEdit(id); return }
+  if (type === 'income' || type === 'expense') { openFinanceDetail(id); return }
+}
+
+// ── Contact Modal (create / edit) ─────────
+let editingContactType = 'persona'
+
+window.openContactModal = (id = null) => {
+  editingContactType = 'persona'
+  const c = id ? allNodes.find(n => n.id === id) : null
+  const m = c?.metadata || {}
+  editingContactType = m.cType || 'persona'
+
+  document.getElementById('contact-modal-title').textContent = c ? 'Editar Contacto' : 'Nuevo Contacto'
+  document.getElementById('cm-name').value    = m.name || c?.content || ''
+  document.getElementById('cm-color').value  = m.color || '#00f0ff'
+  document.getElementById('cm-phone').value  = m.phone || ''
+  document.getElementById('cm-email').value  = m.email || ''
+  document.getElementById('cm-company').value = m.company || ''
+  document.getElementById('cm-bank-name').value = m.bank_name || ''
+  document.getElementById('cm-clabe').value  = m.clabe || ''
+  document.getElementById('cm-holder').value = m.holder || ''
+  document.getElementById('cm-network').value = m.network || ''
+  document.getElementById('cm-wallet').value = m.wallet || ''
+  document.getElementById('cm-notes').value  = m.notes || ''
+  document.getElementById('cm-delete').style.display = c ? 'inline-flex' : 'none'
+
+  // Set type buttons
+  document.querySelectorAll('[data-ct]').forEach(btn => btn.classList.toggle('active', btn.dataset.ct === editingContactType))
+  showContactTypeFields(editingContactType)
+
+  currentContactId = id
+  document.getElementById('contact-modal').classList.remove('hidden')
+}
+
+window.closeContactModal = () => {
+  document.getElementById('contact-modal').classList.add('hidden')
+}
+
+window.selectContactType = (type, btn) => {
+  editingContactType = type
+  document.querySelectorAll('[data-ct]').forEach(b => b.classList.remove('active'))
+  btn?.classList.add('active')
+  showContactTypeFields(type)
+}
+
+function showContactTypeFields(type) {
+  document.getElementById('cm-persona-fields').style.display = type === 'persona' ? '' : 'none'
+  document.getElementById('cm-bank-fields').style.display   = type === 'bank'    ? '' : 'none'
+  document.getElementById('cm-crypto-fields').style.display = type === 'crypto'  ? '' : 'none'
+}
+
+window.saveContact = async () => {
+  const name = document.getElementById('cm-name').value.trim()
+  if (!name) return
+  const cType = editingContactType
+  const meta = {
+    name, cType,
+    color:    document.getElementById('cm-color').value,
+    notes:    document.getElementById('cm-notes').value.trim(),
+    ...(cType==='persona' ? {
+      phone:   document.getElementById('cm-phone').value.trim(),
+      email:   document.getElementById('cm-email').value.trim(),
+      company: document.getElementById('cm-company').value.trim(),
+    } : cType==='bank' ? {
+      bank_name: document.getElementById('cm-bank-name').value.trim(),
+      clabe:     document.getElementById('cm-clabe').value.trim(),
+      holder:    document.getElementById('cm-holder').value.trim(),
+    } : {
+      network: document.getElementById('cm-network').value.trim(),
+      wallet:  document.getElementById('cm-wallet').value.trim(),
+    })
+  }
+
+  if (currentContactId && allNodes.find(n=>n.id===currentContactId)) {
+    const node = allNodes.find(n=>n.id===currentContactId)
+    node.content = name; node.metadata = meta
+    if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+      await supabase.from('nodes').update({ content:name, metadata:meta }).eq('id', currentContactId)
+    }
+  } else {
+    if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+      allNodes.unshift({ id: Math.random().toString(36).substr(2,9), type:'contact', content:name, metadata:meta, created_at:new Date().toISOString() })
+    } else {
+      const { data } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'contact', content:name, metadata:meta }).select()
+      if (data?.[0]) allNodes.unshift(data[0])
+    }
+  }
+  closeContactModal()
+  renderAll()
+  showToast(`Contacto "${name}" guardado`)
+}
+
+window.deleteContact = async () => {
+  if (!currentContactId || !confirm('¿Eliminar este contacto?')) return
+  allNodes = allNodes.filter(n=>n.id!==currentContactId)
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').delete().eq('id', currentContactId)
+  }
+  closeContactModal()
+  document.getElementById('contact-sheet')?.classList.add('hidden')
+  renderAll()
+}
+
+// ── Parser: detect #contactname in transactions ──
+function resolveContactInMetadata(metadata, raw) {
+  const contacts = getContacts()
+  if (!contacts.length) return metadata
+  // Look for #name patterns in raw text (excluding system tags)
+  const systemTags = ['tarea','persona','proyecto']
+  const matches = (raw.match(/#(\w+)/g) || [])
+    .map(m => m.slice(1).toLowerCase())
+    .filter(m => !systemTags.includes(m))
+  for (const slug of matches) {
+    const found = contacts.find(c =>
+      (c.metadata?.name || c.content).toLowerCase().replace(/\s+/g,'') === slug ||
+      (c.metadata?.name || c.content).toLowerCase().startsWith(slug)
+    )
+    if (found) {
+      metadata.contact_id = found.id
+      metadata.contact_name = found.metadata?.name || found.content
+      break
+    }
+  }
+  return metadata
+}
+
+window.openContactByName = (name) => {
+  const c = allNodes.find(n => n.type === 'contact' &&
+    (n.metadata?.name || n.content).toLowerCase() === name.toLowerCase())
+  if (c) openContactSheet(c.id)
+  else showToast(`Contacto "${name}" no encontrado`)
+}
 
 // ─────────────────────────────────────────
 // Onboarding
