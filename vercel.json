@@ -3,6 +3,7 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
-    { "source": "/app", "destination": "/app.html" }
+    { "source": "/app",            "destination": "/app.html" },
+    { "source": "/reset-password", "destination": "/reset-password.html" }
   ]
 }
