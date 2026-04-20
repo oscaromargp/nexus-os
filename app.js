@@ -634,21 +634,49 @@ nexusInput?.addEventListener('keydown', e => {
   }
 })
 
+nexusInput?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const preview = document.getElementById('parser-preview')
+    if (preview) preview.style.display = 'none'
+  }
+})
+
 nexusInput?.addEventListener('input', () => {
   const val = nexusInput.value.trim()
   const suggest = document.getElementById('account-suggest')
-  if (!suggest) return
-  const accounts = allNodes.filter(n => n.type === 'account')
-  if ((val.startsWith('+$') || val.startsWith('-$')) && accounts.length > 0) {
-    suggest.style.display = 'flex'
-    suggest.innerHTML = accounts.map(a =>
-      `<button onclick="injectAccount('@${(a.metadata?.label||a.content).toLowerCase().replace(/\s+/g,'')}')"
-       style="background:rgba(0,246,255,0.1); border:1px solid var(--accent-cyan); border-radius:8px; padding:4px 10px; color:var(--accent-cyan); font-size:12px; cursor:pointer; font-family:inherit;">
-         @${a.metadata?.label||a.content}
-       </button>`
-    ).join('')
-  } else {
-    suggest.style.display = 'none'
+  const preview = document.getElementById('parser-preview')
+
+  // ── Account suggestions ───────────────────
+  if (suggest) {
+    const accounts = allNodes.filter(n => n.type === 'account')
+    if ((val.startsWith('+$') || val.startsWith('-$')) && accounts.length > 0) {
+      suggest.style.display = 'flex'
+      suggest.innerHTML = accounts.map(a =>
+        `<button onclick="injectAccount('@${(a.metadata?.label||a.content).toLowerCase().replace(/\s+/g,'')}')"
+         style="background:rgba(0,246,255,0.1); border:1px solid var(--accent-cyan); border-radius:8px; padding:4px 10px; color:var(--accent-cyan); font-size:12px; cursor:pointer; font-family:inherit;">
+           @${a.metadata?.label||a.content}
+         </button>`
+      ).join('')
+    } else {
+      suggest.style.display = 'none'
+    }
+  }
+
+  // ── Parser preview ─────────────────────────
+  if (preview) {
+    if (!val) { preview.style.display = 'none'; return }
+    const { type, metadata } = parseNode(val)
+    const cfg = {
+      income:   { label: `↑ INGRESO  $${metadata.amount||'?'}${metadata.account_hint ? ' @'+metadata.account_hint : ''}`, bg: 'rgba(74,222,128,0.08)', border: 'rgba(74,222,128,0.3)', color: '#4ade80' },
+      expense:  { label: `↓ GASTO  $${metadata.amount||'?'}${metadata.account_hint ? ' @'+metadata.account_hint : ''}`,   bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.3)', color: '#f87171' },
+      kanban:   { label: '📌 TAREA  →  Pendiente',          bg: 'rgba(96,165,250,0.08)', border: 'rgba(96,165,250,0.3)',  color: '#60a5fa' },
+      persona:  { label: '👤 CONTACTO  →  Bóveda Neural',    bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.3)',  color: '#fbbf24' },
+      proyecto: { label: '📁 PROYECTO  →  Bóveda Neural',    bg: 'rgba(168,85,247,0.08)', border: 'rgba(168,85,247,0.3)',  color: '#a855f7' },
+      note:     { label: '💡 NOTA LIBRE  →  Bóveda Neural',  bg: 'rgba(148,163,184,0.06)', border: 'rgba(148,163,184,0.2)', color: '#94a3b8' },
+    }
+    const c = cfg[type] || cfg.note
+    preview.textContent = c.label + '   ↵ Enter para guardar'
+    preview.style.cssText = `display:block; position:absolute; bottom:calc(100% + 0px); left:0; right:0; padding:7px 18px; font-size:11px; font-weight:600; font-family:'JetBrains Mono',monospace; border-radius:12px 12px 0 0; border:1px solid ${c.border}; border-bottom:none; background:${c.bg}; color:${c.color}; letter-spacing:0.04em; pointer-events:none; z-index:10;`
   }
 })
 
@@ -760,7 +788,7 @@ function renderNotes(nodes) {
     const colorStyle = NOTE_COLORS[color] || ''
     const isPinned = n.metadata?.pinned
     return `
-    <div class="note-keep" style="${colorStyle}" onclick="openNoteEdit('${n.id}')">
+    <div class="note-keep" style="${colorStyle}" ondblclick="openNoteEdit('${n.id}')" title="Doble clic para editar">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div style="font-size:9px; font-weight:800; color:var(--accent-cyan);">#${n.type.toUpperCase()}</div>
         <div style="display:flex; gap:8px;">
@@ -1485,13 +1513,19 @@ function renderAttachments(images, context) {
   const container = document.getElementById(containerId)
   if (!container) return
   container.innerHTML = (images || []).map((src, i) => {
-    const isPdf = src.startsWith('data:application/pdf') || src.includes(';base64,JVBER')
-    const thumb = isPdf
-      ? `<div onclick="viewAttachment('${encodeURIComponent(src.slice(0,50))}_PDF_${i}','${context}')" style="width:80px;height:80px;border-radius:10px;border:1px solid var(--glass-border);background:rgba(248,113,113,0.1);display:grid;place-items:center;cursor:pointer;flex-direction:column;font-size:10px;color:#f87171;gap:4px;">
-           <span style="font-size:28px;">📄</span>
-           <span>PDF</span>
-         </div>`
-      : `<img src="${src}" onclick="viewImage('${src}')" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid var(--glass-border);cursor:pointer;" />`
+    const isPdf   = src.startsWith('data:application/pdf') || src.includes(';base64,JVBER')
+    const isAudio = src.startsWith('data:audio/')
+    let thumb
+    if (isPdf) {
+      thumb = `<div onclick="viewAttachment('PDF_${i}','${context}')" style="width:80px;height:80px;border-radius:10px;border:1px solid var(--glass-border);background:rgba(248,113,113,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-direction:column;font-size:10px;color:#f87171;gap:4px;">
+        <span style="font-size:28px;">📄</span><span>PDF</span></div>`
+    } else if (isAudio) {
+      thumb = `<div style="width:140px;border-radius:10px;border:1px solid var(--glass-border);background:rgba(0,246,255,0.05);padding:8px;display:flex;flex-direction:column;gap:4px;">
+        <audio controls src="${src}" style="width:100%;height:28px;"></audio>
+        <span style="font-size:10px;color:var(--text-muted);text-align:center;">🎙 audio</span></div>`
+    } else {
+      thumb = `<img src="${src}" onclick="viewImage('${src}')" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid var(--glass-border);cursor:pointer;" />`
+    }
     return `
       <div style="position:relative; display:inline-block;">
         ${thumb}
@@ -1501,8 +1535,7 @@ function renderAttachments(images, context) {
 }
 
 window.viewAttachment = (encodedKey, context) => {
-  // For PDFs: open full base64 data URL in new tab
-  const idx = parseInt(encodedKey.split('_PDF_')[1])
+  const idx = parseInt(encodedKey.split('_PDF_')[1] ?? encodedKey.split('_')[1])
   const id = context === 'card' ? editingCardId : context === 'note' ? editingNoteId : editingFinanceId
   const node = allNodes.find(n => n.id === id)
   if (!node?.metadata?.images?.[idx]) return
@@ -1548,3 +1581,90 @@ document.addEventListener('paste', (e) => {
 })
 
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ─────────────────────────────────────────
+// Onboarding
+// ─────────────────────────────────────────
+;(function initOnboarding() {
+  const modal = document.getElementById('onboarding-modal')
+  if (!modal) return
+  const dismissed = localStorage.getItem('nexus_onboarded')
+  if (!dismissed) {
+    modal.style.display = 'flex'
+  } else {
+    modal.style.display = 'none'
+  }
+})()
+
+window.closeOnboarding = (temporary = true) => {
+  const modal = document.getElementById('onboarding-modal')
+  if (modal) modal.style.display = 'none'
+  if (!temporary) localStorage.setItem('nexus_onboarded', '1')
+}
+
+window.tryExample = (val) => {
+  const input = document.getElementById('nexus-input')
+  if (input) {
+    input.value = val
+    input.dispatchEvent(new Event('input'))
+    input.focus()
+    closeOnboarding(true)
+  }
+}
+
+// ─────────────────────────────────────────
+// Audio recording
+// ─────────────────────────────────────────
+let mediaRecorder = null
+let audioChunks = []
+let audioTimerInterval = null
+let audioSeconds = 0
+let audioContext = 'note'
+
+window.toggleAudioRecord = async (context) => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    stopAudioRecord(context)
+    return
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    audioChunks = []
+    audioSeconds = 0
+    audioContext = context
+    mediaRecorder = new MediaRecorder(stream)
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data)
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop())
+      clearInterval(audioTimerInterval)
+      const blob = new Blob(audioChunks, { type: 'audio/webm' })
+      if (blob.size > 5 * 1024 * 1024) { showToast('Audio muy largo — máx 5 MB (~3 min)'); return }
+      const reader = new FileReader()
+      reader.onload = e => addAttachment(e.target.result, audioContext)
+      reader.readAsDataURL(blob)
+      // Reset UI
+      const statusEl = document.getElementById(`${context === 'note' ? 'ne' : 'fd'}-audio-status`)
+      const btnEl    = document.getElementById(`${context === 'note' ? 'ne' : 'fd'}-audio-btn`)
+      if (statusEl) statusEl.style.display = 'none'
+      if (btnEl) btnEl.textContent = '🎙 Grabar audio'
+    }
+    mediaRecorder.start()
+    // UI: show recording state
+    const statusEl = document.getElementById(`${context === 'note' ? 'ne' : 'fd'}-audio-status`)
+    const btnEl    = document.getElementById(`${context === 'note' ? 'ne' : 'fd'}-audio-btn`)
+    if (statusEl) statusEl.style.display = 'flex'
+    if (btnEl) btnEl.textContent = '⏹ Detener'
+    audioTimerInterval = setInterval(() => {
+      audioSeconds++
+      const m = String(Math.floor(audioSeconds / 60)).padStart(2, '0')
+      const s = String(audioSeconds % 60).padStart(2, '0')
+      const timerEl = document.getElementById(`${context === 'note' ? 'ne' : 'fd'}-audio-timer`)
+      if (timerEl) timerEl.textContent = `${m}:${s}`
+    }, 1000)
+  } catch {
+    showToast('No se pudo acceder al micrófono')
+  }
+}
+
+window.stopAudioRecord = (context) => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop()
+}
