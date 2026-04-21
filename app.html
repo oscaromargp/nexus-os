@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#00f0ff" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>NEXUS COMMAND CENTER v4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -837,6 +842,7 @@
   </nav>
 
   <main id="main-scroll">
+  <div id="offline-bar" style="display:none;" class="offline-bar"></div>
     <!-- PANEL DE COMANDOS -->
     <div id="view-feed" class="view-section active">
       <div class="view-header"><h1 class="view-title">Historial de Operaciones</h1></div>
@@ -1314,7 +1320,12 @@
   <div id="spotlight-container">
     <div id="parser-preview" style="display:none; position:absolute; bottom:calc(100% + 4px); left:0; right:0; padding:8px 18px; font-size:12px; font-weight:600; font-family:'JetBrains Mono',monospace; border-radius:12px 12px 0 0; border:1px solid; border-bottom:none; letter-spacing:0.03em; pointer-events:none;"></div>
     <div class="spotlight-wrapper" style="position:relative;">
-       <div id="account-suggest" style="display:none; position:absolute; bottom:100%; left:0; right:0; background:var(--bg-panel); border:1px solid var(--accent-cyan); border-radius:14px; padding:8px; margin-bottom:8px; flex-wrap:wrap; gap:6px;"></div>
+       <div id="ide-suggest" style="display:none; position:absolute; bottom:calc(100% + 4px); left:0; right:0; background:var(--bg-panel); border:1px solid var(--glass-border); border-radius:16px; overflow:hidden; box-shadow:0 -8px 32px rgba(0,0,0,0.6); z-index:20;">
+         <div id="ide-suggest-list"></div>
+         <div style="padding:5px 12px; font-size:10px; color:var(--text-dim); border-top:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between;">
+           <span>↑↓ navegar</span><span>Tab / → completar</span><span>Esc cerrar</span>
+         </div>
+       </div>
        <span class="spotlight-prompt">›</span>
        <input id="nexus-input" type="text" placeholder="Inyectar comando o pensamiento..." autofocus autocomplete="off" />
     </div>
@@ -1355,9 +1366,10 @@
             <div id="tm-assignees-list" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;"></div>
           </div>
         </div>
-        <div id="tm-assignee-row" style="display:none; gap:8px; margin-top:8px;">
+        <div id="tm-assignee-row" style="display:none; gap:8px; margin-top:8px; position:relative;">
           <input type="text" id="tm-member-input" placeholder="Nombre del miembro..." style="flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:8px; padding:8px; color:#fff; outline:none; font-size:13px;" />
           <button id="tm-add-member" style="background:var(--accent-cyan); color:#000; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; font-weight:800;">+</button>
+          <div id="tm-member-drop" style="display:none; position:absolute; background:var(--bg-panel); border:1px solid var(--glass-border); border-radius:10px; overflow:hidden; z-index:100; min-width:200px; box-shadow:0 8px 24px rgba(0,0,0,0.4); top:100%; left:0;"></div>
         </div>
         <div id="tm-labels-row" style="display:none; gap:8px; margin-top:8px;">
           <input type="text" id="tm-label-input" placeholder="#etiqueta" style="flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--glass-border); border-radius:8px; padding:8px; color:#fff; outline:none; font-size:13px;" />
@@ -1547,6 +1559,10 @@
       <select id="fd-account" class="modal-input"></select>
     </div>
     <div class="modal-field">
+      <label class="modal-label">¿A quién / De quién?</label>
+      <select id="fd-contact" class="modal-input"></select>
+    </div>
+    <div class="modal-field">
       <label class="modal-label">Comentarios</label>
       <div id="fd-comments" style="max-height:120px; overflow-y:auto; margin-bottom:8px;"></div>
       <input type="text" id="fd-comment-input" class="modal-input" placeholder="Agregar comentario..." onkeydown="if(event.key==='Enter') addFinanceComment()" />
@@ -1560,6 +1576,7 @@
       </label>
     </div>
     <div class="modal-actions">
+      <button class="btn-danger" onclick="deleteFinanceNode()" style="margin-right:auto;">🗑 Eliminar</button>
       <button class="btn-ghost" onclick="closeFinanceDetail()">Cancelar</button>
       <button class="btn-primary" id="fd-save" onclick="saveFinanceDetail()">Guardar</button>
     </div>
@@ -1697,8 +1714,67 @@
   border-color: rgba(0,246,255,0.25);
 }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── OFFLINE BAR ── */
+    .offline-bar {
+      position: sticky; top: 0; z-index: 200;
+      padding: 8px 20px; font-size: 12px; font-weight: 600;
+      display: flex; align-items: center; gap: 8px;
+      backdrop-filter: blur(8px);
+    }
+    .offline-bar.offline  { background: rgba(248,113,113,0.15); color: #f87171; border-bottom: 1px solid rgba(248,113,113,0.2); }
+    .offline-bar.syncing  { background: rgba(251,191,36,0.12);  color: #fbbf24; border-bottom: 1px solid rgba(251,191,36,0.2); }
+
+    /* ── IDE SUGGEST ── */
+    .ide-row:hover { background: rgba(0,246,255,0.06) !important; }
+
+    /* ── MOBILE RESPONSIVE ── */
+    @media (max-width: 768px) {
+      #nexus-layout {
+        grid-template-columns: 1fr !important;
+        grid-template-areas: "main" !important;
+        grid-template-rows: 1fr;
+      }
+      nav#sidebar {
+        position: fixed; bottom: 0; left: 0; right: 0; top: auto;
+        flex-direction: row; overflow-x: auto; overflow-y: hidden;
+        padding: 8px 12px; z-index: 500;
+        border-right: none; border-top: 1px solid var(--glass-border);
+        gap: 4px; height: auto; min-height: 0;
+      }
+      nav#sidebar .nav-logo { display: none; }
+      nav#sidebar .nav-item {
+        flex-direction: column; gap: 2px; font-size: 9px;
+        padding: 6px 8px; border-radius: 8px; white-space: nowrap;
+        min-width: 52px; text-align: center;
+      }
+      nav#sidebar .nav-spacer, nav#sidebar .nav-user, nav#sidebar .nav-bottom { display: none !important; }
+      nav#sidebar .nav-section-label { display: none; }
+      aside#widgets-sidebar { display: none !important; }
+      main { padding: 16px 12px; padding-bottom: 100px; }
+      #spotlight-container { left: 12px !important; right: 12px !important; bottom: 74px; }
+      body.nav-collapsed nav#sidebar { display: flex !important; padding: 8px 12px; }
+      body.nav-collapsed #nexus-layout { grid-template-columns: 1fr !important; }
+      #toggle-nav, #toggle-side { display: none !important; }
+      .view-header { flex-direction: column; align-items: flex-start !important; }
+      .trello-modal { flex-direction: column !important; }
+      .cronica-col { min-width: 100% !important; }
+      #cronica-root { grid-template-columns: 1fr !important; }
+    }
+
+    @media (max-width: 480px) {
+      h1.view-title { font-size: 20px !important; }
+      .modal-box { margin: 8px; max-width: calc(100vw - 16px) !important; }
+    }
 </style>
 
 <script type="module" src="./app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    })
+  }
+</script>
 </body>
 </html>

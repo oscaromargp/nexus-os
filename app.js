@@ -100,6 +100,8 @@ const TYPE_CONFIG = {
     })
   })
   document.getElementById('cronica-date')?.setAttribute('value', new Date().toISOString().split('T')[0])
+  drainOfflineQueue()
+  updateOfflineBar()
 })()
 
 function setupRealtimeSubscription() {
@@ -429,6 +431,38 @@ document.getElementById('tm-btn-members')?.addEventListener('click', () => {
   if (el) el.style.display = el.style.display === 'none' ? 'flex' : 'none'
 })
 
+const memberInput = document.getElementById('tm-member-input')
+memberInput?.addEventListener('input', () => {
+  const val = memberInput.value.trim().toLowerCase()
+  const drop = document.getElementById('tm-member-drop')
+  if (!drop) return
+  if (!val) { drop.style.display = 'none'; return }
+  const matches = allNodes.filter(n => n.type==='contact' && (n.metadata?.name||n.content).toLowerCase().includes(val)).slice(0,6)
+  if (!matches.length) { drop.style.display = 'none'; return }
+  drop.style.display = 'block'
+  drop.innerHTML = matches.map(c => {
+    const name = c.metadata?.name || c.content
+    const icon = c.metadata?.cType==='bank'?'🏦':c.metadata?.cType==='crypto'?'₿':'👤'
+    return `<div style="padding:8px 12px; cursor:pointer; display:flex; align-items:center; gap:8px; font-size:13px;" onmouseover="this.style.background='rgba(0,246,255,0.08)'" onmouseout="this.style.background=''" onclick="selectMemberContact('${c.id}','${esc(name)}')">${icon} ${esc(name)}</div>`
+  }).join('')
+})
+
+window.selectMemberContact = async function(id, name) {
+  const drop = document.getElementById('tm-member-drop')
+  if (drop) drop.style.display = 'none'
+  if (!editingCardId) return
+  const node = allNodes.find(n => n.id === editingCardId)
+  if (!node) return
+  if (!node.metadata.assignee) node.metadata.assignee = []
+  if (!node.metadata.assignee.includes(name)) {
+    node.metadata.assignee.push(name)
+    await updateNodeMetadata(editingCardId, node.metadata)
+    renderAssignees(node.metadata.assignee)
+  }
+  const input = document.getElementById('tm-member-input')
+  if (input) input.value = ''
+}
+
 document.getElementById('tm-add-member')?.addEventListener('click', async () => {
   const input = document.getElementById('tm-member-input')
   const name = input?.value.trim()
@@ -436,9 +470,11 @@ document.getElementById('tm-add-member')?.addEventListener('click', async () => 
   const node = allNodes.find(n => n.id === editingCardId)
   if (node) {
     if (!node.metadata.assignee) node.metadata.assignee = []
-    node.metadata.assignee.push(name)
-    await updateNodeMetadata(editingCardId, node.metadata)
-    renderAssignees(node.metadata.assignee)
+    if (!node.metadata.assignee.includes(name)) {
+      node.metadata.assignee.push(name)
+      await updateNodeMetadata(editingCardId, node.metadata)
+      renderAssignees(node.metadata.assignee)
+    }
     if (input) input.value = ''
   }
 })
@@ -566,55 +602,89 @@ function parseNode(text) {
   return { type, metadata, content: cleanContent }
 }
 
+// ── OFFLINE SYNC QUEUE ────────────────────────────────────────────────────────
+const OFFLINE_QUEUE_KEY = 'nexus_offline_q'
+function loadOfflineQueue()  { try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)||'[]') } catch { return [] } }
+function saveOfflineQueue(q) { localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(q)) }
+
+function updateOfflineBar() {
+  const el = document.getElementById('offline-bar')
+  if (!el) return
+  const q = loadOfflineQueue()
+  if (!navigator.onLine) {
+    el.style.display = 'flex'; el.className = 'offline-bar offline'
+    el.innerHTML = '📵 Sin conexión &mdash; los cambios se guardan localmente y sincronizan al reconectar'
+  } else if (q.length) {
+    el.style.display = 'flex'; el.className = 'offline-bar syncing'
+    el.innerHTML = `🔄 Sincronizando ${q.length} cambio${q.length!==1?'s':''} pendiente${q.length!==1?'s':''}...`
+  } else {
+    el.style.display = 'none'
+  }
+}
+
+async function drainOfflineQueue() {
+  if (!currentUser || !navigator.onLine) return
+  const queue = loadOfflineQueue()
+  if (!queue.length) { updateOfflineBar(); return }
+  const remaining = []
+  for (const item of queue) {
+    try {
+      const { error } = await supabase.from('nodes').insert({ owner_id: currentUser.id, ...item.payload })
+      if (error) remaining.push(item)
+    } catch { remaining.push(item) }
+  }
+  saveOfflineQueue(remaining)
+  if (remaining.length < queue.length) await loadNodes()
+  updateOfflineBar()
+}
+
+window.addEventListener('online',  () => { updateOfflineBar(); drainOfflineQueue() })
+window.addEventListener('offline', updateOfflineBar)
+
 async function insertNodeRaw(raw, metadataOverrides={}) {
   const { type, metadata, content } = parseNode(raw)
   const finalMetadata = { ...metadata, ...metadataOverrides }
 
-  // Resolve @account_hint to actual account_id
   if (finalMetadata.account_hint) {
     const hint = finalMetadata.account_hint
-    const foundAccount = allNodes.find(n => n.type === 'account' &&
-      (n.metadata?.label || n.content).toLowerCase().includes(hint))
-    if (foundAccount) {
-      finalMetadata.account_id = foundAccount.id
-    } else {
-      showToast(`Cuenta '@${hint}' no encontrada — asignado a General`)
-    }
+    const found = allNodes.find(n => n.type === 'account' && (n.metadata?.label||n.content).toLowerCase().includes(hint))
+    if (found) finalMetadata.account_id = found.id
+    else showToast(`Cuenta '@${hint}' no encontrada — asignado a General`)
     delete finalMetadata.account_hint
   }
+  if (type === 'income' || type === 'expense') resolveContactInMetadata(finalMetadata, raw)
 
-  // Resolve #contactname references in transactions
-  if (type === 'income' || type === 'expense') {
-    resolveContactInMetadata(finalMetadata, raw)
-  }
+  // ── OPTIMISTIC: muestra el nodo AL INSTANTE ──────────────────────────────
+  const tempId = '_tmp_' + Date.now()
+  const tempNode = { id: tempId, type, content: content || raw, metadata: finalMetadata, created_at: new Date().toISOString(), _optimistic: true }
+  allNodes.unshift(tempNode)
+  renderAll()
 
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
-     const newNode = {
-       id: Math.random().toString(36).substr(2, 9),
-       type,
-       content: content || raw,
-       metadata: finalMetadata,
-       created_at: new Date().toISOString()
-     }
-     allNodes.unshift(newNode)
-     renderAll()
-     return
+    const idx = allNodes.findIndex(n => n.id === tempId)
+    const perm = { ...tempNode, id: Math.random().toString(36).substr(2,9), _optimistic: false }
+    if (idx !== -1) allNodes[idx] = perm; else allNodes.unshift(perm)
+    renderAll(); showToast(`NODO INYECTADO: ${type.toUpperCase()}`); return
   }
 
-  const { data: inserted, error } = await supabase.from('nodes').insert({
-    owner_id: currentUser.id,
-    content: content || raw,
-    type,
-    metadata: finalMetadata
-  }).select()
+  const payload = { owner_id: currentUser.id, content: content || raw, type, metadata: finalMetadata }
 
-  if (error) {
-    console.error("Error inserting node:", error)
-    showToast('Error al guardar el nodo')
+  if (!navigator.onLine) {
+    const q = loadOfflineQueue(); q.push({ payload }); saveOfflineQueue(q)
+    const idx = allNodes.findIndex(n => n.id === tempId)
+    if (idx !== -1) allNodes[idx] = { ...tempNode, _offline: true }
+    renderAll(); updateOfflineBar(); showToast('📵 Sin conexión — guardado localmente'); return
+  }
+
+  const { data: inserted, error } = await supabase.from('nodes').insert(payload).select()
+  const idx = allNodes.findIndex(n => n.id === tempId)
+  if (!error && inserted?.[0]) {
+    if (idx !== -1) allNodes[idx] = inserted[0]; else allNodes.unshift(inserted[0])
+    renderAll(); showToast(`NODO INYECTADO: ${type.toUpperCase()}`)
   } else {
-    if (inserted?.[0]) allNodes.unshift(inserted[0])
-    renderAll()
-    showToast(`NODO INYECTADO: ${type.toUpperCase()}`)
+    const q = loadOfflineQueue(); q.push({ payload }); saveOfflineQueue(q)
+    if (idx !== -1) allNodes[idx] = { ...tempNode, _offline: true }
+    renderAll(); updateOfflineBar(); showToast('⚠️ Guardado localmente — se sincronizará al reconectar')
   }
 }
 
@@ -639,64 +709,147 @@ function showDemoBanner() {
 
 // Spotlight Input
 const nexusInput = document.getElementById('nexus-input')
-nexusInput?.addEventListener('keydown', e => { 
-  if (e.key === 'Enter') {
-     const val = nexusInput.value.trim()
-     if (!val) return
-     insertNodeRaw(val)
-     const wrapper = document.querySelector('.spotlight-wrapper')
-     if (wrapper) {
-       wrapper.classList.add('command-success')
-       setTimeout(() => wrapper.classList.remove('command-success'), 500)
-     }
-     if (localStorage.getItem('nexus_admin_bypass') === 'true') {
-       showToast("PROCESANDO PENSAMIENTO...")
-     }
-     nexusInput.value = ''
-     const suggest = document.getElementById('account-suggest')
-     if (suggest) suggest.style.display = 'none'
-  }
-})
 
-nexusInput?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const preview = document.getElementById('parser-preview')
-    if (preview) preview.style.display = 'none'
+// ── IDE AUTOCOMPLETE ENGINE ──────────────────────────────────────────────────
+const IDE_COMMANDS = [
+  { icon:'📌', prefix:'#tarea ',   tpl:'#tarea [descripción de la tarea]',       desc:'Tarea → Muro Táctico',    color:'#a78bfa', cat:'Comandos' },
+  { icon:'💰', prefix:'+$',        tpl:'+$[monto] [descripción] @[cuenta]',       desc:'Ingreso → Bio-Finanzas',  color:'#4ade80', cat:'Comandos' },
+  { icon:'💸', prefix:'-$',        tpl:'-$[monto] [descripción] @[cuenta]',       desc:'Gasto → Bio-Finanzas',    color:'#f87171', cat:'Comandos' },
+  { icon:'👤', prefix:'#persona ', tpl:'#persona [nombre] — [empresa/rol]',       desc:'Contacto → CRM',          color:'#fdba74', cat:'Comandos' },
+  { icon:'📁', prefix:'#proyecto ',tpl:'#proyecto [nombre] [descripción]',        desc:'Proyecto → Bóveda',       color:'#60a5fa', cat:'Comandos' },
+  { icon:'💡', prefix:'#idea ',    tpl:'#idea [descripción de la idea]',          desc:'Idea → Bóveda Neural',    color:'#fbbf24', cat:'Comandos' },
+  { icon:'📅', prefix:'📅 ',       tpl:'📅 [evento] [fecha opcional]',            desc:'Evento → Calendario',     color:'#34d399', cat:'Comandos' },
+]
+
+let ideIdx = -1   // currently highlighted suggestion index
+let ideSuggestions = []
+
+function buildIdeSuggestions(val) {
+  const lower = val.toLowerCase()
+  const results = []
+
+  // Always filter/show commands
+  IDE_COMMANDS.forEach(cmd => {
+    const pfx = cmd.prefix.toLowerCase().replace(' ','')
+    const inp = lower.replace(' ','')
+    if (!val || inp.length <= cmd.prefix.length && cmd.prefix.toLowerCase().startsWith(inp)) {
+      results.push({ ...cmd, _type: 'cmd' })
+    }
+  })
+
+  // Account suggestions when @ appears
+  if (val.includes('@')) {
+    const afterAt = val.split('@').pop().toLowerCase()
+    allNodes.filter(n => n.type === 'account').forEach(a => {
+      const lbl = (a.metadata?.label || a.content)
+      const key = lbl.toLowerCase().replace(/\s+/g,'')
+      if (!afterAt || key.includes(afterAt.replace(/\s+/g,''))) {
+        results.push({ icon: a.metadata?.icon || '🏦', prefix: '@'+key, tpl: '@'+lbl, desc: 'Cuenta bancaria', color:'#94a3b8', cat:'Cuentas', _type:'account', _key: key })
+      }
+    })
+    // Contact wallets too
+    allNodes.filter(n => n.type==='contact' && (n.metadata?.cType==='bank'||n.metadata?.cType==='crypto')).forEach(c => {
+      const lbl = (c.metadata?.name || c.content)
+      const key = lbl.toLowerCase().replace(/\s+/g,'')
+      if (!afterAt || key.includes(afterAt.replace(/\s+/g,''))) {
+        results.push({ icon: c.metadata?.cType==='bank'?'🏦':'₿', prefix:'@'+key, tpl:'@'+lbl, desc: c.metadata?.bank_name||c.metadata?.network||'Contacto', color:'#00f0ff', cat:'Contactos/Cuentas', _type:'contact_acct', _key: key })
+      }
+    })
   }
-})
+
+  // Contact suggestions for member fields and general text
+  if (val.length >= 2 && !val.match(/^[+\-#📅]/)) {
+    allNodes.filter(n => n.type==='contact').forEach(c => {
+      const name = (c.metadata?.name || c.content)
+      if (name.toLowerCase().includes(lower)) {
+        results.push({ icon: c.metadata?.cType==='bank'?'🏦':c.metadata?.cType==='crypto'?'₿':'👤', prefix: name, tpl: name, desc: c.metadata?.company||c.metadata?.bank_name||c.metadata?.network||'Contacto', color: c.metadata?.color||'#00f0ff', cat:'Contactos', _type:'contact', _id: c.id })
+      }
+    })
+  }
+
+  return results.slice(0, 10)
+}
+
+function renderIdeSuggest(val) {
+  const box  = document.getElementById('ide-suggest')
+  const list = document.getElementById('ide-suggest-list')
+  if (!box || !list) return
+
+  ideSuggestions = buildIdeSuggestions(val)
+  ideIdx = -1
+
+  if (!ideSuggestions.length || !val) { box.style.display = 'none'; return }
+
+  list.innerHTML = ideSuggestions.map((s, i) => `
+    <div class="ide-row" data-idx="${i}" onclick="selectIdeSuggestion(${i})"
+      style="display:flex; align-items:center; gap:10px; padding:9px 14px; cursor:pointer; transition:background 0.1s; border-left:3px solid transparent;"
+      onmouseover="highlightIde(${i})" onmouseout="">
+      <span style="font-size:16px; flex-shrink:0;">${s.icon}</span>
+      <div style="flex:1; min-width:0;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:${s.color}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(s.tpl)}</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:1px;">${esc(s.desc)}</div>
+      </div>
+      <span style="font-size:10px; color:var(--text-dim); background:rgba(255,255,255,0.05); padding:2px 6px; border-radius:4px; flex-shrink:0;">${s.cat}</span>
+    </div>
+  `).join('')
+
+  box.style.display = 'block'
+}
+
+function highlightIde(idx) {
+  document.querySelectorAll('.ide-row').forEach((r,i) => {
+    r.style.background = i===idx ? 'rgba(0,246,255,0.08)' : ''
+    r.style.borderLeftColor = i===idx ? 'var(--accent-cyan)' : 'transparent'
+  })
+  ideIdx = idx
+}
+
+window.selectIdeSuggestion = function(idx) {
+  const s = ideSuggestions[idx]
+  if (!s || !nexusInput) return
+  const val = nexusInput.value
+  if (s._type === 'account' || s._type === 'contact_acct') {
+    // Replace the @partial with @full
+    nexusInput.value = val.replace(/@[\w]*$/, '@' + s._key) + ' '
+  } else if (s._type === 'contact') {
+    nexusInput.value = s.tpl
+  } else {
+    // Command: replace entire input with template
+    nexusInput.value = s.prefix
+  }
+  nexusInput.focus()
+  const box = document.getElementById('ide-suggest')
+  if (box) box.style.display = 'none'
+  ideSuggestions = []; ideIdx = -1
+  // Re-trigger input to show updated preview
+  nexusInput.dispatchEvent(new Event('input'))
+}
+
+window.injectAccount = (tag) => {
+  if (nexusInput && !nexusInput.value.includes('@')) nexusInput.value = nexusInput.value.trim() + ' ' + tag + ' '
+  nexusInput.focus()
+  const box = document.getElementById('ide-suggest')
+  if (box) box.style.display = 'none'
+}
 
 nexusInput?.addEventListener('input', () => {
   const val = nexusInput.value.trim()
-  const suggest = document.getElementById('account-suggest')
   const preview = document.getElementById('parser-preview')
 
-  // ── Account suggestions ───────────────────
-  if (suggest) {
-    const accounts = allNodes.filter(n => n.type === 'account')
-    if ((val.startsWith('+$') || val.startsWith('-$')) && accounts.length > 0) {
-      suggest.style.display = 'flex'
-      suggest.innerHTML = accounts.map(a =>
-        `<button onclick="injectAccount('@${(a.metadata?.label||a.content).toLowerCase().replace(/\s+/g,'')}')"
-         style="background:rgba(0,246,255,0.1); border:1px solid var(--accent-cyan); border-radius:8px; padding:4px 10px; color:var(--accent-cyan); font-size:12px; cursor:pointer; font-family:inherit;">
-           @${a.metadata?.label||a.content}
-         </button>`
-      ).join('')
-    } else {
-      suggest.style.display = 'none'
-    }
-  }
+  // IDE suggestions
+  renderIdeSuggest(val)
 
-  // ── Parser preview ─────────────────────────
+  // Parser preview
   if (preview) {
     if (!val) { preview.style.display = 'none'; return }
     const { type, metadata } = parseNode(val)
     const cfg = {
-      income:   { label: `↑ INGRESO  $${metadata.amount||'?'}${metadata.account_hint ? ' @'+metadata.account_hint : ''}`, bg: 'rgba(74,222,128,0.08)', border: 'rgba(74,222,128,0.3)', color: '#4ade80' },
-      expense:  { label: `↓ GASTO  $${metadata.amount||'?'}${metadata.account_hint ? ' @'+metadata.account_hint : ''}`,   bg: 'rgba(248,113,113,0.08)', border: 'rgba(248,113,113,0.3)', color: '#f87171' },
-      kanban:   { label: '📌 TAREA  →  Pendiente',          bg: 'rgba(96,165,250,0.08)', border: 'rgba(96,165,250,0.3)',  color: '#60a5fa' },
-      persona:  { label: '👤 CONTACTO  →  Bóveda Neural',    bg: 'rgba(251,191,36,0.08)', border: 'rgba(251,191,36,0.3)',  color: '#fbbf24' },
-      proyecto: { label: '📁 PROYECTO  →  Bóveda Neural',    bg: 'rgba(168,85,247,0.08)', border: 'rgba(168,85,247,0.3)',  color: '#a855f7' },
-      note:     { label: '💡 NOTA LIBRE  →  Bóveda Neural',  bg: 'rgba(148,163,184,0.06)', border: 'rgba(148,163,184,0.2)', color: '#94a3b8' },
+      income:   { label:`↑ INGRESO $${metadata.amount||'?'}${metadata.account_hint?' @'+metadata.account_hint:''}`, bg:'rgba(74,222,128,0.08)', border:'rgba(74,222,128,0.3)', color:'#4ade80' },
+      expense:  { label:`↓ GASTO $${metadata.amount||'?'}${metadata.account_hint?' @'+metadata.account_hint:''}`,   bg:'rgba(248,113,113,0.08)', border:'rgba(248,113,113,0.3)', color:'#f87171' },
+      kanban:   { label:'📌 TAREA → Pendiente',         bg:'rgba(96,165,250,0.08)',  border:'rgba(96,165,250,0.3)',  color:'#60a5fa' },
+      persona:  { label:'👤 CONTACTO → CRM',             bg:'rgba(251,191,36,0.08)',  border:'rgba(251,191,36,0.3)',  color:'#fbbf24' },
+      proyecto: { label:'📁 PROYECTO → Bóveda Neural',   bg:'rgba(168,85,247,0.08)',  border:'rgba(168,85,247,0.3)',  color:'#a855f7' },
+      note:     { label:'💡 NOTA LIBRE → Bóveda Neural', bg:'rgba(148,163,184,0.06)', border:'rgba(148,163,184,0.2)', color:'#94a3b8' },
     }
     const c = cfg[type] || cfg.note
     preview.textContent = c.label + '   ↵ Enter para guardar'
@@ -704,12 +857,57 @@ nexusInput?.addEventListener('input', () => {
   }
 })
 
-window.injectAccount = (tag) => {
-  if (nexusInput && !nexusInput.value.includes('@')) nexusInput.value = nexusInput.value.trim() + ' ' + tag + ' '
-  nexusInput.focus()
-  const suggest = document.getElementById('account-suggest')
-  if (suggest) suggest.style.display = 'none'
-}
+nexusInput?.addEventListener('keydown', e => {
+  const box = document.getElementById('ide-suggest')
+  const isOpen = box && box.style.display !== 'none' && ideSuggestions.length > 0
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (isOpen) { highlightIde(Math.min(ideIdx+1, ideSuggestions.length-1)) }
+    return
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (isOpen) { highlightIde(Math.max(ideIdx-1, 0)) }
+    return
+  }
+  if ((e.key === 'Tab' || e.key === 'ArrowRight') && isOpen && ideIdx >= 0) {
+    e.preventDefault()
+    selectIdeSuggestion(ideIdx)
+    return
+  }
+  if (e.key === 'Escape' && isOpen) {
+    e.preventDefault()
+    if (box) box.style.display = 'none'; ideSuggestions = []; ideIdx = -1
+    return
+  }
+  if (e.key === 'Enter') {
+    if (isOpen && ideIdx >= 0) {
+      e.preventDefault()
+      selectIdeSuggestion(ideIdx)
+      return
+    }
+    const val = nexusInput.value.trim()
+    if (!val) return
+    insertNodeRaw(val)
+    const wrapper = document.querySelector('.spotlight-wrapper')
+    if (wrapper) { wrapper.classList.add('command-success'); setTimeout(() => wrapper.classList.remove('command-success'), 500) }
+    nexusInput.value = ''
+    if (box) box.style.display = 'none'
+    ideSuggestions = []; ideIdx = -1
+    const preview = document.getElementById('parser-preview')
+    if (preview) preview.style.display = 'none'
+  }
+})
+
+// Close IDE suggest when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('#spotlight-container')) {
+    const box = document.getElementById('ide-suggest')
+    if (box) box.style.display = 'none'
+    ideSuggestions = []; ideIdx = -1
+  }
+})
 
 // ── Helpers & Rendering ──────────────────
 function getFilteredNodes() {
@@ -1618,6 +1816,16 @@ window.openFinanceDetail = (id) => {
   const accounts = allNodes.filter(n => n.type === 'account')
   const acSel = document.getElementById('fd-account')
   acSel.innerHTML = '<option value="">General</option>' + accounts.map(a => `<option value="${a.id}" ${m.account_id===a.id?'selected':''}>${esc(a.metadata?.label||a.content)}</option>`).join('')
+  // Contact picker
+  const contacts = allNodes.filter(n => n.type==='contact')
+  const cSel = document.getElementById('fd-contact')
+  if (cSel) {
+    cSel.innerHTML = '<option value="">— Sin contacto —</option>' + contacts.map(c => {
+      const name = c.metadata?.name || c.content
+      const icon = c.metadata?.cType==='bank'?'🏦':c.metadata?.cType==='crypto'?'₿':'👤'
+      return `<option value="${c.id}" ${m.contact_id===c.id?'selected':''}>${icon} ${esc(name)}</option>`
+    }).join('')
+  }
   renderFinanceComments(m.comments || [])
   renderAttachments(m.images || [], 'finance')
   document.getElementById('finance-detail-modal').classList.remove('hidden')
@@ -1656,11 +1864,24 @@ window.saveFinanceDetail = async () => {
   node.metadata.amount = parseFloat(document.getElementById('fd-amount').value) || 0
   const acId = document.getElementById('fd-account').value
   node.metadata.account_id = acId || undefined
+  const ctId = document.getElementById('fd-contact')?.value
+  node.metadata.contact_id = ctId || undefined
   node.content = node.metadata.label
   if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
     await supabase.from('nodes').update({ content: node.content, metadata: node.metadata }).eq('id', editingFinanceId)
   }
   closeFinanceDetail(); renderAll()
+}
+
+window.deleteFinanceNode = async () => {
+  if (!editingFinanceId || !confirm('¿Eliminar este movimiento? Esta acción no se puede deshacer.')) return
+  allNodes = allNodes.filter(n => n.id !== editingFinanceId)
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').delete().eq('id', editingFinanceId)
+  }
+  closeFinanceDetail()
+  renderAll()
+  showToast('Movimiento eliminado')
 }
 
 // ─────────────────────────────────────────
