@@ -85,7 +85,20 @@ const TYPE_CONFIG = {
   }
   renderAll()
   initTickers()
+  initWorldClock()
+  restorePanels()
   loadSystemSettings()
+  // Live countdown display update from inputs
+  ;['cd-min','cd-sec'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', () => {
+      if (!cdRunning && cdRemaining <= 0) {
+        const min = parseInt(document.getElementById('cd-min')?.value || '0') || 0
+        const sec = parseInt(document.getElementById('cd-sec')?.value || '0') || 0
+        const disp = document.getElementById('cd-display')
+        if (disp) { disp.textContent = String(min).padStart(2,'0') + ':' + String(sec).padStart(2,'0'); disp.classList.remove('finished') }
+      }
+    })
+  })
   document.getElementById('cronica-date')?.setAttribute('value', new Date().toISOString().split('T')[0])
 })()
 
@@ -95,7 +108,10 @@ function setupRealtimeSubscription() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'nodes', filter: `owner_id=eq.${currentUser.id}` }, (payload) => {
       console.log('Realtime change:', payload)
       if (payload.eventType === 'INSERT') {
-        allNodes.unshift(payload.new)
+        // Solo agregar si no existe ya (evita duplicado cuando el mismo cliente hizo el insert)
+        if (!allNodes.find(n => n.id === payload.new.id)) {
+          allNodes.unshift(payload.new)
+        }
       } else if (payload.eventType === 'UPDATE') {
         const idx = allNodes.findIndex(n => n.id === payload.new.id)
         if (idx !== -1) allNodes[idx] = payload.new
@@ -1260,6 +1276,185 @@ document.querySelectorAll('.nav-item:not(#btn-logout)').forEach(btn => {
   })
 })
 
+// ── COLLAPSIBLE PANELS ───────────────────────────────────────────────────────
+// ── AUDIO BEEP UTIL ──────────────────────────────────────────────────────────
+function playBeep(freq = 880, duration = 0.3, volume = 0.5, delay = 0) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc  = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain); gain.connect(ctx.destination)
+    osc.type = 'sine'
+    osc.frequency.value = freq
+    gain.gain.setValueAtTime(volume, ctx.currentTime + delay)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration)
+    osc.start(ctx.currentTime + delay)
+    osc.stop(ctx.currentTime + delay + duration + 0.05)
+  } catch(e) {}
+}
+
+function playAlarm() {
+  // 3 beeps descendentes
+  playBeep(880, 0.25, 0.5, 0.0)
+  playBeep(660, 0.25, 0.5, 0.35)
+  playBeep(440, 0.35, 0.6, 0.70)
+}
+
+function playClick() {
+  playBeep(1200, 0.06, 0.2, 0)
+}
+
+// ── COLLAPSIBLE PANELS ───────────────────────────────────────────────────────
+window.togglePanel = function(which) {
+  const cls = which === 'nav' ? 'nav-collapsed' : 'side-collapsed'
+  const collapsed = document.body.classList.toggle(cls)
+  localStorage.setItem('nexus_' + cls, collapsed ? '1' : '0')
+  const btn = document.getElementById('toggle-' + which)
+  if (!btn) return
+  if (which === 'nav')  btn.textContent = collapsed ? '▶' : '◀'
+  if (which === 'side') btn.textContent = collapsed ? '◀' : '▶'
+  playClick()
+}
+
+// Restore panel state — must run after DOM ready
+function restorePanels() {
+  if (localStorage.getItem('nexus_nav-collapsed') === '1') {
+    document.body.classList.add('nav-collapsed')
+    const b = document.getElementById('toggle-nav'); if (b) b.textContent = '▶'
+  }
+  if (localStorage.getItem('nexus_side-collapsed') === '1') {
+    document.body.classList.add('side-collapsed')
+    const b = document.getElementById('toggle-side'); if (b) b.textContent = '◀'
+  }
+}
+
+// ── WORLD CLOCK ──────────────────────────────────────────────────────────────
+function initWorldClock() {
+  const zones = [
+    { id: 'clock-cdmx',  tz: 'America/Mexico_City' },
+    { id: 'clock-tulum', tz: 'America/Cancun'       },
+    { id: 'clock-local', tz: null },
+  ]
+  const localTzEl = document.getElementById('clock-local-tz')
+  if (localTzEl) localTzEl.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local'
+
+  function tick() {
+    const now = new Date()
+    zones.forEach(({ id, tz }) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.textContent = now.toLocaleTimeString('es-MX', {
+        timeZone: tz || undefined,
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      })
+    })
+  }
+  tick()
+  setInterval(tick, 1000)
+}
+
+// ── CRONÓMETRO ───────────────────────────────────────────────────────────────
+let swRunning = false, swStart = 0, swElapsed = 0, swRafId = null
+
+function swRender() {
+  const total = swElapsed + (swRunning ? Date.now() - swStart : 0)
+  const ms  = Math.floor((total % 1000) / 10)
+  const sec = Math.floor(total / 1000) % 60
+  const min = Math.floor(total / 60000)
+  const disp = document.getElementById('sw-display')
+  if (disp) disp.textContent =
+    String(min).padStart(2,'0') + ':' +
+    String(sec).padStart(2,'0') + '.' +
+    String(ms).padStart(2,'0')
+  if (swRunning) swRafId = requestAnimationFrame(swRender)
+}
+
+window.swToggle = function() {
+  const btn = document.getElementById('sw-btn')
+  if (swRunning) {
+    swElapsed += Date.now() - swStart
+    swRunning = false
+    cancelAnimationFrame(swRafId)
+    if (btn) btn.textContent = '▶ Continuar'
+    playBeep(660, 0.15, 0.3)
+  } else {
+    swStart = Date.now()
+    swRunning = true
+    if (btn) btn.textContent = '⏸ Pausar'
+    playBeep(880, 0.1, 0.3)
+    swRafId = requestAnimationFrame(swRender)
+  }
+}
+
+window.swReset = function() {
+  cancelAnimationFrame(swRafId)
+  swRunning = false; swElapsed = 0; swStart = 0
+  const btn  = document.getElementById('sw-btn')
+  const disp = document.getElementById('sw-display')
+  if (btn)  btn.textContent  = '▶ Iniciar'
+  if (disp) disp.textContent = '00:00.00'
+  playBeep(440, 0.1, 0.2)
+}
+
+// ── CUENTA REGRESIVA ─────────────────────────────────────────────────────────
+let cdRunning = false, cdRemaining = 0, cdInterval = null
+
+function cdRenderDisp() {
+  const min  = Math.floor(cdRemaining / 60)
+  const sec  = cdRemaining % 60
+  const disp = document.getElementById('cd-display')
+  if (disp) disp.textContent = String(min).padStart(2,'0') + ':' + String(sec).padStart(2,'0')
+  // Warning beep last 5 seconds
+  if (cdRemaining <= 5 && cdRemaining > 0) playBeep(1200, 0.08, 0.15)
+}
+
+window.cdToggle = function() {
+  const btn = document.getElementById('cd-btn')
+  if (cdRunning) {
+    clearInterval(cdInterval)
+    cdRunning = false
+    if (btn) btn.textContent = '▶ Continuar'
+    playBeep(660, 0.15, 0.3)
+  } else {
+    if (cdRemaining <= 0) {
+      const min = parseInt(document.getElementById('cd-min')?.value || '0') || 0
+      const sec = parseInt(document.getElementById('cd-sec')?.value || '0') || 0
+      cdRemaining = min * 60 + sec
+      if (cdRemaining <= 0) return
+      document.getElementById('cd-display')?.classList.remove('finished')
+    }
+    cdRunning = true
+    if (btn) btn.textContent = '⏸ Pausar'
+    playBeep(880, 0.1, 0.3)
+    cdInterval = setInterval(() => {
+      cdRemaining--
+      cdRenderDisp()
+      if (cdRemaining <= 0) {
+        clearInterval(cdInterval)
+        cdRunning = false
+        cdRemaining = 0
+        const btn2 = document.getElementById('cd-btn')
+        if (btn2) btn2.textContent = '▶ Iniciar'
+        document.getElementById('cd-display')?.classList.add('finished')
+        playAlarm()
+      }
+    }, 1000)
+  }
+}
+
+window.cdReset = function() {
+  clearInterval(cdInterval)
+  cdRunning = false; cdRemaining = 0
+  const btn  = document.getElementById('cd-btn')
+  const disp = document.getElementById('cd-display')
+  if (btn)  btn.textContent = '▶ Iniciar'
+  disp?.classList.remove('finished')
+  const min = parseInt(document.getElementById('cd-min')?.value || '5') || 5
+  const sec = parseInt(document.getElementById('cd-sec')?.value || '0') || 0
+  if (disp) disp.textContent = String(min).padStart(2,'0') + ':' + String(sec).padStart(2,'0')
+  playBeep(440, 0.1, 0.2)
+}
+
 async function initTickers() {
   const settings = JSON.parse(localStorage.getItem('nexus_settings') || '{}')
   const unit = settings.tempUnit || 'C'
@@ -1909,6 +2104,81 @@ window.deleteContact = async () => {
   closeContactModal()
   document.getElementById('contact-sheet')?.classList.add('hidden')
   renderAll()
+}
+
+// ── FEEDBACK ─────────────────────────────────────────────────────────────────
+let activeFbType = 'bug'
+
+window.selectFbType = function(type, btn) {
+  activeFbType = type
+  document.querySelectorAll('#fb-type-btns .contact-filter-btn').forEach(b => b.classList.remove('active'))
+  btn.classList.add('active')
+}
+
+window.sendFeedback = async function() {
+  const subject   = document.getElementById('fb-subject')?.value.trim()
+  const body      = document.getElementById('fb-body')?.value.trim()
+  const userEmail = document.getElementById('fb-email')?.value.trim()
+  const status    = document.getElementById('fb-status')
+
+  if (!subject || !body) {
+    status.style.display = 'block'
+    status.style.background = 'rgba(248,113,113,0.1)'
+    status.style.border = '1px solid rgba(248,113,113,0.25)'
+    status.style.color = '#f87171'
+    status.textContent = '⚠️ Por favor completa el asunto y la descripción.'
+    return
+  }
+
+  const typeLabels = { bug:'🐛 Error / Bug', feature:'✨ Nueva Función', inconsistency:'⚠️ Inconsistencia', other:'💡 Otro' }
+  const typeLabel  = typeLabels[activeFbType] || activeFbType
+
+  // Guardar en Supabase como nodo tipo feedback para que Oscar lo vea
+  const meta = {
+    fb_type: activeFbType,
+    fb_subject: subject,
+    fb_body: body,
+    fb_email: userEmail || (currentUser?.email || 'anónimo'),
+    fb_user_id: currentUser?.id || 'guest',
+    fb_at: new Date().toISOString(),
+    fb_url: window.location.href
+  }
+
+  try {
+    // Intentar guardar en Supabase
+    if (currentUser) {
+      await supabase.from('nodes').insert({
+        owner_id: currentUser.id,
+        type: 'feedback',
+        content: `[${typeLabel}] ${subject}`,
+        metadata: meta
+      })
+    }
+  } catch(e) { console.warn('Feedback DB:', e) }
+
+  // Abrir mailto como canal principal (llega directo al email)
+  const mailSubject = encodeURIComponent(`[Nexus OS Feedback] ${typeLabel}: ${subject}`)
+  const mailBody    = encodeURIComponent(
+    `Tipo: ${typeLabel}\n` +
+    `Asunto: ${subject}\n` +
+    (userEmail ? `Email de respuesta: ${userEmail}\n` : '') +
+    `Usuario: ${currentUser?.email || 'no autenticado'}\n` +
+    `Fecha: ${new Date().toLocaleString('es-MX')}\n\n` +
+    `--- Descripción ---\n${body}`
+  )
+  window.open(`mailto:oscaromargp@gmail.com?subject=${mailSubject}&body=${mailBody}`, '_blank')
+
+  // Limpiar form y mostrar éxito
+  document.getElementById('fb-subject').value = ''
+  document.getElementById('fb-body').value    = ''
+  document.getElementById('fb-email').value   = ''
+  status.style.display = 'block'
+  status.style.background = 'rgba(34,197,94,0.1)'
+  status.style.border = '1px solid rgba(34,197,94,0.25)'
+  status.style.color = '#4ade80'
+  status.textContent = '✅ ¡Gracias! Tu feedback fue enviado. Se abrió tu cliente de correo para enviarlo.'
+  playBeep(880, 0.2, 0.4)
+  setTimeout(() => { if (status) status.style.display = 'none' }, 6000)
 }
 
 // ── Parser: detect #contactname in transactions ──

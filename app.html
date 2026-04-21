@@ -52,23 +52,62 @@
         radial-gradient(circle at 0% 100%, hsla(var(--h), 100%, 50%, 0.02), transparent 40%);
     }
 
-    #nexus-layout { 
-      display: grid; 
-      grid-template-columns: var(--sidebar-width) 1fr var(--widget-width); 
+    #nexus-layout {
+      display: grid;
+      grid-template-columns: var(--sidebar-width) 1fr var(--widget-width);
       grid-template-rows: 1fr;
-      grid-template-areas: "nav main side"; 
-      height: 100%; 
-      width: 100%; 
+      grid-template-areas: "nav main side";
+      height: 100%;
+      width: 100%;
+      transition: grid-template-columns 0.32s cubic-bezier(0.4,0,0.2,1);
     }
 
+    /* ── COLLAPSIBLE SIDEBARS ── */
+    nav#sidebar, aside#widgets-sidebar {
+      transition: padding 0.32s cubic-bezier(0.4,0,0.2,1);
+      overflow: hidden;
+      min-width: 0;
+    }
+    body.nav-collapsed #nexus-layout  { grid-template-columns: 0px 1fr var(--widget-width); }
+    body.nav-collapsed nav#sidebar    { padding: 0; }
+    body.side-collapsed #nexus-layout { grid-template-columns: var(--sidebar-width) 1fr 0px; }
+    body.side-collapsed aside#widgets-sidebar { padding: 0; }
+    /* Spotlight adjusts with sidebars */
+    body.nav-collapsed  #spotlight-container { left: 40px; }
+    body.side-collapsed #spotlight-container { right: 40px; }
+
+    /* Toggle tabs (left/right fixed edge buttons) */
+    .panel-toggle {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 56px;
+      background: var(--bg-panel);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      z-index: 999;
+      transition: all 0.32s cubic-bezier(0.4,0,0.2,1);
+    }
+    .panel-toggle:hover { background: rgba(0,246,255,0.12); color: #00f6ff; border-color: rgba(0,246,255,0.4); }
+    #toggle-nav  { left: calc(var(--sidebar-width) - 1px); border-radius: 0 8px 8px 0; border-left: none; transition: left 0.32s cubic-bezier(0.4,0,0.2,1); }
+    #toggle-side { right: calc(var(--widget-width) - 1px); border-radius: 8px 0 0 8px; border-right: none; transition: right 0.32s cubic-bezier(0.4,0,0.2,1); }
+    body.nav-collapsed  #toggle-nav  { left: 0px; }
+    body.side-collapsed #toggle-side { right: 0px; }
+
     /* ── SIDEBAR NAV ── */
-    nav#sidebar { 
-      grid-area: nav; 
-      background: var(--bg-panel); 
-      border-right: 1px solid var(--glass-border); 
-      display: flex; 
-      flex-direction: column; 
-      z-index: 100; 
+    nav#sidebar {
+      grid-area: nav;
+      background: var(--bg-panel);
+      border-right: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
       padding: 32px 20px;
       position: relative;
     }
@@ -310,7 +349,61 @@
     .note-keep .note-color-bar { opacity: 0; transition: opacity 0.2s; flex-shrink: 0; }
     .note-keep:hover .note-color-bar { opacity: 1; }
 
+    /* ── WORLD CLOCK ── */
+    .clock-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
+    .clock-row:last-child { border-bottom:none; }
+    .clock-city { font-size:11px; color:var(--text-muted); font-weight:600; letter-spacing:0.04em; }
+    .clock-tz   { font-size:9px; color:var(--text-muted); opacity:0.5; }
+    .clock-time { font-family:'JetBrains Mono',monospace; font-size:14px; color:var(--accent-cyan); font-weight:700; letter-spacing:0.05em; }
+    .clock-time.local { color:#a78bfa; }
+
+    /* ── WIDGET BUTTONS ── */
+    .widget-btn-primary {
+      background:linear-gradient(135deg,var(--accent-cyan),var(--p300));
+      color:#000; border:none; border-radius:8px; padding:7px 14px;
+      font-weight:800; font-size:11px; cursor:pointer; font-family:inherit; flex:1;
+      transition:all 0.2s;
+    }
+    .widget-btn-primary:hover { filter:brightness(1.1); transform:translateY(-1px); }
+    .widget-btn-secondary {
+      background:rgba(255,255,255,0.06); color:var(--text-secondary);
+      border:1px solid var(--glass-border); border-radius:8px; padding:7px 14px;
+      font-weight:700; font-size:11px; cursor:pointer; font-family:inherit; flex:1;
+      transition:all 0.2s;
+    }
+    .widget-btn-secondary:hover { background:rgba(255,255,255,0.1); }
+    .widget-btn-danger {
+      background:rgba(248,113,113,0.12); color:#f87171;
+      border:1px solid rgba(248,113,113,0.25); border-radius:8px; padding:7px 14px;
+      font-weight:700; font-size:11px; cursor:pointer; font-family:inherit; flex:1;
+      transition:all 0.2s;
+    }
+    #sw-display { font-family:'JetBrains Mono',monospace; font-size:30px; color:#fff; text-align:center; margin-bottom:14px; letter-spacing:0.04em; }
+    #cd-display { font-family:'JetBrains Mono',monospace; font-size:30px; color:#fff; text-align:center; margin-bottom:14px; letter-spacing:0.04em; }
+    #cd-display.finished { color:#f87171; animation: pulse-red 1s infinite; }
+    @keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .cd-inputs { display:flex; gap:6px; margin-bottom:12px; }
+    .cd-input { width:100%; background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); color:#fff; border-radius:8px; padding:7px 8px; font-size:14px; text-align:center; font-family:'JetBrains Mono',monospace; outline:none; }
+    .cd-input:focus { border-color:var(--accent-cyan); }
+    .cd-sep { font-size:20px; color:var(--text-muted); display:flex; align-items:center; }
+
     /* ── CONTACTOS ── */
+    .btn-add-contact {
+      background: linear-gradient(135deg, #00f0ff, #1af3ff);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 20px;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-family: inherit;
+      box-shadow: 0 0 20px rgba(0,240,255,0.35);
+      transition: all 0.2s;
+    }
+    .btn-add-contact:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0 0 30px rgba(0,240,255,0.5); }
+
     .contact-filter-btn {
       background: rgba(255,255,255,0.04); border:1px solid var(--glass-border);
       border-radius:20px; padding:5px 14px; color:var(--text-muted); font-size:12px;
@@ -470,13 +563,14 @@
     }
 
     /* ── SPOTLIGHT FIXED ── */
-    #spotlight-container { 
-      position: fixed; 
-      bottom: 40px; 
-      left: calc(var(--sidebar-width) + 40px); 
-      right: calc(var(--widget-width) + 40px); 
-      z-index: 1000; 
+    #spotlight-container {
+      position: fixed;
+      bottom: 40px;
+      left: calc(var(--sidebar-width) + 40px);
+      right: calc(var(--widget-width) + 40px);
+      z-index: 1000;
       animation: spotlight-slide 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+      transition: left 0.32s cubic-bezier(0.4,0,0.2,1), right 0.32s cubic-bezier(0.4,0,0.2,1);
     }
     
     @keyframes spotlight-slide {
@@ -808,7 +902,7 @@
         <h1 class="view-title">Contactos & Cuentas</h1>
         <div style="display:flex; gap:10px; align-items:center;">
           <input id="contact-search" type="text" placeholder="🔍 Buscar..." class="input-field" style="width:220px; padding:8px 14px; font-size:13px;" oninput="renderContacts()" />
-          <button onclick="openContactModal()" style="background:linear-gradient(135deg,var(--accent-cyan),var(--p300)); color:#000; border:none; border-radius:10px; padding:9px 18px; font-weight:800; font-size:13px; cursor:pointer; white-space:nowrap;">+ Nuevo</button>
+          <button onclick="openContactModal()" class="btn-add-contact">+ Nuevo Contacto</button>
         </div>
       </div>
       <!-- Filter pills -->
@@ -904,15 +998,60 @@
            GUARDAR CONFIGURACIÓN
          </button>
       </div>
+
+      <!-- FEEDBACK -->
+      <div class="settings-card" id="feedback-section" style="margin-top:24px; border-color:rgba(0,246,255,0.2);">
+        <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:6px;">💬 Feedback Directo</h2>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:20px;">¿Algo no funciona? ¿Tienes una idea? Cuéntame directamente — leo todos los mensajes.</p>
+
+        <!-- Tipo de feedback -->
+        <div class="settings-group">
+          <label class="settings-label">Tipo de Reporte</label>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;" id="fb-type-btns">
+            <button class="contact-filter-btn active" data-fb="bug"          onclick="selectFbType('bug',this)">🐛 Error / Bug</button>
+            <button class="contact-filter-btn"         data-fb="feature"      onclick="selectFbType('feature',this)">✨ Nueva Función</button>
+            <button class="contact-filter-btn"         data-fb="inconsistency" onclick="selectFbType('inconsistency',this)">⚠️ Inconsistencia</button>
+            <button class="contact-filter-btn"         data-fb="other"        onclick="selectFbType('other',this)">💡 Otro</button>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <label class="settings-label">Asunto</label>
+          <input type="text" id="fb-subject" class="input-field" placeholder="Describe brevemente el problema o idea..." />
+        </div>
+
+        <div class="settings-group">
+          <label class="settings-label">Descripción Detallada</label>
+          <textarea id="fb-body" class="input-field" rows="5" placeholder="¿Qué pasó? ¿Cómo lo reproduces? ¿Qué esperabas que pasara?&#10;&#10;Cuanta más info, más rápido lo resuelvo." style="resize:vertical;"></textarea>
+        </div>
+
+        <div class="settings-group">
+          <label class="settings-label">Tu Email (opcional, para responderte)</label>
+          <input type="email" id="fb-email" class="input-field" placeholder="correo@ejemplo.com" />
+        </div>
+
+        <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
+          <button onclick="sendFeedback()" style="background:linear-gradient(135deg,#00f0ff,#1af3ff); color:#000; border:none; border-radius:10px; padding:12px 24px; font-weight:800; font-size:14px; cursor:pointer; font-family:inherit; flex:1; transition:all 0.2s;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+            📨 Enviar Feedback
+          </button>
+        </div>
+        <div id="fb-status" style="display:none; margin-top:14px; font-size:13px; padding:12px; border-radius:8px;"></div>
+      </div>
+
     </div>
+
     <!-- AYUDA -->
     <div id="view-ayuda" class="view-section">
-      <div class="view-header"><h1 class="view-title">Guía de Uso</h1></div>
-      <div style="max-width:760px; display:flex; flex-direction:column; gap:20px;">
-        
+      <div class="view-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <h1 class="view-title">Guía de Uso</h1>
+        <button onclick="switchView('settings')" style="background:linear-gradient(135deg,#00f0ff,#1af3ff); color:#000; border:none; border-radius:10px; padding:9px 18px; font-weight:800; font-size:13px; cursor:pointer;">💬 Enviar Feedback</button>
+      </div>
+      <div style="max-width:820px; display:flex; flex-direction:column; gap:20px;">
+
+        <!-- PARSER -->
         <div class="settings-card">
           <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">⌨️ Parser Semántico — La Barra de Comandos</h2>
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Escribe en la barra inferior y presiona <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; font-size:11px;">Enter</kbd>. El sistema detecta automáticamente el tipo de nodo.</p>
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Escribe en la barra inferior y presiona <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; font-size:11px;">Enter</kbd>. El sistema detecta el tipo de nodo automáticamente y muestra una vista previa mientras escribes.</p>
           <div style="display:flex; flex-direction:column; gap:10px;">
             <div style="background:rgba(167,139,250,0.06); border:1px solid rgba(167,139,250,0.2); border-radius:10px; padding:14px;">
               <code style="color:#a78bfa; font-family:'JetBrains Mono',monospace;">#tarea Revisar informe Q2</code>
@@ -920,7 +1059,7 @@
             </div>
             <div style="background:rgba(74,222,128,0.06); border:1px solid rgba(74,222,128,0.2); border-radius:10px; padding:14px;">
               <code style="color:#4ade80; font-family:'JetBrains Mono',monospace;">+$1500 Pago freelance @bbva</code>
-              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Registra un ingreso de $1,500 y lo asigna a la cuenta "bbva". Si la cuenta no existe, va a General.</p>
+              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Registra un ingreso de $1,500 asignado a la cuenta "bbva".</p>
             </div>
             <div style="background:rgba(248,113,113,0.06); border:1px solid rgba(248,113,113,0.2); border-radius:10px; padding:14px;">
               <code style="color:#f87171; font-family:'JetBrains Mono',monospace;">-$350 Renta oficina @efectivo</code>
@@ -928,15 +1067,81 @@
             </div>
             <div style="background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.2); border-radius:10px; padding:14px;">
               <code style="color:#60a5fa; font-family:'JetBrains Mono',monospace;">Reflexión sobre el producto #idea</code>
-              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Cualquier texto libre se guarda como nota en la Bóveda Neural.</p>
+              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Texto libre → nota en la Bóveda Neural.</p>
             </div>
             <div style="background:rgba(253,186,116,0.06); border:1px solid rgba(253,186,116,0.2); border-radius:10px; padding:14px;">
               <code style="color:#fdba74; font-family:'JetBrains Mono',monospace;">#persona Juan Pérez — CEO Startup XYZ</code>
-              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Registra un contacto en la Bóveda Neural.</p>
+              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Crea un contacto tipo Persona en la sección Contactos.</p>
+            </div>
+            <div style="background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.2); border-radius:10px; padding:14px;">
+              <code style="color:#4ade80; font-family:'JetBrains Mono',monospace;">📅 Reunión con cliente jueves 3pm</code>
+              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Texto con fecha o emoji 📅 → evento en el Calendario.</p>
             </div>
           </div>
         </div>
 
+        <!-- CONTACTOS -->
+        <div class="settings-card">
+          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">👥 Contactos & Cuentas</h2>
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">Centraliza personas, bancos y carteras cripto. Vincula movimientos financieros a un contacto para ver su historial completo.</p>
+          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:16px;">
+            <div style="background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px; padding:12px; text-align:center;">
+              <div style="font-size:24px; margin-bottom:6px;">👤</div>
+              <div style="font-size:12px; font-weight:700; color:#fff;">Persona</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Nombre, teléfono, email, empresa</div>
+            </div>
+            <div style="background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px; padding:12px; text-align:center;">
+              <div style="font-size:24px; margin-bottom:6px;">🏦</div>
+              <div style="font-size:12px; font-weight:700; color:#fff;">Banco</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Nombre, CLABE, titular</div>
+            </div>
+            <div style="background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px; padding:12px; text-align:center;">
+              <div style="font-size:24px; margin-bottom:6px;">₿</div>
+              <div style="font-size:12px; font-weight:700; color:#fff;">Cripto</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Red, wallet address, alias</div>
+            </div>
+          </div>
+          <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
+            <li>Ve a <b style="color:#fff;">Contactos</b> en el menú lateral y pulsa <b style="color:#00f0ff;">+ Nuevo Contacto</b></li>
+            <li>O escribe <code style="color:#fdba74;">#persona Nombre</code> en la barra de comandos</li>
+            <li>Haz clic en una tarjeta para ver el perfil completo, historial de transacciones y notas</li>
+            <li>Filtra por tipo: Todos / Personas / Bancos / Cripto</li>
+            <li>Los contactos vinculados aparecen como chips clickeables en Bio-Finanzas</li>
+          </ul>
+        </div>
+
+        <!-- PANEL SITUACIONAL -->
+        <div class="settings-card">
+          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">🌍 Panel Situacional — Barra Lateral Derecha</h2>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div style="display:flex; gap:14px; align-items:flex-start; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
+              <span style="font-size:22px; flex-shrink:0;">🕐</span>
+              <div>
+                <div style="font-size:13px; font-weight:700; color:#fff; margin-bottom:4px;">Relojes Mundiales</div>
+                <div style="font-size:12px; color:var(--text-muted);">Muestra la hora en tiempo real de <b style="color:#fff;">CDMX</b> (America/Mexico_City), <b style="color:#fff;">Tulum/Cancún</b> (America/Cancun) y tu <b style="color:#a78bfa;">hora local</b>. Se actualiza cada segundo.</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:14px; align-items:flex-start; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
+              <span style="font-size:22px; flex-shrink:0;">⏱</span>
+              <div>
+                <div style="font-size:13px; font-weight:700; color:#fff; margin-bottom:4px;">Cronómetro</div>
+                <div style="font-size:12px; color:var(--text-muted);">Presiona <b style="color:#fff;">▶ Iniciar</b> para arrancar. Puedes pausar y continuar cuantas veces quieras. <b style="color:#fff;">↺ Reset</b> lo reinicia a cero. Precisión de centésimas de segundo.</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:14px; align-items:flex-start; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
+              <span style="font-size:22px; flex-shrink:0;">⏳</span>
+              <div>
+                <div style="font-size:13px; font-weight:700; color:#fff; margin-bottom:4px;">Cuenta Regresiva</div>
+                <div style="font-size:12px; color:var(--text-muted);">Escribe los minutos y segundos en los campos, pulsa <b style="color:#fff;">▶ Iniciar</b>. Al llegar a cero suena una <b style="color:#f87171;">alarma de 3 tonos</b> y el display parpadea en rojo. Pitidos de aviso en los últimos 5 segundos.</div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:14px; padding:12px; background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px;">
+            <div style="font-size:12px; color:var(--text-muted);">💡 <b style="color:#fff;">Tip:</b> Las pequeñas pestañas <b style="color:#00f0ff;">◀ ▶</b> en los bordes de la pantalla colapsan o expanden cada panel lateral para tener más espacio de trabajo. El estado se guarda automáticamente.</div>
+          </div>
+        </div>
+
+        <!-- BIO-FINANZAS -->
         <div class="settings-card">
           <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">💹 Bio-Finanzas</h2>
           <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
@@ -945,46 +1150,50 @@
             <li>Al hacer clic en cualquier movimiento, puedes editar detalles, agregar comentarios e imágenes</li>
             <li>Filtra por cuenta con los tabs en la parte superior</li>
             <li>Exporta a CSV con el botón <b style="color:#fff;">⬇ CSV</b></li>
+            <li>Haz transferencias entre cuentas con el botón <b style="color:#fff;">⇄ Transferir</b></li>
           </ul>
         </div>
 
+        <!-- ADJUNTOS -->
         <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">📎 Adjuntos de Imagen</h2>
+          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">📎 Adjuntos e Imágenes</h2>
           <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
             <li>Abre cualquier tarea, nota o movimiento financiero</li>
-            <li><b style="color:#fff;">Ctrl+V</b> con una captura de pantalla en el portapapeles la adjunta automáticamente</li>
-            <li>O usa el botón <b style="color:#fff;">📎 Seleccionar imagen</b></li>
-            <li>Máximo 3 imágenes por nodo</li>
-            <li>Haz clic en la miniatura para ver en pantalla completa</li>
+            <li><b style="color:#fff;">Ctrl+V</b> con una captura en el portapapeles la adjunta automáticamente</li>
+            <li>O usa el botón <b style="color:#fff;">📎 Adjuntar archivo</b> (imágenes y PDF)</li>
+            <li>Máximo 3 archivos por nodo · Haz clic en la miniatura para ver en pantalla completa</li>
           </ul>
         </div>
 
+        <!-- MURO TÁCTICO -->
         <div class="settings-card">
           <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">📌 Muro Táctico</h2>
           <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
-            <li>Arrastra tarjetas entre columnas para cambiar el estado</li>
-            <li>Haz clic en una tarjeta para abrir el modal de detalle</li>
-            <li>En el modal: agrega checklist, miembros, etiquetas, fecha de vencimiento e imágenes</li>
-            <li>Añade nuevas listas con <b style="color:#fff;">+ Añadir otra lista</b></li>
-            <li>Crea tarjetas rápido desde la barra de comandos: <code style="color:#a78bfa;">#tarea texto</code></li>
+            <li>Arrastra tarjetas entre columnas: <b style="color:#fff;">Pendiente → En Curso → Finalizado</b></li>
+            <li>Haz clic en una tarjeta para abrir el modal de detalle completo</li>
+            <li>En el modal: checklist, miembros, etiquetas, fecha de vencimiento e imágenes</li>
+            <li>Las tareas finalizadas hoy aparecen en "Done". Las de días anteriores se archivan solas</li>
+            <li>Crea tareas rápido desde la barra: <code style="color:#a78bfa;">#tarea Texto de la tarea</code></li>
           </ul>
         </div>
 
+        <!-- CRÓNICA -->
         <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">📖 Crónica</h2>
+          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">📖 Crónica — Histórico Diario</h2>
           <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
             <li>Elige cualquier fecha para ver todo lo que registraste ese día</li>
-            <li>Muestra tareas, notas y movimientos financieros en columnas separadas</li>
+            <li>Vista en 3 columnas: tareas, notas y movimientos financieros</li>
             <li>Haz clic en cualquier elemento para abrirlo y editarlo</li>
             <li>El balance neto del día se calcula automáticamente</li>
           </ul>
         </div>
 
+        <!-- ATAJOS -->
         <div class="settings-card">
           <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">⌨️ Atajos de Teclado</h2>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
             <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
-              <span style="color:var(--text-muted); font-size:13px;">Guardar comando</span>
+              <span style="color:var(--text-muted); font-size:13px;">Guardar nodo</span>
               <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Enter</kbd>
             </div>
             <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
@@ -996,10 +1205,26 @@
               <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Ctrl+V</kbd>
             </div>
             <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
-              <span style="color:var(--text-muted); font-size:13px;">Agregar checklist</span>
-              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Enter en input</kbd>
+              <span style="color:var(--text-muted); font-size:13px;">Nueva línea en nota</span>
+              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Shift+Enter</kbd>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
+              <span style="color:var(--text-muted); font-size:13px;">Colapsar nav</span>
+              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Pestaña ◀</kbd>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
+              <span style="color:var(--text-muted); font-size:13px;">Colapsar panel</span>
+              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Pestaña ▶</kbd>
             </div>
           </div>
+        </div>
+
+        <!-- FEEDBACK BANNER -->
+        <div style="background:linear-gradient(135deg,rgba(0,246,255,0.08),rgba(167,139,250,0.08)); border:1px solid rgba(0,246,255,0.2); border-radius:16px; padding:24px; text-align:center;">
+          <div style="font-size:28px; margin-bottom:10px;">💬</div>
+          <div style="font-size:15px; font-weight:800; color:#fff; margin-bottom:8px;">¿Encontraste algo raro? ¿Tienes una idea?</div>
+          <div style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Tu retroalimentación hace que Nexus OS mejore. Reporta errores, sugiere funciones o simplemente dinos qué te gusta.</div>
+          <button onclick="switchView('settings'); setTimeout(()=>document.getElementById('feedback-section')?.scrollIntoView({behavior:'smooth'}),200)" style="background:linear-gradient(135deg,#00f0ff,#1af3ff); color:#000; border:none; border-radius:10px; padding:12px 28px; font-weight:800; font-size:14px; cursor:pointer; font-family:inherit;">Enviar Feedback →</button>
         </div>
 
       </div>
@@ -1009,6 +1234,51 @@
 
   <!-- WIDGETS SIDEBAR (RIGHT) -->
   <aside id="widgets-sidebar">
+
+    <!-- WORLD CLOCK -->
+    <div class="widget-box">
+      <span class="widget-label">🌍 Relojes</span>
+      <div style="display:flex; flex-direction:column; gap:0;">
+        <div class="clock-row">
+          <div><div class="clock-city">🏙 CDMX</div><div class="clock-tz">America/Mexico_City</div></div>
+          <span class="clock-time" id="clock-cdmx">--:--:--</span>
+        </div>
+        <div class="clock-row">
+          <div><div class="clock-city">🌴 Tulum</div><div class="clock-tz">America/Cancun</div></div>
+          <span class="clock-time" id="clock-tulum">--:--:--</span>
+        </div>
+        <div class="clock-row">
+          <div><div class="clock-city">📍 Local</div><div id="clock-local-tz" class="clock-tz"></div></div>
+          <span class="clock-time local" id="clock-local">--:--:--</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CRONÓMETRO -->
+    <div class="widget-box">
+      <span class="widget-label">⏱ Cronómetro</span>
+      <div id="sw-display">00:00.00</div>
+      <div style="display:flex; gap:8px;">
+        <button class="widget-btn-primary" id="sw-btn" onclick="swToggle()">▶ Iniciar</button>
+        <button class="widget-btn-secondary" onclick="swReset()">↺ Reset</button>
+      </div>
+    </div>
+
+    <!-- CUENTA REGRESIVA -->
+    <div class="widget-box">
+      <span class="widget-label">⏳ Cuenta Regresiva</span>
+      <div id="cd-display">00:00</div>
+      <div class="cd-inputs">
+        <input id="cd-min" class="cd-input" type="number" min="0" max="99" placeholder="min" value="5" />
+        <span class="cd-sep">:</span>
+        <input id="cd-sec" class="cd-input" type="number" min="0" max="59" placeholder="seg" value="00" />
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="widget-btn-primary" id="cd-btn" onclick="cdToggle()">▶ Iniciar</button>
+        <button class="widget-btn-secondary" onclick="cdReset()">↺ Reset</button>
+      </div>
+    </div>
+
     <div class="widget-box">
       <span class="widget-label">Situational Edge</span>
       <div id="w-weather-box" style="display:flex; gap:16px; align-items:center;">
@@ -1035,6 +1305,10 @@
 
     <div id="sidebar-currencies"></div>
   </aside>
+
+  <!-- PANEL COLLAPSE TOGGLES -->
+  <button id="toggle-nav"  class="panel-toggle" onclick="togglePanel('nav')"  title="Colapsar/expandir nav">◀</button>
+  <button id="toggle-side" class="panel-toggle" onclick="togglePanel('side')" title="Colapsar/expandir panel">▶</button>
 
   <!-- SPOTLIGHT INTERFACE -->
   <div id="spotlight-container">
