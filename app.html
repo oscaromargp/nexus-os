@@ -1450,6 +1450,7 @@
         <button onclick="showTransformPanel('income')" class="fin-tab" style="font-size:12px;">💰 Ingreso</button>
         <button onclick="showTransformPanel('expense')" class="fin-tab" style="font-size:12px;">💸 Gasto</button>
         <button onclick="showTransformPanel('calendar')" class="fin-tab" style="font-size:12px;">📅 Evento</button>
+        <button onclick="showTransformPanel('contact')" class="fin-tab" style="font-size:12px;">👤 Contacto</button>
       </div>
       <div id="transform-panel" style="display:none; background:rgba(0,0,0,0.2); border:1px solid var(--glass-border); border-radius:10px; padding:12px; gap:8px; flex-direction:column;">
         <input type="number" id="tp-amount" placeholder="Monto ($)" class="modal-input" style="display:none;" />
@@ -1544,34 +1545,104 @@
 
 <!-- MODAL: DETALLE DE TRANSACCIÓN -->
 <div id="finance-detail-modal" class="modal-overlay hidden">
-  <div class="modal-box" style="max-width:560px;">
+  <div class="modal-box" style="max-width:620px; max-height:90vh; overflow-y:auto;">
     <div class="modal-title" id="fd-title">Detalle</div>
-    <div class="modal-field">
-      <label class="modal-label">Descripción</label>
-      <input type="text" id="fd-label" class="modal-input" />
+
+    <!-- Fila 1: Descripción + Fecha -->
+    <div style="display:grid; grid-template-columns:1fr auto; gap:12px;">
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Descripción</label>
+        <input type="text" id="fd-label" class="modal-input" />
+      </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Fecha</label>
+        <input type="date" id="fd-fecha" class="modal-input" style="width:150px;" />
+      </div>
     </div>
-    <div class="modal-field">
-      <label class="modal-label">Monto</label>
-      <input type="number" id="fd-amount" class="modal-input" />
+
+    <!-- Fila 2: Monto + Moneda + T.C. -->
+    <div style="display:grid; grid-template-columns:1fr 100px 120px; gap:12px; margin-top:14px;">
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Monto</label>
+        <input type="number" id="fd-amount" class="modal-input" step="0.01" />
+      </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Moneda</label>
+        <select id="fd-moneda" class="modal-input">
+          <option value="MXN">🇲🇽 MXN</option>
+          <option value="USD">🇺🇸 USD</option>
+          <option value="EUR">🇪🇺 EUR</option>
+          <option value="XRP">⚡ XRP</option>
+          <option value="BTC">₿ BTC</option>
+          <option value="USDT">💲 USDT</option>
+        </select>
+      </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">T.C. (tipo cambio)</label>
+        <input type="number" id="fd-tc" class="modal-input" step="0.0001" placeholder="Ej: 17.80" />
+      </div>
     </div>
-    <div class="modal-field">
-      <label class="modal-label">Cuenta</label>
-      <select id="fd-account" class="modal-input"></select>
+
+    <!-- Fila 3: IVA + Referencia/Comprobante -->
+    <div style="display:grid; grid-template-columns:100px 1fr; gap:12px; margin-top:14px;">
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">IVA %</label>
+        <input type="number" id="fd-iva" class="modal-input" step="0.01" placeholder="16" />
+      </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Referencia / Comprobante</label>
+        <input type="text" id="fd-referencia" class="modal-input" placeholder="Folio, SPEI ref, número de cheque..." />
+      </div>
     </div>
-    <div class="modal-field">
-      <label class="modal-label">¿A quién / De quién?</label>
-      <select id="fd-contact" class="modal-input"></select>
+
+    <!-- Divisor -->
+    <div style="border-top:1px solid rgba(255,255,255,0.07); margin:18px 0 14px; padding-top:14px;">
+      <div style="font-size:11px; color:var(--text-dim); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:12px;">Partes involucradas</div>
     </div>
+
+    <!-- Fila 4: Cuenta + Contacto -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Cuenta propia</label>
+        <select id="fd-account" class="modal-input"></select>
+      </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Contacto (beneficiario / ordenante)</label>
+        <select id="fd-contact" class="modal-input"></select>
+      </div>
+    </div>
+
+    <!-- Fila 5: Ordenante + Banco + CLABE -->
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:14px;">
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Ordenante / De quién</label>
+        <input type="text" id="fd-ordenante" class="modal-input" placeholder="Nombre del ordenante..." />
+      </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Banco</label>
+        <input type="text" id="fd-banco" class="modal-input" placeholder="BBVA, HSBC, Banamex..." />
+      </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">CLABE / Cuenta</label>
+        <input type="text" id="fd-clabe" class="modal-input" placeholder="18 dígitos" style="font-family:monospace; font-size:12px;" />
+      </div>
+    </div>
+
+    <!-- Divisor -->
+    <div style="border-top:1px solid rgba(255,255,255,0.07); margin:18px 0 14px; padding-top:14px;">
+      <div style="font-size:11px; color:var(--text-dim); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:12px;">Notas y adjuntos</div>
+    </div>
+
     <div class="modal-field">
       <label class="modal-label">Comentarios</label>
-      <div id="fd-comments" style="max-height:120px; overflow-y:auto; margin-bottom:8px;"></div>
+      <div id="fd-comments" style="max-height:100px; overflow-y:auto; margin-bottom:8px;"></div>
       <input type="text" id="fd-comment-input" class="modal-input" placeholder="Agregar comentario..." onkeydown="if(event.key==='Enter') addFinanceComment()" />
     </div>
     <div class="modal-field">
-      <label class="modal-label">Imágenes adjuntas</label>
+      <label class="modal-label">Imágenes / Comprobantes adjuntos</label>
       <div id="fd-attachments" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;"></div>
       <label style="cursor:pointer; background:rgba(255,255,255,0.05); border:1px dashed var(--glass-border); border-radius:10px; padding:8px 14px; font-size:12px; color:var(--text-muted); display:inline-block;">
-        📎 Agregar imagen
+        📎 Agregar imagen / PDF
         <input type="file" id="fd-img-input" accept="image/*,.pdf,application/pdf" style="display:none;" onchange="attachImageFromFile(this, 'finance')" />
       </label>
     </div>
@@ -1604,20 +1675,30 @@
     </div>
     <!-- Persona fields -->
     <div id="cm-persona-fields">
-      <div class="modal-field"><label class="modal-label">Teléfono</label><input type="tel" id="cm-phone" class="modal-input" placeholder="+52 000 000 0000" /></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Teléfono</label><input type="tel" id="cm-phone" class="modal-input" placeholder="+52 000 000 0000" /></div>
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">RFC</label><input type="text" id="cm-rfc" class="modal-input" placeholder="XXXX000000XXX" style="font-family:monospace; text-transform:uppercase;" /></div>
+      </div>
       <div class="modal-field"><label class="modal-label">Email</label><input type="email" id="cm-email" class="modal-input" placeholder="correo@ejemplo.com" /></div>
       <div class="modal-field"><label class="modal-label">Empresa / Rol</label><input type="text" id="cm-company" class="modal-input" placeholder="Ej: CEO en Startup XYZ" /></div>
     </div>
     <!-- Bank fields -->
     <div id="cm-bank-fields" style="display:none;">
-      <div class="modal-field"><label class="modal-label">Institución</label><input type="text" id="cm-bank-name" class="modal-input" placeholder="BBVA, Santander, HSBC..." /></div>
-      <div class="modal-field"><label class="modal-label">CLABE / Número de cuenta</label><input type="text" id="cm-clabe" class="modal-input" placeholder="18 dígitos CLABE" /></div>
-      <div class="modal-field"><label class="modal-label">Titular</label><input type="text" id="cm-holder" class="modal-input" placeholder="Nombre del titular" /></div>
+      <div class="modal-field"><label class="modal-label">Institución</label><input type="text" id="cm-bank-name" class="modal-input" placeholder="BBVA, Santander, HSBC, Banamex..." /></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">CLABE (18 dígitos)</label><input type="text" id="cm-clabe" class="modal-input" placeholder="012345678901234567" style="font-family:monospace;" maxlength="18" /></div>
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Número de cuenta</label><input type="text" id="cm-account-no" class="modal-input" placeholder="10-11 dígitos" style="font-family:monospace;" /></div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Titular</label><input type="text" id="cm-holder" class="modal-input" placeholder="Nombre del titular" /></div>
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">RFC del titular</label><input type="text" id="cm-bank-rfc" class="modal-input" placeholder="XXXX000000XXX" style="font-family:monospace; text-transform:uppercase;" /></div>
+      </div>
     </div>
     <!-- Crypto fields -->
     <div id="cm-crypto-fields" style="display:none;">
-      <div class="modal-field"><label class="modal-label">Red / Moneda</label><input type="text" id="cm-network" class="modal-input" placeholder="Bitcoin, Ethereum, XRP, SOL..." /></div>
-      <div class="modal-field"><label class="modal-label">Dirección / Wallet</label><input type="text" id="cm-wallet" class="modal-input" placeholder="0x... / r..." style="font-family:monospace;" /></div>
+      <div class="modal-field"><label class="modal-label">Red / Moneda</label><input type="text" id="cm-network" class="modal-input" placeholder="Bitcoin, Ethereum, XRP, SOL, USDT..." /></div>
+      <div class="modal-field"><label class="modal-label">Dirección / Wallet</label><input type="text" id="cm-wallet" class="modal-input" placeholder="0x... / r..." style="font-family:monospace; font-size:12px;" /></div>
+      <div class="modal-field"><label class="modal-label">Memo / Etiqueta de destino (opcional)</label><input type="text" id="cm-memo" class="modal-input" placeholder="Tag, memo o nota de destino" /></div>
     </div>
     <!-- Notes -->
     <div class="modal-field">

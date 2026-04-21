@@ -582,10 +582,13 @@ function parseNode(text) {
     metadata.label = cleanContent
   }
   else if (t.includes('#persona')) {
-    type = 'persona'
+    type = 'contact'
+    metadata.cType = 'persona'
     metadata.tags.push('#persona')
     cleanContent = t.replace('#persona', '').trim()
+    metadata.name  = cleanContent
     metadata.label = cleanContent
+    metadata.color = '#fdba74'
   }
   else if (t.includes('#proyecto')) {
     type = 'proyecto'
@@ -1114,7 +1117,7 @@ window.showTransformPanel = (targetType) => {
   amtInput.style.display = (targetType === 'income' || targetType === 'expense') ? 'block' : 'none'
   dateInput.style.display = (targetType === 'calendar') ? 'block' : 'none'
   if (targetType === 'calendar') dateInput.value = new Date().toISOString().split('T')[0]
-  if (targetType === 'kanban') confirmTransform()
+  if (targetType === 'kanban' || targetType === 'contact') confirmTransform()
 }
 
 window.confirmTransform = async () => {
@@ -1138,6 +1141,10 @@ window.confirmTransform = async () => {
     const date = document.getElementById('tp-date')?.value || new Date().toISOString().split('T')[0]
     node.type = 'kanban'
     node.metadata = { ...node.metadata, label: node.metadata?.label || node.content, due_date: date, status: 'todo' }
+  } else if (targetType === 'contact') {
+    const name = node.metadata?.label || node.metadata?.name || node.content
+    node.type = 'contact'
+    node.metadata = { ...node.metadata, cType: 'persona', name, label: name, color: node.metadata?.color || '#fdba74' }
   }
 
   if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
@@ -1178,15 +1185,20 @@ function renderFinance(nodes) {
     </div>
   `
 
+  const net = income - expense
   const statsHtml = `
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:28px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:28px;">
       <div style="background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2); border-radius:14px; padding:20px;">
-        <div style="font-size:11px; color:#6ee7b7; font-weight:700; letter-spacing:1px; margin-bottom:8px;">INGRESOS</div>
-        <div style="font-size:28px; font-weight:800; color:#4ade80; font-family:'JetBrains Mono',monospace;">+$${income.toLocaleString()}</div>
+        <div style="font-size:11px; color:#6ee7b7; font-weight:700; letter-spacing:1px; margin-bottom:8px;">↑ INGRESOS</div>
+        <div style="font-size:22px; font-weight:800; color:#4ade80; font-family:'JetBrains Mono',monospace;">+$${income.toLocaleString()}</div>
       </div>
       <div style="background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.2); border-radius:14px; padding:20px;">
-        <div style="font-size:11px; color:#fca5a5; font-weight:700; letter-spacing:1px; margin-bottom:8px;">GASTOS</div>
-        <div style="font-size:28px; font-weight:800; color:#f87171; font-family:'JetBrains Mono',monospace;">-$${expense.toLocaleString()}</div>
+        <div style="font-size:11px; color:#fca5a5; font-weight:700; letter-spacing:1px; margin-bottom:8px;">↓ GASTOS</div>
+        <div style="font-size:22px; font-weight:800; color:#f87171; font-family:'JetBrains Mono',monospace;">-$${expense.toLocaleString()}</div>
+      </div>
+      <div style="background:${net>=0?'rgba(0,246,255,0.06)':'rgba(251,146,60,0.06)'}; border:1px solid ${net>=0?'rgba(0,246,255,0.2)':'rgba(251,146,60,0.2)'}; border-radius:14px; padding:20px;">
+        <div style="font-size:11px; color:${net>=0?'#67e8f9':'#fdba74'}; font-weight:700; letter-spacing:1px; margin-bottom:8px;">⚖ SALDO NETO</div>
+        <div style="font-size:22px; font-weight:800; color:${net>=0?'#00f6ff':'#fb923c'}; font-family:'JetBrains Mono',monospace;">${net>=0?'+':''}\$${net.toLocaleString()}</div>
       </div>
     </div>
   `
@@ -1203,22 +1215,33 @@ function renderFinance(nodes) {
     ? '<div style="text-align:center; color:var(--text-muted); padding:40px;">Sin transacciones. Escribe <b>+$1000 Salario</b> o <b>-$200 Renta</b></div>'
     : txs.map(n => {
         const isIncome = n.type === 'income'
-        const acc = accounts.find(a => a.id === n.metadata?.account_id)
+        const m = n.metadata || {}
+        const acc = accounts.find(a => a.id === m.account_id)
+        const fechaDisp = m.fecha || n.created_at?.split('T')[0] || ''
+        const moneda = m.moneda || 'MXN'
+        const refIcon = m.referencia ? '🧾' : ''
+        const contactBadge = m.contact_name
+          ? `<span style="background:rgba(0,246,255,0.1);color:#00f6ff;border-radius:6px;padding:1px 7px;font-size:10px;cursor:pointer;" onclick="event.stopPropagation();openContactByName('${esc(m.contact_name)}')">${isIncome?'De':'A'}: ${esc(m.contact_name)}</span>` : ''
+        const bancoBadge = m.banco ? `<span style="background:rgba(255,255,255,0.06);color:#94a3b8;border-radius:6px;padding:1px 7px;font-size:10px;">🏦 ${esc(m.banco)}</span>` : ''
+        const clabeBadge = m.clabe ? `<span style="background:rgba(255,255,255,0.04);color:#64748b;border-radius:6px;padding:1px 7px;font-size:10px;font-family:monospace;">${esc(m.clabe.slice(-6).padStart(m.clabe.length,'·'))}</span>` : ''
         return `
-        <div onclick="openFinanceDetail('${n.id}')" style="display:flex; align-items:center; gap:16px; padding:16px 0; border-bottom:1px solid rgba(255,255,255,0.04); cursor:pointer; transition:background 0.2s; border-radius:8px; padding-left:8px; padding-right:8px;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
-          <div style="width:36px;height:36px;border-radius:10px;background:${isIncome?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)'};display:grid;place-items:center;font-size:16px;">
+        <div onclick="openFinanceDetail('${n.id}')" style="display:flex; align-items:flex-start; gap:16px; padding:14px 8px; border-bottom:1px solid rgba(255,255,255,0.04); cursor:pointer; transition:background 0.15s; border-radius:8px;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+          <div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;background:${isIncome?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)'};display:grid;place-items:center;font-size:18px;margin-top:2px;">
             ${isIncome ? '↑' : '↓'}
           </div>
-          <div style="flex:1;">
-            <div style="font-size:14px;color:#fff;font-weight:500;">${esc(n.metadata?.label||n.content)}</div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
-              ${new Date(n.created_at).toLocaleDateString('es-MX')}
-              ${acc ? `· <span style="color:${esc(acc.metadata?.color||'#4ade80')}">${esc(acc.metadata?.label||acc.content)}</span>` : ''}
-              ${n.metadata?.contact_name ? `· <span style="color:var(--accent-cyan);cursor:pointer;text-decoration:underline;" onclick="event.stopPropagation(); openContactByName('${esc(n.metadata.contact_name)}')">#${esc(n.metadata.contact_name)}</span>` : ''}
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;color:#fff;font-weight:600;margin-bottom:4px;">${esc(m.label||n.content)} ${refIcon}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;">
+              <span style="font-size:11px;color:var(--text-muted);">${fechaDisp}</span>
+              ${acc ? `<span style="background:${acc.metadata?.color||'#4ade80'}22;color:${acc.metadata?.color||'#4ade80'};border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;">${esc(acc.metadata?.label||acc.content)}</span>` : ''}
+              ${contactBadge}
+              ${bancoBadge}
+              ${clabeBadge}
             </div>
           </div>
-          <div style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${isIncome?'#4ade80':'#f87171'};">
-            ${isIncome?'+':'-'}$${(n.metadata?.amount||0).toLocaleString()}
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${isIncome?'#4ade80':'#f87171'};">${isIncome?'+':'-'}$${(m.amount||0).toLocaleString()}</div>
+            <div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${moneda}</div>
           </div>
         </div>
       `}).join('')
@@ -1813,11 +1836,29 @@ window.openFinanceDetail = (id) => {
   document.getElementById('fd-title').textContent = node.type === 'income' ? '💰 Ingreso' : '💸 Gasto'
   document.getElementById('fd-label').value = m.label || node.content
   document.getElementById('fd-amount').value = m.amount || 0
+  // Fecha
+  const fechaEl = document.getElementById('fd-fecha')
+  if (fechaEl) fechaEl.value = m.fecha || node.created_at?.split('T')[0] || new Date().toISOString().split('T')[0]
+  // Moneda
+  const monedaEl = document.getElementById('fd-moneda')
+  if (monedaEl) monedaEl.value = m.moneda || 'MXN'
+  // Tipo de cambio e IVA
+  const tcEl = document.getElementById('fd-tc')
+  if (tcEl) tcEl.value = m.tc || ''
+  const ivaEl = document.getElementById('fd-iva')
+  if (ivaEl) ivaEl.value = m.iva || ''
+  // RFC / Referencia
+  const refEl = document.getElementById('fd-referencia')
+  if (refEl) refEl.value = m.referencia || ''
+  // Ordenante
+  const ordEl = document.getElementById('fd-ordenante')
+  if (ordEl) ordEl.value = m.ordenante || ''
+  // Cuenta origen/destino
   const accounts = allNodes.filter(n => n.type === 'account')
   const acSel = document.getElementById('fd-account')
   acSel.innerHTML = '<option value="">General</option>' + accounts.map(a => `<option value="${a.id}" ${m.account_id===a.id?'selected':''}>${esc(a.metadata?.label||a.content)}</option>`).join('')
-  // Contact picker
-  const contacts = allNodes.filter(n => n.type==='contact')
+  // Contacto (beneficiario / ordenante)
+  const contacts = getContacts()
   const cSel = document.getElementById('fd-contact')
   if (cSel) {
     cSel.innerHTML = '<option value="">— Sin contacto —</option>' + contacts.map(c => {
@@ -1825,7 +1866,22 @@ window.openFinanceDetail = (id) => {
       const icon = c.metadata?.cType==='bank'?'🏦':c.metadata?.cType==='crypto'?'₿':'👤'
       return `<option value="${c.id}" ${m.contact_id===c.id?'selected':''}>${icon} ${esc(name)}</option>`
     }).join('')
+    // Auto-fill CLABE when contact changes
+    cSel.onchange = () => {
+      const selContact = contacts.find(c => c.id === cSel.value)
+      const clabeEl = document.getElementById('fd-clabe')
+      const bancoEl = document.getElementById('fd-banco')
+      if (selContact?.metadata?.cType === 'bank') {
+        if (clabeEl) clabeEl.value = selContact.metadata?.clabe || ''
+        if (bancoEl) bancoEl.value = selContact.metadata?.bank_name || ''
+      }
+    }
   }
+  // CLABE y Banco
+  const clabeEl = document.getElementById('fd-clabe')
+  if (clabeEl) clabeEl.value = m.clabe || ''
+  const bancoEl = document.getElementById('fd-banco')
+  if (bancoEl) bancoEl.value = m.banco || ''
   renderFinanceComments(m.comments || [])
   renderAttachments(m.images || [], 'finance')
   document.getElementById('finance-detail-modal').classList.remove('hidden')
@@ -1860,17 +1916,33 @@ window.addFinanceComment = async () => {
 window.saveFinanceDetail = async () => {
   const node = allNodes.find(n => n.id === editingFinanceId)
   if (!node) return
-  node.metadata.label = document.getElementById('fd-label').value.trim()
-  node.metadata.amount = parseFloat(document.getElementById('fd-amount').value) || 0
+  node.metadata.label     = document.getElementById('fd-label').value.trim()
+  node.metadata.amount    = parseFloat(document.getElementById('fd-amount').value) || 0
+  node.metadata.fecha     = document.getElementById('fd-fecha')?.value || undefined
+  node.metadata.moneda    = document.getElementById('fd-moneda')?.value || 'MXN'
+  node.metadata.tc        = parseFloat(document.getElementById('fd-tc')?.value) || undefined
+  node.metadata.iva       = parseFloat(document.getElementById('fd-iva')?.value) || undefined
+  node.metadata.referencia = document.getElementById('fd-referencia')?.value.trim() || undefined
+  node.metadata.ordenante  = document.getElementById('fd-ordenante')?.value.trim() || undefined
+  node.metadata.clabe      = document.getElementById('fd-clabe')?.value.trim() || undefined
+  node.metadata.banco      = document.getElementById('fd-banco')?.value.trim() || undefined
   const acId = document.getElementById('fd-account').value
   node.metadata.account_id = acId || undefined
   const ctId = document.getElementById('fd-contact')?.value
   node.metadata.contact_id = ctId || undefined
+  // Store contact name for display
+  if (ctId) {
+    const ct = getContacts().find(c => c.id === ctId)
+    node.metadata.contact_name = ct ? (ct.metadata?.name || ct.content) : undefined
+  } else {
+    node.metadata.contact_name = undefined
+  }
   node.content = node.metadata.label
   if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
     await supabase.from('nodes').update({ content: node.content, metadata: node.metadata }).eq('id', editingFinanceId)
   }
   closeFinanceDetail(); renderAll()
+  showToast('Movimiento guardado')
 }
 
 window.deleteFinanceNode = async () => {
@@ -2013,7 +2085,8 @@ function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'
 // ─────────────────────────────────────────
 
 function getContacts() {
-  return allNodes.filter(n => n.type === 'contact')
+  // Include legacy 'persona' type nodes for backward compatibility
+  return allNodes.filter(n => n.type === 'contact' || n.type === 'persona')
 }
 
 function contactInitials(name) {
@@ -2136,13 +2209,29 @@ function renderCSheetTab(tab, c) {
       <div class="csh-field"><span class="csh-label">📞 Teléfono</span><span>${esc(m.phone||'—')}</span></div>
       <div class="csh-field"><span class="csh-label">✉️ Email</span><span>${esc(m.email||'—')}</span></div>
       <div class="csh-field"><span class="csh-label">🏢 Empresa</span><span>${esc(m.company||'—')}</span></div>
+      ${m.rfc ? `<div class="csh-field"><span class="csh-label">🪪 RFC</span><code style="font-family:monospace;font-size:13px;letter-spacing:0.05em;">${esc(m.rfc)}</code></div>` : ''}
     ` : cType === 'bank' ? `
       <div class="csh-field"><span class="csh-label">🏦 Banco</span><span>${esc(m.bank_name||'—')}</span></div>
-      <div class="csh-field"><span class="csh-label">🔢 CLABE</span><code style="font-family:monospace;font-size:13px;">${esc(m.clabe||'—')}</code></div>
+      <div class="csh-field" style="flex-direction:column;align-items:flex-start;gap:4px;">
+        <span class="csh-label">🔢 CLABE</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <code style="font-family:monospace;font-size:13px;letter-spacing:0.05em;">${esc(m.clabe||'—')}</code>
+          ${m.clabe ? `<button onclick="navigator.clipboard.writeText('${esc(m.clabe)}').then(()=>showToast('CLABE copiada'))" style="background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f6ff;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">📋 Copiar</button>` : ''}
+        </div>
+      </div>
+      ${m.account_no ? `<div class="csh-field"><span class="csh-label">💳 Cuenta</span><code style="font-family:monospace;font-size:13px;">${esc(m.account_no)}</code></div>` : ''}
       <div class="csh-field"><span class="csh-label">👤 Titular</span><span>${esc(m.holder||'—')}</span></div>
+      ${m.rfc ? `<div class="csh-field"><span class="csh-label">🪪 RFC</span><code style="font-family:monospace;font-size:13px;">${esc(m.rfc)}</code></div>` : ''}
     ` : `
       <div class="csh-field"><span class="csh-label">🌐 Red</span><span>${esc(m.network||'—')}</span></div>
-      <div class="csh-field"><span class="csh-label">💳 Wallet</span><code style="font-family:monospace;font-size:11px;word-break:break-all;">${esc(m.wallet||'—')}</code></div>
+      <div class="csh-field" style="flex-direction:column;align-items:flex-start;gap:4px;">
+        <span class="csh-label">💳 Wallet</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <code style="font-family:monospace;font-size:11px;word-break:break-all;color:#a78bfa;">${esc(m.wallet||'—')}</code>
+          ${m.wallet ? `<button onclick="navigator.clipboard.writeText('${esc(m.wallet)}').then(()=>showToast('Wallet copiada'))" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">📋 Copiar</button>` : ''}
+        </div>
+      </div>
+      ${m.memo ? `<div class="csh-field"><span class="csh-label">🏷 Memo</span><span>${esc(m.memo)}</span></div>` : ''}
     `
     body.innerHTML = `<div style="display:flex;flex-direction:column;gap:0;">${fields}
       <div class="csh-field" style="align-items:flex-start;"><span class="csh-label">📝 Notas</span><span style="white-space:pre-wrap;">${esc(m.notes||'—')}</span></div>
@@ -2242,11 +2331,15 @@ window.openContactModal = (id = null) => {
   document.getElementById('cm-phone').value  = m.phone || ''
   document.getElementById('cm-email').value  = m.email || ''
   document.getElementById('cm-company').value = m.company || ''
+  if (document.getElementById('cm-rfc')) document.getElementById('cm-rfc').value = m.rfc || ''
   document.getElementById('cm-bank-name').value = m.bank_name || ''
   document.getElementById('cm-clabe').value  = m.clabe || ''
+  if (document.getElementById('cm-account-no')) document.getElementById('cm-account-no').value = m.account_no || ''
   document.getElementById('cm-holder').value = m.holder || ''
+  if (document.getElementById('cm-bank-rfc')) document.getElementById('cm-bank-rfc').value = m.rfc || ''
   document.getElementById('cm-network').value = m.network || ''
   document.getElementById('cm-wallet').value = m.wallet || ''
+  if (document.getElementById('cm-memo')) document.getElementById('cm-memo').value = m.memo || ''
   document.getElementById('cm-notes').value  = m.notes || ''
   document.getElementById('cm-delete').style.display = c ? 'inline-flex' : 'none'
 
@@ -2287,13 +2380,17 @@ window.saveContact = async () => {
       phone:   document.getElementById('cm-phone').value.trim(),
       email:   document.getElementById('cm-email').value.trim(),
       company: document.getElementById('cm-company').value.trim(),
+      rfc:     document.getElementById('cm-rfc')?.value.trim() || undefined,
     } : cType==='bank' ? {
-      bank_name: document.getElementById('cm-bank-name').value.trim(),
-      clabe:     document.getElementById('cm-clabe').value.trim(),
-      holder:    document.getElementById('cm-holder').value.trim(),
+      bank_name:  document.getElementById('cm-bank-name').value.trim(),
+      clabe:      document.getElementById('cm-clabe').value.trim(),
+      account_no: document.getElementById('cm-account-no')?.value.trim() || undefined,
+      holder:     document.getElementById('cm-holder').value.trim(),
+      rfc:        document.getElementById('cm-bank-rfc')?.value.trim() || undefined,
     } : {
       network: document.getElementById('cm-network').value.trim(),
       wallet:  document.getElementById('cm-wallet').value.trim(),
+      memo:    document.getElementById('cm-memo')?.value.trim() || undefined,
     })
   }
 
