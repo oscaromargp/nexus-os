@@ -1323,7 +1323,7 @@ function renderCurrencyWidget() {
   if (!container) return
   container.innerHTML = `
     <div class="widget-box">
-      <span class="widget-label">Conversor de Monedas</span>
+      <span class="widget-label">Conversor de Monedas Fiat</span>
       <div style="display:flex; gap:6px; margin-bottom:8px;">
         <input type="number" id="currency-amount" class="modal-input" placeholder="Monto" style="flex:1;" />
         <select id="currency-from" class="modal-input" style="width:70px;">
@@ -1343,6 +1343,27 @@ function renderCurrencyWidget() {
       </div>
       <button class="btn-ghost" style="width:100%;" onclick="convertCurrency()">Convertir</button>
       <div id="currency-result" style="font-size:13px; color:var(--accent-cyan); text-align:center; margin-top:6px;"></div>
+    </div>
+    <div class="widget-box" style="margin-top:12px;">
+      <span class="widget-label">Conversor de Criptomonedas</span>
+      <div style="display:flex; gap:6px; margin-bottom:8px;">
+        <input type="number" id="crypto-amount" class="modal-input" placeholder="Monto" style="flex:1;" />
+        <select id="crypto-from" class="modal-input" style="width:70px;">
+          <option value="USDT">USDT</option>
+          <option value="BTC">BTC</option>
+          <option value="ETH">ETH</option>
+          <option value="XRP">XRP</option>
+        </select>
+        <select id="crypto-to" class="modal-input" style="width:70px;">
+          <option value="MXN">MXN</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="JPY">JPY</option>
+        </select>
+      </div>
+      <button class="btn-ghost" style="width:100%" onclick="convertCrypto()">Convertir</button>
+      <div id="crypto-result" style="font-size:13px; color:var(--accent-cyan); text-align:center; margin-top:6px;"></div>
     </div>
     <div class="widget-box" style="margin-top:12px;">
       <span class="widget-label">Calculadora Financiera</span>
@@ -1388,6 +1409,33 @@ function convertCurrency() {
     })
 }
 window.convertCurrency = convertCurrency;
+
+// Crypto converter (fiat/crypto conversion)
+function convertCrypto() {
+  const amount = parseFloat(document.getElementById('crypto-amount')?.value);
+  const from = document.getElementById('crypto-from')?.value;
+  const to = document.getElementById('crypto-to')?.value;
+  const resultEl = document.getElementById('crypto-result');
+  if (isNaN(amount) || !from || !to) {
+    resultEl.textContent = 'Datos inválidos';
+    return;
+  }
+  // Using exchangerate.host which supports crypto rates
+  fetch(`https://api.exchangerate.host/convert?from=${from}&to=${to}&amount=${amount}`)
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.result != null) {
+        resultEl.textContent = `${amount} ${from} = ${d.result.toFixed(2)} ${to}`;
+      } else {
+        resultEl.textContent = 'Error en la conversión';
+      }
+    })
+    .catch(err => {
+      console.warn('Crypto conversion error', err);
+      resultEl.textContent = 'Error en la conversión';
+    });
+}
+window.convertCrypto = convertCrypto;
 
 // Finance calculator for net amount, fee, and required source amount
 function calculateFinance() {
