@@ -1095,6 +1095,7 @@ function toggleNoteSize() {
   if (!modalBox) return
   modalBox.classList.toggle('fullscreen')
 }
+window.toggleNoteSize = toggleNoteSize;
 
 
 document.getElementById('ne-save')?.addEventListener('click', async () => {
@@ -1369,6 +1370,7 @@ function convertCurrency() {
       resultEl.textContent = 'Error en la conversión'
     })
 }
+window.convertCurrency = convertCurrency;
 
 // Account Modal
 window.openAccountModal = (id = null) => {
@@ -1444,6 +1446,35 @@ document.getElementById('tr-save')?.addEventListener('click', async () => {
   closeTransferModal(); renderAll()
 })
 
+// Loan Modal
+window.openLoanModal = () => {
+  const accounts = allNodes.filter(n => n.type === 'account')
+  if (accounts.length < 2) { alert('Necesitas al menos 2 cuentas para crear un préstamo.'); return }
+  const opts = accounts.map(a => `<option value="${a.id}">${esc(a.metadata?.label||a.content)}</option>`).join('')
+  document.getElementById('ln-from').innerHTML = opts
+  document.getElementById('ln-to').innerHTML = opts
+  document.getElementById('loan-modal').classList.remove('hidden')
+}
+window.closeLoanModal = () => {
+  document.getElementById('loan-modal').classList.add('hidden')
+}
+document.getElementById('ln-save')?.addEventListener('click', async () => {
+  const label = document.getElementById('ln-label').value.trim()
+  const amount = parseFloat(document.getElementById('ln-amount').value) || 0
+  const interest = parseFloat(document.getElementById('ln-interest').value) || 0
+  const dueDate = document.getElementById('ln-due-date').value
+  const fromId = document.getElementById('ln-from').value
+  const toId = document.getElementById('ln-to').value
+  if (!label || !amount || !fromId || !toId) return alert('Completa los campos obligatorios del préstamo')
+  const meta = { label, amount, interest, due_date: dueDate || undefined, lender_id: fromId, borrower_id: toId }
+  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+    allNodes.unshift({ id: Math.random().toString(36).substr(2,9), type:'loan', content:label, metadata:meta, created_at:new Date().toISOString() })
+  } else {
+    const { data: inserted } = await supabase.from('nodes').insert({ owner_id: currentUser.id, type:'loan', content:label, metadata:meta }).select()
+    if (inserted?.[0]) allNodes.unshift(inserted[0])
+  }
+  closeLoanModal(); renderAll()
+})
 function renderCalendar(nodes) {
   const root = document.getElementById('cal-days-root')
   if (!root) return
