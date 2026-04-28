@@ -844,6 +844,7 @@
       <button class="nav-item" data-view="calendar"><span class="nav-icon">📅</span> Línea de Tiempo</button>
       <button class="nav-item" data-view="cronica"><span class="nav-icon">📖</span> Crónica</button>
       <button class="nav-item" data-view="contacts"><span class="nav-icon">👥</span> Contactos</button>
+      <button class="nav-item" data-view="herramientas"><span class="nav-icon">🧮</span> Herramientas</button>
       <button class="nav-item" data-view="settings"><span class="nav-icon">⚙️</span> Configuración</button>
       <button class="nav-item" data-view="ayuda"><span class="nav-icon">❓</span> Ayuda</button>
     </div>
@@ -1248,9 +1249,99 @@
       </div>
     </div>
 
+    <!-- ── HERRAMIENTAS ── -->
+    <div id="view-herramientas" class="view-section">
+      <div class="view-header">
+        <h1 class="view-title">🧮 Herramientas</h1>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:20px; align-items:start;">
+
+        <!-- CRONÓMETRO -->
+        <div class="settings-card">
+          <h2 style="font-size:15px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">⏱ Cronómetro</h2>
+          <div id="sw-display" style="font-family:'JetBrains Mono',monospace; font-size:36px; font-weight:800; color:#fff; text-align:center; margin-bottom:16px; letter-spacing:2px;">00:00.00</div>
+          <div style="display:flex; gap:8px;">
+            <button class="widget-btn-primary" id="sw-btn" onclick="swToggle()" style="flex:1; padding:12px;">▶ Iniciar</button>
+            <button class="widget-btn-secondary" onclick="swReset()" style="padding:12px 20px;">↺ Reset</button>
+          </div>
+        </div>
+
+        <!-- CUENTA REGRESIVA -->
+        <div class="settings-card">
+          <h2 style="font-size:15px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">⏳ Cuenta Regresiva</h2>
+          <div id="cd-display" style="font-family:'JetBrains Mono',monospace; font-size:36px; font-weight:800; color:#fff; text-align:center; margin-bottom:12px; letter-spacing:2px;">00:00</div>
+          <div class="cd-inputs" style="justify-content:center; margin-bottom:12px;">
+            <input id="cd-min" class="cd-input" type="number" min="0" max="99" placeholder="min" value="5" />
+            <span class="cd-sep">:</span>
+            <input id="cd-sec" class="cd-input" type="number" min="0" max="59" placeholder="seg" value="00" />
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="widget-btn-primary" id="cd-btn" onclick="cdToggle()" style="flex:1; padding:12px;">▶ Iniciar</button>
+            <button class="widget-btn-secondary" onclick="cdReset()" style="padding:12px 20px;">↺ Reset</button>
+          </div>
+        </div>
+
+        <!-- CONVERSOR FIAT -->
+        <div class="settings-card">
+          <h2 style="font-size:15px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">💱 Conversor de Divisas</h2>
+          <div style="display:flex; gap:8px; margin-bottom:10px;">
+            <input type="number" id="currency-amount" class="modal-input" placeholder="Monto" style="flex:1;" />
+            <select id="currency-from" class="modal-input" style="width:80px;">
+              <option value="USD">USD</option><option value="MXN">MXN</option><option value="EUR">EUR</option>
+              <option value="GBP">GBP</option><option value="JPY">JPY</option><option value="CAD">CAD</option>
+            </select>
+            <select id="currency-to" class="modal-input" style="width:80px;">
+              <option value="MXN">MXN</option><option value="USD">USD</option><option value="EUR">EUR</option>
+              <option value="GBP">GBP</option><option value="JPY">JPY</option><option value="CAD">CAD</option>
+            </select>
+          </div>
+          <button class="btn-ghost" style="width:100%; margin-bottom:10px;" onclick="convertCurrency()">Convertir</button>
+          <div id="currency-result" style="font-size:14px; color:var(--accent-cyan); text-align:center; min-height:20px;"></div>
+        </div>
+
+        <!-- CONVERSOR CRYPTO -->
+        <div class="settings-card">
+          <h2 style="font-size:15px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">₿ Conversor Cripto</h2>
+          <div style="display:flex; gap:8px; margin-bottom:10px;">
+            <input type="number" id="crypto-amount" class="modal-input" placeholder="Monto" style="flex:1;" />
+            <select id="crypto-from" class="modal-input" style="width:80px;">
+              <option value="USDT">USDT</option><option value="BTC">BTC</option>
+              <option value="ETH">ETH</option><option value="XRP">XRP</option>
+              <option value="BNB">BNB</option><option value="SOL">SOL</option>
+            </select>
+            <select id="crypto-to" class="modal-input" style="width:80px;">
+              <option value="MXN">MXN</option><option value="USD">USD</option>
+              <option value="EUR">EUR</option><option value="GBP">GBP</option>
+              <option value="JPY">JPY</option>
+            </select>
+          </div>
+          <button class="btn-ghost" style="width:100%; margin-bottom:10px;" onclick="convertCrypto()">Convertir</button>
+          <div id="crypto-result" style="font-size:14px; color:var(--accent-cyan); text-align:center; min-height:20px;"></div>
+        </div>
+
+        <!-- CALCULADORA FINANCIERA -->
+        <div class="settings-card">
+          <h2 style="font-size:15px; font-weight:800; color:var(--accent-cyan); margin-bottom:4px;">🧾 Calculadora Financiera</h2>
+          <p style="font-size:12px; color:var(--text-muted); margin-bottom:14px;">¿Cuánto enviar para recibir X neto después de comisión?</p>
+          <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
+            <input type="number" id="finance-net" class="modal-input" placeholder="Objetivo neto (MXN)" />
+            <input type="number" id="finance-fee" class="modal-input" placeholder="Comisión (%)" />
+            <select id="finance-from" class="modal-input">
+              <option value="USD">USD</option><option value="MXN">MXN</option><option value="EUR">EUR</option>
+              <option value="GBP">GBP</option><option value="USDT">USDT</option>
+              <option value="BTC">BTC</option><option value="XRP">XRP</option>
+            </select>
+          </div>
+          <button class="btn-ghost" style="width:100%; margin-bottom:10px;" onclick="calculateFinance()">Calcular</button>
+          <div id="finance-result" style="font-size:13px; color:var(--accent-cyan); text-align:center; min-height:20px; line-height:1.6;"></div>
+        </div>
+
+      </div>
+    </div>
+
   </main>
 
-  <!-- WIDGETS SIDEBAR (RIGHT) -->
+  <!-- WIDGETS SIDEBAR (RIGHT) — solo información contextual -->
   <aside id="widgets-sidebar">
 
     <!-- WORLD CLOCK -->
@@ -1272,56 +1363,36 @@
       </div>
     </div>
 
-    <!-- CRONÓMETRO -->
+    <!-- SITUATIONAL EDGE -->
     <div class="widget-box">
-      <span class="widget-label">⏱ Cronómetro</span>
-      <div id="sw-display">00:00.00</div>
-      <div style="display:flex; gap:8px;">
-        <button class="widget-btn-primary" id="sw-btn" onclick="swToggle()">▶ Iniciar</button>
-        <button class="widget-btn-secondary" onclick="swReset()">↺ Reset</button>
-      </div>
-    </div>
-
-    <!-- CUENTA REGRESIVA -->
-    <div class="widget-box">
-      <span class="widget-label">⏳ Cuenta Regresiva</span>
-      <div id="cd-display">00:00</div>
-      <div class="cd-inputs">
-        <input id="cd-min" class="cd-input" type="number" min="0" max="99" placeholder="min" value="5" />
-        <span class="cd-sep">:</span>
-        <input id="cd-sec" class="cd-input" type="number" min="0" max="59" placeholder="seg" value="00" />
-      </div>
-      <div style="display:flex; gap:8px;">
-        <button class="widget-btn-primary" id="cd-btn" onclick="cdToggle()">▶ Iniciar</button>
-        <button class="widget-btn-secondary" onclick="cdReset()">↺ Reset</button>
-      </div>
-    </div>
-
-    <div class="widget-box">
-      <span class="widget-label">Situational Edge</span>
+      <span class="widget-label">🌤 Situational Edge</span>
       <div id="w-weather-box" style="display:flex; gap:16px; align-items:center;">
         <span style="font-size:32px;">☀️</span>
         <div>
-          <div style="font-size:11px; color:var(--text-muted); font-weight: 700;">LA PAZ, BCS</div>
-          <div id="w-weather" style="font-family:'JetBrains Mono'; font-size:24px; color: #fff;">--°</div>
+          <div style="font-size:11px; color:var(--text-muted); font-weight:700;">LA PAZ, BCS</div>
+          <div id="w-weather" style="font-family:'JetBrains Mono'; font-size:24px; color:#fff;">--°</div>
         </div>
       </div>
     </div>
 
-    <div class="widget-box" style="background: linear-gradient(135deg, rgba(var(--accent-cyan-rgb), 0.05), transparent);">
-      <span class="widget-label">Actividad de Red</span>
-      <div style="display: flex; flex-direction: column; gap: 8px;">
+    <!-- ACTIVIDAD DE RED -->
+    <div class="widget-box" style="background:linear-gradient(135deg,rgba(var(--accent-cyan-rgb),0.05),transparent);">
+      <span class="widget-label">📡 Actividad de Red</span>
+      <div style="display:flex; flex-direction:column; gap:8px;">
         <div style="display:flex; justify-content:space-between; font-size:12px;">
-          <span style="color: var(--text-muted);">Misiones</span>
+          <span style="color:var(--text-muted);">Misiones activas</span>
           <span id="w-nodes-count" style="font-weight:800; color:var(--accent-cyan);">0</span>
         </div>
-        <div style="height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden;">
-          <div style="width: 65%; height: 100%; background: var(--accent-cyan); box-shadow: 0 0 10px var(--accent-cyan);"></div>
+        <div style="height:4px; background:rgba(255,255,255,0.05); border-radius:2px; overflow:hidden;">
+          <div style="width:65%; height:100%; background:var(--accent-cyan); box-shadow:0 0 10px var(--accent-cyan);"></div>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted); text-align:right; margin-top:4px;">
+          → <a onclick="switchView('herramientas')" style="color:var(--accent-cyan); cursor:pointer;">Abrir Herramientas</a>
         </div>
       </div>
     </div>
 
-    <div id="sidebar-currencies"></div>
+    <div id="sidebar-currencies" style="display:none;"></div>
   </aside>
 
   <!-- PANEL COLLAPSE TOGGLES -->
@@ -1881,7 +1952,7 @@
       aside#widgets-sidebar { display: none !important; }
       main { padding: 16px 12px; padding-bottom: 100px; }
       #spotlight-container { left: 12px !important; right: 12px !important; bottom: 74px; }
-      body { transform: scale(0.75); transform-origin: top left; width: 133.34vw; height: 133.34vh; overflow: hidden; }
+      body { font-size: 13px; }
       body.nav-collapsed nav#sidebar { display: flex !important; padding: 8px 12px; }
       body.nav-collapsed #nexus-layout { grid-template-columns: 1fr !important; }
       #toggle-nav, #toggle-side { display: none !important; }

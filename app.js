@@ -88,7 +88,7 @@ const TYPE_CONFIG = {
   initWorldClock()
   restorePanels()
 loadSystemSettings()
-  renderCurrencyWidget()
+  // renderCurrencyWidget() — widgets moved to view-herramientas, sidebar-currencies hidden
   // Live countdown display update from inputs
   ;['cd-min','cd-sec'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', () => {
@@ -1082,6 +1082,11 @@ window.openNoteEdit = (id) => {
 }
 
 window.closeNoteModal = () => {
+  // Always remove fullscreen before hiding to avoid broken state on reopen
+  const modalBox = document.querySelector('#note-edit-modal .modal-box')
+  if (modalBox) modalBox.classList.remove('fullscreen')
+  const fsBtn = document.getElementById('note-toggle-size')
+  if (fsBtn) fsBtn.textContent = '🔲'
   document.getElementById('note-edit-modal').classList.add('hidden')
   const panel = document.getElementById('transform-panel')
   if (panel) panel.style.display = 'none'
@@ -1093,7 +1098,9 @@ window.closeNoteModal = () => {
 function toggleNoteSize() {
   const modalBox = document.querySelector('#note-edit-modal .modal-box')
   if (!modalBox) return
-  modalBox.classList.toggle('fullscreen')
+  const isFs = modalBox.classList.toggle('fullscreen')
+  const btn = document.getElementById('note-toggle-size')
+  if (btn) btn.textContent = isFs ? '🗗' : '🔲'
 }
 window.toggleNoteSize = toggleNoteSize;
 
@@ -1586,7 +1593,7 @@ document.getElementById('ln-save')?.addEventListener('click', async () => {
   const dueDate = document.getElementById('ln-due-date').value
   const fromId = document.getElementById('ln-from').value
   const toId = document.getElementById('ln-to').value
-  if (!label || !amount || !fromId || !toId) return alert('Completa los campos obligatorios del préstamo')
+  if (!label || !amount) return alert('Completa al menos la descripción y el monto del préstamo')
   const meta = { label, amount, interest, due_date: dueDate || undefined, lender_id: fromId, borrower_id: toId }
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
     allNodes.unshift({ id: Math.random().toString(36).substr(2,9), type:'loan', content:label, metadata:meta, created_at:new Date().toISOString() })
@@ -1736,13 +1743,19 @@ document.getElementById('btn-logout')?.addEventListener('click', async (e) => {
 // Navegación
 document.querySelectorAll('.nav-item:not(#btn-logout)').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'))
-    btn.classList.add('active')
-    document.querySelectorAll('.view-section').forEach(v=>v.classList.remove('active'))
-    const target = document.getElementById(`view-${btn.dataset.view}`)
-    if (target) target.classList.add('active')
+    if (!btn.dataset.view) return
+    switchView(btn.dataset.view)
   })
 })
+
+window.switchView = function(viewName) {
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'))
+  const navBtn = document.querySelector(`.nav-item[data-view="${viewName}"]`)
+  if (navBtn) navBtn.classList.add('active')
+  document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'))
+  const target = document.getElementById(`view-${viewName}`)
+  if (target) target.classList.add('active')
+}
 
 // ── COLLAPSIBLE PANELS ───────────────────────────────────────────────────────
 // ── AUDIO BEEP UTIL ──────────────────────────────────────────────────────────
