@@ -87,7 +87,8 @@ const TYPE_CONFIG = {
   initTickers()
   initWorldClock()
   restorePanels()
-  loadSystemSettings()
+loadSystemSettings()
+  renderCurrencyWidget()
   // Live countdown display update from inputs
   ;['cd-min','cd-sec'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', () => {
@@ -645,8 +646,16 @@ window.addEventListener('online',  () => { updateOfflineBar(); drainOfflineQueue
 window.addEventListener('offline', updateOfflineBar)
 
 async function insertNodeRaw(raw, metadataOverrides={}) {
+  // Ensure no ghost comments persist when creating a new node
+  // Clear any existing comments in metadata to avoid stray comment artifacts
+  // This addresses the ghost comment issue observed during node insertion
+  // (We deliberately reset comments array before proceeding)
+  // Note: This will not affect existing nodes that already have comments
+
   const { type, metadata, content } = parseNode(raw)
   const finalMetadata = { ...metadata, ...metadataOverrides }
+  // Reset comments to avoid ghost comment artifacts on new nodes
+  finalMetadata.comments = []
 
   if (finalMetadata.account_hint) {
     const hint = finalMetadata.account_hint
@@ -1080,6 +1089,14 @@ window.closeNoteModal = () => {
   editingNoteId = null
 }
 
+// Toggle note editor between normal and fullscreen modes
+function toggleNoteSize() {
+  const modalBox = document.querySelector('#note-edit-modal .modal-box')
+  if (!modalBox) return
+  modalBox.classList.toggle('fullscreen')
+}
+
+
 document.getElementById('ne-save')?.addEventListener('click', async () => {
   const node = allNodes.find(n => n.id === editingNoteId)
   if (!node) return
@@ -1163,7 +1180,7 @@ function renderFinance(nodes) {
   if (!root) return
 
   const accounts = nodes.filter(n => n.type === 'account')
-  const txs = nodes.filter(n => (n.type === 'income' || n.type === 'expense') &&
+  const txs = nodes.filter(n => (n.type === 'income' || n.type === 'expense' || n.type === 'loan') &&
     (activeAccount === 'all' || (n.metadata?.account_id === activeAccount)))
 
   const income  = txs.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
@@ -1206,15 +1223,16 @@ function renderFinance(nodes) {
   const actionsHtml = `
     <div style="display:flex; gap:10px; margin-bottom:24px; flex-wrap:wrap;">
       <button class="fin-action-btn" onclick="openTransferModal()">⇄ Transferir</button>
+      <button class="fin-action-btn" onclick="openLoanModal()">💸 Préstamo</button>
       <button class="fin-action-btn" onclick="exportFinanceCSV()">⬇ CSV</button>
-      <button class="fin-action-btn" onclick="window.print()">🖨 PDF</button>
+      <button class="fin-action-btn" onclick="exportFinancePDF()">🖨 PDF</button>
     </div>
   `
 
   const rowsHtml = txs.length === 0
     ? '<div style="text-align:center; color:var(--text-muted); padding:40px;">Sin transacciones. Escribe <b>+$1000 Salario</b> o <b>-$200 Renta</b></div>'
     : txs.map(n => {
-        const isIncome = n.type === 'income'
+        const isIncome = n.type === 'income'; const isLoan = n.type === 'loan'
         const m = n.metadata || {}
         const acc = accounts.find(a => a.id === m.account_id)
         const fechaDisp = m.fecha || n.created_at?.split('T')[0] || ''
@@ -1273,6 +1291,83 @@ window.exportFinanceCSV = () => {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
   a.download = `nexus-finanzas-${new Date().toISOString().split('T')[0]}.csv`
   a.click()
+}
+
+// Export finance view as PDF (account‑specific)
+function exportFinancePDF() {
+  // Hide all non‑finance sections temporarily
+  const allSections = document.querySelectorAll('.view-section')
+  const hidden = []
+  allSections.forEach(sec => {
+    if (!sec.id.startsWith('view-finance')) {
+      hidden.push(sec)
+      sec.style.display = 'none'
+    }
+  })
+  // Ensure any pending UI updates are applied before printing
+  setTimeout(() => {
+    window.print()
+    // Restore hidden sections after a short delay to avoid race conditions
+    setTimeout(() => {
+      hidden.forEach(sec => sec.style.display = '')
+    }, 500)
+  }, 200)
+}
+
+// Account Modal
+
+// Render currency conversion widget in sidebar
+function renderCurrencyWidget() {
+  const container = document.getElementById('sidebar-currencies')
+  if (!container) return
+  container.innerHTML = `
+    <div class="widget-box">
+      <span class="widget-label">Conversor de Monedas</span>
+      <div style="display:flex; gap:6px; margin-bottom:8px;">
+        <input type="number" id="currency-amount" class="modal-input" placeholder="Monto" style="flex:1;" />
+        <select id="currency-from" class="modal-input" style="width:70px;">
+          <option value="USD">USD</option>
+          <option value="MXN">MXN</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="JPY">JPY</option>
+        </select>
+        <select id="currency-to" class="modal-input" style="width:70px;">
+          <option value="MXN">MXN</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="JPY">JPY</option>
+        </select>
+      </div>
+      <button class="btn-ghost" style="width:100%;" onclick="convertCurrency()">Convertir</button>
+      <div id="currency-result" style="font-size:13px; color:var(--accent-cyan); text-align:center; margin-top:6px;"></div>
+    </div>
+  `
+}
+
+function convertCurrency() {
+  const amount = parseFloat(document.getElementById('currency-amount').value)
+  const from = document.getElementById('currency-from').value
+  const to = document.getElementById('currency-to').value
+  const resultEl = document.getElementById('currency-result')
+  if (isNaN(amount) || !from || !to) {
+    resultEl.textContent = 'Datos inválidos'
+    return
+  }
+  fetch(`https://api.exchangerate.host/convert?from=${from}&to=${to}&amount=${amount}`)
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.result != null) {
+        resultEl.textContent = `${amount} ${from} = ${d.result.toFixed(2)} ${to}`
+      } else {
+        resultEl.textContent = 'Error en la conversión'
+      }
+    })
+    .catch(err => {
+      console.warn('Conversion fetch error', err)
+      resultEl.textContent = 'Error en la conversión'
+    })
 }
 
 // Account Modal
