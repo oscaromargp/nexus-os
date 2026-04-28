@@ -1344,6 +1344,23 @@ function renderCurrencyWidget() {
       <button class="btn-ghost" style="width:100%;" onclick="convertCurrency()">Convertir</button>
       <div id="currency-result" style="font-size:13px; color:var(--accent-cyan); text-align:center; margin-top:6px;"></div>
     </div>
+    <div class="widget-box" style="margin-top:12px;">
+      <span class="widget-label">Calculadora Financiera</span>
+      <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+        <input type="number" id="finance-net" class="modal-input" placeholder="Objetivo neto (MXN)" style="flex:1;" />
+        <input type="number" id="finance-fee" class="modal-input" placeholder="Comisión (%)" style="flex:1;" />
+        <select id="finance-from" class="modal-input" style="width:70px;">
+          <option value="USD">USD</option>
+          <option value="MXN">MXN</option>
+          <option value="EUR">EUR</option>
+          <option value="GBP">GBP</option>
+          <option value="JPY">JPY</option>
+          <option value="USDT">USDT</option>
+        </select>
+      </div>
+      <button class="btn-ghost" style="width:100%" onclick="calculateFinance()">Calcular</button>
+      <div id="finance-result" style="font-size:13px; color:var(--accent-cyan); text-align:center; margin-top:6px;"></div>
+    </div>
   `
 }
 
@@ -1371,6 +1388,41 @@ function convertCurrency() {
     })
 }
 window.convertCurrency = convertCurrency;
+
+// Finance calculator for net amount, fee, and required source amount
+function calculateFinance() {
+  const netTarget = parseFloat(document.getElementById('finance-net').value);
+  const feePct = parseFloat(document.getElementById('finance-fee').value);
+  const from = document.getElementById('finance-from').value;
+  const resultEl = document.getElementById('finance-result');
+  if (isNaN(netTarget) || isNaN(feePct) || !from) {
+    resultEl.textContent = 'Datos inválidos';
+    return;
+  }
+  // Get conversion rate from source currency to MXN (1 unit of FROM = rate MXN)
+  fetch(`https://api.exchangerate.host/convert?from=${from}&to=MXN&amount=1`)
+    .then(r => r.json())
+    .then(d => {
+      if (!d || d.result == null) {
+        resultEl.textContent = 'Error en la conversión';
+        return;
+      }
+      const rate = d.result;
+      const requiredFrom = netTarget / (rate * (1 - feePct / 100));
+      const preFeeMXN = requiredFrom * rate;
+      const feeMXN = preFeeMXN * (feePct / 100);
+      resultEl.innerHTML = `
+        Necesitas enviar <b>${requiredFrom.toFixed(4)} ${from}</b>.<br>
+        Equivalente a <b>${preFeeMXN.toFixed(2)} MXN</b> antes de comisión.<br>
+        Comisión (${feePct}%): <b>${feeMXN.toFixed(2)} MXN</b>.
+      `;
+    })
+    .catch(err => {
+      console.warn('Finance calc fetch error', err);
+      resultEl.textContent = 'Error en la conversión';
+    });
+}
+window.calculateFinance = calculateFinance;
 
 // Account Modal
 window.openAccountModal = (id = null) => {
