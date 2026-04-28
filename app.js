@@ -1385,90 +1385,111 @@ function renderCurrencyWidget() {
   `
 }
 
-function convertCurrency() {
-  const amount = parseFloat(document.getElementById('currency-amount').value)
-  const from = document.getElementById('currency-from').value
-  const to = document.getElementById('currency-to').value
+// ── Helpers de tipo de cambio ─────────────────────────────────────────
+// Fiat: open.er-api.com (gratis, sin key)
+// Crypto: cdn.jsdelivr.net/@fawazahmed0/currency-api (gratis, sin key)
+const CRYPTO_SYMBOLS = ['btc','eth','xrp','usdt','bnb','sol','ada','dot','matic','ltc']
+
+async function fetchFiatRate(from, to) {
+  const r = await fetch(`https://open.er-api.com/v6/latest/${from.toUpperCase()}`)
+  const d = await r.json()
+  if (d.result !== 'success') throw new Error('API error')
+  return d.rates[to.toUpperCase()]
+}
+
+async function fetchCryptoRate(from, to) {
+  const sym = from.toLowerCase()
+  const target = to.toLowerCase()
+  const r = await fetch(`https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/${sym}.json`)
+  const d = await r.json()
+  const rate = d[sym]?.[target]
+  if (rate == null) throw new Error(`No rate for ${from}→${to}`)
+  return rate
+}
+
+// ── Conversor Fiat ────────────────────────────────────────────────────
+async function convertCurrency() {
+  const amount = parseFloat(document.getElementById('currency-amount')?.value)
+  const from   = document.getElementById('currency-from')?.value
+  const to     = document.getElementById('currency-to')?.value
   const resultEl = document.getElementById('currency-result')
-  if (isNaN(amount) || !from || !to) {
-    resultEl.textContent = 'Datos inválidos'
-    return
+  if (!resultEl) return
+  if (isNaN(amount) || amount <= 0) { resultEl.textContent = 'Ingresa un monto válido'; return }
+  resultEl.textContent = '⏳ Consultando...'
+  try {
+    const rate   = await fetchFiatRate(from, to)
+    const result = (amount * rate).toFixed(2)
+    resultEl.innerHTML = `<b>${amount.toLocaleString()} ${from}</b> = <b>${parseFloat(result).toLocaleString()} ${to}</b>`
+  } catch(e) {
+    console.warn('convertCurrency error', e)
+    resultEl.textContent = '⚠️ No se pudo obtener el tipo de cambio'
   }
-  fetch(`https://api.exchangerate.host/convert?from=${from}&to=${to}&amount=${amount}`)
-    .then(r => r.json())
-    .then(d => {
-      if (d && d.result != null) {
-        resultEl.textContent = `${amount} ${from} = ${d.result.toFixed(2)} ${to}`
-      } else {
-        resultEl.textContent = 'Error en la conversión'
-      }
-    })
-    .catch(err => {
-      console.warn('Conversion fetch error', err)
-      resultEl.textContent = 'Error en la conversión'
-    })
 }
 window.convertCurrency = convertCurrency;
 
-// Crypto converter (fiat/crypto conversion)
-function convertCrypto() {
-  const amount = parseFloat(document.getElementById('crypto-amount')?.value);
-  const from = document.getElementById('crypto-from')?.value;
-  const to = document.getElementById('crypto-to')?.value;
-  const resultEl = document.getElementById('crypto-result');
-  if (isNaN(amount) || !from || !to) {
-    resultEl.textContent = 'Datos inválidos';
-    return;
+// ── Conversor Crypto ──────────────────────────────────────────────────
+async function convertCrypto() {
+  const amount   = parseFloat(document.getElementById('crypto-amount')?.value)
+  const from     = document.getElementById('crypto-from')?.value
+  const to       = document.getElementById('crypto-to')?.value
+  const resultEl = document.getElementById('crypto-result')
+  if (!resultEl) return
+  if (isNaN(amount) || amount <= 0) { resultEl.textContent = 'Ingresa un monto válido'; return }
+  resultEl.textContent = '⏳ Consultando...'
+  try {
+    const isCryptoFrom = CRYPTO_SYMBOLS.includes(from.toLowerCase())
+    let result
+    if (isCryptoFrom) {
+      const rate = await fetchCryptoRate(from, to)
+      result = amount * rate
+    } else {
+      // fiat → crypto: get crypto→fiat then invert
+      const rate = await fetchCryptoRate(to, from)
+      result = amount / rate
+    }
+    const decimals = result < 1 ? 6 : 2
+    resultEl.innerHTML = `<b>${amount} ${from}</b> = <b>${result.toFixed(decimals)} ${to}</b>`
+  } catch(e) {
+    console.warn('convertCrypto error', e)
+    resultEl.textContent = '⚠️ No se pudo obtener la cotización'
   }
-  // Using exchangerate.host which supports crypto rates
-  fetch(`https://api.exchangerate.host/convert?from=${from}&to=${to}&amount=${amount}`)
-    .then(r => r.json())
-    .then(d => {
-      if (d && d.result != null) {
-        resultEl.textContent = `${amount} ${from} = ${d.result.toFixed(2)} ${to}`;
-      } else {
-        resultEl.textContent = 'Error en la conversión';
-      }
-    })
-    .catch(err => {
-      console.warn('Crypto conversion error', err);
-      resultEl.textContent = 'Error en la conversión';
-    });
 }
 window.convertCrypto = convertCrypto;
 
-// Finance calculator for net amount, fee, and required source amount
-function calculateFinance() {
-  const netTarget = parseFloat(document.getElementById('finance-net').value);
-  const feePct = parseFloat(document.getElementById('finance-fee').value);
-  const from = document.getElementById('finance-from').value;
-  const resultEl = document.getElementById('finance-result');
-  if (isNaN(netTarget) || isNaN(feePct) || !from) {
-    resultEl.textContent = 'Datos inválidos';
-    return;
+// ── Calculadora Financiera ────────────────────────────────────────────
+// Responde: ¿cuánto tengo que enviar en moneda X para que lleguen Y MXN netos?
+async function calculateFinance() {
+  const netTarget = parseFloat(document.getElementById('finance-net')?.value)
+  const feePct    = parseFloat(document.getElementById('finance-fee')?.value) || 0
+  const from      = document.getElementById('finance-from')?.value
+  const resultEl  = document.getElementById('finance-result')
+  if (!resultEl) return
+  if (isNaN(netTarget) || netTarget <= 0 || !from) { resultEl.textContent = 'Ingresa objetivo neto y moneda'; return }
+  resultEl.textContent = '⏳ Calculando...'
+  try {
+    const isCrypto = CRYPTO_SYMBOLS.includes(from.toLowerCase())
+    let rateFROMtoMXN
+    if (from.toUpperCase() === 'MXN') {
+      rateFROMtoMXN = 1
+    } else if (isCrypto) {
+      rateFROMtoMXN = await fetchCryptoRate(from, 'mxn')
+    } else {
+      rateFROMtoMXN = await fetchFiatRate(from, 'MXN')
+    }
+    // gross = neto / (1 - fee%)
+    const grossMXN      = netTarget / (1 - feePct / 100)
+    const requiredFrom  = grossMXN / rateFROMtoMXN
+    const feeMXN        = grossMXN - netTarget
+    const decimals      = isCrypto ? 6 : 2
+    resultEl.innerHTML = `
+      Enviar: <b>${requiredFrom.toFixed(decimals)} ${from}</b><br>
+      Bruto MXN: <b>$${grossMXN.toFixed(2)}</b> &nbsp;|&nbsp; Comisión: <b>$${feeMXN.toFixed(2)}</b><br>
+      Neto recibido: <b>$${netTarget.toFixed(2)} MXN</b>
+    `
+  } catch(e) {
+    console.warn('calculateFinance error', e)
+    resultEl.textContent = '⚠️ Error al obtener tipo de cambio'
   }
-  // Get conversion rate from source currency to MXN (1 unit of FROM = rate MXN)
-  fetch(`https://api.exchangerate.host/convert?from=${from}&to=MXN&amount=1`)
-    .then(r => r.json())
-    .then(d => {
-      if (!d || d.result == null) {
-        resultEl.textContent = 'Error en la conversión';
-        return;
-      }
-      const rate = d.result;
-      const requiredFrom = netTarget / (rate * (1 - feePct / 100));
-      const preFeeMXN = requiredFrom * rate;
-      const feeMXN = preFeeMXN * (feePct / 100);
-      resultEl.innerHTML = `
-        Necesitas enviar <b>${requiredFrom.toFixed(4)} ${from}</b>.<br>
-        Equivalente a <b>${preFeeMXN.toFixed(2)} MXN</b> antes de comisión.<br>
-        Comisión (${feePct}%): <b>${feeMXN.toFixed(2)} MXN</b>.
-      `;
-    })
-    .catch(err => {
-      console.warn('Finance calc fetch error', err);
-      resultEl.textContent = 'Error en la conversión';
-    });
 }
 window.calculateFinance = calculateFinance;
 
@@ -1522,8 +1543,8 @@ document.getElementById('am-delete')?.addEventListener('click', async () => {
 // Transfer Modal
 window.openTransferModal = () => {
   const accounts = allNodes.filter(n => n.type === 'account')
-  if (accounts.length < 2) { alert('Necesitas al menos 2 cuentas para transferir.'); return }
-  const opts = accounts.map(a => `<option value="${a.id}">${esc(a.metadata?.label||a.content)}</option>`).join('')
+  const noAccOpt = `<option value="">— Sin cuenta —</option>`
+  const opts = noAccOpt + accounts.map(a => `<option value="${a.id}">${esc(a.metadata?.label||a.content)}</option>`).join('')
   document.getElementById('tr-from').innerHTML = opts
   document.getElementById('tr-to').innerHTML   = opts
   document.getElementById('transfer-modal').classList.remove('hidden')
@@ -1549,8 +1570,8 @@ document.getElementById('tr-save')?.addEventListener('click', async () => {
 // Loan Modal
 window.openLoanModal = () => {
   const accounts = allNodes.filter(n => n.type === 'account')
-  if (accounts.length < 2) { alert('Necesitas al menos 2 cuentas para crear un préstamo.'); return }
-  const opts = accounts.map(a => `<option value="${a.id}">${esc(a.metadata?.label||a.content)}</option>`).join('')
+  const noAccOpt = `<option value="">— Sin cuenta —</option>`
+  const opts = noAccOpt + accounts.map(a => `<option value="${a.id}">${esc(a.metadata?.label||a.content)}</option>`).join('')
   document.getElementById('ln-from').innerHTML = opts
   document.getElementById('ln-to').innerHTML = opts
   document.getElementById('loan-modal').classList.remove('hidden')
