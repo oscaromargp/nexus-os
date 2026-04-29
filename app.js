@@ -1250,27 +1250,24 @@ function renderFinance(nodes) {
   const net = income - expense
   const statsHtml = `
     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:28px;">
-      <div style="background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2); border-radius:14px; padding:20px;">
-        <div style="font-size:11px; color:#6ee7b7; font-weight:700; letter-spacing:1px; margin-bottom:8px;">↑ INGRESOS</div>
-        <div style="font-size:22px; font-weight:800; color:#4ade80; font-family:'JetBrains Mono',monospace;">+$${income.toLocaleString()}</div>
+      <div style="background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2); border-radius:14px; padding:20px; position:relative; overflow:hidden;">
+        <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:40px;opacity:0.06;pointer-events:none;">↑</div>
+        <div style="font-size:10px; color:#6ee7b7; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">↑ INGRESOS</div>
+        <div id="fin-kpi-income" style="font-size:24px; font-weight:800; color:#4ade80; font-family:'JetBrains Mono',monospace;">+$${income.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${txs.filter(n=>n.type==='income').length} transacciones</div>
       </div>
-      <div style="background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.2); border-radius:14px; padding:20px;">
-        <div style="font-size:11px; color:#fca5a5; font-weight:700; letter-spacing:1px; margin-bottom:8px;">↓ GASTOS</div>
-        <div style="font-size:22px; font-weight:800; color:#f87171; font-family:'JetBrains Mono',monospace;">-$${expense.toLocaleString()}</div>
+      <div style="background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.2); border-radius:14px; padding:20px; position:relative; overflow:hidden;">
+        <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:40px;opacity:0.06;pointer-events:none;">↓</div>
+        <div style="font-size:10px; color:#fca5a5; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">↓ GASTOS</div>
+        <div id="fin-kpi-expense" style="font-size:24px; font-weight:800; color:#f87171; font-family:'JetBrains Mono',monospace;">-$${expense.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${txs.filter(n=>n.type==='expense').length} transacciones</div>
       </div>
-      <div style="background:${net>=0?'rgba(0,246,255,0.06)':'rgba(251,146,60,0.06)'}; border:1px solid ${net>=0?'rgba(0,246,255,0.2)':'rgba(251,146,60,0.2)'}; border-radius:14px; padding:20px;">
-        <div style="font-size:11px; color:${net>=0?'#67e8f9':'#fdba74'}; font-weight:700; letter-spacing:1px; margin-bottom:8px;">⚖ SALDO NETO</div>
-        <div style="font-size:22px; font-weight:800; color:${net>=0?'#00f6ff':'#fb923c'}; font-family:'JetBrains Mono',monospace;">${net>=0?'+':''}\$${net.toLocaleString()}</div>
+      <div style="background:${net>=0?'rgba(0,246,255,0.06)':'rgba(251,146,60,0.06)'}; border:1px solid ${net>=0?'rgba(0,246,255,0.2)':'rgba(251,146,60,0.2)'}; border-radius:14px; padding:20px; position:relative; overflow:hidden;">
+        <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:40px;opacity:0.06;pointer-events:none;">⚖</div>
+        <div style="font-size:10px; color:${net>=0?'#67e8f9':'#fdba74'}; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">⚖ SALDO NETO</div>
+        <div id="fin-kpi-net" style="font-size:24px; font-weight:800; color:${net>=0?'#00f6ff':'#fb923c'}; font-family:'JetBrains Mono',monospace;">${net>=0?'+':''}\$${net.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${net>=0?'✅ Positivo':'⚠️ Déficit'}</div>
       </div>
-    </div>
-  `
-
-  const actionsHtml = `
-    <div style="display:flex; gap:10px; margin-bottom:24px; flex-wrap:wrap;">
-      <button class="fin-action-btn" onclick="openTransferModal()">⇄ Transferir</button>
-      <button class="fin-action-btn" onclick="openLoanModal()">💸 Préstamo</button>
-      <button class="fin-action-btn" onclick="exportFinanceCSV()">⬇ CSV</button>
-      <button class="fin-action-btn" onclick="exportFinancePDF()">🖨 PDF</button>
     </div>
   `
 
@@ -1309,8 +1306,46 @@ function renderFinance(nodes) {
         </div>
       `}).join('')
 
-  root.innerHTML = accountTabsHtml + statsHtml + actionsHtml +
+  // Charts toggle button in actions
+  const chartsBtn = `<button class="fin-action-btn" id="fin-charts-toggle" onclick="toggleFinanceCharts()" style="background:${finChartsVisible?'rgba(0,246,255,0.15)':'rgba(255,255,255,0.05)'};color:${finChartsVisible?'var(--accent-cyan)':'var(--text-muted)'};">📊 Gráficos</button>`
+  const actionsHtmlFull = `
+    <div style="display:flex; gap:10px; margin-bottom:24px; flex-wrap:wrap;">
+      <button class="fin-action-btn" onclick="openTransferModal()">⇄ Transferir</button>
+      <button class="fin-action-btn" onclick="openLoanModal()">💸 Préstamo</button>
+      <button class="fin-action-btn" onclick="exportFinanceCSV()">⬇ CSV</button>
+      <button class="fin-action-btn" onclick="exportFinancePDF()">🖨 PDF</button>
+      ${chartsBtn}
+    </div>
+  `
+
+  // Charts panel (3 canvases)
+  const chartsHtml = `
+    <div id="finance-charts-panel" style="display:${finChartsVisible?'grid':'none'};grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:28px;">
+      <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:18px;">
+        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:14px;">INGRESOS VS GASTOS · ÚLTIMOS 6 MESES</div>
+        <canvas id="chart-bar" style="max-height:220px;"></canvas>
+      </div>
+      <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:18px;">
+        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:14px;">DISTRIBUCIÓN DE GASTOS</div>
+        <canvas id="chart-donut" style="max-height:220px;"></canvas>
+      </div>
+      <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:18px;">
+        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:14px;">PATRIMONIO NETO · HISTORIAL</div>
+        <canvas id="chart-line" style="max-height:220px;"></canvas>
+      </div>
+    </div>
+  `
+
+  root.innerHTML = accountTabsHtml + statsHtml + actionsHtmlFull + chartsHtml +
     `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:24px;">${rowsHtml}</div>`
+
+  // Animate KPI numbers
+  animateStatEl('fin-kpi-income',  income)
+  animateStatEl('fin-kpi-expense', expense)
+  animateStatEl('fin-kpi-net',     net)
+
+  // Render charts after DOM is painted
+  if (finChartsVisible) setTimeout(() => renderFinanceCharts(nodes), 0)
 }
 
 window.setActiveAccount = (id) => {
@@ -1998,8 +2033,178 @@ document.getElementById('cal-export')?.addEventListener('click', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
+//  FINANCE CHARTS (Chart.js)
+// ═══════════════════════════════════════════════════════════════
+
+function ensureChartDefaults() {
+  if (chartJsReady || typeof Chart === 'undefined') return
+  chartJsReady = true
+  Chart.defaults.color = '#64748b'
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.06)'
+  Chart.defaults.font.family = "'JetBrains Mono', monospace"
+  Chart.defaults.font.size = 10
+  Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(10,15,28,0.95)'
+  Chart.defaults.plugins.tooltip.borderColor = 'rgba(255,255,255,0.1)'
+  Chart.defaults.plugins.tooltip.borderWidth = 1
+  Chart.defaults.plugins.tooltip.padding = 10
+  Chart.defaults.plugins.tooltip.titleColor = '#e2e8f0'
+  Chart.defaults.plugins.tooltip.bodyColor = '#94a3b8'
+}
+
+function destroyCharts() {
+  Object.keys(finCharts).forEach(k => { if (finCharts[k]) { finCharts[k].destroy(); finCharts[k] = null } })
+}
+
+window.toggleFinanceCharts = () => {
+  finChartsVisible = !finChartsVisible
+  const panel = document.getElementById('finance-charts-panel')
+  const btn   = document.getElementById('fin-charts-toggle')
+  if (panel) panel.style.display = finChartsVisible ? 'grid' : 'none'
+  if (btn)   { btn.style.background = finChartsVisible ? 'rgba(0,246,255,0.15)' : 'rgba(255,255,255,0.05)'; btn.style.color = finChartsVisible ? 'var(--accent-cyan)' : 'var(--text-muted)' }
+  if (finChartsVisible) setTimeout(() => renderFinanceCharts(allNodes), 0)
+  else destroyCharts()
+}
+
+function renderFinanceCharts(nodes) {
+  if (typeof Chart === 'undefined') return
+  ensureChartDefaults()
+  destroyCharts()
+
+  const today = new Date()
+
+  // ── 1. BAR: Ingresos vs Gastos últimos 6 meses ──────────────
+  const months = Array.from({length:6}, (_,i) => {
+    const d = new Date(today.getFullYear(), today.getMonth() - (5-i), 1)
+    return { year:d.getFullYear(), month:d.getMonth(), label: d.toLocaleDateString('es-ES',{month:'short',year:'2-digit'}).toUpperCase() }
+  })
+  const incomeByM  = months.map(m => nodes.filter(n => n.type==='income'  && new Date(n.created_at).getFullYear()===m.year && new Date(n.created_at).getMonth()===m.month).reduce((s,n)=>s+(n.metadata?.amount||0),0))
+  const expenseByM = months.map(m => nodes.filter(n => n.type==='expense' && new Date(n.created_at).getFullYear()===m.year && new Date(n.created_at).getMonth()===m.month).reduce((s,n)=>s+(n.metadata?.amount||0),0))
+  const barCtx = document.getElementById('chart-bar')
+  if (barCtx) {
+    finCharts.bar = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: months.map(m => m.label),
+        datasets: [
+          { label:'Ingresos', data: incomeByM,  backgroundColor:'rgba(74,222,128,0.7)', borderColor:'#4ade80', borderWidth:1, borderRadius:6 },
+          { label:'Gastos',   data: expenseByM, backgroundColor:'rgba(248,113,113,0.7)', borderColor:'#f87171', borderWidth:1, borderRadius:6 }
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:true,
+        plugins: { legend:{ position:'bottom', labels:{ boxWidth:10, padding:12 } } },
+        scales: {
+          x: { grid:{ color:'rgba(255,255,255,0.04)' }, ticks:{ color:'#64748b' } },
+          y: { grid:{ color:'rgba(255,255,255,0.04)' }, ticks:{ color:'#64748b', callback: v => '$'+v.toLocaleString() } }
+        }
+      }
+    })
+  }
+
+  // ── 2. DONUT: Distribución de gastos por categoría ───────────
+  const expenses = nodes.filter(n => n.type==='expense')
+  const cats = {}
+  expenses.forEach(n => {
+    const tags = (n.metadata?.tags||[]).filter(t => t !== '#expense' && t !== '#gasto')
+    const key = tags[0] || n.metadata?.label?.split(' ').slice(0,2).join(' ') || 'Otros'
+    cats[key] = (cats[key]||0) + (n.metadata?.amount||0)
+  })
+  const sortedCats = Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,8)
+  const DONUT_COLORS = ['#00f0ff','#4ade80','#c084fc','#fb923c','#f87171','#facc15','#38bdf8','#a78bfa']
+  const donutCtx = document.getElementById('chart-donut')
+  if (donutCtx) {
+    if (sortedCats.length === 0) {
+      donutCtx.parentElement.innerHTML += '<div style="text-align:center;color:var(--text-muted);font-size:11px;padding:20px 0;">Sin gastos registrados aún</div>'
+    } else {
+      finCharts.donut = new Chart(donutCtx, {
+        type: 'doughnut',
+        data: {
+          labels: sortedCats.map(([k])=>k),
+          datasets: [{ data: sortedCats.map(([,v])=>v), backgroundColor: DONUT_COLORS.slice(0,sortedCats.length), borderWidth:2, borderColor:'rgba(10,15,28,0.8)' }]
+        },
+        options: {
+          responsive:true, maintainAspectRatio:true,
+          cutout:'62%',
+          plugins: {
+            legend:{ position:'bottom', labels:{ boxWidth:10, padding:10 } },
+            tooltip:{ callbacks:{ label: ctx => ` $${ctx.parsed.toLocaleString()}` } }
+          }
+        }
+      })
+    }
+  }
+
+  // ── 3. LINE: Patrimonio neto acumulado ───────────────────────
+  const allTx = nodes.filter(n => n.type==='income'||n.type==='expense').sort((a,b)=>new Date(a.created_at)-new Date(b.created_at))
+  let cum = 0
+  const linePoints = allTx.map(n => {
+    cum += n.type==='income' ? (n.metadata?.amount||0) : -(n.metadata?.amount||0)
+    return { x: n.created_at.split('T')[0], y: Math.round(cum) }
+  })
+  const lineCtx = document.getElementById('chart-line')
+  if (lineCtx) {
+    if (linePoints.length === 0) {
+      lineCtx.parentElement.innerHTML += '<div style="text-align:center;color:var(--text-muted);font-size:11px;padding:20px 0;">Sin datos suficientes aún</div>'
+    } else {
+      const isPositive = linePoints[linePoints.length-1]?.y >= 0
+      const lineColor = isPositive ? '#4ade80' : '#f87171'
+      finCharts.line = new Chart(lineCtx, {
+        type: 'line',
+        data: {
+          labels: linePoints.map(p=>p.x),
+          datasets: [{
+            label:'Patrimonio Neto',
+            data: linePoints.map(p=>p.y),
+            borderColor: lineColor,
+            backgroundColor: lineColor.replace(')', ',0.08)').replace('rgb','rgba'),
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3,
+            pointRadius: linePoints.length > 20 ? 0 : 3,
+            pointHoverRadius: 5,
+            pointBackgroundColor: lineColor
+          }]
+        },
+        options: {
+          responsive:true, maintainAspectRatio:true,
+          plugins: { legend:{ display:false } },
+          scales: {
+            x: { display: linePoints.length <= 30, grid:{ color:'rgba(255,255,255,0.04)' }, ticks:{ color:'#64748b', maxTicksLimit:6 } },
+            y: { grid:{ color:'rgba(255,255,255,0.04)' }, ticks:{ color:'#64748b', callback: v => '$'+v.toLocaleString() } }
+          }
+        }
+      })
+    }
+  }
+}
+
+// ── ANIMATED KPI COUNTER ──────────────────────────────────────
+function animateStatEl(id, target) {
+  const el = document.getElementById(id)
+  if (!el || !target) return
+  const isNeg = target < 0
+  const abs = Math.abs(target)
+  const prefix = id === 'fin-kpi-income' ? '+$' : id === 'fin-kpi-expense' ? '-$' : (isNeg ? '-$' : '+$')
+  const start = performance.now()
+  const duration = 700
+  const run = (now) => {
+    const p = Math.min((now - start) / duration, 1)
+    const eased = 1 - Math.pow(1-p, 3)
+    el.textContent = prefix + Math.floor(abs * eased).toLocaleString()
+    if (p < 1) requestAnimationFrame(run)
+    else el.textContent = prefix + abs.toLocaleString()
+  }
+  requestAnimationFrame(run)
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  AGENDA FINANCIERA
 // ═══════════════════════════════════════════════════════════════
+// Finance charts state
+const finCharts = { bar: null, donut: null, line: null }
+let finChartsVisible = true
+let chartJsReady = false
+
 let agendaItemType = 'card'
 let agendaColor    = '#60a5fa'
 let editingAgendaId = null
