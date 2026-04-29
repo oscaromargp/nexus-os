@@ -1550,10 +1550,17 @@ document.getElementById('am-delete')?.addEventListener('click', async () => {
 // Transfer Modal
 window.openTransferModal = () => {
   const accounts = allNodes.filter(n => n.type === 'account')
-  const noAccOpt = `<option value="">— Sin cuenta —</option>`
-  const opts = noAccOpt + accounts.map(a => `<option value="${a.id}">${esc(a.metadata?.label||a.content)}</option>`).join('')
+  if (accounts.length === 0) {
+    alert('Primero da de alta al menos una cuenta en Bio-Finanzas para poder transferir.')
+    return
+  }
+  const opts = accounts.map(a => `<option value="${a.id}">${esc(a.metadata?.label||a.content)}</option>`).join('')
   document.getElementById('tr-from').innerHTML = opts
-  document.getElementById('tr-to').innerHTML   = opts
+  // Para "to" seleccionar el segundo por defecto si existe
+  document.getElementById('tr-to').innerHTML = opts
+  if (accounts.length >= 2) {
+    document.getElementById('tr-to').selectedIndex = 1
+  }
   document.getElementById('transfer-modal').classList.remove('hidden')
 }
 window.closeTransferModal = () => document.getElementById('transfer-modal').classList.add('hidden')
@@ -1562,25 +1569,30 @@ document.getElementById('tr-save')?.addEventListener('click', async () => {
   const toId   = document.getElementById('tr-to').value
   const amount = parseFloat(document.getElementById('tr-amount').value) || 0
   const label  = document.getElementById('tr-label').value.trim() || 'Transferencia'
-  if (!amount || fromId === toId) return alert('Verifica los datos.')
-  const expense = { owner_id:currentUser?.id, type:'expense', content:label, metadata:{ label, amount, account_id:fromId, transfer:true } }
-  const income  = { owner_id:currentUser?.id, type:'income',  content:label, metadata:{ label, amount, account_id:toId, transfer:true } }
+  if (!amount) return alert('Ingresa el monto de la transferencia.')
+  if (fromId && toId && fromId === toId) return alert('La cuenta origen y destino no pueden ser la misma.')
+  const expense = { owner_id:currentUser?.id, type:'expense', content:label, metadata:{ label, amount, account_id:fromId||null, transfer:true } }
+  const income  = { owner_id:currentUser?.id, type:'income',  content:label, metadata:{ label, amount, account_id:toId||null,   transfer:true } }
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
     allNodes.unshift({...expense, id:Math.random().toString(36).substr(2,9), created_at:new Date().toISOString()})
     allNodes.unshift({...income,  id:Math.random().toString(36).substr(2,9), created_at:new Date().toISOString()})
   } else {
-    await supabase.from('nodes').insert([expense, income])
+    const { error } = await supabase.from('nodes').insert([expense, income])
+    if (error) { alert('Error al guardar: ' + error.message); return }
   }
   closeTransferModal(); renderAll()
 })
 
-// Loan Modal
+// Loan Modal — cuentas opcionales, contactos como prestamista/prestatario
 window.openLoanModal = () => {
-  const accounts = allNodes.filter(n => n.type === 'account')
-  const noAccOpt = `<option value="">— Sin cuenta —</option>`
-  const opts = noAccOpt + accounts.map(a => `<option value="${a.id}">${esc(a.metadata?.label||a.content)}</option>`).join('')
-  document.getElementById('ln-from').innerHTML = opts
-  document.getElementById('ln-to').innerHTML = opts
+  const accounts  = allNodes.filter(n => n.type === 'account')
+  const contacts  = allNodes.filter(n => n.type === 'contact' || n.type === 'persona')
+  const noOpt     = `<option value="">— Ninguna —</option>`
+  const accOpts   = accounts.map(a  => `<option value="${a.id}">💳 ${esc(a.metadata?.label||a.content)}</option>`).join('')
+  const contOpts  = contacts.map(c  => `<option value="${c.id}">👤 ${esc(c.metadata?.name||c.content)}</option>`).join('')
+  const allOpts   = noOpt + accOpts + contOpts
+  document.getElementById('ln-from').innerHTML = allOpts
+  document.getElementById('ln-to').innerHTML   = allOpts
   document.getElementById('loan-modal').classList.remove('hidden')
 }
 window.closeLoanModal = () => {
