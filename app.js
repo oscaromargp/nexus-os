@@ -19,6 +19,9 @@ let activeAccount = 'all'
 let editingNoteId = null
 let editingAccountId = null
 let calView = 'month'
+let selectedEventColor = '#00f0ff'
+let calDragNodeId = null
+let editingEventId = null
 let pendingTransformType = null
 let editingFinanceId = null
 let currentContactId = null
@@ -700,6 +703,39 @@ async function insertNodeRaw(raw, metadataOverrides={}) {
   }
 }
 
+// ── INSERT DIRECT NODE (bypasses parseNode — used for events, agenda items) ───
+async function insertDirectNode(type, content, metadata) {
+  const finalMeta = { comments: [], ...metadata }
+  const tempId = '_tmp_' + Date.now()
+  const tempNode = { id: tempId, type, content, metadata: finalMeta, created_at: new Date().toISOString(), _optimistic: true }
+  allNodes.unshift(tempNode)
+  renderAll()
+
+  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+    const idx = allNodes.findIndex(n => n.id === tempId)
+    const perm = { ...tempNode, id: Math.random().toString(36).substr(2,9), _optimistic: false }
+    if (idx !== -1) allNodes[idx] = perm; else allNodes.unshift(perm)
+    renderAll(); showToast(`✅ ${content}`); return
+  }
+  const payload = { owner_id: currentUser.id, content, type, metadata: finalMeta }
+  if (!navigator.onLine) {
+    const q = loadOfflineQueue(); q.push({ payload }); saveOfflineQueue(q)
+    const idx = allNodes.findIndex(n => n.id === tempId)
+    if (idx !== -1) allNodes[idx] = { ...tempNode, _offline: true }
+    renderAll(); updateOfflineBar(); showToast('📵 Sin conexión — guardado localmente'); return
+  }
+  const { data: inserted, error } = await supabase.from('nodes').insert(payload).select()
+  const idx = allNodes.findIndex(n => n.id === tempId)
+  if (!error && inserted?.[0]) {
+    if (idx !== -1) allNodes[idx] = inserted[0]; else allNodes.unshift(inserted[0])
+    renderAll(); showToast(`✅ ${content}`)
+  } else {
+    const q = loadOfflineQueue(); q.push({ payload }); saveOfflineQueue(q)
+    if (idx !== -1) allNodes[idx] = { ...tempNode, _offline: true }
+    renderAll(); updateOfflineBar(); showToast('⚠️ Guardado localmente')
+  }
+}
+
 function showToast(msg) {
   const el = document.getElementById('node-msg')
   if (!el) return
@@ -941,6 +977,7 @@ function renderAll() {
   renderCalendar(nodes)
   renderCronica(nodes)
   renderContacts()
+  renderAgenda(allNodes)
   renderFilterBar()
 }
 
@@ -1615,134 +1652,658 @@ document.getElementById('ln-save')?.addEventListener('click', async () => {
   }
   closeLoanModal(); renderAll()
 })
+// ── CALENDAR HELPERS ─────────────────────────────────────────────────────────
+function calNodeDate(n) {
+  return n.metadata?.date || n.metadata?.due_date || n.created_at?.split('T')[0] || ''
+}
+function calEvColor(e) {
+  if (e.metadata?.color) return e.metadata.color
+  const evType = e.metadata?.eventType
+  if (evType === 'tarea')   return '#4ade80'
+  if (evType === 'cita')    return '#fb923c'
+  if (evType === 'reunion') return '#c084fc'
+  return TYPE_CONFIG[e.type]?.color || 'var(--accent-cyan)'
+}
+function calEvIcon(e) {
+  const t = e.metadata?.eventType
+  if (t === 'tarea')   return '✅'
+  if (t === 'cita')    return '🤝'
+  if (t === 'reunion') return '👥'
+  return '📅'
+}
+function calGetDayEvents(nodes, dateStr) {
+  return nodes.filter(n => n.type !== 'account' && calNodeDate(n) === dateStr)
+}
+function addHour(t) {
+  const [h, m] = t.split(':').map(Number)
+  return `${Math.min(h+1,23).toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`
+}
+
+// ── RENDER CALENDAR (dispatcher + title + tab state) ─────────────────────────
 function renderCalendar(nodes) {
   const root = document.getElementById('cal-days-root')
   if (!root) return
+
+  // Title
   const monthTitle = document.getElementById('cal-month-title')
-  if (monthTitle) monthTitle.textContent = new Intl.DateTimeFormat('es-ES',{month:'long', year:'numeric'}).format(calDate).toUpperCase()
+  if (monthTitle) {
+    if (calView === 'month') {
+      monthTitle.textContent = new Intl.DateTimeFormat('es-ES',{month:'long', year:'numeric'}).format(calDate).toUpperCase()
+    } else if (calView === 'week') {
+      const sow = new Date(calDate); sow.setDate(calDate.getDate() - calDate.getDay())
+      const eow = new Date(sow); eow.setDate(sow.getDate() + 6)
+      const fmt = new Intl.DateTimeFormat('es-ES',{day:'numeric',month:'short'})
+      monthTitle.textContent = `${fmt.format(sow)} — ${fmt.format(eow)} ${eow.getFullYear()}`
+    } else {
+      monthTitle.textContent = calDate.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase()
+    }
+  }
+  // Tab highlighting
+  ['month','week','day'].forEach(v => {
+    document.getElementById(`cal-view-${v}`)?.classList.toggle('fin-tab-active', calView === v)
+  })
 
   if (calView === 'month') renderCalMonth(root, nodes)
   else if (calView === 'week') renderCalWeek(root, nodes)
   else renderCalDay(root, nodes)
 }
 
+// ── MONTH VIEW ────────────────────────────────────────────────────────────────
 function renderCalMonth(root, nodes) {
-  root.style.gridTemplateColumns = 'repeat(7,1fr)'
-  const firstDay = new Date(calDate.getFullYear(), calDate.getMonth(), 1).getDay()
+  root.style.cssText = 'display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:rgba(255,255,255,0.05); border-radius:12px; overflow:hidden;'
+  const firstDay   = new Date(calDate.getFullYear(), calDate.getMonth(), 1).getDay()
   const daysInMonth = new Date(calDate.getFullYear(), calDate.getMonth() + 1, 0).getDate()
-  const prevMonthDays = new Date(calDate.getFullYear(), calDate.getMonth(), 0).getDate()
-  const weekDays = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
-  let html = weekDays.map(d => `<div style="background:rgba(0,0,0,0.3); padding:8px; text-align:center; font-size:10px; font-weight:800; color:var(--text-muted); letter-spacing:1px;">${d}</div>`).join('')
-  for (let i = firstDay - 1; i >= 0; i--) html += `<div class="cal-day other-month"><span class="cal-number">${prevMonthDays - i}</span></div>`
+  const prevDays   = new Date(calDate.getFullYear(), calDate.getMonth(), 0).getDate()
+  const weekDays   = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+  let html = weekDays.map(d => `<div style="background:rgba(0,0,0,0.3);padding:8px;text-align:center;font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;">${d}</div>`).join('')
+  for (let i = firstDay - 1; i >= 0; i--) html += `<div class="cal-day other-month"><span class="cal-number">${prevDays - i}</span></div>`
   for (let d = 1; d <= daysInMonth; d++) {
     const today = new Date()
     const isToday = today.getFullYear() === calDate.getFullYear() && today.getMonth() === calDate.getMonth() && today.getDate() === d
     const dayDate = `${calDate.getFullYear()}-${(calDate.getMonth()+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`
-    const events = nodes.filter(n => n.type !== 'account' && (n.metadata?.due_date === dayDate || n.created_at?.startsWith(dayDate)))
-    html += `
-      <div class="cal-day ${isToday ? 'today' : ''}" ondblclick="planDay('${dayDate}')">
+    const events = calGetDayEvents(nodes, dayDate)
+    const chips = events.slice(0,3).map(e => {
+      const clr = calEvColor(e)
+      const icon = calEvIcon(e)
+      const timeStr = e.metadata?.timeStart ? `<span style="opacity:0.6;margin-right:2px;">${e.metadata.timeStart}</span>` : ''
+      return `<div class="cal-event" draggable="true"
+        ondragstart="calEventDragStart(event,'${e.id}')"
+        onclick="event.stopPropagation();openCardModal('${e.id}')"
+        style="border-left-color:${clr};background:${clr}22;color:${clr};">
+        ${timeStr}${icon} ${esc(e.metadata?.label || e.content)}
+      </div>`
+    }).join('')
+    html += `<div class="cal-day ${isToday?'today':''}"
+      ondblclick="openEventModal('${dayDate}',null)"
+      ondragover="calDayDragOver(event)" ondragleave="calDayDragLeave(event)" ondrop="calDayDrop(event,'${dayDate}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
         <span class="cal-number">${d}</span>
-        <div class="cal-events-list">
-          ${events.slice(0,3).map(e => {
-            const tc = TYPE_CONFIG[e.type] || {}
-            return `<div class="cal-event" style="border-left-color:${tc.color||'var(--accent-cyan)'}; background:${(tc.border||'rgba(0,246,255,0.3)').replace('0.4','0.1')}; color:${tc.color||'var(--accent-cyan)'};" onclick="openCardModal('${e.id}')">${esc(e.metadata?.label || e.content)}</div>`
-          }).join('')}
-          ${events.length > 3 ? `<div style="font-size:9px; color:var(--text-muted); margin-top:2px;">+${events.length-3} más</div>` : ''}
-        </div>
-      </div>`
-  }
-  root.innerHTML = html
-}
-
-function renderCalWeek(root, nodes) {
-  root.style.gridTemplateColumns = 'repeat(7,1fr)'
-  const startOfWeek = new Date(calDate)
-  startOfWeek.setDate(calDate.getDate() - calDate.getDay())
-  let html = ''
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(startOfWeek)
-    d.setDate(startOfWeek.getDate() + i)
-    const dayDate = d.toISOString().split('T')[0]
-    const isToday = d.toDateString() === new Date().toDateString()
-    const events = nodes.filter(n => n.type !== 'account' && (n.metadata?.due_date === dayDate || n.created_at?.startsWith(dayDate)))
-    html += `
-      <div class="cal-day" style="min-height:200px; ${isToday ? 'background:var(--accent-cyan-dim)' : ''}">
-        <span class="cal-number" style="font-size:11px;">${['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][d.getDay()]} ${d.getDate()}</span>
-        ${events.map(e => {
-          const tc = TYPE_CONFIG[e.type] || {}
-          return `<div class="cal-event" style="border-left-color:${tc.color||'var(--accent-cyan)'}; background:${(tc.border||'rgba(0,246,255,0.3)').replace('0.4','0.12')}; color:${tc.color||'var(--accent-cyan)'}; white-space:normal; margin-bottom:4px;" onclick="openCardModal('${e.id}')">${esc(e.metadata?.label || e.content)}</div>`
-        }).join('')}
-        <div style="font-size:10px; color:var(--text-dim); margin-top:auto; cursor:pointer;" ondblclick="planDay('${dayDate}')">+ Añadir</div>
-      </div>`
-  }
-  root.innerHTML = html
-}
-
-function renderCalDay(root, nodes) {
-  root.style.gridTemplateColumns = '1fr'
-  const dayDate = calDate.toISOString().split('T')[0]
-  const events = nodes.filter(n => n.type !== 'account' && (n.metadata?.due_date === dayDate || n.created_at?.startsWith(dayDate)))
-  const isToday = calDate.toDateString() === new Date().toDateString()
-  root.innerHTML = `
-    <div style="background:var(--bg-panel); padding:24px; min-height:400px;">
-      <div style="font-size:14px; font-weight:700; color:${isToday?'var(--accent-cyan)':'#fff'}; margin-bottom:20px;">
-        ${calDate.toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' }).toUpperCase()}
+        <span class="cal-add-btn" onclick="event.stopPropagation();openEventModal('${dayDate}',null)"
+          style="font-size:16px;color:var(--text-dim);cursor:pointer;opacity:0;transition:opacity 0.2s;line-height:1;padding:0 2px;">+</span>
       </div>
-      ${events.length === 0
-        ? `<div style="text-align:center; color:var(--text-muted); padding:40px;">Sin eventos. Doble clic para planificar.</div>`
-        : events.map(e => {
-            const tc = TYPE_CONFIG[e.type] || {}
-            return `<div onclick="openCardModal('${e.id}')" style="display:flex; gap:12px; align-items:center; padding:14px; margin-bottom:10px; background:${tc.bg||'var(--glass-bg)'}; border:1px solid ${tc.border||'var(--glass-border)'}; border-radius:12px; cursor:pointer;">
-              <div style="width:6px; height:40px; border-radius:3px; background:${tc.color||'var(--accent-cyan)'}; flex-shrink:0;"></div>
-              <div>
-                <div style="font-size:14px; color:#fff; font-weight:600;">${esc(e.metadata?.label || e.content)}</div>
-                <div style="font-size:11px; color:var(--text-muted);">${tc.label||''}</div>
-              </div>
-            </div>`
-          }).join('')}
-      <div ondblclick="planDay('${dayDate}')" style="padding:14px; border:1px dashed var(--glass-border); border-radius:12px; text-align:center; color:var(--text-muted); cursor:pointer; font-size:13px; margin-top:8px;">+ Planificar este día</div>
+      <div class="cal-events-list">
+        ${chips}
+        ${events.length > 3 ? `<div style="font-size:9px;color:var(--text-muted);margin-top:2px;">+${events.length-3} más</div>` : ''}
+      </div>
+    </div>`
+  }
+  root.innerHTML = html
+}
+
+// ── TIME GRID BUILDER (shared by week + day) ──────────────────────────────────
+const HOUR_H = 60   // px per hour — 60px/hr = 1px/min
+function buildTimeGrid(dayColumns) {
+  const TOTAL_H = 24 * HOUR_H
+  const TIME_W  = dayColumns.length === 1 ? 64 : 48
+  const nCols   = dayColumns.length
+  const todayStr = new Date().toISOString().split('T')[0]
+  const now = new Date()
+  const nowPx = now.getHours() * HOUR_H + Math.floor(now.getMinutes() * HOUR_H / 60)
+
+  // Header
+  let headerHtml = `<div style="width:${TIME_W}px;padding:6px 4px;"></div>`
+  dayColumns.forEach(({dayLabel, isToday}) => {
+    headerHtml += `<div style="padding:8px 4px;text-align:center;border-left:1px solid rgba(255,255,255,0.06);${isToday?'color:var(--accent-cyan);font-weight:800;':'color:var(--text-muted);font-weight:600;'}">${dayLabel}</div>`
+  })
+
+  // All-day row
+  let alldayHtml = `<div style="width:${TIME_W}px;padding:4px 4px;font-size:9px;color:var(--text-muted);display:flex;align-items:center;justify-content:flex-end;padding-right:6px;">Todo día</div>`
+  dayColumns.forEach(({date, allDayEvents, isToday}) => {
+    alldayHtml += `<div style="padding:2px 4px;border-left:1px solid rgba(255,255,255,0.06);${isToday?'background:rgba(0,246,255,0.02)':''}" ondblclick="openEventModal('${date}',null)">
+      ${allDayEvents.map(e => {
+        const clr = calEvColor(e)
+        return `<div onclick="openCardModal('${e.id}')" style="background:${clr}22;color:${clr};border-left:2px solid ${clr};padding:1px 4px;border-radius:3px;font-size:9px;font-weight:600;margin-bottom:1px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${calEvIcon(e)} ${esc(e.metadata?.label||e.content)}</div>`
+      }).join('')}
+    </div>`
+  })
+
+  // Time labels column
+  let timeColHtml = ''
+  for (let h = 0; h < 24; h++) {
+    timeColHtml += `<div class="cal-timelabel" style="top:${h * HOUR_H}px;">${h.toString().padStart(2,'0')}:00</div>`
+    timeColHtml += `<div class="cal-half-line" style="top:${h * HOUR_H + 30}px;"></div>`
+  }
+
+  // Day columns
+  let dayColsHtml = ''
+  dayColumns.forEach(({date, timedEvents, isToday}) => {
+    let inner = ''
+    for (let h = 0; h < 24; h++) {
+      inner += `<div class="cal-hour-line" style="top:${h * HOUR_H}px;"></div>`
+    }
+    if (isToday) {
+      inner += `<div class="cal-now-line" style="top:${nowPx}px;"><div class="cal-now-dot"></div></div>`
+    }
+    timedEvents.forEach(e => {
+      const ts = e.metadata?.timeStart || '00:00'
+      const te = e.metadata?.timeEnd   || addHour(ts)
+      const [sh, sm] = ts.split(':').map(Number)
+      const [eh, em] = te.split(':').map(Number)
+      const topPx = sh * HOUR_H + Math.floor(sm * HOUR_H / 60)
+      const heightPx = Math.max((eh * 60 + em) - (sh * 60 + sm), 30)
+      const clr = calEvColor(e)
+      inner += `<div class="cal-time-event"
+        style="top:${topPx}px;height:${heightPx}px;background:${clr}22;color:${clr};border-color:${clr};"
+        onclick="openCardModal('${e.id}')" title="${esc(e.metadata?.label||e.content)}">
+        <div style="font-size:9px;opacity:0.65;">${ts}–${te}</div>
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${calEvIcon(e)} ${esc(e.metadata?.label||e.content)}</div>
+      </div>`
+    })
+    dayColsHtml += `<div class="cal-daycol" style="height:${TOTAL_H}px;${isToday?'background:rgba(0,246,255,0.015)':''}"
+      ondblclick="calTimeDblClick(event,'${date}')"
+      ondragover="calDayDragOver(event)" ondragleave="calDayDragLeave(event)" ondrop="calDayDrop(event,'${date}')">
+      ${inner}
+    </div>`
+  })
+
+  const gridCols = `${TIME_W}px repeat(${nCols},1fr)`
+  return `
+    <div class="cal-timegrid-wrapper">
+      <div class="cal-timegrid-header" style="grid-template-columns:${gridCols};">${headerHtml}</div>
+      <div class="cal-timegrid-allday" style="grid-template-columns:${gridCols};">${alldayHtml}</div>
+      <div class="cal-timegrid-scroll" id="cal-tg-scroll">
+        <div class="cal-timegrid-body" style="grid-template-columns:${TIME_W}px repeat(${nCols},1fr);height:${TOTAL_H}px;">
+          <div class="cal-timecol" style="height:${TOTAL_H}px;">${timeColHtml}</div>
+          ${dayColsHtml}
+        </div>
+      </div>
     </div>`
 }
 
-window.planDay = (date) => {
-  const existing = document.getElementById('plan-day-form')
-  if (existing) existing.remove()
-  const form = document.createElement('div')
-  form.id = 'plan-day-form'
-  form.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--bg-panel);border:1px solid var(--accent-cyan);border-radius:14px;padding:16px;z-index:2000;display:flex;gap:8px;width:400px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,0.6);'
-  form.innerHTML = `
-    <input type="text" id="plan-day-input" placeholder="Tarea para el ${date}..." style="flex:1;background:rgba(0,0,0,0.3);border:1px solid var(--glass-border);border-radius:8px;padding:10px;color:#fff;outline:none;font-size:14px;" />
-    <button onclick="confirmPlanDay('${date}')" style="background:var(--accent-cyan);color:#000;border:none;border-radius:8px;padding:10px 16px;cursor:pointer;font-weight:800;">+</button>
-    <button onclick="document.getElementById('plan-day-form')?.remove()" style="background:rgba(255,255,255,0.1);color:#fff;border:none;border-radius:8px;padding:10px 12px;cursor:pointer;">✕</button>`
-  document.body.appendChild(form)
-  setTimeout(() => document.getElementById('plan-day-input')?.focus(), 50)
+// ── WEEK VIEW ─────────────────────────────────────────────────────────────────
+function renderCalWeek(root, nodes) {
+  root.style.cssText = 'display:block;'
+  const sow = new Date(calDate); sow.setDate(calDate.getDate() - calDate.getDay())
+  const DAYS = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+  const dayColumns = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(sow); d.setDate(sow.getDate() + i)
+    const dateStr = d.toISOString().split('T')[0]
+    const isToday = dateStr === new Date().toISOString().split('T')[0]
+    const allEv = calGetDayEvents(nodes, dateStr)
+    dayColumns.push({
+      date: dateStr, isToday,
+      dayLabel: `<div style="font-size:10px;">${DAYS[d.getDay()]}</div><div style="font-size:${isToday?20:15}px;">${d.getDate()}</div>`,
+      allDayEvents: allEv.filter(e => !e.metadata?.timeStart || e.metadata?.allDay),
+      timedEvents:  allEv.filter(e =>  e.metadata?.timeStart && !e.metadata?.allDay)
+    })
+  }
+  root.innerHTML = buildTimeGrid(dayColumns)
+  setTimeout(() => { const s = document.getElementById('cal-tg-scroll'); if (s) s.scrollTop = 7 * HOUR_H }, 0)
 }
 
-window.confirmPlanDay = (date) => {
-  const task = document.getElementById('plan-day-input')?.value.trim()
-  if (task) insertNodeRaw(`#tarea ${task}`, { due_date: date })
-  document.getElementById('plan-day-form')?.remove()
+// ── DAY VIEW ──────────────────────────────────────────────────────────────────
+function renderCalDay(root, nodes) {
+  root.style.cssText = 'display:block;'
+  const dateStr = calDate.toISOString().split('T')[0]
+  const isToday = dateStr === new Date().toISOString().split('T')[0]
+  const DAYS = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+  const allEv = calGetDayEvents(nodes, dateStr)
+  const dayColumns = [{
+    date: dateStr, isToday,
+    dayLabel: `<div style="font-size:11px;">${DAYS[calDate.getDay()]}</div><div style="font-size:22px;">${calDate.getDate()}</div>`,
+    allDayEvents: allEv.filter(e => !e.metadata?.timeStart || e.metadata?.allDay),
+    timedEvents:  allEv.filter(e =>  e.metadata?.timeStart && !e.metadata?.allDay)
+  }]
+  root.innerHTML = buildTimeGrid(dayColumns)
+  setTimeout(() => { const s = document.getElementById('cal-tg-scroll'); if (s) s.scrollTop = 7 * HOUR_H }, 0)
 }
 
-document.getElementById('cal-prev')?.addEventListener('click', () => { calDate.setMonth(calDate.getMonth() - 1); renderAll(); })
-document.getElementById('cal-next')?.addEventListener('click', () => { calDate.setMonth(calDate.getMonth() + 1); renderAll(); })
+// ── DRAG & DROP ────────────────────────────────────────────────────────────────
+window.calEventDragStart = (ev, nodeId) => {
+  calDragNodeId = nodeId
+  ev.dataTransfer.effectAllowed = 'move'
+}
+window.calDayDragOver = (ev) => {
+  ev.preventDefault()
+  ev.currentTarget.style.background = 'rgba(0,246,255,0.08)'
+}
+window.calDayDragLeave = (ev) => { ev.currentTarget.style.background = '' }
+window.calDayDrop = async (ev, date) => {
+  ev.preventDefault(); ev.currentTarget.style.background = ''
+  const nodeId = calDragNodeId
+  calDragNodeId = null
+  if (!nodeId) return
+  const node = allNodes.find(n => n.id === nodeId)
+  if (!node) return
+  const newMeta = { ...node.metadata, due_date: date, date }
+  node.metadata = newMeta
+  renderAll(); showToast(`📅 Movido al ${date}`)
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+    await supabase.from('nodes').update({ metadata: newMeta }).eq('id', nodeId)
+}
+window.calTimeDblClick = (ev, date) => {
+  const col = ev.currentTarget
+  const rect = col.getBoundingClientRect()
+  const scrollTop = document.getElementById('cal-tg-scroll')?.scrollTop || 0
+  const relY = ev.clientY - rect.top + scrollTop
+  const hour = Math.floor(relY / HOUR_H)
+  const min  = Math.floor(((relY % HOUR_H) / HOUR_H) * 60 / 15) * 15
+  const timeStr = `${hour.toString().padStart(2,'0')}:${min.toString().padStart(2,'0')}`
+  openEventModal(date, timeStr)
+}
 
+// ── EVENT MODAL ───────────────────────────────────────────────────────────────
+window.openEventModal = (date, time) => {
+  editingEventId = null
+  document.getElementById('ecm-title-label').textContent = 'Nuevo Evento'
+  document.getElementById('ev-title').value = ''
+  document.getElementById('ev-date').value = date || new Date().toISOString().split('T')[0]
+  document.getElementById('ev-allday').checked = !time
+  document.getElementById('ev-time-start').value = time || '09:00'
+  document.getElementById('ev-time-end').value = time ? addHour(time) : '10:00'
+  document.getElementById('ev-location').value = ''
+  document.getElementById('ev-description').value = ''
+  // Reset type
+  const defType = document.querySelector('input[name="ev-type"][value="evento"]')
+  if (defType) defType.checked = true
+  // Reset color
+  selectedEventColor = '#00f0ff'
+  document.querySelectorAll('.ev-color-swatch').forEach(s => s.classList.remove('active'))
+  document.querySelector('.ev-color-swatch[data-color="#00f0ff"]')?.classList.add('active')
+  toggleAlldayFields()
+  document.getElementById('event-create-modal').classList.remove('hidden')
+  setTimeout(() => document.getElementById('ev-title')?.focus(), 60)
+}
+window.closeEventModal = () => {
+  document.getElementById('event-create-modal')?.classList.add('hidden')
+  editingEventId = null
+}
+window.toggleAlldayFields = () => {
+  const allDay = document.getElementById('ev-allday')?.checked
+  document.getElementById('ev-time-start-wrap').style.display = allDay ? 'none' : ''
+  document.getElementById('ev-time-end-wrap').style.display   = allDay ? 'none' : ''
+}
+window.selectEventColor = (btn) => {
+  document.querySelectorAll('.ev-color-swatch').forEach(s => s.classList.remove('active'))
+  btn.classList.add('active')
+  selectedEventColor = btn.dataset.color
+}
+window.saveEvent = async () => {
+  const title = document.getElementById('ev-title')?.value.trim()
+  if (!title) { showToast('⚠️ El título es obligatorio'); return }
+  const eventType = document.querySelector('input[name="ev-type"]:checked')?.value || 'evento'
+  const date      = document.getElementById('ev-date')?.value
+  const allDay    = document.getElementById('ev-allday')?.checked
+  const timeStart = allDay ? null : (document.getElementById('ev-time-start')?.value || null)
+  const timeEnd   = allDay ? null : (document.getElementById('ev-time-end')?.value   || null)
+  const location  = document.getElementById('ev-location')?.value.trim()
+  const description = document.getElementById('ev-description')?.value.trim()
+  closeEventModal()
+  const meta = { label: title, eventType, date, due_date: date, timeStart, timeEnd, allDay: allDay||false, location, description, color: selectedEventColor, tags: [] }
+  if (editingEventId) {
+    // Update existing
+    const node = allNodes.find(n => n.id === editingEventId)
+    if (node) {
+      node.metadata = { ...node.metadata, ...meta }
+      renderAll()
+      if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+        await supabase.from('nodes').update({ metadata: node.metadata, content: title }).eq('id', editingEventId)
+      showToast('✅ Evento actualizado')
+    }
+  } else {
+    await insertDirectNode('event', title, meta)
+  }
+}
+
+// ── CALENDAR NAV BUTTONS ───────────────────────────────────────────────────────
+document.getElementById('cal-prev')?.addEventListener('click', () => {
+  if (calView === 'week') calDate.setDate(calDate.getDate() - 7)
+  else if (calView === 'day') calDate.setDate(calDate.getDate() - 1)
+  else calDate.setMonth(calDate.getMonth() - 1)
+  renderAll()
+})
+document.getElementById('cal-next')?.addEventListener('click', () => {
+  if (calView === 'week') calDate.setDate(calDate.getDate() + 7)
+  else if (calView === 'day') calDate.setDate(calDate.getDate() + 1)
+  else calDate.setMonth(calDate.getMonth() + 1)
+  renderAll()
+})
+document.getElementById('cal-today')?.addEventListener('click', () => { calDate = new Date(); renderAll() })
 document.getElementById('cal-view-month')?.addEventListener('click', () => { calView = 'month'; renderAll() })
-document.getElementById('cal-view-week')?.addEventListener('click', () => { calView = 'week'; renderAll() })
-document.getElementById('cal-view-day')?.addEventListener('click', () => { calView = 'day'; renderAll() })
+document.getElementById('cal-view-week')?.addEventListener('click',  () => { calView = 'week';  renderAll() })
+document.getElementById('cal-view-day')?.addEventListener('click',   () => { calView = 'day';   renderAll() })
 document.getElementById('cal-export')?.addEventListener('click', () => {
   const events = allNodes.filter(n => n.type !== 'account' && n.type !== 'note')
   const rows = events.map(n => [
     new Date(n.created_at).toLocaleDateString('es-MX'),
-    n.metadata?.due_date || '',
+    n.metadata?.date || n.metadata?.due_date || '',
     TYPE_CONFIG[n.type]?.label || n.type,
     JSON.stringify(n.metadata?.label || n.content)
   ].join(','))
-  const csv = '\ufeff' + ['Creado,Vencimiento,Tipo,Descripción', ...rows].join('\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const csv = '\ufeff' + ['Creado,Fecha,Tipo,Descripción',...rows].join('\n')
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' })
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
   a.download = `nexus-calendario-${new Date().toISOString().split('T')[0]}.csv`; a.click()
 })
+
+// ═══════════════════════════════════════════════════════════════
+//  AGENDA FINANCIERA
+// ═══════════════════════════════════════════════════════════════
+let agendaItemType = 'card'
+let agendaColor    = '#60a5fa'
+let editingAgendaId = null
+
+function renderAgenda(nodes) {
+  const cards  = nodes.filter(n => n.type === 'card')
+  const subs   = nodes.filter(n => n.type === 'subscription')
+  const bills  = nodes.filter(n => n.type === 'bill')
+  const today  = new Date()
+  const todayN = today.getDate()
+
+  // ── KPIs ─────────────────────────────────────────────────────
+  const totalSubs  = subs.reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const totalBills = bills.filter(b => !b.metadata?.paid).reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const totalFixed = totalSubs + totalBills
+  const kpis = [
+    { label:'Gasto fijo mensual', value:fmt$(totalFixed), color:'#fb923c' },
+    { label:'Suscripciones activas', value: subs.length, color:'#a78bfa' },
+    { label:'Tarjetas registradas', value: cards.length, color:'#60a5fa' },
+    { label:'Pagos pendientes', value: bills.filter(b => !b.metadata?.paid).length, color:'#f87171' },
+  ]
+  const kpiEl = document.getElementById('agenda-kpis')
+  if (kpiEl) kpiEl.innerHTML = kpis.map(k => `
+    <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px 20px;">
+      <div style="font-size:22px;font-weight:800;color:${k.color};font-family:'JetBrains Mono',monospace;">${k.value}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${k.label}</div>
+    </div>`).join('')
+
+  // ── PLAN DEL MES (tabla doble entrada/salida) ─────────────────
+  const planMonth = document.getElementById('agenda-plan-month')
+  if (planMonth) planMonth.textContent = today.toLocaleDateString('es-ES',{month:'long',year:'numeric'}).toUpperCase()
+
+  const incomeNodes = nodes.filter(n => n.type === 'income')
+  const expenseNodes = nodes.filter(n => n.type === 'expense')
+  const totalIn  = incomeNodes.reduce((s,n)  => s + (n.metadata?.amount||0), 0)
+  const totalOut = expenseNodes.reduce((s,n) => s + (n.metadata?.amount||0), 0) + totalFixed
+
+  const planBody = document.getElementById('agenda-plan-body')
+  const planFoot = document.getElementById('agenda-plan-foot')
+  if (planBody) {
+    const rows = []
+    // Ingresos como filas de entrada
+    incomeNodes.slice(0,5).forEach(n => {
+      rows.push(`<tr>
+        <td style="padding:5px 4px;color:#fff;">${esc(n.metadata?.label||n.content)}</td>
+        <td style="text-align:right;padding:5px 4px;color:#4ade80;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
+        <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
+        <td style="text-align:right;padding:5px 4px;"></td>
+      </tr>`)
+    })
+    // Suscripciones como salidas fijas
+    subs.forEach(n => {
+      rows.push(`<tr>
+        <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)} <span style="font-size:9px;opacity:0.5;">(día ${n.metadata?.dayOfMonth||1})</span></td>
+        <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
+        <td style="text-align:right;padding:5px 4px;color:#f87171;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
+        <td style="text-align:right;padding:5px 4px;"></td>
+      </tr>`)
+    })
+    // Pagos fijos pendientes
+    bills.filter(b => !b.metadata?.paid).forEach(n => {
+      rows.push(`<tr>
+        <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)}</td>
+        <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
+        <td style="text-align:right;padding:5px 4px;color:#fb923c;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
+        <td style="text-align:right;padding:5px 4px;"></td>
+      </tr>`)
+    })
+    planBody.innerHTML = rows.join('') || '<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--text-muted);font-size:12px;">Agrega ingresos y compromisos para ver el plan</td></tr>'
+  }
+  const saldo = totalIn - totalOut
+  const saldoClr = saldo >= 0 ? '#4ade80' : '#f87171'
+  if (planFoot) planFoot.innerHTML = `
+    <tr style="border-top:1px solid var(--glass-border);">
+      <td style="padding:8px 4px;font-weight:800;color:#fff;">TOTAL</td>
+      <td style="text-align:right;padding:8px 4px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">${fmt$(totalIn)}</td>
+      <td style="text-align:right;padding:8px 4px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">${fmt$(totalOut)}</td>
+      <td style="text-align:right;padding:8px 4px;font-weight:800;color:${saldoClr};font-family:'JetBrains Mono',monospace;">${fmt$(saldo)}</td>
+    </tr>`
+
+  // ── PRÓXIMOS 7 DÍAS ───────────────────────────────────────────
+  const upcomingEl = document.getElementById('agenda-upcoming')
+  if (upcomingEl) {
+    const upcoming = []
+    const in7 = new Date(today); in7.setDate(today.getDate() + 7)
+    // Cards: días de corte y pago
+    cards.forEach(c => {
+      const m = c.metadata || {}
+      ;[[m.cutDay,'✂️ Corte','#60a5fa'],[m.payDay,'💳 Pago','#f87171']].forEach(([day,label,color]) => {
+        if (!day) return
+        const d = new Date(today.getFullYear(), today.getMonth(), day)
+        if (d < today) d.setMonth(d.getMonth() + 1)
+        if (d <= in7) upcoming.push({ date:d, label:`${label} ${esc(m.label||c.content)}`, color })
+      })
+    })
+    // Subs
+    subs.forEach(s => {
+      const day = s.metadata?.dayOfMonth
+      if (!day) return
+      const d = new Date(today.getFullYear(), today.getMonth(), day)
+      if (d < today) d.setMonth(d.getMonth() + 1)
+      if (d <= in7) upcoming.push({ date:d, label:`🔄 ${esc(s.metadata?.label||s.content)}`, color:'#a78bfa', amount: s.metadata?.amount })
+    })
+    // Bills
+    bills.filter(b => !b.metadata?.paid && b.metadata?.dueDate).forEach(b => {
+      const d = new Date(b.metadata.dueDate)
+      if (d >= today && d <= in7) upcoming.push({ date:d, label:`📋 ${esc(b.metadata?.label||b.content)}`, color:'#fb923c', amount: b.metadata?.amount })
+    })
+    upcoming.sort((a,b) => a.date - b.date)
+
+    const diffDays = d => Math.ceil((d - today) / 86400000)
+    upcomingEl.innerHTML = upcoming.length === 0
+      ? `<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:12px;">Sin vencimientos próximos esta semana 🎉</div>`
+      : upcoming.map(u => {
+          const days = diffDays(u.date)
+          const urgency = days <= 1 ? '#f87171' : days <= 3 ? '#fb923c' : u.color
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${urgency}14;border:1px solid ${urgency}33;border-radius:10px;margin-bottom:8px;">
+            <div style="background:${urgency};color:#000;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800;font-family:'JetBrains Mono',monospace;flex-shrink:0;">
+              ${days === 0 ? 'HOY' : days === 1 ? 'MAÑANA' : `${days}d`}
+            </div>
+            <div style="flex:1;">
+              <div style="font-size:12px;font-weight:600;color:#fff;">${u.label}</div>
+              <div style="font-size:10px;color:var(--text-muted);">${u.date.toLocaleDateString('es-MX',{weekday:'short',day:'numeric',month:'short'})}</div>
+            </div>
+            ${u.amount ? `<div style="font-size:11px;font-weight:700;color:${urgency};font-family:'JetBrains Mono',monospace;">${fmt$(u.amount)}</div>` : ''}
+          </div>`
+        }).join('')
+  }
+
+  // ── BADGE en nav ──────────────────────────────────────────────
+  const navAgenda = document.querySelector('[data-view="agenda"]')
+  const urgentCount = (() => {
+    const in2 = new Date(today); in2.setDate(today.getDate() + 2)
+    let cnt = 0
+    ;[...cards,...subs,...bills].forEach(n => {
+      const m = n.metadata || {}
+      const days = [m.cutDay, m.payDay, m.dayOfMonth].filter(Boolean)
+      days.forEach(d => {
+        const dt = new Date(today.getFullYear(), today.getMonth(), d)
+        if (dt < today) dt.setMonth(dt.getMonth() + 1)
+        if (dt <= in2) cnt++
+      })
+    })
+    return cnt
+  })()
+  if (navAgenda) {
+    const badge = navAgenda.querySelector('.agenda-badge') || (() => {
+      const b = document.createElement('span')
+      b.className = 'agenda-badge'
+      b.style.cssText = 'background:#f87171;color:#000;border-radius:50%;font-size:9px;font-weight:800;padding:1px 5px;margin-left:4px;'
+      navAgenda.appendChild(b); return b
+    })()
+    if (urgentCount > 0) { badge.textContent = urgentCount; badge.style.display = 'inline' }
+    else badge.style.display = 'none'
+  }
+
+  // ── TARJETAS ──────────────────────────────────────────────────
+  const cardsEl = document.getElementById('agenda-cards')
+  if (cardsEl) cardsEl.innerHTML = cards.length === 0
+    ? `<div style="color:var(--text-muted);font-size:12px;">Sin tarjetas. Agrega una con el botón "+" de arriba.</div>`
+    : cards.map(c => {
+        const m = c.metadata || {}
+        const clr = m.color || '#60a5fa'
+        const daysToPayment = (() => {
+          if (!m.payDay) return null
+          const d = new Date(today.getFullYear(), today.getMonth(), m.payDay)
+          if (d < today) d.setMonth(d.getMonth() + 1)
+          return Math.ceil((d - today) / 86400000)
+        })()
+        return `<div style="background:linear-gradient(135deg,${clr}22,${clr}08);border:1px solid ${clr}44;border-radius:16px;padding:20px;position:relative;overflow:hidden;">
+          <div style="position:absolute;right:12px;top:12px;opacity:0.08;font-size:60px;pointer-events:none;">💳</div>
+          <div style="font-size:11px;color:${clr};font-weight:700;letter-spacing:1px;margin-bottom:6px;">${esc(m.label||c.content)}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:16px;color:#fff;margin-bottom:12px;">•••• •••• •••• ${m.lastFour||'????'}</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            <div><div style="font-size:9px;color:var(--text-muted);">CORTE</div><div style="font-size:13px;font-weight:700;color:#fff;">Día ${m.cutDay||'—'}</div></div>
+            <div><div style="font-size:9px;color:var(--text-muted);">PAGO</div><div style="font-size:13px;font-weight:700;color:${daysToPayment<=3?'#f87171':'#fff'};">Día ${m.payDay||'—'}${daysToPayment!==null?` <span style="font-size:10px;opacity:0.7;">(${daysToPayment}d)</span>`:''}</div></div>
+            ${m.limit ? `<div><div style="font-size:9px;color:var(--text-muted);">LÍMITE</div><div style="font-size:13px;font-weight:700;color:#fff;">${fmt$(m.limit)}</div></div>` : ''}
+          </div>
+          <button onclick="deleteAgendaItem('${c.id}')" style="position:absolute;bottom:10px;right:10px;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;" title="Eliminar">✕</button>
+        </div>`
+      }).join('')
+
+  // ── SUSCRIPCIONES ─────────────────────────────────────────────
+  const subsEl = document.getElementById('agenda-subs')
+  if (subsEl) subsEl.innerHTML = subs.length === 0
+    ? `<div style="color:var(--text-muted);font-size:12px;">Sin suscripciones registradas.</div>`
+    : subs.map(s => {
+        const m = s.metadata || {}
+        const clr = m.color || '#a78bfa'
+        return `<div style="background:${clr}18;border:1px solid ${clr}33;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;">
+          <div style="font-size:24px;">${m.category?.split(' ')[0] || '🔄'}</div>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:700;color:#fff;">${esc(m.label||s.content)}</div>
+            <div style="font-size:10px;color:var(--text-muted);">Día ${m.dayOfMonth||'—'} · ${m.currency||'MXN'}</div>
+          </div>
+          <div style="font-size:13px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${fmt$(m.amount||0)}</div>
+          <button onclick="deleteAgendaItem('${s.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Eliminar">✕</button>
+        </div>`
+      }).join('')
+
+  // ── PAGOS FIJOS ───────────────────────────────────────────────
+  const billsEl = document.getElementById('agenda-bills')
+  if (billsEl) billsEl.innerHTML = bills.length === 0
+    ? `<div style="color:var(--text-muted);font-size:12px;">Sin pagos fijos registrados.</div>`
+    : bills.map(b => {
+        const m = b.metadata || {}
+        const clr = m.color || '#fb923c'
+        const paid = m.paid || false
+        return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${paid?'rgba(74,222,128,0.05)':clr+'14'};border:1px solid ${paid?'#4ade8033':clr+'33'};border-radius:12px;opacity:${paid?0.6:1};">
+          <button onclick="toggleBillPaid('${b.id}')" style="background:${paid?'#4ade80':'transparent'};border:2px solid ${paid?'#4ade80':clr};width:20px;height:20px;border-radius:5px;cursor:pointer;flex-shrink:0;color:${paid?'#000':'transparent'};font-size:12px;display:flex;align-items:center;justify-content:center;">✓</button>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:600;color:#fff;${paid?'text-decoration:line-through;':''}">${esc(m.label||b.content)}</div>
+            ${m.dueDate?`<div style="font-size:10px;color:var(--text-muted);">Vence: ${m.dueDate}</div>`:''}
+          </div>
+          <div style="font-size:13px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${fmt$(m.amount||0)}</div>
+          <button onclick="deleteAgendaItem('${b.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Eliminar">✕</button>
+        </div>`
+      }).join('')
+}
+
+function fmt$(n) {
+  if (typeof n !== 'number') return '$0'
+  return '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+// ── AGENDA MODAL ──────────────────────────────────────────────────────────────
+window.openAgendaModal = (type) => {
+  agendaItemType = type
+  editingAgendaId = null
+  agendaColor = type === 'card' ? '#60a5fa' : type === 'subscription' ? '#a78bfa' : '#fb923c'
+  const titles = { card:'Nueva Tarjeta de Crédito', subscription:'Nueva Suscripción / Servicio', bill:'Nuevo Pago Fijo' }
+  document.getElementById('agenda-modal-title').textContent = titles[type] || 'Nuevo Ítem'
+  document.getElementById('ag-name').value = ''
+  // Toggle field groups
+  document.getElementById('ag-fields-card').style.display      = type === 'card' ? '' : 'none'
+  document.getElementById('ag-fields-recurring').style.display = type !== 'card' ? '' : 'none'
+  document.getElementById('ag-category-wrap').style.display    = type === 'subscription' ? '' : 'none'
+  if (type !== 'card') {
+    document.getElementById('ag-amount').value = ''
+    document.getElementById('ag-day').value    = ''
+    document.getElementById('ag-category').value = ''
+  } else {
+    document.getElementById('ag-last4').value   = ''
+    document.getElementById('ag-limit').value   = ''
+    document.getElementById('ag-cut-day').value = ''
+    document.getElementById('ag-pay-day').value = ''
+  }
+  // Reset color swatches
+  document.querySelectorAll('#agenda-modal .ev-color-swatch').forEach(s => s.classList.remove('active'))
+  document.querySelector(`#agenda-modal .ev-color-swatch[data-color="${agendaColor}"]`)?.classList.add('active')
+  document.getElementById('agenda-modal').classList.remove('hidden')
+  setTimeout(() => document.getElementById('ag-name')?.focus(), 60)
+}
+window.closeAgendaModal = () => document.getElementById('agenda-modal')?.classList.add('hidden')
+window.selectAgendaColor = (btn) => {
+  document.querySelectorAll('#agenda-modal .ev-color-swatch').forEach(s => s.classList.remove('active'))
+  btn.classList.add('active'); agendaColor = btn.dataset.color
+}
+window.saveAgendaItem = async () => {
+  const name = document.getElementById('ag-name')?.value.trim()
+  if (!name) { showToast('⚠️ El nombre es obligatorio'); return }
+  let meta = { label: name, color: agendaColor }
+  if (agendaItemType === 'card') {
+    meta = { ...meta,
+      lastFour: document.getElementById('ag-last4')?.value,
+      limit:    parseFloat(document.getElementById('ag-limit')?.value) || 0,
+      cutDay:   parseInt(document.getElementById('ag-cut-day')?.value) || null,
+      payDay:   parseInt(document.getElementById('ag-pay-day')?.value) || null,
+      currency: document.getElementById('ag-card-currency')?.value || 'MXN'
+    }
+  } else {
+    meta = { ...meta,
+      amount:     parseFloat(document.getElementById('ag-amount')?.value) || 0,
+      currency:   document.getElementById('ag-currency')?.value || 'MXN',
+      dayOfMonth: parseInt(document.getElementById('ag-day')?.value) || null,
+      category:   document.getElementById('ag-category')?.value.trim(),
+      paid: false
+    }
+    if (agendaItemType === 'bill') {
+      meta.dueDate = (() => {
+        const day = meta.dayOfMonth; if (!day) return ''
+        const d = new Date(); d.setDate(day)
+        if (d < new Date()) d.setMonth(d.getMonth() + 1)
+        return d.toISOString().split('T')[0]
+      })()
+    }
+  }
+  closeAgendaModal()
+  await insertDirectNode(agendaItemType, name, meta)
+}
+window.deleteAgendaItem = async (nodeId) => {
+  if (!confirm('¿Eliminar este ítem?')) return
+  allNodes = allNodes.filter(n => n.id !== nodeId)
+  renderAll()
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+    await supabase.from('nodes').delete().eq('id', nodeId)
+}
+window.toggleBillPaid = async (nodeId) => {
+  const node = allNodes.find(n => n.id === nodeId); if (!node) return
+  node.metadata = { ...node.metadata, paid: !node.metadata?.paid }
+  renderAll()
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', nodeId)
+}
 
 // Logout
 document.getElementById('btn-logout')?.addEventListener('click', async (e) => {

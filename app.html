@@ -481,17 +481,93 @@
     .cal-number { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; color: var(--text-muted); }
     .today .cal-number { color: var(--accent-cyan); }
     
-    .cal-event { 
-      font-size: 10px; 
-      padding: 2px 6px; 
-      border-radius: 4px; 
-      white-space: nowrap; 
-      overflow: hidden; 
-      text-overflow: ellipsis; 
+    .cal-event {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       background: var(--accent-cyan-dim);
       color: var(--accent-cyan);
       border-left: 2px solid var(--accent-cyan);
+      cursor: grab;
     }
+    .cal-day:hover .cal-add-btn { opacity: 1 !important; }
+
+    /* ── Calendar Time Grid ──────────────────────────────── */
+    .cal-timegrid-wrapper {
+      display: flex; flex-direction: column;
+      height: 620px;
+      border: 1px solid var(--glass-border);
+      border-radius: 16px; overflow: hidden;
+      background: var(--bg-panel);
+    }
+    .cal-timegrid-header {
+      display: grid; flex-shrink: 0;
+      background: rgba(0,0,0,0.35);
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .cal-timegrid-allday {
+      display: grid; flex-shrink: 0;
+      border-bottom: 1px solid var(--glass-border);
+      background: rgba(0,0,0,0.2); min-height: 28px;
+    }
+    .cal-timegrid-scroll { overflow-y: auto; flex: 1; position: relative; }
+    .cal-timegrid-body  { display: grid; position: relative; }
+    .cal-timecol {
+      position: relative;
+      border-right: 1px solid var(--glass-border);
+      background: rgba(0,0,0,0.2);
+    }
+    .cal-timelabel {
+      position: absolute; right: 4px;
+      font-size: 9px; color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      transform: translateY(-50%); user-select: none;
+    }
+    .cal-daycol {
+      position: relative;
+      border-right: 1px solid rgba(255,255,255,0.04);
+      cursor: crosshair;
+    }
+    .cal-daycol:last-child { border-right: none; }
+    .cal-hour-line  { position: absolute; left:0; right:0; height:1px; background:rgba(255,255,255,0.05); }
+    .cal-half-line  { position: absolute; left:0; right:0; height:1px; background:rgba(255,255,255,0.025); pointer-events:none; }
+    .cal-now-line   { position: absolute; left:0; right:0; height:2px; background:#ff4c4c; z-index:5; pointer-events:none; }
+    .cal-now-dot    { position: absolute; left:-4px; top:-4px; width:10px; height:10px; border-radius:50%; background:#ff4c4c; }
+    .cal-time-event {
+      position: absolute; left:2px; right:2px;
+      border-radius: 6px; padding: 3px 6px;
+      font-size: 10px; font-weight: 600;
+      overflow: hidden; cursor: pointer;
+      border-left: 3px solid; z-index: 2;
+      transition: opacity 0.15s;
+      word-break: break-word;
+    }
+    .cal-time-event:hover { opacity: 0.82; }
+
+    /* ── Event creation modal ─────────────────────────────── */
+    .ev-type-btn {
+      text-align: center; padding: 10px 4px;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border);
+      cursor: pointer; font-size: 11px; font-weight: 600;
+      transition: all 0.18s;
+      background: rgba(255,255,255,0.03);
+      color: var(--text-muted);
+    }
+    .ev-type-opt input:checked + .ev-type-btn {
+      border-color: var(--accent-cyan);
+      background: var(--accent-cyan-dim); color: #fff;
+    }
+    .ev-color-swatch {
+      width: 26px; height: 26px; border-radius: 50%;
+      border: 2px solid transparent; cursor: pointer;
+      transition: transform 0.15s, outline 0.15s;
+    }
+    .ev-color-swatch:hover { transform: scale(1.15); }
+    .ev-color-swatch.active { outline: 2px solid #fff; outline-offset: 2px; }
 
     .t-modal-main { padding: 32px; overflow-y: auto; }
     .t-modal-side { padding: 32px 16px; background: rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 16px; }
@@ -844,6 +920,7 @@
       <button class="nav-item" data-view="calendar"><span class="nav-icon">📅</span> Línea de Tiempo</button>
       <button class="nav-item" data-view="cronica"><span class="nav-icon">📖</span> Crónica</button>
       <button class="nav-item" data-view="contacts"><span class="nav-icon">👥</span> Contactos</button>
+      <button class="nav-item" data-view="agenda"><span class="nav-icon">💳</span> Agenda Financiera</button>
       <button class="nav-item" data-view="herramientas"><span class="nav-icon">🧮</span> Herramientas</button>
       <button class="nav-item" data-view="settings"><span class="nav-icon">⚙️</span> Configuración</button>
       <button class="nav-item" data-view="ayuda"><span class="nav-icon">❓</span> Ayuda</button>
@@ -889,19 +966,23 @@
 
     <!-- LÍNEA DE TIEMPO -->
     <div id="view-calendar" class="view-section">
-      <div class="view-header"><h1 class="view-title">Calendario Táctico</h1></div>
-      <div id="calendar-controls" style="display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap;">
-        <button id="cal-prev" class="nav-item" style="border:1px solid rgba(255,255,255,0.1)">◀</button>
-        <span id="cal-month-title" style="font-weight:800; font-size:18px; flex:1; text-align:center; min-width:200px;">---</span>
-        <button id="cal-next" class="nav-item" style="border:1px solid rgba(255,255,255,0.1)">▶</button>
-        <div style="display:flex; gap:6px; margin-left:auto;">
+      <div class="view-header">
+        <h1 class="view-title">📅 Calendario Táctico</h1>
+        <button onclick="openEventModal(null,null)" style="background:var(--accent-cyan);color:#000;border:none;border-radius:10px;padding:9px 18px;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:0.03em;">+ Nuevo Evento</button>
+      </div>
+      <div id="calendar-controls" style="display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
+        <button id="cal-prev" class="nav-item" style="border:1px solid rgba(255,255,255,0.1); padding:6px 14px;">◀</button>
+        <span id="cal-month-title" style="font-weight:800; font-size:17px; flex:1; text-align:center; min-width:180px;">---</span>
+        <button id="cal-next" class="nav-item" style="border:1px solid rgba(255,255,255,0.1); padding:6px 14px;">▶</button>
+        <div style="display:flex; gap:6px; margin-left:auto; flex-wrap:wrap;">
+          <button id="cal-today" class="fin-tab">Hoy</button>
           <button id="cal-view-month" class="fin-tab fin-tab-active">Mes</button>
           <button id="cal-view-week" class="fin-tab">Semana</button>
           <button id="cal-view-day" class="fin-tab">Día</button>
-          <button id="cal-export" class="fin-tab" style="margin-left:8px;">⬇ CSV</button>
+          <button id="cal-export" class="fin-tab" style="margin-left:4px; opacity:0.6;">⬇ CSV</button>
         </div>
       </div>
-      <div id="cal-days-root" class="cal-grid" style="display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:rgba(255,255,255,0.05); border-radius:12px; overflow:hidden;"></div>
+      <div id="cal-days-root" style="display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:rgba(255,255,255,0.05); border-radius:12px; overflow:hidden;"></div>
     </div>
 
     <!-- CRÓNICA -->
@@ -932,6 +1013,156 @@
         <button class="contact-filter-btn"         data-ctype="crypto"  onclick="setContactFilter('crypto',this)">₿ Cripto</button>
       </div>
       <div id="contacts-root" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px;"></div>
+    </div>
+
+    <!-- ════ AGENDA FINANCIERA ════ -->
+    <div id="view-agenda" class="view-section">
+      <div class="view-header">
+        <h1 class="view-title">💳 Agenda Financiera</h1>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button onclick="openAgendaModal('card')"         style="background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid #60a5fa44;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Tarjeta</button>
+          <button onclick="openAgendaModal('subscription')" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid #a78bfa44;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Suscripción</button>
+          <button onclick="openAgendaModal('bill')"         style="background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid #fb923c44;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Pago Fijo</button>
+        </div>
+      </div>
+
+      <!-- KPI summary -->
+      <div id="agenda-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:28px;"></div>
+
+      <!-- PLAN DEL MES -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;align-items:start;">
+
+        <!-- Compromisos del mes -->
+        <div class="settings-card" style="padding:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            <h3 style="font-size:15px;font-weight:800;color:#a78bfa;">📆 Plan del Mes</h3>
+            <span id="agenda-plan-month" style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;"></span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;" id="agenda-plan-table">
+            <thead>
+              <tr>
+                <th style="text-align:left;padding:6px 4px;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--glass-border);">Concepto</th>
+                <th style="text-align:right;padding:6px 4px;color:#4ade80;font-weight:600;border-bottom:1px solid var(--glass-border);">Entrada</th>
+                <th style="text-align:right;padding:6px 4px;color:#f87171;font-weight:600;border-bottom:1px solid var(--glass-border);">Salida</th>
+                <th style="text-align:right;padding:6px 4px;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--glass-border);">Saldo</th>
+              </tr>
+            </thead>
+            <tbody id="agenda-plan-body"></tbody>
+            <tfoot id="agenda-plan-foot"></tfoot>
+          </table>
+        </div>
+
+        <!-- Próximos 7 días -->
+        <div class="settings-card" style="padding:20px;">
+          <h3 style="font-size:15px;font-weight:800;color:#fb923c;margin-bottom:16px;">⏰ Próximos 7 días</h3>
+          <div id="agenda-upcoming"></div>
+        </div>
+      </div>
+
+      <!-- Tarjetas de crédito -->
+      <div style="margin-bottom:28px;">
+        <h3 style="font-size:14px;font-weight:800;color:#60a5fa;margin-bottom:12px;">💳 Tarjetas de Crédito</h3>
+        <div id="agenda-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;"></div>
+      </div>
+
+      <!-- Suscripciones -->
+      <div style="margin-bottom:28px;">
+        <h3 style="font-size:14px;font-weight:800;color:#a78bfa;margin-bottom:12px;">🔄 Suscripciones & Servicios</h3>
+        <div id="agenda-subs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;"></div>
+      </div>
+
+      <!-- Pagos fijos / Bills -->
+      <div>
+        <h3 style="font-size:14px;font-weight:800;color:#fb923c;margin-bottom:12px;">📋 Pagos Fijos del Mes</h3>
+        <div id="agenda-bills" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+    </div>
+
+    <!-- MODAL: AGENDA ITEM -->
+    <div id="agenda-modal" class="modal-overlay hidden">
+      <div class="modal-box" style="max-width:460px;">
+        <div class="modal-title" id="agenda-modal-title">Nueva Tarjeta</div>
+
+        <!-- Campos comunes -->
+        <div class="modal-field">
+          <label class="modal-label">Nombre *</label>
+          <input id="ag-name" type="text" class="modal-input" placeholder="Ej: BBVA Crédito, Netflix, Renta..." />
+        </div>
+
+        <!-- Tarjeta fields -->
+        <div id="ag-fields-card">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label class="modal-label">Últimos 4 dígitos</label>
+              <input id="ag-last4" type="text" maxlength="4" class="modal-input" placeholder="4321" />
+            </div>
+            <div>
+              <label class="modal-label">Límite de crédito</label>
+              <input id="ag-limit" type="number" class="modal-input" placeholder="0" />
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label class="modal-label">Día de corte</label>
+              <input id="ag-cut-day" type="number" min="1" max="31" class="modal-input" placeholder="15" />
+            </div>
+            <div>
+              <label class="modal-label">Día de pago</label>
+              <input id="ag-pay-day" type="number" min="1" max="31" class="modal-input" placeholder="5" />
+            </div>
+            <div>
+              <label class="modal-label">Moneda</label>
+              <select id="ag-card-currency" class="modal-input">
+                <option value="MXN">MXN</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Suscripción / Pago fijo fields -->
+        <div id="ag-fields-recurring" style="display:none;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label class="modal-label">Monto</label>
+              <input id="ag-amount" type="number" class="modal-input" placeholder="0.00" />
+            </div>
+            <div>
+              <label class="modal-label">Moneda</label>
+              <select id="ag-currency" class="modal-input">
+                <option value="MXN">MXN</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+            <div>
+              <label class="modal-label">Día del mes</label>
+              <input id="ag-day" type="number" min="1" max="31" class="modal-input" placeholder="1" />
+            </div>
+          </div>
+          <div class="modal-field" id="ag-category-wrap">
+            <label class="modal-label">Categoría / Ícono</label>
+            <input id="ag-category" type="text" class="modal-input" placeholder="📺 Streaming, 💡 Servicios, 🏠 Renta..." />
+          </div>
+        </div>
+
+        <!-- Color -->
+        <div style="margin-bottom:16px;">
+          <label class="modal-label">Color</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+            <button class="ev-color-swatch active" data-color="#60a5fa" onclick="selectAgendaColor(this)" style="background:#60a5fa;"></button>
+            <button class="ev-color-swatch" data-color="#a78bfa" onclick="selectAgendaColor(this)" style="background:#a78bfa;"></button>
+            <button class="ev-color-swatch" data-color="#4ade80" onclick="selectAgendaColor(this)" style="background:#4ade80;"></button>
+            <button class="ev-color-swatch" data-color="#fb923c" onclick="selectAgendaColor(this)" style="background:#fb923c;"></button>
+            <button class="ev-color-swatch" data-color="#f87171" onclick="selectAgendaColor(this)" style="background:#f87171;"></button>
+            <button class="ev-color-swatch" data-color="#facc15" onclick="selectAgendaColor(this)" style="background:#facc15;"></button>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-ghost" onclick="closeAgendaModal()">Cancelar</button>
+          <button class="btn-primary" onclick="saveAgendaItem()">Guardar</button>
+        </div>
+      </div>
     </div>
 
     <!-- SETTINGS -->
@@ -1967,6 +2198,98 @@
       .modal-box { margin: 8px; max-width: calc(100vw - 16px) !important; }
     }
 </style>
+
+<!-- ═══════════════════════ MODAL: CREAR / EDITAR EVENTO ═══════════════════════ -->
+<div id="event-create-modal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:520px; padding:28px;">
+    <!-- Header -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+      <div style="font-size:18px; font-weight:800;" id="ecm-title-label">Nuevo Evento</div>
+      <button onclick="closeEventModal()" style="background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+
+    <!-- Tipo de evento -->
+    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:18px;">
+      <label class="ev-type-opt" data-type="evento">
+        <input type="radio" name="ev-type" value="evento" checked style="display:none;">
+        <div class="ev-type-btn">📅<br>Evento</div>
+      </label>
+      <label class="ev-type-opt" data-type="tarea">
+        <input type="radio" name="ev-type" value="tarea" style="display:none;">
+        <div class="ev-type-btn">✅<br>Tarea</div>
+      </label>
+      <label class="ev-type-opt" data-type="cita">
+        <input type="radio" name="ev-type" value="cita" style="display:none;">
+        <div class="ev-type-btn">🤝<br>Cita</div>
+      </label>
+      <label class="ev-type-opt" data-type="reunion">
+        <input type="radio" name="ev-type" value="reunion" style="display:none;">
+        <div class="ev-type-btn">👥<br>Reunión</div>
+      </label>
+    </div>
+
+    <!-- Título -->
+    <div class="modal-field">
+      <label class="modal-label">Título *</label>
+      <input id="ev-title" type="text" class="modal-input" placeholder="¿Qué tienes planeado?" />
+    </div>
+
+    <!-- Todo el día -->
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <input type="checkbox" id="ev-allday" onchange="toggleAlldayFields()" style="width:16px;height:16px;accent-color:var(--accent-cyan);cursor:pointer;">
+      <label for="ev-allday" style="font-size:13px; color:var(--text-muted); cursor:pointer;">Todo el día</label>
+    </div>
+
+    <!-- Fecha + horas -->
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:14px;">
+      <div>
+        <label class="modal-label">Fecha</label>
+        <input id="ev-date" type="date" class="modal-input" />
+      </div>
+      <div id="ev-time-start-wrap">
+        <label class="modal-label">Inicio</label>
+        <input id="ev-time-start" type="time" class="modal-input" value="09:00" />
+      </div>
+      <div id="ev-time-end-wrap">
+        <label class="modal-label">Fin</label>
+        <input id="ev-time-end" type="time" class="modal-input" value="10:00" />
+      </div>
+    </div>
+
+    <!-- Lugar -->
+    <div class="modal-field">
+      <label class="modal-label">Lugar / Enlace</label>
+      <input id="ev-location" type="text" class="modal-input" placeholder="Oficina, Zoom, Dirección..." />
+    </div>
+
+    <!-- Descripción -->
+    <div class="modal-field">
+      <label class="modal-label">Notas / Descripción</label>
+      <textarea id="ev-description" class="modal-input" rows="3" placeholder="Detalles, agenda, recordatorios..."></textarea>
+    </div>
+
+    <!-- Color -->
+    <div style="margin-bottom:20px;">
+      <label class="modal-label" style="margin-bottom:8px;">Color</label>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="ev-color-swatch active" data-color="#00f0ff" onclick="selectEventColor(this)" style="background:#00f0ff;"></button>
+        <button class="ev-color-swatch" data-color="#4ade80" onclick="selectEventColor(this)" style="background:#4ade80;"></button>
+        <button class="ev-color-swatch" data-color="#c084fc" onclick="selectEventColor(this)" style="background:#c084fc;"></button>
+        <button class="ev-color-swatch" data-color="#fb923c" onclick="selectEventColor(this)" style="background:#fb923c;"></button>
+        <button class="ev-color-swatch" data-color="#f87171" onclick="selectEventColor(this)" style="background:#f87171;"></button>
+        <button class="ev-color-swatch" data-color="#facc15" onclick="selectEventColor(this)" style="background:#facc15;"></button>
+        <button class="ev-color-swatch" data-color="#a78bfa" onclick="selectEventColor(this)" style="background:#a78bfa;"></button>
+        <button class="ev-color-swatch" data-color="#38bdf8" onclick="selectEventColor(this)" style="background:#38bdf8;"></button>
+      </div>
+    </div>
+
+    <!-- Acciones -->
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeEventModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveEvent()">Guardar</button>
+    </div>
+  </div>
+</div>
 
 <script type="module" src="./app.js"></script>
 <script>
