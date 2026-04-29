@@ -15,6 +15,8 @@ let calDate       = new Date()
 let editingCardId = null
 let userPrefs     = { tempUnit: 'C' }
 let currentFilter = null
+let activeTypeFilter = null   // null = todos los tipos
+let feedGrouped = false       // agrupar por tipo en el feed
 let activeAccount = 'all'
 let editingNoteId = null
 let editingAccountId = null
@@ -959,13 +961,20 @@ document.addEventListener('click', e => {
 
 // ── Helpers & Rendering ──────────────────
 function getFilteredNodes() {
-  if (!currentFilter) return allNodes
-  return allNodes.filter(n => 
-    n.content.toLowerCase().includes(currentFilter.toLowerCase()) || 
-    (n.metadata?.tags || []).some(t => t.toLowerCase() === currentFilter.toLowerCase()) ||
-    (n.metadata?.label || '').toLowerCase().includes(currentFilter.toLowerCase())
+  let nodes = allNodes
+  if (activeTypeFilter) nodes = nodes.filter(n => n.type === activeTypeFilter)
+  if (!currentFilter) return nodes
+  const q = currentFilter.toLowerCase()
+  return nodes.filter(n =>
+    n.content.toLowerCase().includes(q) ||
+    (n.metadata?.tags || []).some(t => t.toLowerCase() === q) ||
+    (n.metadata?.label || '').toLowerCase().includes(q) ||
+    n.type.toLowerCase().includes(q)
   )
 }
+
+window.setTypeFilter = (type) => { activeTypeFilter = activeTypeFilter === type ? null : type; renderAll() }
+window.toggleFeedGroup = () => { feedGrouped = !feedGrouped; renderAll() }
 
 function renderAll() {
   const nodes = getFilteredNodes()
@@ -995,36 +1004,110 @@ function renderFilterBar() {
   }
 }
 
-window.clearFilter = () => { currentFilter = null; renderAll(); }
+window.clearFilter = () => { currentFilter = null; activeTypeFilter = null; renderAll(); }
 window.setFilter = (tag) => { currentFilter = tag; renderAll(); }
 
 function updateStats(nodes) {
-  const inc = nodes.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
-  const exp = nodes.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const inc = allNodes.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const exp = allNodes.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
   document.getElementById('dominance-balance').textContent = `$${(inc-exp).toLocaleString()}`
-  document.getElementById('w-nodes-count').textContent = nodes.filter(n=>n.type==='kanban').length
+  document.getElementById('w-nodes-count').textContent = allNodes.filter(n=>n.type==='kanban').length
+}
+
+// TYPE_FILTERS — pills para el panel de comandos
+const TYPE_FILTERS = [
+  { type:'income',   label:'💰 Ingresos',  color:'#4ade80' },
+  { type:'expense',  label:'💸 Gastos',    color:'#f87171' },
+  { type:'kanban',   label:'📌 Tareas',    color:'#a78bfa' },
+  { type:'note',     label:'🧠 Notas',     color:'#60a5fa' },
+  { type:'contact',  label:'👥 Contactos', color:'#34d399' },
+  { type:'event',    label:'📅 Eventos',   color:'#fb923c' },
+  { type:'account',  label:'🏦 Cuentas',   color:'#facc15' },
+  { type:'loan',     label:'💳 Préstamos', color:'#c084fc' },
+]
+
+function feedItemHtml(n) {
+  const tc = TYPE_CONFIG[n.type] || { label:`#${n.type.toUpperCase()}`, color:'var(--accent-cyan)', border:'rgba(0,246,255,0.3)', bg:'rgba(0,246,255,0.04)' }
+  const amount = (n.type === 'income' || n.type === 'expense') && n.metadata?.amount
+    ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:${tc.color};flex-shrink:0;">${n.type==='income'?'+':'-'}$${n.metadata.amount.toLocaleString()}</span>` : ''
+  const timeStr = n.created_at ? `${new Date(n.created_at).getHours().toString().padStart(2,'0')}:${new Date(n.created_at).getMinutes().toString().padStart(2,'0')}` : '--:--'
+  return `
+    <div class="feed-item" style="border-left:3px solid ${tc.border};background:${tc.bg};" onclick="openCardModal('${n.id}')">
+      <span class="feed-time">${timeStr}</span>
+      <span style="font-size:9px;font-weight:800;color:${tc.color};background:${tc.border.replace('0.4','0.12').replace('0.3','0.12')};padding:2px 8px;border-radius:4px;flex-shrink:0;">${tc.label}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.label || n.content)}</div>
+        <div style="margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;">
+          ${(n.metadata?.tags||[]).filter(t=>t.toLowerCase()!==`#${n.type.toLowerCase()}`).map(t=>`<span style="background:${tc.border.replace('0.4','0.1').replace('0.3','0.1')};color:${tc.color};font-size:9px;padding:1px 5px;border-radius:3px;cursor:pointer;" onclick="event.stopPropagation();setFilter('${t}')">${t}</span>`).join('')}
+        </div>
+      </div>
+      ${amount}
+      <span onclick="event.stopPropagation();if(confirm('¿Eliminar?')){deleteNode('${n.id}')}" style="color:var(--text-dim);cursor:pointer;padding:4px;flex-shrink:0;">✕</span>
+    </div>`
 }
 
 function renderFeed(nodes) {
   const root = document.getElementById('feed-root')
-  root.innerHTML = nodes.map(n => {
-    const tc = TYPE_CONFIG[n.type] || { label: `#${n.type.toUpperCase()}`, color: 'var(--accent-cyan)', border: 'var(--glass-border)', bg: 'var(--glass-bg)' }
-    const amount = (n.type === 'income' || n.type === 'expense') && n.metadata?.amount
-      ? `<span style="font-family:'JetBrains Mono',monospace; font-weight:800; color:${tc.color}; margin-left:auto;">${n.type==='income'?'+':'-'}$${n.metadata.amount.toLocaleString()}</span>` : ''
-    return `
-    <div class="feed-item" style="border-left:3px solid ${tc.border}; background:${tc.bg};" onclick="openCardModal('${n.id}')">
-      <span class="feed-time">${new Date(n.created_at).getHours().toString().padStart(2,'0')}:${new Date(n.created_at).getMinutes().toString().padStart(2,'0')}</span>
-      <span style="font-size:9px; font-weight:800; color:${tc.color}; background:${tc.border.replace('0.4','0.15')}; padding:2px 8px; border-radius:4px; flex-shrink:0;">${tc.label}</span>
-      <div style="flex:1; min-width:0;">
-        <div style="font-size:14px; color:#f0f6fc; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(n.metadata?.label || n.content)}</div>
-        <div style="margin-top:4px; display:flex; gap:5px; flex-wrap:wrap;">
-          ${(n.metadata?.tags || []).filter(t => t.toLowerCase() !== `#${n.type.toLowerCase()}`).map(t => `<span style="background:${tc.border.replace('0.4','0.12')}; color:${tc.color}; font-size:9px; padding:1px 5px; border-radius:3px; cursor:pointer;" onclick="event.stopPropagation(); setFilter('${t}')">${t}</span>`).join('')}
-        </div>
+  if (!root) return
+
+  // Stats del feed
+  const total = allNodes.length
+  const counts = {}
+  TYPE_FILTERS.forEach(f => { counts[f.type] = allNodes.filter(n=>n.type===f.type).length })
+
+  // Barra de filtros tipo tabla dinámica
+  const filterBar = `
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+        <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;">FILTRAR</span>
+        <button onclick="clearFilter()" style="border:1px solid ${!activeTypeFilter&&!currentFilter?'var(--accent-cyan)':'var(--glass-border)'};background:${!activeTypeFilter&&!currentFilter?'rgba(0,246,255,0.12)':'transparent'};color:${!activeTypeFilter&&!currentFilter?'var(--accent-cyan)':'var(--text-muted)'};border-radius:20px;padding:4px 12px;font-size:10px;font-weight:800;cursor:pointer;">
+          TODOS <span style="opacity:0.6;">(${total})</span>
+        </button>
+        ${TYPE_FILTERS.filter(f=>counts[f.type]>0).map(f=>`
+          <button onclick="setTypeFilter('${f.type}')" style="border:1px solid ${activeTypeFilter===f.type?f.color:'var(--glass-border)'};background:${activeTypeFilter===f.type?f.color+'22':'transparent'};color:${activeTypeFilter===f.type?f.color:'var(--text-muted)'};border-radius:20px;padding:4px 12px;font-size:10px;font-weight:800;cursor:pointer;transition:all 0.15s;">
+            ${f.label} <span style="opacity:0.6;">(${counts[f.type]})</span>
+          </button>`).join('')}
+        <button onclick="toggleFeedGroup()" style="margin-left:auto;border:1px solid ${feedGrouped?'var(--accent-cyan)':'var(--glass-border)'};background:${feedGrouped?'rgba(0,246,255,0.1)':'transparent'};color:${feedGrouped?'var(--accent-cyan)':'var(--text-muted)'};border-radius:20px;padding:4px 12px;font-size:10px;font-weight:800;cursor:pointer;" title="Agrupar por tipo">
+          ${feedGrouped?'⊞ Agrupado':'⊟ Agrupar'}
+        </button>
       </div>
-      ${amount}
-      <span onclick="event.stopPropagation(); if(confirm('¿Eliminar este nodo?')){ deleteNode('${n.id}') }" style="color:var(--text-dim); cursor:pointer; padding:4px; flex-shrink:0;" title="Eliminar">✕</span>
+      ${currentFilter?`<div style="display:flex;align-items:center;gap:8px;background:rgba(0,246,255,0.06);border:1px solid rgba(0,246,255,0.2);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--accent-cyan);">
+        <span>🔍 Buscando: <b>${currentFilter}</b></span>
+        <span onclick="clearFilter()" style="cursor:pointer;margin-left:auto;color:var(--text-muted);">✕ Limpiar</span>
+      </div>`:''}
     </div>`
-  }).join('')
+
+  if (nodes.length === 0) {
+    root.innerHTML = filterBar + `<div style="text-align:center;color:var(--text-muted);padding:60px 20px;">
+      <div style="font-size:40px;margin-bottom:12px;">🔍</div>
+      <div style="font-size:15px;font-weight:700;margin-bottom:6px;">Sin resultados</div>
+      <div style="font-size:12px;">Prueba otro filtro o borra la búsqueda</div>
+    </div>`
+    return
+  }
+
+  let content = ''
+  if (feedGrouped) {
+    // Agrupar por tipo
+    const groups = {}
+    nodes.forEach(n => { if (!groups[n.type]) groups[n.type] = []; groups[n.type].push(n) })
+    content = Object.entries(groups).map(([type, items]) => {
+      const f = TYPE_FILTERS.find(f=>f.type===type)
+      const tc = TYPE_CONFIG[type] || {}
+      return `
+        <div style="margin-bottom:24px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--glass-border);">
+            <span style="font-size:10px;font-weight:800;color:${f?.color||'var(--accent-cyan)'};letter-spacing:1.5px;">${f?.label||type.toUpperCase()}</span>
+            <span style="font-size:10px;color:var(--text-dim);background:var(--glass-border);border-radius:10px;padding:1px 8px;">${items.length}</span>
+          </div>
+          ${items.map(feedItemHtml).join('')}
+        </div>`
+    }).join('')
+  } else {
+    content = nodes.map(feedItemHtml).join('')
+  }
+
+  root.innerHTML = filterBar + content
 }
 
 window.deleteNode = async (id) => {
@@ -1138,6 +1221,13 @@ function toggleNoteSize() {
   const isFs = modalBox.classList.toggle('fullscreen')
   const btn = document.getElementById('note-toggle-size')
   if (btn) btn.textContent = isFs ? '🗗' : '🔲'
+  // Reset inline styles when exiting fullscreen so CSS takes over cleanly
+  if (!isFs) {
+    const body = document.getElementById('ne-body')
+    if (body) { body.style.flex = ''; body.style.height = ''; body.style.minHeight = ''; body.style.resize = '' }
+    modalBox.style.display = ''
+    modalBox.style.flexDirection = ''
+  }
 }
 window.toggleNoteSize = toggleNoteSize;
 
@@ -1248,25 +1338,38 @@ function renderFinance(nodes) {
   `
 
   const net = income - expense
+  // Saldo de la cuenta: balance inicial + movimientos
+  const activeAcc   = accounts.find(a => a.id === activeAccount)
+  const initBalance = activeAccount !== 'all' ? (activeAcc?.metadata?.balance || 0) : null
+  const accBalance  = initBalance !== null ? initBalance + income - expense : null
+  const balLabel    = activeAccount !== 'all' ? `💳 ${esc(activeAcc?.metadata?.label||'Cuenta')}` : '⚖ SALDO NETO'
+  const balValue    = accBalance !== null ? accBalance : net
+  const balColor    = balValue >= 0 ? '#00f6ff' : '#fb923c'
+  const balBg       = balValue >= 0 ? 'rgba(0,246,255,0.06)' : 'rgba(251,146,60,0.06)'
+  const balBorder   = balValue >= 0 ? 'rgba(0,246,255,0.2)' : 'rgba(251,146,60,0.2)'
+  const balSub      = activeAccount !== 'all'
+    ? `Saldo inicial: $${initBalance.toLocaleString()} ${balValue>=0?'✅':'⚠️'}`
+    : (net>=0?'✅ Positivo':'⚠️ Déficit')
+
   const statsHtml = `
     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:28px;">
       <div style="background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2); border-radius:14px; padding:20px; position:relative; overflow:hidden;">
         <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:40px;opacity:0.06;pointer-events:none;">↑</div>
-        <div style="font-size:10px; color:#6ee7b7; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">↑ INGRESOS</div>
+        <div style="font-size:10px; color:#6ee7b7; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">↑ INGRESOS${activeAccount!=='all'?' · '+esc(activeAcc?.metadata?.label||''):''}</div>
         <div id="fin-kpi-income" style="font-size:24px; font-weight:800; color:#4ade80; font-family:'JetBrains Mono',monospace;">+$${income.toLocaleString()}</div>
         <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${txs.filter(n=>n.type==='income').length} transacciones</div>
       </div>
       <div style="background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.2); border-radius:14px; padding:20px; position:relative; overflow:hidden;">
         <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:40px;opacity:0.06;pointer-events:none;">↓</div>
-        <div style="font-size:10px; color:#fca5a5; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">↓ GASTOS</div>
+        <div style="font-size:10px; color:#fca5a5; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">↓ GASTOS${activeAccount!=='all'?' · '+esc(activeAcc?.metadata?.label||''):''}</div>
         <div id="fin-kpi-expense" style="font-size:24px; font-weight:800; color:#f87171; font-family:'JetBrains Mono',monospace;">-$${expense.toLocaleString()}</div>
         <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${txs.filter(n=>n.type==='expense').length} transacciones</div>
       </div>
-      <div style="background:${net>=0?'rgba(0,246,255,0.06)':'rgba(251,146,60,0.06)'}; border:1px solid ${net>=0?'rgba(0,246,255,0.2)':'rgba(251,146,60,0.2)'}; border-radius:14px; padding:20px; position:relative; overflow:hidden;">
+      <div style="background:${balBg}; border:1px solid ${balBorder}; border-radius:14px; padding:20px; position:relative; overflow:hidden;">
         <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:40px;opacity:0.06;pointer-events:none;">⚖</div>
-        <div style="font-size:10px; color:${net>=0?'#67e8f9':'#fdba74'}; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">⚖ SALDO NETO</div>
-        <div id="fin-kpi-net" style="font-size:24px; font-weight:800; color:${net>=0?'#00f6ff':'#fb923c'}; font-family:'JetBrains Mono',monospace;">${net>=0?'+':''}\$${net.toLocaleString()}</div>
-        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${net>=0?'✅ Positivo':'⚠️ Déficit'}</div>
+        <div style="font-size:10px; color:${balColor}; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">${balLabel}</div>
+        <div id="fin-kpi-net" style="font-size:24px; font-weight:800; color:${balColor}; font-family:'JetBrains Mono',monospace;">${balValue>=0?'+':''}\$${balValue.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${balSub}</div>
       </div>
     </div>
   `
@@ -1374,23 +1477,100 @@ window.exportFinanceCSV = () => {
 }
 
 // Export finance view as PDF (account‑specific)
-function exportFinancePDF() {
-  // Hide all non‑finance sections temporarily
-  const allSections = document.querySelectorAll('.view-section')
-  const hidden = []
-  allSections.forEach(sec => {
-    if (!sec.id.startsWith('view-finance')) {
-      hidden.push(sec)
-      sec.style.display = 'none'
-    }
-  })
-  // Ensure any pending UI updates are applied before printing
+window.exportFinancePDF = function exportFinancePDF() {
+  // Mostrar modal de filtros antes de imprimir
+  const accounts = allNodes.filter(n => n.type === 'account')
+  const modal = document.getElementById('print-filter-modal')
+  if (!modal) return
+  // Llenar selector de cuentas
+  const acSel = document.getElementById('pf-account')
+  if (acSel) {
+    acSel.innerHTML = '<option value="all">Todas las cuentas</option>' +
+      accounts.map(a=>`<option value="${a.id}">${esc(a.metadata?.label||a.content)}</option>`).join('')
+    if (activeAccount !== 'all') acSel.value = activeAccount
+  }
+  // Fechas por defecto: primer día del mes actual → hoy
+  const today = new Date().toISOString().split('T')[0]
+  const firstOfMonth = today.slice(0,7) + '-01'
+  const pfFrom = document.getElementById('pf-from')
+  const pfTo   = document.getElementById('pf-to')
+  if (pfFrom && !pfFrom.value) pfFrom.value = firstOfMonth
+  if (pfTo   && !pfTo.value)   pfTo.value   = today
+  modal.classList.remove('hidden')
+}
+
+window.doPrint = function doPrint() {
+  const pfAccount = document.getElementById('pf-account')?.value || 'all'
+  const pfType    = document.getElementById('pf-type')?.value    || 'all'
+  const pfFrom    = document.getElementById('pf-from')?.value    || ''
+  const pfTo      = document.getElementById('pf-to')?.value      || ''
+  document.getElementById('print-filter-modal')?.classList.add('hidden')
+
+  // Filtrar nodos para imprimir
+  let printNodes = allNodes.filter(n => n.type === 'income' || n.type === 'expense')
+  if (pfAccount !== 'all') printNodes = printNodes.filter(n => n.metadata?.account_id === pfAccount)
+  if (pfType !== 'all')    printNodes = printNodes.filter(n => n.type === pfType)
+  if (pfFrom) printNodes = printNodes.filter(n => (n.metadata?.fecha||n.created_at?.split('T')[0]||'') >= pfFrom)
+  if (pfTo)   printNodes = printNodes.filter(n => (n.metadata?.fecha||n.created_at?.split('T')[0]||'') <= pfTo)
+
+  const accounts = allNodes.filter(n => n.type === 'account')
+  const accLabel = pfAccount === 'all' ? 'Todas las cuentas' : (accounts.find(a=>a.id===pfAccount)?.metadata?.label || pfAccount)
+  const income  = printNodes.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const expense = printNodes.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+
+  // Inyectar contenido en #print-zone y hacer window.print()
+  let printZone = document.getElementById('print-zone')
+  if (!printZone) { printZone = document.createElement('div'); printZone.id = 'print-zone'; document.body.appendChild(printZone) }
+  printZone.innerHTML = `
+    <div style="font-family:'JetBrains Mono',monospace; padding:32px; max-width:900px; margin:0 auto;">
+      <h1 style="font-size:20px; margin-bottom:4px;">Nexus OS — Estado de Cuenta</h1>
+      <p style="color:#666; font-size:12px; margin-bottom:4px;">Cuenta: ${accLabel} | Período: ${pfFrom||'inicio'} → ${pfTo||'hoy'}</p>
+      <p style="color:#666; font-size:12px; margin-bottom:24px;">Generado: ${new Date().toLocaleString('es-MX')}</p>
+      <table style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:24px;">
+        <thead>
+          <tr style="border-bottom:2px solid #333;">
+            <th style="text-align:left; padding:8px 4px;">Fecha</th>
+            <th style="text-align:left; padding:8px 4px;">Descripción</th>
+            <th style="text-align:left; padding:8px 4px;">Cuenta</th>
+            <th style="text-align:right; padding:8px 4px;">Entrada</th>
+            <th style="text-align:right; padding:8px 4px;">Salida</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${printNodes.map(n=>{
+            const acc = accounts.find(a=>a.id===n.metadata?.account_id)
+            const fecha = n.metadata?.fecha || n.created_at?.split('T')[0] || ''
+            return `<tr style="border-bottom:1px solid #eee;">
+              <td style="padding:6px 4px;">${fecha}</td>
+              <td style="padding:6px 4px;">${esc(n.metadata?.label||n.content)}</td>
+              <td style="padding:6px 4px;">${esc(acc?.metadata?.label||acc?.content||'-')}</td>
+              <td style="text-align:right; padding:6px 4px; color:${n.type==='income'?'green':''};">${n.type==='income'?'$'+n.metadata?.amount?.toLocaleString():''}</td>
+              <td style="text-align:right; padding:6px 4px; color:${n.type==='expense'?'red':''};">${n.type==='expense'?'$'+n.metadata?.amount?.toLocaleString():''}</td>
+            </tr>`
+          }).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid #333; font-weight:bold;">
+            <td colspan="3" style="padding:10px 4px;">TOTALES (${printNodes.length} movimientos)</td>
+            <td style="text-align:right; padding:10px 4px; color:green;">$${income.toLocaleString()}</td>
+            <td style="text-align:right; padding:10px 4px; color:red;">$${expense.toLocaleString()}</td>
+          </tr>
+          <tr style="font-weight:bold; background:#f9f9f9;">
+            <td colspan="4" style="padding:10px 4px;">SALDO NETO</td>
+            <td style="text-align:right; padding:10px 4px; color:${income-expense>=0?'green':'red'};">${income-expense>=0?'+':''}\$${(income-expense).toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`
+
+  // Añadir CSS de impresión temporal
+  const style = document.createElement('style')
+  style.id = 'print-override'
+  style.textContent = `@media print { body > *:not(#print-zone) { display:none !important; } #print-zone { display:block !important; } }`
+  document.head.appendChild(style)
   setTimeout(() => {
     window.print()
-    // Restore hidden sections after a short delay to avoid race conditions
-    setTimeout(() => {
-      hidden.forEach(sec => sec.style.display = '')
-    }, 500)
+    setTimeout(() => { style.remove(); printZone.innerHTML = '' }, 800)
   }, 200)
 }
 
@@ -2613,7 +2793,8 @@ function initWorldClock() {
 }
 
 // ── CRONÓMETRO ───────────────────────────────────────────────────────────────
-let swRunning = false, swStart = 0, swElapsed = 0, swRafId = null
+// ── CRONÓMETRO ───────────────────────────────────────────────────────────────
+let swRunning = false, swStart = 0, swElapsed = 0, swRafId = null, swLaps = []
 
 function swRender() {
   const total = swElapsed + (swRunning ? Date.now() - swStart : 0)
@@ -2621,10 +2802,10 @@ function swRender() {
   const sec = Math.floor(total / 1000) % 60
   const min = Math.floor(total / 60000)
   const disp = document.getElementById('sw-display')
-  if (disp) disp.textContent =
-    String(min).padStart(2,'0') + ':' +
-    String(sec).padStart(2,'0') + '.' +
-    String(ms).padStart(2,'0')
+  if (disp) disp.textContent = String(min).padStart(2,'0') + ':' + String(sec).padStart(2,'0') + '.' + String(ms).padStart(2,'0')
+  const alertEl = document.getElementById('sw-alert')
+  const elapsed = document.getElementById('sw-elapsed')
+  if (alertEl && swRunning) { alertEl.style.display = 'block'; if (elapsed) elapsed.textContent = `${Math.floor(total/1000)}s` }
   if (swRunning) swRafId = requestAnimationFrame(swRender)
 }
 
@@ -2636,6 +2817,9 @@ window.swToggle = function() {
     cancelAnimationFrame(swRafId)
     if (btn) btn.textContent = '▶ Continuar'
     playBeep(660, 0.15, 0.3)
+    // Notificación visual de pausa
+    const alertEl = document.getElementById('sw-alert')
+    if (alertEl) alertEl.style.display = 'none'
   } else {
     swStart = Date.now()
     swRunning = true
@@ -2645,13 +2829,30 @@ window.swToggle = function() {
   }
 }
 
+window.swLap = function() {
+  if (!swRunning && swElapsed === 0) return
+  const total = swElapsed + (swRunning ? Date.now() - swStart : 0)
+  const ms  = Math.floor((total % 1000) / 10)
+  const sec = Math.floor(total / 1000) % 60
+  const min = Math.floor(total / 60000)
+  const lapStr = `#${swLaps.length+1} — ${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${String(ms).padStart(2,'0')}`
+  swLaps.push(lapStr)
+  const lapsEl = document.getElementById('sw-laps')
+  if (lapsEl) lapsEl.innerHTML = swLaps.slice(-4).reverse().map(l=>`<div style="border-bottom:1px solid var(--glass-border);padding:2px 0;">${l}</div>`).join('')
+  playBeep(1000, 0.08, 0.2)
+}
+
 window.swReset = function() {
   cancelAnimationFrame(swRafId)
-  swRunning = false; swElapsed = 0; swStart = 0
+  swRunning = false; swElapsed = 0; swStart = 0; swLaps = []
   const btn  = document.getElementById('sw-btn')
   const disp = document.getElementById('sw-display')
+  const laps = document.getElementById('sw-laps')
+  const alrt = document.getElementById('sw-alert')
   if (btn)  btn.textContent  = '▶ Iniciar'
   if (disp) disp.textContent = '00:00.00'
+  if (laps) laps.innerHTML   = ''
+  if (alrt) alrt.style.display = 'none'
   playBeep(440, 0.1, 0.2)
 }
 
@@ -2659,11 +2860,18 @@ window.swReset = function() {
 let cdRunning = false, cdRemaining = 0, cdInterval = null
 
 function cdRenderDisp() {
-  const min  = Math.floor(cdRemaining / 60)
+  const hr   = Math.floor(cdRemaining / 3600)
+  const min  = Math.floor((cdRemaining % 3600) / 60)
   const sec  = cdRemaining % 60
   const disp = document.getElementById('cd-display')
-  if (disp) disp.textContent = String(min).padStart(2,'0') + ':' + String(sec).padStart(2,'0')
-  // Warning beep last 5 seconds
+  const str  = hr > 0
+    ? `${String(hr).padStart(2,'0')}:${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+    : `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+  if (disp) {
+    disp.textContent = str
+    // Color warning cuando quedan ≤ 60 segundos
+    disp.style.color = cdRemaining <= 10 ? '#f87171' : cdRemaining <= 60 ? '#fb923c' : '#fff'
+  }
   if (cdRemaining <= 5 && cdRemaining > 0) playBeep(1200, 0.08, 0.15)
 }
 
@@ -2676,11 +2884,13 @@ window.cdToggle = function() {
     playBeep(660, 0.15, 0.3)
   } else {
     if (cdRemaining <= 0) {
+      const hr  = parseInt(document.getElementById('cd-hr')?.value  || '0') || 0
       const min = parseInt(document.getElementById('cd-min')?.value || '0') || 0
       const sec = parseInt(document.getElementById('cd-sec')?.value || '0') || 0
-      cdRemaining = min * 60 + sec
-      if (cdRemaining <= 0) return
+      cdRemaining = hr * 3600 + min * 60 + sec
+      if (cdRemaining <= 0) { alert('Configura un tiempo mayor a 0'); return }
       document.getElementById('cd-display')?.classList.remove('finished')
+      document.getElementById('cd-alert')?.setAttribute('style','display:none')
     }
     cdRunning = true
     if (btn) btn.textContent = '⏸ Pausar'
@@ -2695,10 +2905,25 @@ window.cdToggle = function() {
         const btn2 = document.getElementById('cd-btn')
         if (btn2) btn2.textContent = '▶ Iniciar'
         document.getElementById('cd-display')?.classList.add('finished')
+        // Mostrar panel de alerta visual
+        const alertEl = document.getElementById('cd-alert')
+        if (alertEl) alertEl.style.display = 'block'
+        // Alarma sonora repetida 3 veces
         playAlarm()
+        setTimeout(() => playAlarm(), 1200)
+        setTimeout(() => playAlarm(), 2400)
+        // Intentar notificación del navegador
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('⏳ Nexus OS — ¡Tiempo!', { body: 'La cuenta regresiva ha llegado a cero.', icon: '/favicon.ico' })
+        }
       }
     }, 1000)
   }
+}
+
+window.cdDismiss = function() {
+  const alertEl = document.getElementById('cd-alert')
+  if (alertEl) alertEl.style.display = 'none'
 }
 
 window.cdReset = function() {
@@ -2706,12 +2931,121 @@ window.cdReset = function() {
   cdRunning = false; cdRemaining = 0
   const btn  = document.getElementById('cd-btn')
   const disp = document.getElementById('cd-display')
+  const alrt = document.getElementById('cd-alert')
   if (btn)  btn.textContent = '▶ Iniciar'
+  if (alrt) alrt.style.display = 'none'
   disp?.classList.remove('finished')
   const min = parseInt(document.getElementById('cd-min')?.value || '5') || 5
   const sec = parseInt(document.getElementById('cd-sec')?.value || '0') || 0
-  if (disp) disp.textContent = String(min).padStart(2,'0') + ':' + String(sec).padStart(2,'0')
+  if (disp) { disp.textContent = String(min).padStart(2,'0') + ':' + String(sec).padStart(2,'0'); disp.style.color = '#fff' }
   playBeep(440, 0.1, 0.2)
+}
+
+// ── CONVERSOR UNIFICADO FIAT + CRYPTO ────────────────────────────────────────
+const FIAT_SYMBOLS_SET = new Set(['USD','MXN','EUR','CNY','GBP','JPY','CAD'])
+
+window.swapUniConverter = function() {
+  const from = document.getElementById('uni-from')
+  const to   = document.getElementById('uni-to')
+  if (!from || !to) return
+  const tmp  = from.value
+  from.value = to.value
+  to.value   = tmp
+  convertUnified()
+}
+
+window.convertUnified = async function convertUnified() {
+  const amount  = parseFloat(document.getElementById('uni-amount')?.value) || 1
+  const from    = document.getElementById('uni-from')?.value?.toUpperCase()
+  const to      = document.getElementById('uni-to')?.value?.toUpperCase()
+  const resEl   = document.getElementById('uni-result')
+  const rateEl  = document.getElementById('uni-rate')
+  if (!resEl || !from || !to) return
+  resEl.textContent = '⏳'
+  try {
+    let rate
+    const fromIsFiat   = FIAT_SYMBOLS_SET.has(from)
+    const toIsFiat     = FIAT_SYMBOLS_SET.has(to)
+    if (from === to) { rate = 1 }
+    else if (fromIsFiat && toIsFiat) {
+      rate = await fetchFiatRate(from, to)
+    } else if (!fromIsFiat && !toIsFiat) {
+      // crypto → crypto: from→USD → USD→to
+      const fromUSD = await fetchCryptoRate(from, 'usd')
+      const toUSD   = await fetchCryptoRate(to,   'usd')
+      rate = fromUSD / toUSD
+    } else if (!fromIsFiat && toIsFiat) {
+      // crypto → fiat
+      rate = await fetchCryptoRate(from, to.toLowerCase())
+      if (!rate) {
+        const toUSD = await fetchCryptoRate(from, 'usd')
+        const fxRate = toIsFiat && to !== 'USD' ? await fetchFiatRate('USD', to) : 1
+        rate = toUSD * fxRate
+      }
+    } else {
+      // fiat → crypto: invert crypto→fiat rate
+      const cryptoToFiat = await fetchCryptoRate(to, from.toLowerCase())
+      if (cryptoToFiat) { rate = 1 / cryptoToFiat }
+      else {
+        const cryptoToUSD = await fetchCryptoRate(to, 'usd')
+        const fiatToUSD   = from !== 'USD' ? await fetchFiatRate(from, 'USD') : 1
+        rate = (fiatToUSD) / cryptoToUSD
+      }
+    }
+    const result   = amount * rate
+    const decimals = result < 0.01 ? 8 : result < 1 ? 6 : result < 1000 ? 4 : 2
+    resEl.textContent = result.toFixed(decimals) + ' ' + to
+    if (rateEl) rateEl.textContent = `1 ${from} = ${rate.toFixed(rate < 0.01 ? 8 : 4)} ${to}`
+  } catch(e) {
+    resEl.textContent = '⚠️ Error'
+    if (rateEl) rateEl.textContent = 'No se pudo obtener cotización'
+    console.warn('convertUnified error', e)
+  }
+}
+
+// ── CALCULADORA INVERSA — recibí X crypto → neto en MXN y USD ──────────────
+window.calculateInverse = async function calculateInverse() {
+  const amount   = parseFloat(document.getElementById('inv-amount')?.value)
+  const coin     = document.getElementById('inv-coin')?.value?.toUpperCase()
+  const price    = parseFloat(document.getElementById('inv-price')?.value)  // precio en USD
+  const feePct   = parseFloat(document.getElementById('inv-fee')?.value) || 0
+  const resultEl = document.getElementById('inv-result')
+  if (!resultEl) return
+  if (isNaN(amount) || amount <= 0 || !coin) { resultEl.innerHTML = '<span style="color:#f87171;">Ingresa la cantidad y moneda</span>'; return }
+
+  resultEl.innerHTML = '⏳ Calculando...'
+  try {
+    let priceUSD = price
+    // Si no ingresó precio, consultamos la API
+    if (!priceUSD || isNaN(priceUSD)) {
+      if (coin === 'USD' || coin === 'USDT') priceUSD = 1
+      else { priceUSD = await fetchCryptoRate(coin, 'usd') }
+    }
+    if (!priceUSD) throw new Error('No se pudo obtener el precio')
+
+    // Tipo de cambio USD → MXN
+    const usdMXN   = await fetchFiatRate('USD', 'MXN')
+    const grossUSD = amount * priceUSD
+    const feeUSD   = grossUSD * (feePct / 100)
+    const netUSD   = grossUSD - feeUSD
+    const netMXN   = netUSD * usdMXN
+
+    resultEl.innerHTML = `
+      <div style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);border-radius:12px;padding:14px;text-align:left;">
+        <div style="font-size:10px;font-weight:800;color:#a78bfa;letter-spacing:1px;margin-bottom:10px;">LIQUIDACIÓN</div>
+        <div style="display:grid;gap:6px;font-size:12px;">
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Recibido:</span><span style="font-weight:700;color:#fff;">${amount} ${coin} @ $${priceUSD.toFixed(coin==='BTC'?0:4)} USD</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Bruto USD:</span><span style="font-weight:700;color:#fff;">$${grossUSD.toFixed(2)}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Comisión (${feePct}%):</span><span style="font-weight:700;color:#f87171;">-$${feeUSD.toFixed(2)} USD</span></div>
+          <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;display:flex;justify-content:space-between;"><span style="color:#4ade80;font-weight:800;">Neto USD:</span><span style="font-size:16px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">$${netUSD.toFixed(2)} USD</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:#00f6ff;font-weight:800;">Neto MXN:</span><span style="font-size:16px;font-weight:800;color:#00f6ff;font-family:'JetBrains Mono',monospace;">$${netMXN.toFixed(2)} MXN</span></div>
+          <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:4px;">TC: 1 USD = $${usdMXN.toFixed(2)} MXN</div>
+        </div>
+      </div>`
+  } catch(e) {
+    resultEl.innerHTML = `<span style="color:#f87171;">⚠️ Error: ${e.message}</span>`
+    console.warn('calculateInverse error', e)
+  }
 }
 
 async function initTickers() {
@@ -2818,48 +3152,117 @@ document.addEventListener('keydown', (e) => {
 function renderCronica(nodes) {
   const dateInput = document.getElementById('cronica-date')
   if (dateInput) {
-    if (!dateInput.value) {
-      dateInput.value = new Date().toISOString().split('T')[0]
-    }
+    if (!dateInput.value) dateInput.value = new Date().toISOString().split('T')[0]
     renderCronicaView()
   }
 }
 
-function renderCronicaView() {
+// Exposed to window so HTML onclick puede llamarla
+window.renderCronicaView = function renderCronicaView() {
   const date = document.getElementById('cronica-date')?.value || new Date().toISOString().split('T')[0]
   const allN = allNodes
-  const tasksToday = allN.filter(n => n.type === 'kanban' && (n.created_at?.startsWith(date) || n.metadata?.due_date === date))
-  const notesToday = allN.filter(n => (n.type === 'note' || n.type === 'persona' || n.type === 'proyecto') && n.created_at?.startsWith(date))
-  const finToday   = allN.filter(n => (n.type === 'income' || n.type === 'expense') && n.created_at?.startsWith(date))
-  const netDay = finToday.reduce((s,n) => s + (n.type==='income' ? 1 : -1) * (n.metadata?.amount||0), 0)
 
-  const root = document.getElementById('cronica-root')
+  // Helper: nodo ocurrió en esta fecha
+  const onDate = (n) => {
+    const created = n.created_at?.split('T')[0] === date
+    const metaDate = n.metadata?.date === date || n.metadata?.fecha === date || n.metadata?.due_date === date
+    return created || metaDate
+  }
+
+  const tasksToday    = allN.filter(n => n.type === 'kanban'   && onDate(n))
+  const notesToday    = allN.filter(n => n.type === 'note'     && onDate(n))
+  const finToday      = allN.filter(n => (n.type === 'income' || n.type === 'expense') && onDate(n))
+  const eventsToday   = allN.filter(n => n.type === 'event'    && onDate(n))
+  const contactsToday = allN.filter(n => n.type === 'contact'  && onDate(n))
+  const totalItems    = tasksToday.length + notesToday.length + finToday.length + eventsToday.length + contactsToday.length
+
+  const netDay = finToday.reduce((s,n) => s + (n.type==='income' ? 1 : -1) * (n.metadata?.amount||0), 0)
+  const incDay = finToday.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const expDay = finToday.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+
+  const root  = document.getElementById('cronica-root')
   const stats = document.getElementById('cronica-stats')
   if (!root) return
-  if (stats) stats.textContent = `${tasksToday.length} tareas · ${notesToday.length} notas · ${finToday.length} movimientos · balance ${netDay >= 0 ? '+' : ''}$${netDay.toLocaleString()}`
 
-  const col = (title, color, items, renderFn) => `
+  const dateFmt = new Date(date + 'T12:00:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+  if (stats) stats.innerHTML = `
+    <span style="color:var(--accent-cyan);font-weight:800;">${dateFmt}</span>
+    &nbsp;·&nbsp; ${totalItems} registros
+    &nbsp;·&nbsp; <span style="color:#4ade80;">+$${incDay.toLocaleString()}</span>
+    &nbsp;·&nbsp; <span style="color:#f87171;">-$${expDay.toLocaleString()}</span>
+    &nbsp;·&nbsp; <span style="color:${netDay>=0?'#00f6ff':'#fb923c'};">neto ${netDay>=0?'+':''}\$${netDay.toLocaleString()}</span>
+  `
+
+  if (totalItems === 0) {
+    root.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--text-muted);">
+      <div style="font-size:48px;margin-bottom:16px;">📭</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px;">Sin actividad registrada</div>
+      <div style="font-size:13px;">No hay nodos creados ni fechados para el <b>${date}</b></div>
+    </div>`
+    return
+  }
+
+  const col = (icon, title, color, bg, items, renderFn) => items.length === 0 ? '' : `
     <div style="background:var(--bg-panel); border:1px solid var(--glass-border); border-radius:16px; padding:20px;">
-      <div style="font-size:11px; font-weight:800; color:${color}; letter-spacing:1px; margin-bottom:16px; text-transform:uppercase;">${title}</div>
-      ${items.length === 0
-        ? `<div style="color:var(--text-dim); font-size:13px; text-align:center; padding:20px;">Sin registros</div>`
-        : items.map(renderFn).join('')}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+        <span style="font-size:16px;">${icon}</span>
+        <span style="font-size:10px; font-weight:800; color:${color}; letter-spacing:1.5px; text-transform:uppercase;">${title}</span>
+        <span style="margin-left:auto;background:${bg};color:${color};border-radius:20px;padding:2px 10px;font-size:10px;font-weight:800;">${items.length}</span>
+      </div>
+      ${items.map(renderFn).join('')}
     </div>`
 
+  // Mini bar chart inline para finanzas del día
+  const finChart = finToday.length === 0 ? '' : `
+    <div style="background:var(--bg-panel); border:1px solid var(--glass-border); border-radius:16px; padding:20px;">
+      <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1.5px;margin-bottom:14px;">💹 RESUMEN FINANCIERO DEL DÍA</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:9px;color:#6ee7b7;font-weight:800;margin-bottom:4px;">ENTRADAS</div>
+          <div style="font-size:16px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${incDay.toLocaleString()}</div>
+        </div>
+        <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:9px;color:#fca5a5;font-weight:800;margin-bottom:4px;">SALIDAS</div>
+          <div style="font-size:16px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${expDay.toLocaleString()}</div>
+        </div>
+        <div style="background:${netDay>=0?'rgba(0,246,255,0.06)':'rgba(251,146,60,0.06)'};border:1px solid ${netDay>=0?'rgba(0,246,255,0.2)':'rgba(251,146,60,0.2)'};border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:9px;color:${netDay>=0?'#67e8f9':'#fdba74'};font-weight:800;margin-bottom:4px;">NETO</div>
+          <div style="font-size:16px;font-weight:800;color:${netDay>=0?'#00f6ff':'#fb923c'};font-family:'JetBrains Mono',monospace;">${netDay>=0?'+':''}\$${netDay.toLocaleString()}</div>
+        </div>
+      </div>
+      ${finToday.map(n => `
+        <div onclick="openFinanceDetail('${n.id}')" style="display:flex;align-items:center;gap:12px;padding:8px;border-radius:8px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background=''">
+          <span style="font-size:18px;">${n.type==='income'?'↑':'↓'}</span>
+          <span style="flex:1;font-size:13px;color:#fff;">${esc(n.metadata?.label||n.content)}</span>
+          <span style="font-size:14px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${n.type==='income'?'#4ade80':'#f87171'};">${n.type==='income'?'+':'-'}$${(n.metadata?.amount||0).toLocaleString()}</span>
+        </div>`).join('')}
+    </div>`
+
+  const taskKanbanCols = { todo:'⬜ Pendiente', in_progress:'🔄 En Progreso', done:'✅ Completado' }
+
   root.innerHTML =
-    col('📌 Tareas', '#a78bfa', tasksToday, n => `
-      <div onclick="openCardModal('${n.id}')" style="padding:10px; background:rgba(167,139,250,0.06); border:1px solid rgba(167,139,250,0.2); border-radius:10px; margin-bottom:8px; cursor:pointer;">
-        <div style="font-size:13px; color:#fff;">${esc(n.metadata?.label || n.content)}</div>
-        <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">${n.metadata?.status || 'todo'}</div>
+    finChart +
+    col('📌','Tareas','#a78bfa','rgba(167,139,250,0.12)', tasksToday, n => `
+      <div onclick="openCardModal('${n.id}')" style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.15);border-radius:10px;margin-bottom:8px;cursor:pointer;">
+        <span style="font-size:11px;background:rgba(167,139,250,0.2);color:#c4b5fd;padding:2px 8px;border-radius:20px;white-space:nowrap;">${taskKanbanCols[n.metadata?.status]||'⬜ Pendiente'}</span>
+        <span style="font-size:13px;color:#fff;flex:1;">${esc(n.metadata?.label||n.content)}</span>
       </div>`) +
-    col('🧠 Notas', '#60a5fa', notesToday, n => `
-      <div onclick="openNoteEdit('${n.id}')" style="padding:10px; background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.2); border-radius:10px; margin-bottom:8px; cursor:pointer;">
-        <div style="font-size:13px; color:#fff;">${esc(n.metadata?.label || n.content)}</div>
+    col('📅','Eventos','#fb923c','rgba(251,146,60,0.12)', eventsToday, n => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.15);border-radius:10px;margin-bottom:8px;">
+        <span style="font-size:11px;color:#fdba74;">${n.metadata?.time||''}</span>
+        <span style="font-size:13px;color:#fff;flex:1;">${esc(n.metadata?.label||n.content)}</span>
+        ${n.metadata?.place?`<span style="font-size:10px;color:var(--text-muted);">📍 ${esc(n.metadata.place)}</span>`:''}
       </div>`) +
-    col('💹 Finanzas', '#4ade80', finToday, n => `
-      <div onclick="openFinanceDetail('${n.id}')" style="padding:10px; background:${n.type==='income'?'rgba(74,222,128,0.06)':'rgba(248,113,113,0.06)'}; border:1px solid ${n.type==='income'?'rgba(74,222,128,0.2)':'rgba(248,113,113,0.2)'}; border-radius:10px; margin-bottom:8px; cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
-        <div style="font-size:13px; color:#fff;">${esc(n.metadata?.label || n.content)}</div>
-        <div style="font-size:14px; font-weight:800; color:${n.type==='income'?'#4ade80':'#f87171'}; font-family:'JetBrains Mono',monospace;">${n.type==='income'?'+':'-'}$${(n.metadata?.amount||0).toLocaleString()}</div>
+    col('🧠','Notas','#60a5fa','rgba(96,165,250,0.12)', notesToday, n => `
+      <div onclick="openNoteEdit('${n.id}')" style="padding:10px;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.15);border-radius:10px;margin-bottom:8px;cursor:pointer;">
+        <div style="font-size:13px;color:#fff;margin-bottom:4px;">${esc(n.metadata?.label||n.content.slice(0,80))}</div>
+        ${(n.metadata?.tags||[]).map(t=>`<span style="font-size:9px;background:rgba(96,165,250,0.15);color:#93c5fd;padding:1px 6px;border-radius:4px;margin-right:3px;">${t}</span>`).join('')}
+      </div>`) +
+    col('👥','Contactos','#34d399','rgba(52,211,153,0.12)', contactsToday, n => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.15);border-radius:10px;margin-bottom:8px;">
+        <span style="font-size:18px;">👤</span>
+        <span style="font-size:13px;color:#fff;">${esc(n.metadata?.name||n.content)}</span>
+        ${n.metadata?.company?`<span style="font-size:10px;color:var(--text-muted);">${esc(n.metadata.company)}</span>`:''}
       </div>`)
 }
 
