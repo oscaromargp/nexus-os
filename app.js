@@ -179,6 +179,7 @@ function renderKanban(nodes) {
                  ondragstart="cardDragStart(event, '${n.id}')"
                  ondragend="this.style.opacity='1'"
                  onclick="openCardModal('${n.id}')">
+              ${(() => { const imgs = n.metadata?.images; if (!imgs?.length) return ''; const src = typeof imgs[0]==='string' ? imgs[0] : (imgs[0].url||imgs[0].data||''); return src ? `<div style="margin:-12px -12px 10px -12px;height:120px;overflow:hidden;border-radius:8px 8px 0 0;"><img src="${src}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.style.display='none'"/></div>` : '' })()}
               <div class="trello-card-title">${esc(n.metadata?.label || n.content)}</div>
               <div class="trello-card-meta">
                  ${(n.metadata?.comments || []).length > 0 ? `<span>💬 ${(n.metadata?.comments || []).length}</span>` : ''}
@@ -1392,6 +1393,20 @@ function renderFinance(nodes) {
   const initBalance = activeAccount !== 'all' ? (activeAcc?.metadata?.balance || 0) : 0
   const accBalance  = activeAccount !== 'all' ? initBalance + income - expense : net
 
+  // ── Reactive finance-hero ──────────────────────────────────────
+  const heroLabel = document.getElementById('dominance-label')
+  const heroBalance = document.getElementById('dominance-balance')
+  if (heroLabel && heroBalance) {
+    if (activeAccount === 'all') {
+      heroLabel.textContent = 'Balance Neto Consolidado'
+      heroBalance.textContent = `$${net.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2})}`
+    } else {
+      const accName = activeAcc?.metadata?.label || activeAcc?.content || 'Cuenta'
+      heroLabel.textContent = `Balance • ${accName}`
+      heroBalance.textContent = `$${accBalance.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2})}`
+    }
+  }
+
   // ── DASHBOARD "TODAS LAS CUENTAS" ─────────────────────────────
   let statsHtml = ''
   if (activeAccount === 'all') {
@@ -2374,8 +2389,10 @@ window.toggleFinanceCharts = () => {
   const btn   = document.getElementById('fin-charts-toggle')
   if (panel) panel.style.display = finChartsVisible ? 'grid' : 'none'
   if (btn)   { btn.style.background = finChartsVisible ? 'rgba(0,246,255,0.15)' : 'rgba(255,255,255,0.05)'; btn.style.color = finChartsVisible ? 'var(--accent-cyan)' : 'var(--text-muted)' }
-  if (finChartsVisible) setTimeout(() => renderFinanceCharts(allNodes), 0)
-  else destroyCharts()
+  if (finChartsVisible) {
+    const filtered = activeAccount === 'all' ? allNodes : allNodes.filter(n => n.metadata?.account_id === activeAccount || n.type === 'account')
+    setTimeout(() => renderFinanceCharts(filtered), 0)
+  } else destroyCharts()
 }
 
 function renderFinanceCharts(nodes) {
