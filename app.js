@@ -3834,8 +3834,10 @@ function contactInitials(name) {
 }
 
 function contactTypeIcon(cType) {
-  return cType === 'bank' ? '🏦' : cType === 'crypto' ? '₿' : '👤'
+  return cType === 'bank' ? '🏦' : cType === 'crypto' ? '₿' : cType === 'proveedor' ? '🔧' : '👤'
 }
+
+const PROV_STATUS_LABEL = { activo:'✅ Activo', recomendado:'⭐ Recomendado', pausado:'⏸ Pausado', no_recomendado:'❌ No recomendado' }
 
 window.setContactFilter = (type, btn) => {
   activeContactFilter = type
@@ -3869,9 +3871,8 @@ function renderContacts() {
     const m = c.metadata || {}
     const name  = m.name || c.content
     const cType = m.cType || 'persona'
-    const color = m.color || '#00f0ff'
+    const color = m.color || (cType==='proveedor' ? '#f97316' : '#00f0ff')
     const inits = cType === 'persona' ? contactInitials(name) : contactTypeIcon(cType)
-    // Count transactions linked to this contact
     const txCount = allNodes.filter(n =>
       (n.type === 'income' || n.type === 'expense') && n.metadata?.contact_id === c.id
     ).length
@@ -3879,13 +3880,22 @@ function renderContacts() {
       .filter(n => n.type === 'expense' && n.metadata?.contact_id === c.id)
       .reduce((s,n) => s + (n.metadata?.amount||0), 0)
 
+    const provExtra = cType === 'proveedor' ? `
+      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px;">
+        ${m.specialty ? `<span style="font-size:11px; color:#f97316; background:rgba(249,115,22,0.1); padding:1px 7px; border-radius:4px;">${esc(m.specialty)}</span>` : ''}
+        ${m.zone ? `<span style="font-size:11px; color:var(--text-dim);">📍${esc(m.zone)}</span>` : ''}
+        ${m.rating ? `<span style="font-size:11px;">${'⭐'.repeat(m.rating)}</span>` : ''}
+        ${m.prov_status ? `<span style="font-size:10px; color:var(--text-dim);">${PROV_STATUS_LABEL[m.prov_status]||''}</span>` : ''}
+      </div>` : ''
+
     return `<div class="contact-card" onclick="openContactSheet('${c.id}')">
       <div style="display:flex; gap:12px; align-items:flex-start;">
         <div class="contact-avatar" style="background:${color}20; color:${color}; border:1.5px solid ${color}40; font-size:${cType==='persona'?'16':'20'}px;">${inits}</div>
         <div style="flex:1; min-width:0;">
           <div style="font-size:14px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(name)}</div>
-          <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${esc(m.company || m.bank_name || m.network || '')}</div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${esc(m.company || m.bank_name || m.network || m.specialty || '')}</div>
           ${m.phone ? `<div style="font-size:11px; color:var(--text-muted); margin-top:1px;">📞 ${esc(m.phone)}</div>` : ''}
+          ${provExtra}
         </div>
       </div>
       ${txCount > 0 ? `<div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
@@ -3950,7 +3960,20 @@ function renderCSheetTab(tab, c) {
       <div class="csh-field"><span class="csh-label">✉️ Email</span><span>${esc(m.email||'—')}</span></div>
       <div class="csh-field"><span class="csh-label">🏢 Empresa</span><span>${esc(m.company||'—')}</span></div>
       ${m.rfc ? `<div class="csh-field"><span class="csh-label">🪪 RFC</span><code style="font-family:monospace;font-size:13px;letter-spacing:0.05em;">${esc(m.rfc)}</code></div>` : ''}
-    ` : cType === 'bank' ? `
+    ` : cType === 'proveedor' ? (() => {
+      const totalPaid = allNodes.filter(n=>n.type==='expense'&&n.metadata?.contact_id===c.id).reduce((s,n)=>s+(n.metadata?.amount||0),0)
+      const lastNode  = allNodes.filter(n=>n.metadata?.contact_id===c.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]
+      const lastDate  = lastNode ? new Date(lastNode.created_at).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}) : '—'
+      return `
+      <div class="csh-field"><span class="csh-label">🔧 Especialidad</span><span style="color:#f97316;">${esc(m.specialty||'—')}</span></div>
+      <div class="csh-field"><span class="csh-label">📍 Zona</span><span>${esc(m.zone||'—')}</span></div>
+      <div class="csh-field"><span class="csh-label">💲 Tarifa</span><span>${esc(m.price||'—')}</span></div>
+      <div class="csh-field"><span class="csh-label">📞 Teléfono</span><span>${esc(m.phone||'—')}</span></div>
+      <div class="csh-field"><span class="csh-label">⭐ Rating</span><span>${'⭐'.repeat(m.rating||3)} <span style="color:var(--text-dim);font-size:11px;">(${m.rating||3}/5)</span></span></div>
+      <div class="csh-field"><span class="csh-label">🚦 Estado</span><span>${PROV_STATUS_LABEL[m.prov_status||'activo']||'—'}</span></div>
+      <div class="csh-field"><span class="csh-label">💸 Total pagado</span><span style="color:#f87171;font-weight:700;">${totalPaid > 0 ? '-$'+totalPaid.toLocaleString('es-MX') : '—'}</span></div>
+      <div class="csh-field"><span class="csh-label">🕐 Última interacción</span><span>${lastDate}</span></div>
+    `})() : cType === 'bank' ? `
       <div class="csh-field"><span class="csh-label">🏦 Banco</span><span>${esc(m.bank_name||'—')}</span></div>
       <div class="csh-field" style="flex-direction:column;align-items:flex-start;gap:4px;">
         <span class="csh-label">🔢 CLABE</span>
@@ -4080,6 +4103,13 @@ window.openContactModal = (id = null) => {
   document.getElementById('cm-network').value = m.network || ''
   document.getElementById('cm-wallet').value = m.wallet || ''
   if (document.getElementById('cm-memo')) document.getElementById('cm-memo').value = m.memo || ''
+  // Proveedor fields
+  if (document.getElementById('cm-prov-specialty')) document.getElementById('cm-prov-specialty').value = m.specialty || ''
+  if (document.getElementById('cm-prov-zone'))      document.getElementById('cm-prov-zone').value      = m.zone || ''
+  if (document.getElementById('cm-prov-price'))     document.getElementById('cm-prov-price').value     = m.price || ''
+  if (document.getElementById('cm-prov-phone'))     document.getElementById('cm-prov-phone').value     = m.phone || ''
+  if (document.getElementById('cm-prov-status'))    document.getElementById('cm-prov-status').value    = m.prov_status || 'activo'
+  if (document.getElementById('cm-prov-rating'))    document.getElementById('cm-prov-rating').value    = String(m.rating || 3)
   document.getElementById('cm-notes').value  = m.notes || ''
   document.getElementById('cm-delete').style.display = c ? 'inline-flex' : 'none'
 
@@ -4103,9 +4133,10 @@ window.selectContactType = (type, btn) => {
 }
 
 function showContactTypeFields(type) {
-  document.getElementById('cm-persona-fields').style.display = type === 'persona' ? '' : 'none'
-  document.getElementById('cm-bank-fields').style.display   = type === 'bank'    ? '' : 'none'
-  document.getElementById('cm-crypto-fields').style.display = type === 'crypto'  ? '' : 'none'
+  document.getElementById('cm-persona-fields').style.display    = type === 'persona'   ? '' : 'none'
+  document.getElementById('cm-proveedor-fields').style.display  = type === 'proveedor' ? '' : 'none'
+  document.getElementById('cm-bank-fields').style.display       = type === 'bank'      ? '' : 'none'
+  document.getElementById('cm-crypto-fields').style.display     = type === 'crypto'    ? '' : 'none'
 }
 
 window.saveContact = async () => {
@@ -4121,6 +4152,13 @@ window.saveContact = async () => {
       email:   document.getElementById('cm-email').value.trim(),
       company: document.getElementById('cm-company').value.trim(),
       rfc:     document.getElementById('cm-rfc')?.value.trim() || undefined,
+    } : cType==='proveedor' ? {
+      specialty:   document.getElementById('cm-prov-specialty')?.value.trim() || '',
+      zone:        document.getElementById('cm-prov-zone')?.value.trim() || '',
+      price:       document.getElementById('cm-prov-price')?.value.trim() || '',
+      phone:       document.getElementById('cm-prov-phone')?.value.trim() || '',
+      prov_status: document.getElementById('cm-prov-status')?.value || 'activo',
+      rating:      parseInt(document.getElementById('cm-prov-rating')?.value || '3'),
     } : cType==='bank' ? {
       bank_name:  document.getElementById('cm-bank-name').value.trim(),
       clabe:      document.getElementById('cm-clabe').value.trim(),

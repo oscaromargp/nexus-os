@@ -1113,10 +1113,11 @@
       </div>
       <!-- Filter pills -->
       <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
-        <button class="contact-filter-btn active" data-ctype="all"   onclick="setContactFilter('all',this)">Todos</button>
-        <button class="contact-filter-btn"         data-ctype="persona" onclick="setContactFilter('persona',this)">👤 Personas</button>
-        <button class="contact-filter-btn"         data-ctype="bank"    onclick="setContactFilter('bank',this)">🏦 Bancos</button>
-        <button class="contact-filter-btn"         data-ctype="crypto"  onclick="setContactFilter('crypto',this)">₿ Cripto</button>
+        <button class="contact-filter-btn active" data-ctype="all"        onclick="setContactFilter('all',this)">Todos</button>
+        <button class="contact-filter-btn"         data-ctype="persona"   onclick="setContactFilter('persona',this)">👤 Personas</button>
+        <button class="contact-filter-btn"         data-ctype="proveedor" onclick="setContactFilter('proveedor',this)">🔧 Proveedores</button>
+        <button class="contact-filter-btn"         data-ctype="bank"      onclick="setContactFilter('bank',this)">🏦 Bancos</button>
+        <button class="contact-filter-btn"         data-ctype="crypto"    onclick="setContactFilter('crypto',this)">₿ Cripto</button>
       </div>
       <div id="contacts-root" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px;"></div>
     </div>
@@ -2537,9 +2538,10 @@
     <div class="modal-title" id="contact-modal-title">Nuevo Contacto</div>
     <!-- Type selector -->
     <div style="display:flex; gap:8px; margin-bottom:20px;">
-      <button class="contact-filter-btn active" data-ct="persona" onclick="selectContactType('persona',this)">👤 Persona</button>
-      <button class="contact-filter-btn" data-ct="bank"   onclick="selectContactType('bank',this)">🏦 Banco</button>
-      <button class="contact-filter-btn" data-ct="crypto" onclick="selectContactType('crypto',this)">₿ Cripto</button>
+      <button class="contact-filter-btn active" data-ct="persona"   onclick="selectContactType('persona',this)">👤 Persona</button>
+      <button class="contact-filter-btn" data-ct="proveedor" onclick="selectContactType('proveedor',this)">🔧 Proveedor</button>
+      <button class="contact-filter-btn" data-ct="bank"      onclick="selectContactType('bank',this)">🏦 Banco</button>
+      <button class="contact-filter-btn" data-ct="crypto"    onclick="selectContactType('crypto',this)">₿ Cripto</button>
     </div>
     <!-- Common fields -->
     <div class="modal-field">
@@ -2569,6 +2571,39 @@
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
         <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Titular</label><input type="text" id="cm-holder" class="modal-input" placeholder="Nombre del titular" /></div>
         <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">RFC del titular</label><input type="text" id="cm-bank-rfc" class="modal-input" placeholder="XXXX000000XXX" style="font-family:monospace; text-transform:uppercase;" /></div>
+      </div>
+    </div>
+    <!-- Proveedor fields -->
+    <div id="cm-proveedor-fields" style="display:none;">
+      <div class="modal-field"><label class="modal-label">Especialidad / Servicio *</label><input type="text" id="cm-prov-specialty" class="modal-input" placeholder="Ej: Electricista, Paneles solares, Plomero, Diseño web..." /></div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Zona / Ciudad</label><input type="text" id="cm-prov-zone" class="modal-input" placeholder="La Paz, Tulum, CDMX..." /></div>
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Precio / Tarifa</label><input type="text" id="cm-prov-price" class="modal-input" placeholder="Ej: $800/día, $500/hr" /></div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Teléfono</label>
+        <input type="tel" id="cm-prov-phone" class="modal-input" placeholder="+52 000 000 0000" />
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Estado</label>
+          <select id="cm-prov-status" class="modal-input">
+            <option value="activo">✅ Activo</option>
+            <option value="recomendado">⭐ Recomendado</option>
+            <option value="pausado">⏸ Pausado</option>
+            <option value="no_recomendado">❌ No recomendado</option>
+          </select>
+        </div>
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Rating ⭐</label>
+          <select id="cm-prov-rating" class="modal-input">
+            <option value="5">⭐⭐⭐⭐⭐</option>
+            <option value="4">⭐⭐⭐⭐</option>
+            <option value="3" selected>⭐⭐⭐</option>
+            <option value="2">⭐⭐</option>
+            <option value="1">⭐</option>
+          </select>
+        </div>
       </div>
     </div>
     <!-- Crypto fields -->
