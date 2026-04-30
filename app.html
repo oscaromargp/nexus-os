@@ -697,6 +697,14 @@
     }
 
     /* ── FEED ITEMS ── */
+    @keyframes nexus-pulse-in {
+      0%   { opacity:0.5; transform:translateX(-8px) scale(0.98); box-shadow:0 0 0 0 rgba(0,246,255,0); }
+      40%  { opacity:1;   transform:translateX(0)   scale(1);    box-shadow:0 0 12px 3px rgba(0,246,255,0.25); }
+      100% { box-shadow:0 0 0 0 rgba(0,246,255,0); }
+    }
+    .nexus-new-pulse {
+      animation: nexus-pulse-in 0.6s ease-out both;
+    }
     .feed-item {
       background: var(--glass-bg);
       border: 1px solid var(--glass-border);
@@ -1015,8 +1023,13 @@
     <div id="view-contacts" class="view-section">
       <div class="view-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
         <h1 class="view-title">Contactos & Cuentas</h1>
-        <div style="display:flex; gap:10px; align-items:center;">
-          <input id="contact-search" type="text" placeholder="🔍 Buscar..." class="input-field" style="width:220px; padding:8px 14px; font-size:13px;" oninput="renderContacts()" />
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input id="contact-search" type="text" placeholder="🔍 Buscar..." class="input-field" style="width:200px; padding:8px 14px; font-size:13px;" oninput="renderContacts()" />
+          <button onclick="downloadContactTemplate()" title="Descargar plantilla CSV" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:9px;padding:7px 13px;color:var(--text-muted);cursor:pointer;font-size:12px;font-weight:600;">📄 Plantilla</button>
+          <button onclick="exportContactsCSV()" title="Exportar contactos CSV" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);border-radius:9px;padding:7px 13px;color:#4ade80;cursor:pointer;font-size:12px;font-weight:600;">⬇ Exportar</button>
+          <label title="Importar contactos CSV" style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);border-radius:9px;padding:7px 13px;color:#60a5fa;cursor:pointer;font-size:12px;font-weight:600;">
+            ⬆ Importar<input id="contact-csv-input" type="file" accept=".csv" style="display:none;" onchange="importContactsCSV(this)" />
+          </label>
           <button onclick="openContactModal()" class="btn-add-contact">+ Nuevo Contacto</button>
         </div>
       </div>
@@ -1049,10 +1062,12 @@
 
         <!-- Compromisos del mes -->
         <div class="settings-card" style="padding:20px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
             <h3 style="font-size:15px;font-weight:800;color:#a78bfa;">📆 Plan del Mes</h3>
             <span id="agenda-plan-month" style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;"></span>
           </div>
+          <!-- Selector de cuentas -->
+          <div id="agenda-plan-accounts" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
           <table style="width:100%;border-collapse:collapse;font-size:12px;" id="agenda-plan-table">
             <thead>
               <tr>
@@ -1108,15 +1123,52 @@
         <div id="ag-fields-card">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
+              <label class="modal-label">Banco / Emisor</label>
+              <input id="ag-bank" type="text" class="modal-input" placeholder="BBVA, Banamex, Nu..." />
+            </div>
+            <div>
+              <label class="modal-label">Tipo de tarjeta</label>
+              <select id="ag-card-type" class="modal-input">
+                <option value="crédito">💳 Crédito</option>
+                <option value="débito">💰 Débito</option>
+                <option value="digital">📱 Digital</option>
+                <option value="cripto">₿ Cripto</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label class="modal-label">Titular</label>
+              <input id="ag-holder" type="text" class="modal-input" placeholder="Nombre completo" />
+            </div>
+            <div>
               <label class="modal-label">Últimos 4 dígitos</label>
               <input id="ag-last4" type="text" maxlength="4" class="modal-input" placeholder="4321" />
             </div>
+          </div>
+          <div class="modal-field" style="margin-bottom:12px;">
+            <label class="modal-label">Número completo de tarjeta</label>
+            <input id="ag-card-number" type="text" maxlength="19" class="modal-input" placeholder="1234 5678 9012 3456" />
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label class="modal-label">CLABE interbancaria</label>
+              <input id="ag-clabe" type="text" maxlength="18" class="modal-input" placeholder="18 dígitos" />
+            </div>
+            <div>
+              <label class="modal-label">Número de cuenta</label>
+              <input id="ag-account-num" type="text" class="modal-input" placeholder="10–11 dígitos" />
+            </div>
+          </div>
+          <div class="modal-field" style="margin-bottom:12px;">
+            <label class="modal-label">Sucursal</label>
+            <input id="ag-branch" type="text" class="modal-input" placeholder="Centro Histórico, Zona Rosa..." />
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
               <label class="modal-label">Límite de crédito</label>
               <input id="ag-limit" type="number" class="modal-input" placeholder="0" />
             </div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
               <label class="modal-label">Día de corte</label>
               <input id="ag-cut-day" type="number" min="1" max="31" class="modal-input" placeholder="15" />
@@ -1125,6 +1177,8 @@
               <label class="modal-label">Día de pago</label>
               <input id="ag-pay-day" type="number" min="1" max="31" class="modal-input" placeholder="5" />
             </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
               <label class="modal-label">Moneda</label>
               <select id="ag-card-currency" class="modal-input">
@@ -1155,8 +1209,43 @@
             </div>
           </div>
           <div class="modal-field" id="ag-category-wrap">
-            <label class="modal-label">Categoría / Ícono</label>
-            <input id="ag-category" type="text" class="modal-input" placeholder="📺 Streaming, 💡 Servicios, 🏠 Renta..." />
+            <label class="modal-label">Categoría</label>
+            <select id="ag-category" class="modal-input">
+              <option value="📺 Streaming">📺 Streaming</option>
+              <option value="💻 SaaS / Software">💻 SaaS / Software</option>
+              <option value="🌐 Hosting / Dominio">🌐 Hosting / Dominio</option>
+              <option value="📱 Telefonía">📱 Telefonía</option>
+              <option value="💡 Servicios Públicos">💡 Servicios Públicos</option>
+              <option value="🛡️ Seguros">🛡️ Seguros</option>
+              <option value="🏋️ Membresías">🏋️ Membresías</option>
+              <option value="🏠 Renta / Hipoteca">🏠 Renta / Hipoteca</option>
+              <option value="🍽️ Alimentación">🍽️ Alimentación</option>
+              <option value="🎮 Entretenimiento">🎮 Entretenimiento</option>
+              <option value="👥 Nómina">👥 Nómina</option>
+              <option value="🔧 Otros">🔧 Otros</option>
+            </select>
+          </div>
+          <!-- Bill-specific fields -->
+          <div id="ag-bill-fields" style="display:none;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+              <div>
+                <label class="modal-label">Contacto beneficiario</label>
+                <select id="ag-bill-contact" class="modal-input">
+                  <option value="">— Sin contacto —</option>
+                </select>
+              </div>
+              <div>
+                <label class="modal-label">Método de pago</label>
+                <select id="ag-bill-method" class="modal-input">
+                  <option value="transferencia">🏦 Transferencia</option>
+                  <option value="tarjeta">💳 Tarjeta</option>
+                  <option value="efectivo">💵 Efectivo</option>
+                  <option value="cripto">₿ Cripto</option>
+                  <option value="domiciliado">🔄 Cargo domiciliado</option>
+                </select>
+              </div>
+            </div>
+            <div id="ag-bill-contact-info" style="display:none;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.25);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--text-muted);"></div>
           </div>
         </div>
 
@@ -1711,7 +1800,15 @@
       </div>
     </div>
 
-    <div id="sidebar-currencies" style="display:none;"></div>
+    <div id="sidebar-currencies" style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:14px 16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:0.5px;">TIPO DE CAMBIO</span>
+        <span id="fx-updated" style="font-size:9px;color:var(--text-dim);">—</span>
+      </div>
+      <div id="fx-table" style="display:flex;flex-direction:column;gap:6px;">
+        <div style="text-align:center;color:var(--text-dim);font-size:11px;">Cargando...</div>
+      </div>
+    </div>
   </aside>
 
   <!-- PANEL COLLAPSE TOGGLES -->

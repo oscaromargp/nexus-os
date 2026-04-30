@@ -93,7 +93,7 @@ const TYPE_CONFIG = {
   initWorldClock()
   restorePanels()
 loadSystemSettings()
-  // renderCurrencyWidget() — widgets moved to view-herramientas, sidebar-currencies hidden
+  initFxWidget() // Sidebar tipo de cambio en vivo
   // Live countdown display update from inputs
   ;['cd-min','cd-sec'].forEach(id => {
     document.getElementById(id)?.addEventListener('input', () => {
@@ -1031,8 +1031,9 @@ function feedItemHtml(n) {
   const amount = (n.type === 'income' || n.type === 'expense') && n.metadata?.amount
     ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:${tc.color};flex-shrink:0;">${n.type==='income'?'+':'-'}$${n.metadata.amount.toLocaleString()}</span>` : ''
   const timeStr = n.created_at ? `${new Date(n.created_at).getHours().toString().padStart(2,'0')}:${new Date(n.created_at).getMinutes().toString().padStart(2,'0')}` : '--:--'
+  const newPulse = n._optimistic ? ' nexus-new-pulse' : ''
   return `
-    <div class="feed-item" style="border-left:3px solid ${tc.border};background:${tc.bg};" onclick="openCardModal('${n.id}')">
+    <div class="feed-item${newPulse}" style="border-left:3px solid ${tc.border};background:${tc.bg};" onclick="openCardModal('${n.id}')">
       <span class="feed-time">${timeStr}</span>
       <span style="font-size:9px;font-weight:800;color:${tc.color};background:${tc.border.replace('0.4','0.12').replace('0.3','0.12')};padding:2px 8px;border-radius:4px;flex-shrink:0;">${tc.label}</span>
       <div style="flex:1;min-width:0;">
@@ -1108,6 +1109,12 @@ function renderFeed(nodes) {
   }
 
   root.innerHTML = filterBar + content
+
+  // Scroll to top when a new optimistic node appears
+  if (nodes.some(n => n._optimistic)) {
+    const feedSection = document.getElementById('view-feed')
+    if (feedSection?.classList.contains('active')) root.scrollTop = 0
+  }
 }
 
 window.deleteNode = async (id) => {
@@ -2388,6 +2395,7 @@ let chartJsReady = false
 let agendaItemType = 'card'
 let agendaColor    = '#60a5fa'
 let editingAgendaId = null
+let agendaPlanAccounts = new Set() // empty = all accounts
 
 function renderAgenda(nodes) {
   const cards  = nodes.filter(n => n.type === 'card')
@@ -2417,7 +2425,30 @@ function renderAgenda(nodes) {
   const planMonth = document.getElementById('agenda-plan-month')
   if (planMonth) planMonth.textContent = today.toLocaleDateString('es-ES',{month:'long',year:'numeric'}).toUpperCase()
 
-  const incomeNodes = nodes.filter(n => n.type === 'income')
+  // ── Account selector checkboxes ───────────────────────────────
+  const accountNodes = allNodes.filter(n => n.type === 'account')
+  const planAccountsEl = document.getElementById('agenda-plan-accounts')
+  if (planAccountsEl) {
+    if (accountNodes.length > 0) {
+      planAccountsEl.innerHTML = `<span style="font-size:10px;color:var(--text-muted);font-weight:600;align-self:center;white-space:nowrap;">CUENTAS:</span>` +
+        accountNodes.map(acc => {
+          const label = acc.metadata?.label || acc.content
+          const checked = agendaPlanAccounts.size === 0 || agendaPlanAccounts.has(acc.id)
+          const clr = acc.metadata?.color || '#60a5fa'
+          return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;background:${clr}15;border:1px solid ${clr}33;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:${checked?clr:'var(--text-muted)'};">
+            <input type="checkbox" ${checked?'checked':''} onchange="toggleAgendaAccount('${acc.id}',this)" style="display:none;" />
+            ${esc(label)}
+          </label>`
+        }).join('')
+    } else {
+      planAccountsEl.innerHTML = ''
+    }
+  }
+
+  const incomeAll = nodes.filter(n => n.type === 'income')
+  const incomeNodes = agendaPlanAccounts.size === 0
+    ? incomeAll
+    : incomeAll.filter(n => !n.metadata?.account_id || agendaPlanAccounts.has(n.metadata.account_id))
   const expenseNodes = nodes.filter(n => n.type === 'expense')
   const totalIn  = incomeNodes.reduce((s,n)  => s + (n.metadata?.amount||0), 0)
   const totalOut = expenseNodes.reduce((s,n) => s + (n.metadata?.amount||0), 0) + totalFixed
@@ -2457,12 +2488,20 @@ function renderAgenda(nodes) {
   }
   const saldo = totalIn - totalOut
   const saldoClr = saldo >= 0 ? '#4ade80' : '#f87171'
+  const selectedLabel = agendaPlanAccounts.size > 0
+    ? ` <span style="font-size:9px;opacity:0.6;">(${agendaPlanAccounts.size} cta${agendaPlanAccounts.size!==1?'s':''})</span>`
+    : ''
   if (planFoot) planFoot.innerHTML = `
     <tr style="border-top:1px solid var(--glass-border);">
-      <td style="padding:8px 4px;font-weight:800;color:#fff;">TOTAL</td>
+      <td style="padding:8px 4px;font-weight:800;color:#fff;">TOTAL${selectedLabel}</td>
       <td style="text-align:right;padding:8px 4px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">${fmt$(totalIn)}</td>
       <td style="text-align:right;padding:8px 4px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">${fmt$(totalOut)}</td>
       <td style="text-align:right;padding:8px 4px;font-weight:800;color:${saldoClr};font-family:'JetBrains Mono',monospace;">${fmt$(saldo)}</td>
+    </tr>
+    <tr>
+      <td colspan="4" style="padding:6px 4px;font-size:11px;color:var(--text-muted);">
+        💰 <b style="color:${saldoClr};">Disponible real: ${fmt$(saldo)}</b> = entradas (${fmt$(totalIn)}) − compromisos (${fmt$(totalOut)})
+      </td>
     </tr>`
 
   // ── PRÓXIMOS 7 DÍAS ───────────────────────────────────────────
@@ -2554,14 +2593,26 @@ function renderAgenda(nodes) {
           if (d < today) d.setMonth(d.getMonth() + 1)
           return Math.ceil((d - today) / 86400000)
         })()
+        const cardNumDisplay = m.cardNumber
+          ? m.cardNumber.replace(/(\d{4})(?=\d)/g,'$1 ')
+          : (m.lastFour ? `•••• •••• •••• ${m.lastFour}` : '•••• •••• •••• ????')
         return `<div style="background:linear-gradient(135deg,${clr}22,${clr}08);border:1px solid ${clr}44;border-radius:16px;padding:20px;position:relative;overflow:hidden;">
-          <div style="position:absolute;right:12px;top:12px;opacity:0.08;font-size:60px;pointer-events:none;">💳</div>
-          <div style="font-size:11px;color:${clr};font-weight:700;letter-spacing:1px;margin-bottom:6px;">${esc(m.label||c.content)}</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:16px;color:#fff;margin-bottom:12px;">•••• •••• •••• ${m.lastFour||'????'}</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <div style="position:absolute;right:12px;top:12px;opacity:0.07;font-size:60px;pointer-events:none;">💳</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-size:11px;color:${clr};font-weight:700;letter-spacing:1px;">${esc(m.label||c.content)}</span>
+            ${m.bank ? `<span style="font-size:10px;color:var(--text-dim);background:${clr}18;border-radius:5px;padding:1px 6px;">${esc(m.bank)}</span>` : ''}
+            ${m.cardType ? `<span style="font-size:9px;color:var(--text-dim);opacity:0.7;">${m.cardType}</span>` : ''}
+          </div>
+          ${m.holder ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">👤 ${esc(m.holder)}</div>` : ''}
+          <div style="font-family:'JetBrains Mono',monospace;font-size:15px;color:#fff;margin-bottom:8px;letter-spacing:1px;">${cardNumDisplay}</div>
+          ${m.clabe ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;font-family:'JetBrains Mono',monospace;">CLABE: ${esc(m.clabe)}</div>` : ''}
+          ${m.accountNum ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;font-family:'JetBrains Mono',monospace;">Cta: ${esc(m.accountNum)}</div>` : ''}
+          ${m.branch ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">🏢 ${esc(m.branch)}</div>` : ''}
+          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;">
             <div><div style="font-size:9px;color:var(--text-muted);">CORTE</div><div style="font-size:13px;font-weight:700;color:#fff;">Día ${m.cutDay||'—'}</div></div>
-            <div><div style="font-size:9px;color:var(--text-muted);">PAGO</div><div style="font-size:13px;font-weight:700;color:${daysToPayment<=3?'#f87171':'#fff'};">Día ${m.payDay||'—'}${daysToPayment!==null?` <span style="font-size:10px;opacity:0.7;">(${daysToPayment}d)</span>`:''}</div></div>
+            <div><div style="font-size:9px;color:var(--text-muted);">PAGO</div><div style="font-size:13px;font-weight:700;color:${daysToPayment!==null&&daysToPayment<=3?'#f87171':'#fff'};">Día ${m.payDay||'—'}${daysToPayment!==null?` <span style="font-size:10px;opacity:0.7;">(${daysToPayment}d)</span>`:''}</div></div>
             ${m.limit ? `<div><div style="font-size:9px;color:var(--text-muted);">LÍMITE</div><div style="font-size:13px;font-weight:700;color:#fff;">${fmt$(m.limit)}</div></div>` : ''}
+            <div><div style="font-size:9px;color:var(--text-muted);">MONEDA</div><div style="font-size:12px;font-weight:700;color:${clr};">${m.currency||'MXN'}</div></div>
           </div>
           <button onclick="deleteAgendaItem('${c.id}')" style="position:absolute;bottom:10px;right:10px;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;" title="Eliminar">✕</button>
         </div>`
@@ -2593,11 +2644,18 @@ function renderAgenda(nodes) {
         const m = b.metadata || {}
         const clr = m.color || '#fb923c'
         const paid = m.paid || false
+        const billContact = m.contactId ? allNodes.find(n => n.id === m.contactId) : null
+        const billContactName = billContact ? (billContact.metadata?.name || billContact.content) : ''
+        const methodLabel = { transferencia:'🏦 Transferencia', tarjeta:'💳 Tarjeta', efectivo:'💵 Efectivo', cripto:'₿ Cripto', domiciliado:'🔄 Cargo domiciliado' }
         return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${paid?'rgba(74,222,128,0.05)':clr+'14'};border:1px solid ${paid?'#4ade8033':clr+'33'};border-radius:12px;opacity:${paid?0.6:1};">
           <button onclick="toggleBillPaid('${b.id}')" style="background:${paid?'#4ade80':'transparent'};border:2px solid ${paid?'#4ade80':clr};width:20px;height:20px;border-radius:5px;cursor:pointer;flex-shrink:0;color:${paid?'#000':'transparent'};font-size:12px;display:flex;align-items:center;justify-content:center;">✓</button>
           <div style="flex:1;">
             <div style="font-size:12px;font-weight:600;color:#fff;${paid?'text-decoration:line-through;':''}">${esc(m.label||b.content)}</div>
-            ${m.dueDate?`<div style="font-size:10px;color:var(--text-muted);">Vence: ${m.dueDate}</div>`:''}
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:3px;">
+              ${m.dueDate?`<span style="font-size:10px;color:var(--text-muted);">📅 ${m.dueDate}</span>`:''}
+              ${billContactName?`<span style="font-size:10px;color:var(--text-muted);">→ ${esc(billContactName)}</span>`:''}
+              ${m.method?`<span style="font-size:10px;color:var(--text-muted);">${methodLabel[m.method]||m.method}</span>`:''}
+            </div>
           </div>
           <div style="font-size:13px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${fmt$(m.amount||0)}</div>
           <button onclick="deleteAgendaItem('${b.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Eliminar">✕</button>
@@ -2622,15 +2680,51 @@ window.openAgendaModal = (type) => {
   document.getElementById('ag-fields-card').style.display      = type === 'card' ? '' : 'none'
   document.getElementById('ag-fields-recurring').style.display = type !== 'card' ? '' : 'none'
   document.getElementById('ag-category-wrap').style.display    = type === 'subscription' ? '' : 'none'
+  document.getElementById('ag-bill-fields').style.display      = type === 'bill' ? '' : 'none'
   if (type !== 'card') {
     document.getElementById('ag-amount').value = ''
     document.getElementById('ag-day').value    = ''
-    document.getElementById('ag-category').value = ''
   } else {
-    document.getElementById('ag-last4').value   = ''
-    document.getElementById('ag-limit').value   = ''
-    document.getElementById('ag-cut-day').value = ''
-    document.getElementById('ag-pay-day').value = ''
+    document.getElementById('ag-last4').value       = ''
+    document.getElementById('ag-limit').value       = ''
+    document.getElementById('ag-cut-day').value     = ''
+    document.getElementById('ag-pay-day').value     = ''
+    document.getElementById('ag-bank').value        = ''
+    document.getElementById('ag-holder').value      = ''
+    document.getElementById('ag-card-number').value = ''
+    document.getElementById('ag-clabe').value       = ''
+    document.getElementById('ag-account-num').value = ''
+    document.getElementById('ag-branch').value      = ''
+  }
+  // Populate contact dropdown for bills
+  if (type === 'bill') {
+    const sel = document.getElementById('ag-bill-contact')
+    const infoEl = document.getElementById('ag-bill-contact-info')
+    if (sel) {
+      const contacts = getContacts()
+      sel.innerHTML = '<option value="">— Sin contacto —</option>' +
+        contacts.map(c => {
+          const name = c.metadata?.name || c.content
+          return `<option value="${c.id}">${esc(name)}</option>`
+        }).join('')
+      if (infoEl) infoEl.style.display = 'none'
+      sel.onchange = () => {
+        const cId = sel.value
+        if (!cId || !infoEl) { infoEl && (infoEl.style.display='none'); return }
+        const contact = allNodes.find(n => n.id === cId)
+        if (!contact) { infoEl.style.display='none'; return }
+        const m = contact.metadata || {}
+        const parts = []
+        if (m.bank_name || m.bank) parts.push(`🏦 ${m.bank_name || m.bank}`)
+        if (m.clabe)               parts.push(`CLABE: ${m.clabe}`)
+        if (m.account)             parts.push(`Cta: ${m.account}`)
+        if (m.phone)               parts.push(`📞 ${m.phone}`)
+        if (m.email)               parts.push(`✉ ${m.email}`)
+        if (m.address?.wallet)     parts.push(`₿ ${m.address.wallet}`)
+        if (parts.length) { infoEl.innerHTML = parts.join(' &nbsp;·&nbsp; '); infoEl.style.display = '' }
+        else infoEl.style.display = 'none'
+      }
+    }
   }
   // Reset color swatches
   document.querySelectorAll('#agenda-modal .ev-color-swatch').forEach(s => s.classList.remove('active'))
@@ -2639,6 +2733,19 @@ window.openAgendaModal = (type) => {
   setTimeout(() => document.getElementById('ag-name')?.focus(), 60)
 }
 window.closeAgendaModal = () => document.getElementById('agenda-modal')?.classList.add('hidden')
+window.toggleAgendaAccount = (accId, checkbox) => {
+  // If currently "all selected" (empty set), initialize with all ids checked minus the one being unchecked
+  if (agendaPlanAccounts.size === 0) {
+    const allAcc = allNodes.filter(n => n.type === 'account').map(n => n.id)
+    allAcc.forEach(id => agendaPlanAccounts.add(id))
+  }
+  if (checkbox.checked) agendaPlanAccounts.add(accId)
+  else agendaPlanAccounts.delete(accId)
+  // If all selected again → reset to "all" state
+  const allAcc = allNodes.filter(n => n.type === 'account').map(n => n.id)
+  if (allAcc.every(id => agendaPlanAccounts.has(id))) agendaPlanAccounts.clear()
+  renderAgenda(allNodes)
+}
 window.selectAgendaColor = (btn) => {
   document.querySelectorAll('#agenda-modal .ev-color-swatch').forEach(s => s.classList.remove('active'))
   btn.classList.add('active'); agendaColor = btn.dataset.color
@@ -2649,21 +2756,30 @@ window.saveAgendaItem = async () => {
   let meta = { label: name, color: agendaColor }
   if (agendaItemType === 'card') {
     meta = { ...meta,
-      lastFour: document.getElementById('ag-last4')?.value,
-      limit:    parseFloat(document.getElementById('ag-limit')?.value) || 0,
-      cutDay:   parseInt(document.getElementById('ag-cut-day')?.value) || null,
-      payDay:   parseInt(document.getElementById('ag-pay-day')?.value) || null,
-      currency: document.getElementById('ag-card-currency')?.value || 'MXN'
+      bank:       document.getElementById('ag-bank')?.value.trim() || '',
+      cardType:   document.getElementById('ag-card-type')?.value || 'crédito',
+      holder:     document.getElementById('ag-holder')?.value.trim() || '',
+      lastFour:   document.getElementById('ag-last4')?.value.trim() || '',
+      cardNumber: document.getElementById('ag-card-number')?.value.replace(/\s/g,'') || '',
+      clabe:      document.getElementById('ag-clabe')?.value.trim() || '',
+      accountNum: document.getElementById('ag-account-num')?.value.trim() || '',
+      branch:     document.getElementById('ag-branch')?.value.trim() || '',
+      limit:      parseFloat(document.getElementById('ag-limit')?.value) || 0,
+      cutDay:     parseInt(document.getElementById('ag-cut-day')?.value) || null,
+      payDay:     parseInt(document.getElementById('ag-pay-day')?.value) || null,
+      currency:   document.getElementById('ag-card-currency')?.value || 'MXN'
     }
   } else {
     meta = { ...meta,
       amount:     parseFloat(document.getElementById('ag-amount')?.value) || 0,
       currency:   document.getElementById('ag-currency')?.value || 'MXN',
       dayOfMonth: parseInt(document.getElementById('ag-day')?.value) || null,
-      category:   document.getElementById('ag-category')?.value.trim(),
+      category:   document.getElementById('ag-category')?.value || '',
       paid: false
     }
     if (agendaItemType === 'bill') {
+      meta.contactId = document.getElementById('ag-bill-contact')?.value || ''
+      meta.method    = document.getElementById('ag-bill-method')?.value || 'transferencia'
       meta.dueDate = (() => {
         const day = meta.dayOfMonth; if (!day) return ''
         const d = new Date(); d.setDate(day)
@@ -4055,4 +4171,146 @@ window.toggleAudioRecord = async (context) => {
 
 window.stopAudioRecord = (context) => {
   if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop()
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CONTACTOS — EXPORT / IMPORT CSV
+// ═══════════════════════════════════════════════════════════════
+const CONTACT_CSV_HEADERS = [
+  'nombre','tipo','empresa','telefono','email','banco','clabe','cuenta','red_cripto','wallet','color','notas'
+]
+
+window.downloadContactTemplate = () => {
+  const header = CONTACT_CSV_HEADERS.join(',')
+  const example = [
+    'Juan Pérez','persona','ACME Corp','5512345678','juan@correo.com','BBVA','021180000000000000','1234567890','','','#00f0ff','Proveedor frecuente'
+  ].map(v => `"${v}"`).join(',')
+  const csv = `${header}\n${example}\n`
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url  = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = 'nexus_contactos_plantilla.csv'; a.click()
+  URL.revokeObjectURL(url)
+  showToast('📄 Plantilla descargada')
+}
+
+window.exportContactsCSV = () => {
+  const contacts = getContacts()
+  if (!contacts.length) { showToast('Sin contactos para exportar'); return }
+  const rows = [CONTACT_CSV_HEADERS.join(',')]
+  contacts.forEach(c => {
+    const m = c.metadata || {}
+    const row = [
+      m.name || c.content,
+      m.cType || 'persona',
+      m.company || '',
+      m.phone || '',
+      m.email || '',
+      m.bank_name || m.bank || '',
+      m.clabe || '',
+      m.account || '',
+      m.network || '',
+      m.address?.wallet || '',
+      m.color || '#00f0ff',
+      m.notes || ''
+    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')
+    rows.push(row)
+  })
+  const csv  = rows.join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url  = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = `nexus_contactos_${new Date().toISOString().split('T')[0]}.csv`; a.click()
+  URL.revokeObjectURL(url)
+  showToast(`⬇ ${contacts.length} contactos exportados`)
+}
+
+window.importContactsCSV = async (input) => {
+  const file = input.files?.[0]; if (!file) return
+  const text = await file.text()
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) { showToast('⚠️ CSV vacío o sin datos'); return }
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g,''))
+  const idxOf = key => headers.indexOf(key)
+  const parseCell = cell => cell?.trim().replace(/^"|"$/g,'').replace(/""/g,'"') || ''
+
+  let imported = 0, errors = 0
+  for (let i = 1; i < lines.length; i++) {
+    // Respect quoted commas
+    const cells = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)?.map(parseCell) || []
+    const nombre = cells[idxOf('nombre')] || cells[0] || ''
+    if (!nombre) { errors++; continue }
+    const cType  = cells[idxOf('tipo')] || 'persona'
+    const meta = {
+      name:     nombre,
+      cType:    ['persona','bank','crypto'].includes(cType) ? cType : 'persona',
+      company:  cells[idxOf('empresa')] || '',
+      phone:    cells[idxOf('telefono')] || '',
+      email:    cells[idxOf('email')] || '',
+      bank_name:cells[idxOf('banco')] || '',
+      clabe:    cells[idxOf('clabe')] || '',
+      account:  cells[idxOf('cuenta')] || '',
+      network:  cells[idxOf('red_cripto')] || '',
+      color:    cells[idxOf('color')] || '#00f0ff',
+      notes:    cells[idxOf('notas')] || '',
+    }
+    const wallet = cells[idxOf('wallet')] || ''
+    if (wallet) meta.address = { wallet }
+    try {
+      await insertDirectNode('contact', nombre, meta)
+      imported++
+    } catch { errors++ }
+  }
+  input.value = ''
+  showToast(`✅ ${imported} contactos importados${errors?` (${errors} errores)`:''}`)
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SIDEBAR — TIPO DE CAMBIO EN VIVO
+// ═══════════════════════════════════════════════════════════════
+let fxIntervalId = null
+
+async function refreshFxWidget() {
+  const container = document.getElementById('fx-table')
+  const updatedEl = document.getElementById('fx-updated')
+  if (!container) return
+
+  const pairs = [
+    { from:'USD',  to:'MXN',  label:'USD',  icon:'🇺🇸', crypto:false },
+    { from:'btc',  to:'mxn',  label:'BTC',  icon:'₿',   crypto:true  },
+    { from:'eth',  to:'mxn',  label:'ETH',  icon:'Ξ',   crypto:true  },
+    { from:'xrp',  to:'mxn',  label:'XRP',  icon:'✕',   crypto:true  },
+    { from:'usdt', to:'mxn',  label:'USDT', icon:'₮',   crypto:true  },
+  ]
+
+  const rows = await Promise.all(pairs.map(async p => {
+    try {
+      const rate = p.crypto
+        ? await fetchCryptoRate(p.from, p.to)
+        : await fetchFiatRate(p.from, p.to)
+      if (!rate) throw new Error('no rate')
+      const fmt = rate >= 10
+        ? rate.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : rate.toLocaleString('es-MX', { minimumFractionDigits: 4, maximumFractionDigits: 6 })
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
+        <span style="font-size:11px;color:var(--text-muted);">${p.icon} ${p.label}</span>
+        <span style="font-size:11px;font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">$${fmt}</span>
+      </div>`
+    } catch {
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
+        <span style="font-size:11px;color:var(--text-muted);">${p.icon} ${p.label}</span>
+        <span style="font-size:10px;color:var(--text-dim);">—</span>
+      </div>`
+    }
+  }))
+
+  container.innerHTML = rows.join('<div style="border-top:1px solid rgba(255,255,255,0.04);margin:2px 0;"></div>')
+  if (updatedEl) {
+    const now = new Date()
+    updatedEl.textContent = now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
+  }
+}
+
+function initFxWidget() {
+  refreshFxWidget()
+  if (fxIntervalId) clearInterval(fxIntervalId)
+  fxIntervalId = setInterval(refreshFxWidget, 60_000)
 }
