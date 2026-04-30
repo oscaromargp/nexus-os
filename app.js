@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import Fuse from 'fuse.js'
 
 // ─────────────────────────────────────────
 // Clientes y Estado
@@ -817,7 +818,39 @@ function buildIdeSuggestions(val) {
     })
   }
 
-  return results.slice(0, 10)
+  // Tag autocomplete: detect # mid-input (after at least one char before it)
+  const hashMatch = val.match(/#(\w*)$/)
+  const isCommandStart = /^#(tarea|persona|proyecto|idea)\s/i.test(val)
+  if (hashMatch && !isCommandStart && val.indexOf('#') > 0) {
+    const partial = hashMatch[1].toLowerCase()
+    const tagFreq = {}
+    allNodes.forEach(n => {
+      ;(n.metadata?.tags || []).forEach(t => {
+        const tag = t.replace(/^#/, '').toLowerCase().trim()
+        if (tag) tagFreq[tag] = (tagFreq[tag] || 0) + 1
+      })
+    })
+    Object.entries(tagFreq)
+      .filter(([t]) => !partial || t.startsWith(partial))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .forEach(([tag, freq]) => {
+        const completed = val.replace(/#\w*$/, '#' + tag) + ' '
+        results.push({
+          icon: '🏷️',
+          prefix: '#' + tag,
+          tpl: completed,
+          desc: `${freq} nodo${freq > 1 ? 's' : ''}`,
+          color: '#a855f7',
+          cat: 'Etiquetas',
+          _type: 'tag',
+          _tag: tag,
+          _completed: completed
+        })
+      })
+  }
+
+  return results.slice(0, 12)
 }
 
 function renderIdeSuggest(val) {
@@ -859,12 +892,12 @@ window.selectIdeSuggestion = function(idx) {
   if (!s || !nexusInput) return
   const val = nexusInput.value
   if (s._type === 'account' || s._type === 'contact_acct') {
-    // Replace the @partial with @full
     nexusInput.value = val.replace(/@[\w]*$/, '@' + s._key) + ' '
+  } else if (s._type === 'tag') {
+    nexusInput.value = s._completed
   } else if (s._type === 'contact') {
     nexusInput.value = s.tpl
   } else {
-    // Command: replace entire input with template
     nexusInput.value = s.prefix
   }
   nexusInput.focus()
@@ -988,6 +1021,8 @@ function renderAll() {
   renderContacts()
   renderAgenda(allNodes)
   renderFilterBar()
+  // Keep Fuse index in sync with allNodes
+  if (typeof buildFuseIndex === 'function') buildFuseIndex()
 }
 
 function renderFilterBar() {
@@ -1033,7 +1068,7 @@ function feedItemHtml(n) {
   const timeStr = n.created_at ? `${new Date(n.created_at).getHours().toString().padStart(2,'0')}:${new Date(n.created_at).getMinutes().toString().padStart(2,'0')}` : '--:--'
   const newPulse = n._optimistic ? ' nexus-new-pulse' : ''
   return `
-    <div class="feed-item${newPulse}" style="border-left:3px solid ${tc.border};background:${tc.bg};" onclick="openCardModal('${n.id}')">
+    <div class="feed-item${newPulse}" data-node-id="${n.id}" style="border-left:3px solid ${tc.border};background:${tc.bg};" onclick="openCardModal('${n.id}')">
       <span class="feed-time">${timeStr}</span>
       <span style="font-size:9px;font-weight:800;color:${tc.color};background:${tc.border.replace('0.4','0.12').replace('0.3','0.12')};padding:2px 8px;border-radius:4px;flex-shrink:0;">${tc.label}</span>
       <div style="flex:1;min-width:0;">
@@ -4539,3 +4574,170 @@ function initFxWidget() {
   if (fxIntervalId) clearInterval(fxIntervalId)
   fxIntervalId = setInterval(refreshFxWidget, 60_000)
 }
+
+// ═══════════════════════════════════════════════════════════
+// BUSCADOR GLOBAL — Fuse.js (Sprint 10)
+// ═══════════════════════════════════════════════════════════
+
+let fuseInstance = null
+let searchDebounceTimer = null
+
+const TYPE_LABELS = {
+  income:   { icon:'💰', label:'Ingreso',   color:'#4ade80' },
+  expense:  { icon:'💸', label:'Gasto',     color:'#f87171' },
+  kanban:   { icon:'📌', label:'Tarea',     color:'#a78bfa' },
+  note:     { icon:'💡', label:'Nota',      color:'#94a3b8' },
+  persona:  { icon:'👤', label:'Contacto',  color:'#fbbf24' },
+  proyecto: { icon:'📁', label:'Proyecto',  color:'#60a5fa' },
+  contact:  { icon:'👤', label:'Contacto',  color:'#fbbf24' },
+  account:  { icon:'🏦', label:'Cuenta',    color:'#34d399' },
+  event:    { icon:'📅', label:'Evento',    color:'#34d399' },
+  agenda:   { icon:'📋', label:'Agenda',    color:'#f97316' },
+}
+
+function buildFuseIndex() {
+  const docs = allNodes.map(n => ({
+    id: n.id,
+    content: n.content || '',
+    type: n.type || 'note',
+    tags: (n.metadata?.tags || []).join(' '),
+    account: n.metadata?.account_hint || n.metadata?.label || '',
+    notes: n.metadata?.notes || '',
+    name: n.metadata?.name || n.metadata?.title || '',
+    date: n.metadata?.date || (n.created_at ? n.created_at.slice(0,10) : ''),
+  }))
+  fuseInstance = new Fuse(docs, {
+    keys: [
+      { name: 'content', weight: 3 },
+      { name: 'name',    weight: 2 },
+      { name: 'tags',    weight: 2 },
+      { name: 'notes',   weight: 1 },
+      { name: 'account', weight: 1 },
+      { name: 'date',    weight: 0.5 },
+    ],
+    threshold: 0.35,
+    includeScore: true,
+    ignoreLocation: true,
+    minMatchCharLength: 2,
+  })
+}
+
+window.openGlobalSearch = function() {
+  buildFuseIndex()
+  const modal = document.getElementById('global-search-modal')
+  if (!modal) return
+  modal.style.display = 'flex'
+  const inp = document.getElementById('gs-input')
+  if (inp) { inp.value = ''; inp.focus() }
+  document.getElementById('gs-results').innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:32px 0; font-size:13px;">Empieza a escribir para buscar en todos tus nodos…</div>'
+}
+
+window.closeGlobalSearch = function() {
+  const modal = document.getElementById('global-search-modal')
+  if (modal) modal.style.display = 'none'
+}
+
+window.handleGsInput = function() {
+  clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(runGlobalSearch, 120)
+}
+
+function runGlobalSearch() {
+  const inp = document.getElementById('gs-input')
+  const resultsEl = document.getElementById('gs-results')
+  if (!inp || !resultsEl || !fuseInstance) return
+
+  const q = inp.value.trim()
+  if (!q) {
+    resultsEl.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:32px 0; font-size:13px;">Empieza a escribir para buscar en todos tus nodos…</div>'
+    return
+  }
+
+  const raw = fuseInstance.search(q, { limit: 20 })
+  if (!raw.length) {
+    resultsEl.innerHTML = `<div style="color:var(--text-muted); text-align:center; padding:32px 0; font-size:13px;">Sin resultados para "<b>${esc(q)}</b>"</div>`
+    return
+  }
+
+  resultsEl.innerHTML = raw.map(({ item, score }) => {
+    const node = allNodes.find(n => n.id === item.id)
+    if (!node) return ''
+    const cfg = TYPE_LABELS[node.type] || TYPE_LABELS.note
+    const snippet = highlight(item.content || item.name || '', q)
+    const tagStr = item.tags ? item.tags.split(' ').filter(Boolean).map(t => `<span style="color:#a855f7; font-size:11px;">#${t.replace(/^#/,'')}</span>`).join(' ') : ''
+    const dateStr = item.date ? `<span style="color:var(--text-dim); font-size:11px;">${item.date}</span>` : ''
+    const acct = item.account ? `<span style="color:#00f0ff; font-size:11px;">@${item.account}</span>` : ''
+    const amtRaw = node.metadata?.amount
+    const amtStr = amtRaw ? `<span style="color:${cfg.color}; font-weight:700; font-size:13px;">${node.type==='income'?'+':'-'}$${(+amtRaw).toLocaleString('es-MX')}</span>` : ''
+    return `
+      <div class="gs-result-row" onclick="gsNavigateTo('${node.id}','${node.type}')" title="Ir al nodo">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+          <span style="font-size:18px; flex-shrink:0;">${cfg.icon}</span>
+          <span style="background:rgba(255,255,255,0.06); color:${cfg.color}; border-radius:5px; padding:1px 7px; font-size:10px; font-weight:700; letter-spacing:0.05em;">${cfg.label}</span>
+          ${amtStr}
+          <span style="flex:1; min-width:0; font-size:13px; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${snippet}</span>
+          <span style="color:var(--text-dim); font-size:10px; flex-shrink:0;">${Math.round((1-score)*100)}%</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; padding-left:28px; flex-wrap:wrap;">${tagStr}${acct}${dateStr}</div>
+      </div>`
+  }).join('')
+}
+
+function highlight(text, q) {
+  if (!text || !q) return esc(text)
+  const words = q.trim().split(/\s+/).filter(Boolean)
+  let result = esc(text.slice(0, 120))
+  words.forEach(w => {
+    const re = new RegExp(`(${w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi')
+    result = result.replace(re, '<mark style="background:rgba(0,246,255,0.25); color:#fff; border-radius:3px; padding:0 2px;">$1</mark>')
+  })
+  return result
+}
+
+window.gsNavigateTo = function(nodeId, type) {
+  window.closeGlobalSearch()
+  const viewMap = {
+    income: 'finance', expense: 'finance',
+    kanban: 'kanban',
+    note: 'notes', persona: 'notes', proyecto: 'notes',
+    contact: 'contacts',
+    account: 'finance',
+    event: 'calendar',
+    agenda: 'agenda',
+  }
+  const view = viewMap[type] || 'feed'
+  document.querySelectorAll('.nav-item[data-view]').forEach(el => el.classList.remove('active'))
+  const navBtn = document.querySelector(`.nav-item[data-view="${view}"]`)
+  if (navBtn) navBtn.classList.add('active')
+  document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'))
+  const viewEl = document.getElementById(`view-${view}`)
+  if (viewEl) viewEl.classList.add('active')
+  activeView = view
+  // Highlight the target node after a brief moment
+  setTimeout(() => {
+    const el = document.querySelector(`[data-node-id="${nodeId}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.style.outline = '2px solid var(--accent-cyan)'
+      el.style.boxShadow = '0 0 20px rgba(0,246,255,0.3)'
+      setTimeout(() => { el.style.outline = ''; el.style.boxShadow = '' }, 2000)
+    }
+  }, 250)
+}
+
+// Keyboard shortcut Ctrl+K / Cmd+K to open search
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault()
+    const modal = document.getElementById('global-search-modal')
+    if (modal && modal.style.display !== 'none') {
+      window.closeGlobalSearch()
+    } else {
+      window.openGlobalSearch()
+    }
+  }
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('global-search-modal')
+    if (modal && modal.style.display !== 'none') window.closeGlobalSearch()
+  }
+})
