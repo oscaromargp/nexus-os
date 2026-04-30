@@ -323,6 +323,11 @@ window.openCardModal = (id) => {
   const dueDateEl = document.getElementById('tm-due-date')
   if (dueDateEl) dueDateEl.value = m.due_date || ''
   document.getElementById('card-modal').classList.remove('hidden')
+  // Sprint 14: render connections
+  renderCardConnections(id)
+  // Reset link search
+  const lsBox = document.getElementById('tm-link-search-box')
+  if (lsBox) lsBox.style.display = 'none'
 }
 
 window.closeCardModal = () => { document.getElementById('card-modal').classList.add('hidden'); editingCardId = null; }
@@ -1080,6 +1085,7 @@ function feedItemHtml(n) {
         </div>
       </div>
       ${amount}
+      ${n.type==='proyecto' ? `<span onclick="event.stopPropagation();openProjectView('${n.id}')" title="Vista de Proyecto" style="color:#60a5fa;cursor:pointer;padding:4px;flex-shrink:0;font-size:13px;">📁</span>` : ''}
       <span onclick="event.stopPropagation();if(confirm('¿Eliminar?')){deleteNode('${n.id}')}" style="color:var(--text-dim);cursor:pointer;padding:4px;flex-shrink:0;">✕</span>
     </div>`
 }
@@ -4987,6 +4993,166 @@ window.injectHabitTag = function(tag) {
     inp.value = `#hábito #${tag} `
     inp.focus()
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// ARQUITECTURA RELACIONAL — Sprint 14
+// ═══════════════════════════════════════════════════════════
+
+// ── Render Connections in Card Modal ───────────────────────
+function renderCardConnections(nodeId) {
+  const root = document.getElementById('tm-links-root')
+  if (!root) return
+  const node = allNodes.find(n => n.id === nodeId)
+  if (!node) { root.innerHTML = ''; return }
+  const links = node.metadata?.linkedTo || []
+  if (!links.length) { root.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:4px 0;">Sin conexiones aún.</div>'; return }
+  root.innerHTML = links.map(lid => {
+    const linked = allNodes.find(n => n.id === lid)
+    if (!linked) return ''
+    const cfg = TYPE_LABELS[linked.type] || { icon:'💡', label:'Nodo', color:'#94a3b8' }
+    const label = linked.metadata?.label || linked.content || '(sin título)'
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:8px;">
+      <span style="font-size:14px;flex-shrink:0;">${cfg.icon}</span>
+      <span style="font-size:12px;color:#e2e8f0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(label)}</span>
+      <span style="font-size:10px;color:${cfg.color};background:${cfg.color}18;padding:1px 6px;border-radius:4px;flex-shrink:0;">${cfg.label}</span>
+      <button onclick="unlinkNode('${nodeId}','${lid}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:0 2px;line-height:1;" title="Desvincular">✕</button>
+    </div>`
+  }).filter(Boolean).join('')
+}
+
+window.toggleLinkSearch = function() {
+  const box = document.getElementById('tm-link-search-box')
+  if (!box) return
+  const visible = box.style.display !== 'none'
+  box.style.display = visible ? 'none' : 'block'
+  if (!visible) document.getElementById('tm-link-search-inp')?.focus()
+}
+
+let linkSearchTimer = null
+window.handleLinkSearch = function() {
+  clearTimeout(linkSearchTimer)
+  linkSearchTimer = setTimeout(() => {
+    const q = document.getElementById('tm-link-search-inp')?.value?.trim().toLowerCase()
+    const resultsEl = document.getElementById('tm-link-search-results')
+    if (!resultsEl || !editingCardId) return
+    const current = allNodes.find(n => n.id === editingCardId)
+    const alreadyLinked = new Set([editingCardId, ...(current?.metadata?.linkedTo || [])])
+    const matches = allNodes
+      .filter(n => !alreadyLinked.has(n.id))
+      .filter(n => {
+        if (!q) return true
+        return (n.metadata?.label || n.content || '').toLowerCase().includes(q) ||
+          (n.metadata?.tags || []).join(' ').toLowerCase().includes(q)
+      })
+      .slice(0, 8)
+    if (!matches.length) {
+      resultsEl.innerHTML = '<div style="padding:10px 14px;font-size:12px;color:var(--text-muted);">Sin resultados.</div>'
+      return
+    }
+    resultsEl.innerHTML = matches.map(n => {
+      const cfg = TYPE_LABELS[n.type] || { icon:'💡', label:'Nodo', color:'#94a3b8' }
+      const label = n.metadata?.label || n.content || '(sin título)'
+      return `<div onclick="linkNodeTo('${editingCardId}','${n.id}')" style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;transition:background 0.1s;" onmouseover="this.style.background='rgba(0,246,255,0.06)'" onmouseout="this.style.background=''">
+        <span style="font-size:14px;">${cfg.icon}</span>
+        <span style="font-size:13px;color:#e2e8f0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(label)}</span>
+        <span style="font-size:10px;color:${cfg.color};flex-shrink:0;">${cfg.label}</span>
+      </div>`
+    }).join('')
+  }, 150)
+}
+
+window.linkNodeTo = async function(sourceId, targetId) {
+  const source = allNodes.find(n => n.id === sourceId)
+  if (!source) return
+  if (!source.metadata) source.metadata = {}
+  if (!source.metadata.linkedTo) source.metadata.linkedTo = []
+  if (!source.metadata.linkedTo.includes(targetId)) {
+    source.metadata.linkedTo.push(targetId)
+    await updateNodeMetadata(sourceId, source.metadata)
+  }
+  // Close search
+  const box = document.getElementById('tm-link-search-box')
+  if (box) { box.style.display = 'none'; const inp = document.getElementById('tm-link-search-inp'); if (inp) inp.value = '' }
+  renderCardConnections(sourceId)
+  showToast('Nodo vinculado ✓')
+}
+
+window.unlinkNode = async function(sourceId, targetId) {
+  const source = allNodes.find(n => n.id === sourceId)
+  if (!source?.metadata?.linkedTo) return
+  source.metadata.linkedTo = source.metadata.linkedTo.filter(id => id !== targetId)
+  await updateNodeMetadata(sourceId, source.metadata)
+  renderCardConnections(sourceId)
+  showToast('Vínculo eliminado')
+}
+
+// ── Project Unified View ────────────────────────────────────
+window.openProjectView = function(nodeId) {
+  const node = allNodes.find(n => n.id === nodeId)
+  if (!node) return
+  const modal = document.getElementById('project-view-modal')
+  if (!modal) return
+
+  const label = node.metadata?.label || node.content
+  const tags  = (node.metadata?.tags || []).map(t => t.replace(/^#/,'').toLowerCase())
+
+  document.getElementById('pv-title').textContent = label
+  document.getElementById('pv-tags').textContent = tags.map(t=>'#'+t).join(' ')
+  modal.style.display = 'flex'
+
+  // Aggregate: nodes with explicit links OR sharing at least one tag
+  const linked = new Set(node.metadata?.linkedTo || [])
+  const related = allNodes.filter(n => {
+    if (n.id === nodeId) return false
+    if (linked.has(n.id)) return true
+    const nTags = (n.metadata?.tags || []).map(t => t.replace(/^#/,'').toLowerCase())
+    return tags.some(t => nTags.includes(t))
+  })
+
+  // Group by type
+  const groups = {
+    kanban:  { label:'📌 Tareas', color:'#a78bfa', nodes:[] },
+    expense: { label:'💸 Gastos', color:'#f87171', nodes:[] },
+    income:  { label:'💰 Ingresos', color:'#4ade80', nodes:[] },
+    contact: { label:'👤 Contactos', color:'#fbbf24', nodes:[] },
+    note:    { label:'💡 Notas', color:'#94a3b8', nodes:[] },
+    other:   { label:'📦 Otros', color:'#60a5fa', nodes:[] },
+  }
+  related.forEach(n => {
+    const k = groups[n.type] ? n.type : 'other'
+    groups[k].nodes.push(n)
+  })
+
+  const body = document.getElementById('pv-body')
+  const nonEmpty = Object.values(groups).filter(g => g.nodes.length)
+  if (!nonEmpty.length) {
+    body.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:40px;font-size:14px;">
+      Sin nodos relacionados aún.<br>Comparte etiquetas con otros nodos o vincúlalos desde el modal de tarea.
+    </div>`
+  } else {
+    body.innerHTML = nonEmpty.map(g => `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;min-width:0;">
+        <div style="font-size:12px;font-weight:700;color:${g.color};text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px;">${g.label} (${g.nodes.length})</div>
+        ${g.nodes.slice(0,8).map(n => {
+          const lbl = n.metadata?.label || n.content || '(sin título)'
+          const amtRaw = n.metadata?.amount
+          const amtStr = amtRaw ? `<span style="color:${g.color};font-weight:700;font-size:12px;margin-left:4px;">${n.type==='income'?'+':'-'}$${(+amtRaw).toLocaleString('es-MX')}</span>` : ''
+          const date = n.metadata?.date || (n.created_at ? n.created_at.slice(0,10) : '')
+          return `<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="closeProjectView();setTimeout(()=>openCardModal('${n.id}'),100)">
+            <span style="font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(lbl)}</span>
+            ${amtStr}
+            ${date ? `<span style="font-size:10px;color:var(--text-dim);flex-shrink:0;">${date}</span>` : ''}
+          </div>`
+        }).join('')}
+        ${g.nodes.length > 8 ? `<div style="font-size:11px;color:var(--text-dim);margin-top:8px;">+${g.nodes.length-8} más</div>` : ''}
+      </div>`).join('')
+  }
+}
+
+window.closeProjectView = function() {
+  const modal = document.getElementById('project-view-modal')
+  if (modal) modal.style.display = 'none'
 }
 
 // ═══════════════════════════════════════════════════════════
