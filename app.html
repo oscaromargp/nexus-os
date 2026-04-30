@@ -42,6 +42,33 @@
       --transition-soft: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
+    /* ── LIGHT THEME ── */
+    [data-theme="light"] {
+      --bg-deep: #f0f4f8;
+      --bg-panel: #ffffff;
+      --bg-widget: #f8fafc;
+      --glass-bg: rgba(255,255,255,0.85);
+      --glass-border: hsla(var(--h), 60%, 50%, 0.2);
+      --glass-border-bright: hsla(var(--h), 60%, 50%, 0.4);
+      --text-main: #111827;
+      --text-muted: #4b5563;
+      --text-dim: #9ca3af;
+    }
+    [data-theme="light"] body {
+      background-image: radial-gradient(circle at 50% -20%, hsla(var(--h),100%,50%,0.04),transparent 50%);
+    }
+    [data-theme="light"] .nav-sidebar,
+    [data-theme="light"] aside {
+      background: rgba(255,255,255,0.95);
+      border-color: rgba(0,0,0,0.08);
+    }
+    [data-theme="light"] .feed-item { background: #fff; border-color: rgba(0,0,0,0.08); }
+    [data-theme="light"] .feed-item:hover { background: #f8fafc; }
+    [data-theme="light"] .settings-card { background: #fff; border-color: rgba(0,0,0,0.08); }
+    [data-theme="light"] .nav-item { color: #374151; }
+    [data-theme="light"] .nav-item.active { background: rgba(0,200,220,0.12); }
+    [data-theme="light"] input, [data-theme="light"] select, [data-theme="light"] textarea { background: #f3f4f6; color: #111; border-color: rgba(0,0,0,0.12); }
+
     /* ── BASE & LAYOUT ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     
@@ -1289,7 +1316,7 @@
 
          <div class="settings-group">
            <label class="settings-label">Localización & Clima</label>
-           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom:12px;">
              <div>
                <span style="font-size: 11px; color: var(--text-muted);">Huso Horario</span>
                <select id="pref-tz" class="input-field">
@@ -1304,6 +1331,34 @@
                  <option value="C">Celsius (°C)</option>
                  <option value="F">Fahrenheit (°F)</option>
                </select>
+             </div>
+           </div>
+           <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+             <div>
+               <span style="font-size: 11px; color: var(--text-muted);">Ciudad (widget clima)</span>
+               <input type="text" id="pref-city" class="input-field" placeholder="LA PAZ, BCS" />
+             </div>
+             <div>
+               <span style="font-size: 11px; color: var(--text-muted);">Latitud</span>
+               <input type="number" id="pref-lat" class="input-field" placeholder="24.14" step="0.01" />
+             </div>
+             <div>
+               <span style="font-size: 11px; color: var(--text-muted);">Longitud</span>
+               <input type="number" id="pref-lon" class="input-field" placeholder="-110.31" step="0.01" />
+             </div>
+           </div>
+         </div>
+
+         <div class="settings-group">
+           <label class="settings-label">Apariencia</label>
+           <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; background:rgba(255,255,255,0.03); border-radius:12px; border:1px solid var(--glass-border);">
+             <div>
+               <div style="font-size:13px; font-weight:700; color:#fff;">Tema de color</div>
+               <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Oscuro (Deep Ocean) o Claro</div>
+             </div>
+             <div style="display:flex; gap:8px;">
+               <button id="theme-dark-btn" onclick="setTheme('dark')" style="background:rgba(0,0,0,0.6);border:2px solid var(--accent-cyan);color:#fff;border-radius:9px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;">🌙 Oscuro</button>
+               <button id="theme-light-btn" onclick="setTheme('light')" style="background:rgba(255,255,255,0.1);border:2px solid transparent;color:var(--text-muted);border-radius:9px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;">☀️ Claro</button>
              </div>
            </div>
          </div>
@@ -1573,6 +1628,86 @@
           </div>
         </div>
 
+        <!-- AGENDA FINANCIERA -->
+        <div class="settings-card">
+          <h2 style="font-size:16px; font-weight:800; color:#60a5fa; margin-bottom:16px;">💳 Agenda Financiera</h2>
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">Controla tarjetas de crédito, suscripciones y pagos fijos mensuales en un solo tablero de liquidez.</p>
+          <div style="display:flex; flex-direction:column; gap:12px;">
+            <div style="padding:12px; background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.2); border-radius:10px;">
+              <div style="font-size:13px; font-weight:700; color:#60a5fa; margin-bottom:6px;">💳 Tarjetas</div>
+              <ul style="color:var(--text-muted); font-size:12px; line-height:1.9; padding-left:18px; margin:0;">
+                <li>Banco, tipo (crédito/débito/digital), titular, número completo</li>
+                <li>CLABE interbancaria, número de cuenta, sucursal</li>
+                <li>Día de corte y pago con alerta de días restantes</li>
+              </ul>
+            </div>
+            <div style="padding:12px; background:rgba(167,139,250,0.06); border:1px solid rgba(167,139,250,0.2); border-radius:10px;">
+              <div style="font-size:13px; font-weight:700; color:#a78bfa; margin-bottom:6px;">🔄 Suscripciones</div>
+              <ul style="color:var(--text-muted); font-size:12px; line-height:1.9; padding-left:18px; margin:0;">
+                <li>Categorías predefinidas: Streaming, SaaS, Hosting, Telefonía, Seguros, etc.</li>
+                <li>Día del mes de cargo · Monto · Moneda</li>
+              </ul>
+            </div>
+            <div style="padding:12px; background:rgba(251,146,60,0.06); border:1px solid rgba(251,146,60,0.2); border-radius:10px;">
+              <div style="font-size:13px; font-weight:700; color:#fb923c; margin-bottom:6px;">📋 Pagos Fijos</div>
+              <ul style="color:var(--text-muted); font-size:12px; line-height:1.9; padding-left:18px; margin:0;">
+                <li>Vincula un <b style="color:#fff;">contacto beneficiario</b> — renta, nómina, proveedor</li>
+                <li>Selecciona el <b style="color:#fff;">método de pago</b>: transferencia, tarjeta, efectivo, cripto, cargo domiciliado</li>
+                <li>Los datos bancarios del contacto aparecen automáticamente al seleccionarlo</li>
+                <li>Marca pagos como ✓ realizados para limpiar el tablero</li>
+              </ul>
+            </div>
+            <div style="padding:12px; background:rgba(74,222,128,0.06); border:1px solid rgba(74,222,128,0.2); border-radius:10px;">
+              <div style="font-size:13px; font-weight:700; color:#4ade80; margin-bottom:6px;">📆 Plan del Mes</div>
+              <ul style="color:var(--text-muted); font-size:12px; line-height:1.9; padding-left:18px; margin:0;">
+                <li>Selecciona qué cuentas incluir con los checkboxes de cuenta</li>
+                <li><b style="color:#4ade80;">Disponible real</b> = entradas seleccionadas − compromisos del mes</li>
+                <li>Alerta visual de vencimientos en los próximos 7 días</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- CONTACTOS CSV -->
+        <div class="settings-card">
+          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">👥 Contactos — Import / Export CSV</h2>
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">Importa y exporta tu agenda de contactos en formato CSV estándar. Lo que exportas es exactamente lo que puedes volver a importar.</p>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div style="padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
+              <div style="font-size:12px; font-weight:700; color:#fff; margin-bottom:6px;">📄 Plantilla CSV</div>
+              <div style="font-size:12px; color:var(--text-muted);">Descarga la plantilla oficial con el botón <b style="color:#fff;">📄 Plantilla</b> en la sección Contactos. Llénala con tus datos y súbela con <b style="color:#60a5fa;">⬆ Importar</b>.</div>
+            </div>
+            <div style="padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
+              <div style="font-size:12px; font-weight:700; color:#fff; margin-bottom:4px;">Columnas del CSV</div>
+              <code style="font-size:11px; color:#a78bfa; display:block; overflow-x:auto; white-space:nowrap;">nombre, tipo, empresa, telefono, email, banco, clabe, cuenta, red_cripto, wallet, color, notas</code>
+            </div>
+            <div style="padding:12px; background:rgba(74,222,128,0.06); border:1px solid rgba(74,222,128,0.2); border-radius:10px;">
+              <div style="font-size:12px; color:var(--text-muted);">💡 <b style="color:#fff;">Flujo recomendado:</b> exporta tus contactos existentes → edítalos o agrégalos en Excel/Sheets → vuelve a importar. El sistema detecta el formato automáticamente.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SIDEBAR TIPO DE CAMBIO -->
+        <div class="settings-card">
+          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">💱 Tipo de Cambio en Vivo</h2>
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">El panel lateral derecho muestra una mini tabla de tipo de cambio vs MXN, actualizándose automáticamente cada 60 segundos.</p>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div style="padding:10px; background:rgba(255,255,255,0.03); border-radius:8px; text-align:center;">
+              <div style="font-size:18px;">🇺🇸</div><div style="font-size:11px; color:#fff; font-weight:700;">USD/MXN</div>
+            </div>
+            <div style="padding:10px; background:rgba(255,255,255,0.03); border-radius:8px; text-align:center;">
+              <div style="font-size:18px;">₿</div><div style="font-size:11px; color:#fff; font-weight:700;">BTC/MXN</div>
+            </div>
+            <div style="padding:10px; background:rgba(255,255,255,0.03); border-radius:8px; text-align:center;">
+              <div style="font-size:18px;">Ξ</div><div style="font-size:11px; color:#fff; font-weight:700;">ETH/MXN</div>
+            </div>
+            <div style="padding:10px; background:rgba(255,255,255,0.03); border-radius:8px; text-align:center;">
+              <div style="font-size:18px;">✕</div><div style="font-size:11px; color:#fff; font-weight:700;">XRP/MXN</div>
+            </div>
+          </div>
+          <div style="margin-top:10px; font-size:12px; color:var(--text-muted);">APIs usadas: <code style="color:#a78bfa;">open.er-api.com</code> (fiat) y <code style="color:#a78bfa;">@fawazahmed0/currency-api</code> (cripto). Ambas gratuitas, sin API key.</div>
+        </div>
+
         <!-- FEEDBACK BANNER -->
         <div style="background:linear-gradient(135deg,rgba(0,246,255,0.08),rgba(167,139,250,0.08)); border:1px solid rgba(0,246,255,0.2); border-radius:16px; padding:24px; text-align:center;">
           <div style="font-size:28px; margin-bottom:10px;">💬</div>
@@ -1771,14 +1906,31 @@
       </div>
     </div>
 
-    <!-- SITUATIONAL EDGE -->
+    <!-- SITUATIONAL EDGE / CLIMA -->
     <div class="widget-box">
-      <span class="widget-label">🌤 Situational Edge</span>
-      <div id="w-weather-box" style="display:flex; gap:16px; align-items:center;">
-        <span style="font-size:32px;">☀️</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <span class="widget-label" style="margin-bottom:0;">🌤 Clima</span>
+        <span id="w-city-label" style="font-size:10px;color:var(--text-dim);">LA PAZ, BCS</span>
+      </div>
+      <div id="w-weather-box" style="display:flex;gap:14px;align-items:center;margin-bottom:8px;">
+        <span id="w-weather-icon" style="font-size:36px;">⏳</span>
         <div>
-          <div style="font-size:11px; color:var(--text-muted); font-weight:700;">LA PAZ, BCS</div>
-          <div id="w-weather" style="font-family:'JetBrains Mono'; font-size:24px; color:#fff;">--°</div>
+          <div id="w-weather" style="font-family:'JetBrains Mono';font-size:26px;font-weight:800;color:#fff;">--°</div>
+          <div id="w-weather-desc" style="font-size:10px;color:var(--text-muted);margin-top:2px;">Cargando...</div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
+        <div style="text-align:center;background:rgba(255,255,255,0.04);border-radius:8px;padding:5px;">
+          <div style="font-size:9px;color:var(--text-dim);">SENSACIÓN</div>
+          <div id="w-feels" style="font-size:11px;font-weight:700;color:#fff;font-family:'JetBrains Mono',monospace;">--°</div>
+        </div>
+        <div style="text-align:center;background:rgba(255,255,255,0.04);border-radius:8px;padding:5px;">
+          <div style="font-size:9px;color:var(--text-dim);">HUMEDAD</div>
+          <div id="w-humidity" style="font-size:11px;font-weight:700;color:#60a5fa;font-family:'JetBrains Mono',monospace;">--%</div>
+        </div>
+        <div style="text-align:center;background:rgba(255,255,255,0.04);border-radius:8px;padding:5px;">
+          <div style="font-size:9px;color:var(--text-dim);">VIENTO</div>
+          <div id="w-wind" style="font-size:11px;font-weight:700;color:#4ade80;font-family:'JetBrains Mono',monospace;">-- km/h</div>
         </div>
       </div>
     </div>

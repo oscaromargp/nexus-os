@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://via.placeholder.com/1200x400/02040a/00F6FF?text=⬡+NEXUS+OS+—+Everything+is+a+Node" alt="Nexus OS Banner" width="100%"/>
+  <img src="https://via.placeholder.com/1200x360/02040a/00F6FF?text=⬡+NEXUS+OS+—+Everything+is+a+Node" alt="Nexus OS Banner" width="100%"/>
 </p>
 
 <h1 align="center">⬡ Nexus OS</h1>
@@ -9,22 +9,28 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/version-2.0.0-brightgreen?style=for-the-badge" alt="Version"/>
-  <img src="https://img.shields.io/badge/status-live-brightgreen?style=for-the-badge" alt="Status"/>
+  <a href="https://nexus-os-chi.vercel.app">
+    <img src="https://img.shields.io/badge/🚀_DEMO_EN_VIVO-nexus--os--chi.vercel.app-00F6FF?style=for-the-badge" alt="Demo en vivo"/>
+  </a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/licencia-MIT-blue?style=for-the-badge" alt="License"/>
+  <img src="https://img.shields.io/badge/versión-2.7.0-brightgreen?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/estado-en%20producción-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite"/>
-  <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase"/>
+  <img src="https://img.shields.io/badge/Vanilla%20JS-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black" alt="Vanilla JS"/>
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind"/>
+  <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase"/>
   <img src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel"/>
 </p>
 
 <p align="center">
-  <a href="#-acerca-del-proyecto">Acerca</a> •
   <a href="#-características">Características</a> •
   <a href="#-parser-semántico">Parser</a> •
-  <a href="#-arquitectura">Arquitectura</a> •
-  <a href="#-comenzando">Comenzando</a> •
+  <a href="#-quick-start">Quick Start</a> •
   <a href="#-deploy-en-vercel">Deploy</a> •
+  <a href="#%EF%B8%8F-stack">Stack</a> •
   <a href="#-contacto">Contacto</a>
 </p>
 
@@ -36,11 +42,7 @@
 
 La solución es radical: **Todo es un Nodo.**
 
-Una sola barra de comandos. Un solo sistema. Todo clasificado automáticamente por un **Parser Semántico** en tiempo real que detecta el tipo de información por su contenido y sintaxis.
-
-<p align="center">
-  <img src="assets/screenshots/01-panel-comandos.png" alt="Panel de Comandos — Feed unificado con color-coding por tipo de nodo" width="800"/>
-</p>
+Una sola barra de comandos. Un solo sistema. Todo clasificado automáticamente por un **Parser Semántico** en tiempo real que detecta el tipo de información por su contenido y sintaxis — sin configuración, sin formularios.
 
 ---
 
@@ -60,7 +62,8 @@ Una sola barra de comandos. Un solo sistema. Todo clasificado automáticamente p
     <td align="center"><strong>📖 Crónica</strong><br/><img src="assets/screenshots/06-cronica.png" width="380"/></td>
   </tr>
   <tr>
-    <td align="center" colspan="2"><strong>❓ Ayuda Integrada</strong><br/><img src="assets/screenshots/07-ayuda.png" width="380"/></td>
+    <td align="center"><strong>👥 Contactos & CRM</strong><br/><img src="assets/screenshots/07-contactos.png" width="380"/></td>
+    <td align="center"><strong>💳 Agenda Financiera</strong><br/><img src="assets/screenshots/08-herramientas.png" width="380"/></td>
   </tr>
 </table>
 
@@ -68,163 +71,212 @@ Una sola barra de comandos. Un solo sistema. Todo clasificado automáticamente p
 
 ## ✨ Características
 
+### 10 Módulos integrados
+
 | Módulo | Descripción |
 |---|---|
-| 📊 **Panel de Comandos** | Feed unificado con color-coding por tipo de nodo. Vista cronológica de toda tu actividad. |
-| 📌 **Muro Táctico** | Kanban completo: drag-and-drop, modal detalle, checklist, miembros, etiquetas, fechas e imágenes adjuntas. |
-| 💹 **Bio-Finanzas** | Multi-cuenta con `@cuenta` en comandos, modal de detalle por transacción, comentarios, adjuntos y exportación CSV. |
-| 🧠 **Bóveda Neural** | Notas estilo Google Keep: colores, pin, etiquetas y **Transform Note** (convierte en tarea, ingreso, gasto o evento). |
-| 📅 **Línea de Tiempo** | Calendario con vistas Mes / Semana / Día, dots por tipo de nodo y exportación CSV. |
-| 📖 **Crónica** | Histórico diario: elige cualquier fecha y ve todo lo que registraste en 3 columnas (tareas · notas · finanzas) con balance neto del día. |
-| ❓ **Ayuda** | Guía de uso integrada: parser, atajos de teclado, instrucciones por módulo. |
-| ⚙️ **Configuración** | Preferencias, cambio de contraseña, zona horaria, unidades y donación XRP. |
-| 🔒 **Auth Segura** | Login / registro con Supabase Auth + JWT + Row Level Security. |
-| 📎 **Adjuntos de Imagen** | Pega capturas de pantalla con **Ctrl+V** o selecciona archivo. Compresión automática a JPEG 0.7. Máx. 3 por nodo. |
-| 🌐 **Modo Demo** | Acceso sin cuenta con datos de ejemplo precargados. |
+| 📊 **Panel de Comandos** | Feed unificado con color-coding por tipo. Filtros por categoría, agrupación, búsqueda global. Actualización optimista — el nodo aparece al instante con animación pulse. |
+| 📌 **Muro Táctico** | Kanban completo: 4 columnas drag-and-drop, modal detalle con checklist, miembros, etiquetas de colores, fechas e imágenes adjuntas (Ctrl+V paste). |
+| 💹 **Bio-Finanzas** | Multi-cuenta con `@cuenta` en comandos. Saldo independiente por cuenta, gráficas Chart.js, modal por transacción, comentarios, adjuntos y exportación CSV. |
+| 🧠 **Bóveda Neural** | Notas estilo Google Keep: 8 colores, pin, edición fullscreen, **Transform Note** (convierte en tarea / ingreso / gasto / evento). |
+| 📅 **Línea de Tiempo** | Calendario Mes / Semana / Día con dots por tipo de nodo. Creación de eventos directa y exportación CSV. |
+| 📖 **Crónica** | Histórico diario en 3 columnas (tareas · notas · finanzas) con balance neto del día. Navega a cualquier fecha pasada. |
+| 👥 **Contactos & CRM** | Agenda con personas, bancos y carteras cripto. Import/Export CSV con plantilla descargable. Ficha detalle con historial de transacciones vinculadas. |
+| 💳 **Agenda Financiera** | Tarjetas (banco, titular, número completo, CLABE, sucursal), suscripciones con categorías predefinidas, pagos fijos con contacto beneficiario y método de pago. Plan del Mes con selector de cuentas y disponible real. |
+| 🛠️ **Herramientas** | Conversor unificado fiat↔crypto en tiempo real, calculadora inversa (¿cuánto cobrar para recibir X neto?), cronómetro con alertas sonoras, contador regresivo. |
+| ❓ **Ayuda & Config** | Guía de uso integrada, atajos de teclado, preferencias de sistema, cambio de contraseña, zona horaria. |
+
+### Funciones transversales
+
+| Función | Detalle |
+|---|---|
+| 🔐 **Auth segura** | Login / registro con Supabase Auth + JWT + Row Level Security por `owner_id` |
+| 🔄 **Actualizaciones optimistas** | Nodo visible al instante; se sincroniza con Supabase en background |
+| 📵 **Cola offline** | Si no hay internet, guarda en `localStorage` y sincroniza al reconectar |
+| 📎 **Adjuntos** | Imágenes via Ctrl+V o selector; compresión JPEG 0.7 automática. Audio hasta 5 MB |
+| 🔍 **Búsqueda global** | Filtra por tags `#etiqueta` o texto libre en todos los módulos |
+| 📤 **Print & Export CSV** | Imprime o exporta cualquier vista filtrada |
+| 💱 **Tipo de cambio en vivo** | Sidebar con USD/BTC/ETH/XRP/USDT en MXN, actualización cada 60 s |
+| 🎨 **Transform Note** | Convierte cualquier nota en tarea, ingreso, gasto o evento con un clic |
 
 ---
 
 ## ⌨️ Parser Semántico
 
-La barra de comandos inferior clasifica automáticamente cada entrada:
+La barra de comandos inferior clasifica automáticamente cada entrada sin formularios:
 
 ```bash
-# TAREAS → Muro Táctico
+# ─── TAREAS ─────────────────────────────────────────────────────
 #tarea Revisar informe Q2
 → { type: "kanban", status: "todo" }
 
-# INGRESOS con cuenta asignada
-+$1500 @bbva  Pago proyecto freelance
-→ { type: "income", amount: 1500, account: "bbva" }
+# ─── INGRESOS  (con cuenta asignada) ────────────────────────────
++$15000 @bbva  Pago proyecto freelance
+→ { type: "income", amount: 15000, account_id: "bbva" }
 
-# GASTOS con cuenta asignada
--$350 @efectivo  Gasolina
-→ { type: "expense", amount: 350, account: "efectivo" }
+# ─── GASTOS  (con cuenta asignada) ──────────────────────────────
+-$350 @efectivo  Gasolina #auto
+→ { type: "expense", amount: 350, account_id: "efectivo" }
 
-# NOTAS libres → Bóveda Neural
+# ─── NOTA LIBRE → Bóveda Neural ─────────────────────────────────
 Reflexión sobre el producto #idea #startup
 → { type: "note", tags: ["#idea", "#startup"] }
 
-# CONTACTOS / CRM
+# ─── CONTACTO / CRM ─────────────────────────────────────────────
 #persona Juan Pérez — CEO Startup XYZ
 → { type: "persona" }
 
-# PROYECTOS
-#proyecto Rediseño landing Q3
+# ─── PROYECTO ───────────────────────────────────────────────────
+#proyecto Rediseño landing Q3 #diseño
 → { type: "proyecto" }
 ```
 
-> **Tip:** Al escribir `+$` o `-$`, aparece un selector de cuentas encima del input para asignar con un clic.
+> **Tip:** Escribe `+$` o `-$` y aparece automáticamente un selector de cuentas encima del input para asignar con un clic. El signo `@cuenta` también funciona directamente en el texto.
 
 ---
 
 ## 🏗️ Arquitectura
 
-### "Everything is a Node"
-
 ```
-INPUT DEL USUARIO
+INPUT DEL USUARIO  (barra de comandos unificada)
         │
         ▼
-┌───────────────────────┐
-│   Parser Semántico    │  ← Analiza en tiempo real
-└───────────────────────┘
+┌────────────────────────┐
+│    Parser Semántico    │  ← Analiza en tiempo real  ← preview live
+└────────────────────────┘
         │
-        ├── #tarea      → kanban   → Muro Táctico
-        ├── +$  @cuenta → income   → Bio-Finanzas
-        ├── -$  @cuenta → expense  → Bio-Finanzas
-        ├── #persona    → persona  → Bóveda Neural
-        ├── #proyecto   → proyecto → Bóveda Neural
-        └── texto libre → note     → Bóveda Neural
-                                │
-                    ┌───────────▼──────────┐
-                    │     nexus_nodos      │  ← Supabase PostgreSQL
-                    │   + metadata JSONB   │     con RLS habilitado
-                    └──────────────────────┘
-                                │
-           ┌────────────────────┼────────────────────┐
-           ▼                    ▼                    ▼
-    Panel Comandos         Crónica           Línea de Tiempo
-    Muro Táctico         Bio-Finanzas        Bóveda Neural
+        ├── #tarea      → kanban      → Muro Táctico
+        ├── +$  @cuenta → income      → Bio-Finanzas
+        ├── -$  @cuenta → expense     → Bio-Finanzas
+        ├── #persona    → persona     → Bóveda Neural / Contactos
+        ├── #proyecto   → proyecto    → Bóveda Neural
+        ├── texto libre → note        → Bóveda Neural
+        ├── card/sub/bill→ agenda     → Agenda Financiera
+        └── contact     → contact     → Contactos & CRM
+                                 │
+               ┌─────────────────▼──────────────────┐
+               │          nodes  (Supabase)          │
+               │  id · owner_id · type · metadata{}  │
+               │         Row Level Security          │
+               └─────────────────┬──────────────────┘
+                                 │ Realtime subscription
+           ┌─────────────────────┼────────────────────┐
+           ▼                     ▼                    ▼
+    Panel Comandos          Crónica           Línea de Tiempo
+    Muro Táctico          Bio-Finanzas        Bóveda Neural
+    Contactos             Agenda Financiera   Herramientas
 ```
 
 ### Estructura del Proyecto
 
 ```
 nexus-os/
-├── index.html              # Landing page + Modal Auth
-├── app.html                # Dashboard (7 vistas, ruta /app)
-├── app.js                  # Core: Parser + CRUD + Renders + Modals
+├── index.html              # Landing page + Auth modal
+├── app.html                # Dashboard SPA (10 módulos)
+├── app.js                  # Core: Parser + CRUD + Renders + Modals (~4 200 líneas)
 ├── main.js                 # Auth Supabase + animación landing
-├── style.css               # Design system Deep Ocean Tech
-├── reset-password.html     # Flujo reset de contraseña
+├── style.css               # Design system "Deep Ocean Tech"
+├── reset-password.html     # Flujo reset contraseña
 ├── tailwind.config.js
 ├── vite.config.js
 ├── vercel.json             # Rewrite /app → /app.html
-├── docs/
-│   └── database_schema.md  # SQL completo para Supabase
 └── assets/
+    └── screenshots/        # Capturas de los módulos
 ```
 
 ---
 
-## 🚀 Comenzando
+## 🚀 Quick Start
 
 ### Prerrequisitos
 
-- Node.js `>= 18.0` · npm `>= 9.0`
-- Cuenta en [Supabase](https://supabase.com) (gratuita)
+- Node.js `>= 18` · npm `>= 9`
+- Cuenta en [Supabase](https://supabase.com) (plan gratuito funciona)
 
-### Instalación
+### 1 — Clonar e instalar
 
 ```bash
 git clone https://github.com/oscaromargp/nexus-os.git
 cd nexus-os
 npm install
-cp .env.example .env   # Agrega tus credenciales Supabase
-npm run dev
 ```
 
-### Base de datos — Supabase SQL Editor
+### 2 — Variables de entorno
+
+```bash
+cp .env.example .env
+```
+
+```env
+VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
+VITE_SUPABASE_ANON_KEY=tu-anon-key-publica
+```
+
+### 3 — Crear la base de datos en Supabase
+
+Abre el **SQL Editor** de Supabase y ejecuta:
 
 ```sql
-create table nexus_nodos (
+-- Tabla principal (todo es un nodo)
+create table if not exists nodes (
   id         uuid primary key default gen_random_uuid(),
   owner_id   uuid references auth.users not null,
   content    text not null,
-  type       text not null,
+  type       text not null default 'note',
   metadata   jsonb default '{}',
   created_at timestamptz default now()
 );
 
-alter table nexus_nodos enable row level security;
+-- Row Level Security — cada usuario ve solo sus datos
+alter table nodes enable row level security;
 
-create policy "user_data" on nexus_nodos
-  using (auth.uid() = owner_id)
+create policy "user_owns_nodes" on nodes
+  for all
+  using  (auth.uid() = owner_id)
   with check (auth.uid() = owner_id);
 
-create index idx_nodos_owner   on nexus_nodos (owner_id);
-create index idx_nodos_type    on nexus_nodos (type);
-create index idx_nodos_created on nexus_nodos (created_at desc);
+-- Índices de rendimiento
+create index if not exists idx_nodes_owner   on nodes (owner_id);
+create index if not exists idx_nodes_type    on nodes (type);
+create index if not exists idx_nodes_created on nodes (created_at desc);
+
+-- Realtime (opcional — para sincronización en tiempo real)
+alter publication supabase_realtime add table nodes;
+```
+
+### 4 — Desarrollo local
+
+```bash
+npm run dev
+# → http://localhost:5173
 ```
 
 ---
 
 ## 🚢 Deploy en Vercel
 
-1. Conecta el repositorio en [vercel.com](https://vercel.com)
-2. Agrega las variables de entorno:
+```bash
+# 1. Instala la CLI de Vercel (una vez)
+npm i -g vercel
+
+# 2. Agrega las variables de entorno en Vercel Dashboard
+#    VITE_SUPABASE_URL  y  VITE_SUPABASE_ANON_KEY
+
+# 3. Build + deploy
+vercel build --prod
+vercel deploy --prod --yes
+```
+
+O conecta el repositorio en [vercel.com](https://vercel.com) — el archivo `vercel.json` ya incluye la reescritura `/app → /app.html`.
 
 | Variable | Descripción |
 |---|---|
 | `VITE_SUPABASE_URL` | URL de tu proyecto Supabase |
-| `VITE_SUPABASE_ANON_KEY` | Clave anon pública |
-
-3. Deploy automático — el `vercel.json` ya incluye la reescritura `/app → /app.html`
+| `VITE_SUPABASE_ANON_KEY` | Clave anon pública (segura para el frontend) |
 
 ---
 
-## 🛠️ Stack Tecnológico
+## 🛠️ Stack
 
 <p align="left">
   <img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black"/>
@@ -232,42 +284,44 @@ create index idx_nodos_created on nexus_nodos (created_at desc);
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white"/>
   <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white"/>
   <img src="https://img.shields.io/badge/PostgreSQL-316192?style=for-the-badge&logo=postgresql&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Chart.js-FF6384?style=for-the-badge&logo=chartdotjs&logoColor=white"/>
   <img src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white"/>
 </p>
+
+| Capa | Tecnología | Propósito |
+|---|---|---|
+| Frontend | Vite + Vanilla JS ES Modules | Build ultra-rápido, sin framework overhead |
+| Estilos | Tailwind CSS + CSS Variables | Design system "Deep Ocean Tech" |
+| Backend | Supabase (PostgreSQL + Auth) | BD relacional + Auth + Realtime + RLS |
+| Gráficas | Chart.js 4.4.4 | Visualizaciones Bio-Finanzas |
+| Deploy | Vercel | Edge CDN global |
+| APIs externas | open.er-api.com · @fawazahmed0/currency-api | Tipo de cambio fiat y cripto (gratis, sin key) |
 
 ---
 
 ## 🤝 Contribuyendo
 
 ```bash
-git checkout -b feature/nueva-funcionalidad
-git commit -m 'feat: descripción del cambio'
-git push origin feature/nueva-funcionalidad
-# Abre un Pull Request
+# Fork → branch → commit → Pull Request
+git checkout -b feature/mi-nueva-funcion
+git commit -m 'feat: descripción clara del cambio'
+git push origin feature/mi-nueva-funcion
+# → Abre un Pull Request en GitHub
 ```
 
+Convenciones de commits: `feat:` · `fix:` · `refactor:` · `docs:` · `chore:`
+
 ---
 
-## 💖 Apoya este Proyecto
+## 👤 Autor
 
 <p align="center">
-  <strong>Donaciones en Criptomonedas — Red XRP</strong><br><br>
-  <img src="https://img.shields.io/badge/XRP-rBthUCndKy3Xbb19Ln4xkZeMwusX9NrYfj-00AAE4?style=for-the-badge&logo=ripple" alt="XRP Address"/>
+  <a href="https://oscaromargp.github.io/Oscaromargp/">
+    <img src="https://github.com/oscaromargp.png" width="80" style="border-radius:50%" alt="Oscar Omar Gómez Peña"/>
+  </a>
+  <br/>
+  <strong>Oscar Omar Gómez Peña</strong>
 </p>
-
-> Dirección XRP: `rBthUCndKy3Xbb19Ln4xkZeMwusX9NrYfj`
-
----
-
-## 📄 Licencia
-
-Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE).
-
----
-
-## 📬 Contacto
-
-<p align="center"><strong>Oscar Omar Gómez Peña</strong></p>
 
 <p align="center">
   <a href="https://oscaromargp.github.io/Oscaromargp/">
@@ -278,6 +332,23 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE).
     <img src="https://img.shields.io/badge/GitHub-oscaromargp-181717?style=for-the-badge&logo=github" alt="GitHub"/>
   </a>
 </p>
+
+---
+
+## 💖 Apoya este Proyecto
+
+<p align="center">
+  <strong>Donaciones en Criptomonedas — Red XRP</strong><br/><br/>
+  <img src="https://img.shields.io/badge/XRP-rBthUCndKy3Xbb19Ln4xkZeMwusX9NrYfj-00AAE4?style=for-the-badge&logo=ripple" alt="XRP Address"/>
+</p>
+
+> `rBthUCndKy3Xbb19Ln4xkZeMwusX9NrYfj`
+
+---
+
+## 📄 Licencia
+
+Distribuido bajo la licencia [MIT](LICENSE).
 
 ---
 
@@ -295,4 +366,10 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE).
 
 ---
 
-[Supabase](https://supabase.com) · [Vite](https://vitejs.dev) · [Shields.io](https://shields.io) · [Vercel](https://vercel.com)
+<p align="center">
+  <a href="https://supabase.com">Supabase</a> ·
+  <a href="https://vitejs.dev">Vite</a> ·
+  <a href="https://shields.io">Shields.io</a> ·
+  <a href="https://vercel.com">Vercel</a> ·
+  <a href="https://nexus-os-chi.vercel.app">🚀 Demo en vivo</a>
+</p>

@@ -3164,49 +3164,111 @@ window.calculateInverse = async function calculateInverse() {
   }
 }
 
+// WMO weather code → descripción e ícono
+function wmoWeather(code) {
+  const map = {
+    0:['Despejado','☀️'], 1:['Mayormente despejado','🌤'], 2:['Parcialmente nublado','⛅'],
+    3:['Nublado','☁️'], 45:['Niebla','🌫'], 48:['Niebla con escarcha','🌫'],
+    51:['Llovizna ligera','🌦'], 53:['Llovizna','🌦'], 55:['Llovizna intensa','🌧'],
+    61:['Lluvia ligera','🌧'], 63:['Lluvia','🌧'], 65:['Lluvia intensa','⛈'],
+    71:['Nieve ligera','🌨'], 73:['Nieve','❄️'], 75:['Nieve intensa','❄️'],
+    80:['Chubascos ligeros','🌦'], 81:['Chubascos','🌧'], 82:['Chubascos intensos','⛈'],
+    95:['Tormenta eléctrica','⛈'], 96:['Tormenta con granizo','⛈'], 99:['Tormenta severa','🌩'],
+  }
+  return map[code] || ['Desconocido','🌡️']
+}
+
 async function initTickers() {
   const settings = JSON.parse(localStorage.getItem('nexus_settings') || '{}')
   const unit = settings.tempUnit || 'C'
+
+  // Usar coordenadas de la ciudad configurada (default La Paz, BCS)
+  const lat  = parseFloat(settings.lat  || '24.14')
+  const lon  = parseFloat(settings.lon  || '-110.31')
+  const city = settings.city || 'LA PAZ, BCS'
+
+  const cityEl = document.getElementById('w-city-label')
+  if (cityEl) cityEl.textContent = city
+
   try {
-    const res = await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=24.14&longitude=-110.31&current_weather=true`)).json()
-    if (res && res.current_weather) {
-      let temp = res.current_weather.temperature
-      if (unit === 'F') temp = (temp * 9/5) + 32
-      document.getElementById('w-weather').textContent = `${Math.round(temp)}°${unit}`
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+                `&current=temperature_2m,apparent_temperature,relative_humidity_2m,windspeed_10m,weathercode`
+    const res = await (await fetch(url)).json()
+    const c = res?.current
+    if (c) {
+      const toUnit = t => unit === 'F' ? Math.round((t * 9/5) + 32) : Math.round(t)
+      const [desc, icon] = wmoWeather(c.weathercode)
+      const tempDisp   = `${toUnit(c.temperature_2m)}°${unit}`
+      const feelsDisp  = `${toUnit(c.apparent_temperature)}°`
+      const humDisp    = `${Math.round(c.relative_humidity_2m)}%`
+      const windDisp   = `${Math.round(c.windspeed_10m)} km/h`
+
+      const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val }
+      set('w-weather',      tempDisp)
+      set('w-weather-desc', desc)
+      set('w-weather-icon', icon)
+      set('w-feels',        feelsDisp)
+      set('w-humidity',     humDisp)
+      set('w-wind',         windDisp)
     } else {
-      document.getElementById('w-weather').textContent = `N/A`
+      document.getElementById('w-weather').textContent = 'N/A'
     }
   } catch (e) {
-    console.warn("Weather fetch failed", e)
-    document.getElementById('w-weather').textContent = `OFFLINE`
+    console.warn('Weather fetch failed', e)
+    document.getElementById('w-weather').textContent = 'Offline'
   }
-  
+
   if (settings.nickname) {
     const titleEl = document.querySelector('.view-title')
     if (titleEl) titleEl.textContent = `Comandos de ${settings.nickname}`
   }
 }
 
+// ── THEME TOGGLE ────────────────────────────────────────────────
+window.setTheme = (theme) => {
+  document.documentElement.setAttribute('data-theme', theme)
+  localStorage.setItem('nexus_theme', theme)
+  const darkBtn  = document.getElementById('theme-dark-btn')
+  const lightBtn = document.getElementById('theme-light-btn')
+  const accentOn  = '2px solid var(--accent-cyan)'
+  const accentOff = '2px solid transparent'
+  if (darkBtn)  { darkBtn.style.border  = theme === 'dark'  ? accentOn : accentOff; darkBtn.style.color  = theme === 'dark'  ? '#fff' : 'var(--text-muted)' }
+  if (lightBtn) { lightBtn.style.border = theme === 'light' ? accentOn : accentOff; lightBtn.style.color = theme === 'light' ? '#fff' : 'var(--text-muted)' }
+}
+
+function applyStoredTheme() {
+  const theme = localStorage.getItem('nexus_theme') || 'dark'
+  setTheme(theme)
+}
+
 // Settings Logic
 document.getElementById('btn-save-settings')?.addEventListener('click', () => {
   const settings = {
-    nickname: document.getElementById('pref-nickname').value,
-    email: document.getElementById('pref-email').value,
-    timezone: document.getElementById('pref-tz').value,
-    tempUnit: document.getElementById('pref-temp').value
+    nickname: document.getElementById('pref-nickname')?.value || '',
+    email:    document.getElementById('pref-email')?.value || '',
+    timezone: document.getElementById('pref-tz')?.value || 'America/Mexico_City',
+    tempUnit: document.getElementById('pref-temp')?.value || 'C',
+    city:     (document.getElementById('pref-city')?.value || 'LA PAZ, BCS').toUpperCase(),
+    lat:      document.getElementById('pref-lat')?.value || '24.14',
+    lon:      document.getElementById('pref-lon')?.value || '-110.31',
   }
   localStorage.setItem('nexus_settings', JSON.stringify(settings))
-  alert('Sistema Actualizado: Preferencias sincronizadas.')
-  location.reload()
+  showToast('✅ Preferencias guardadas')
+  initTickers() // Re-fetch weather with new city
 })
 
 // Load settings on boot
 function loadSystemSettings() {
   const settings = JSON.parse(localStorage.getItem('nexus_settings') || '{}')
-  if (settings.nickname) document.getElementById('pref-nickname').value = settings.nickname
-  if (settings.email) document.getElementById('pref-email').value = settings.email
-  if (settings.timezone) document.getElementById('pref-tz').value = settings.timezone
-  if (settings.tempUnit) document.getElementById('pref-temp').value = settings.tempUnit
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val }
+  setVal('pref-nickname', settings.nickname)
+  setVal('pref-email',    settings.email)
+  setVal('pref-tz',       settings.timezone)
+  setVal('pref-temp',     settings.tempUnit)
+  setVal('pref-city',     settings.city)
+  setVal('pref-lat',      settings.lat)
+  setVal('pref-lon',      settings.lon)
+  applyStoredTheme()
 }
 document.getElementById('btn-change-password')?.addEventListener('click', async () => {
   const newPwd = document.getElementById('pref-new-password')?.value.trim()
