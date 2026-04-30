@@ -1021,6 +1021,8 @@ function renderAll() {
   renderContacts()
   renderAgenda(allNodes)
   renderFilterBar()
+  renderPulsoSemanal()
+  checkHabitAlerts()
   // Keep Fuse index in sync with allNodes
   if (typeof buildFuseIndex === 'function') buildFuseIndex()
 }
@@ -2949,7 +2951,7 @@ window.switchView = function(viewName) {
   if (target) target.classList.add('active')
   activeView = viewName
   // Render on-demand views
-  if (viewName === 'tags') window.renderTagsView()
+  if (viewName === 'tags') { window.renderTagsView(); window.renderHabitosSection() }
 }
 
 // ── COLLAPSIBLE PANELS ───────────────────────────────────────────────────────
@@ -4781,6 +4783,210 @@ function renderTagFolder(label, nodes) {
     </div>`
   }).join('')
   document.getElementById('tag-folder-header')?.scrollIntoView({ behavior:'smooth', block:'start' })
+}
+
+// ═══════════════════════════════════════════════════════════
+// PULSO SEMANAL + HÁBITOS — Sprint 13
+// ═══════════════════════════════════════════════════════════
+
+// ── Pulso Semanal ──────────────────────────────────────────
+function renderPulsoSemanal() {
+  const el = document.getElementById('pulso-semanal')
+  if (!el) return
+
+  const now   = new Date()
+  const wkStart = new Date(now); wkStart.setDate(now.getDate() - now.getDay())
+  wkStart.setHours(0,0,0,0)
+  const wkPrev  = new Date(wkStart); wkPrev.setDate(wkPrev.getDate()-7)
+  const wkStartStr = wkStart.toISOString().slice(0,10)
+  const wkPrevStr  = wkPrev.toISOString().slice(0,10)
+
+  const inWeek = n => { const d=(n.metadata?.date||n.created_at?.slice(0,10)||''); return d >= wkStartStr }
+  const inPrev = n => { const d=(n.metadata?.date||n.created_at?.slice(0,10)||''); return d >= wkPrevStr && d < wkStartStr }
+
+  // KPIs esta semana
+  const txThis  = allNodes.filter(n=>(n.type==='income'||n.type==='expense') && inWeek(n))
+  const txPrev  = allNodes.filter(n=>(n.type==='income'||n.type==='expense') && inPrev(n))
+  const gThis   = txThis.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const gPrev   = txPrev.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const iThis   = txThis.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const tasksOpen  = allNodes.filter(n=>n.type==='kanban'&&n.metadata?.status!=='done').length
+  const tasksDone  = allNodes.filter(n=>n.type==='kanban'&&n.metadata?.status==='done'&& inWeek(n)).length
+  const notesWk    = allNodes.filter(n=>(n.type==='note'||n.type==='proyecto')&&inWeek(n)).length
+
+  // Eventos próximos 7 días
+  const next7 = new Date(now); next7.setDate(now.getDate()+7)
+  const upcoming = allNodes.filter(n => {
+    if (!n.metadata?.date) return false
+    const d = new Date(n.metadata.date)
+    return d >= now && d <= next7
+  }).sort((a,b)=>new Date(a.metadata.date)-new Date(b.metadata.date)).slice(0,3)
+
+  // Gasto delta
+  const gastoDelta = gThis - gPrev
+  const gastoDeltaColor = gastoDelta <= 0 ? '#4ade80' : '#f87171'
+  const gastoDeltaStr = (gastoDelta>=0?'+':'')+`$${Math.abs(gastoDelta).toLocaleString('es-MX')}`
+
+  // Día de la semana
+  const diasEs = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+  const weekDay = diasEs[now.getDay()]
+  const dateStr = now.toLocaleDateString('es-MX',{day:'numeric',month:'long'})
+
+  el.style.display = 'block'
+  el.innerHTML = `
+  <div class="pulso-card">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+      <div>
+        <div style="font-size:11px; color:var(--accent-cyan); font-weight:700; letter-spacing:0.1em; text-transform:uppercase;">⚡ Pulso Semanal</div>
+        <div style="font-size:14px; color:#fff; font-weight:600; margin-top:2px;">${weekDay} ${dateStr}</div>
+      </div>
+      <button onclick="document.getElementById('pulso-semanal').style.display='none'" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:4px 8px;">✕</button>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; margin-bottom:16px;">
+      <div class="pulso-kpi">
+        <span class="pulso-kpi-val" style="color:#f87171;">\$${gThis.toLocaleString('es-MX')}</span>
+        <span class="pulso-kpi-lbl">Gasto semana</span>
+        <span style="font-size:10px; color:${gastoDeltaColor}; margin-top:2px;">${gastoDeltaStr} vs anterior</span>
+      </div>
+      <div class="pulso-kpi">
+        <span class="pulso-kpi-val" style="color:#4ade80;">\$${iThis.toLocaleString('es-MX')}</span>
+        <span class="pulso-kpi-lbl">Ingresos semana</span>
+      </div>
+      <div class="pulso-kpi">
+        <span class="pulso-kpi-val" style="color:#60a5fa;">${tasksOpen}</span>
+        <span class="pulso-kpi-lbl">Tareas abiertas</span>
+        ${tasksDone ? `<span style="font-size:10px;color:#4ade80;margin-top:2px;">${tasksDone} cerradas hoy</span>` : ''}
+      </div>
+      <div class="pulso-kpi">
+        <span class="pulso-kpi-val" style="color:#a855f7;">${notesWk}</span>
+        <span class="pulso-kpi-lbl">Notas esta semana</span>
+      </div>
+    </div>
+    ${upcoming.length ? `
+    <div style="margin-top:4px;">
+      <div style="font-size:10px; color:var(--text-muted); font-weight:700; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:8px;">📅 Próximos 7 días</div>
+      ${upcoming.map(n => {
+        const d = new Date(n.metadata.date)
+        const label = n.metadata?.title || n.metadata?.label || n.content
+        const days = Math.ceil((d - now) / 86400000)
+        return `<div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="font-size:11px; background:rgba(0,246,255,0.1); color:var(--accent-cyan); padding:2px 8px; border-radius:5px; flex-shrink:0;">${days===0?'hoy':days===1?'mañana':'en '+days+'d'}</span>
+          <span style="font-size:13px; color:#e2e8f0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${esc(label)}</span>
+        </div>`
+      }).join('')}
+    </div>` : ''}
+  </div>`
+}
+
+// ── Hábitos ────────────────────────────────────────────────
+
+function computeHabitStreaks() {
+  // Todos los nodos que tienen etiqueta #hábito
+  const habitNodes = allNodes.filter(n => {
+    const tags = (n.metadata?.tags||[]).map(t=>t.replace(/^#/,'').toLowerCase())
+    return tags.includes('hábito') || tags.includes('habito')
+  })
+
+  // Extraer nombres de hábito (otras etiquetas además de #hábito)
+  const habitNames = new Set()
+  habitNodes.forEach(n => {
+    ;(n.metadata?.tags||[]).forEach(t => {
+      const clean = t.replace(/^#/,'').toLowerCase()
+      if (clean !== 'hábito' && clean !== 'habito') habitNames.add(clean)
+    })
+  })
+
+  // Por cada hábito, calcular: días con registro, racha actual, días desde último
+  const habits = []
+  habitNames.forEach(name => {
+    const myNodes = habitNodes.filter(n =>
+      (n.metadata?.tags||[]).map(t=>t.replace(/^#/,'').toLowerCase()).includes(name)
+    )
+    // Build set of dates
+    const datesSet = new Set(myNodes.map(n => n.metadata?.date || n.created_at?.slice(0,10)).filter(Boolean))
+    const today = new Date().toISOString().slice(0,10)
+    const sortedDates = [...datesSet].sort()
+    const lastDate = sortedDates[sortedDates.length-1] || ''
+    const daysSince = lastDate
+      ? Math.floor((new Date(today) - new Date(lastDate)) / 86400000)
+      : null
+
+    // Streak: count consecutive days ending today or yesterday
+    let streak = 0
+    let check = new Date()
+    if (lastDate && lastDate < today) check = new Date(lastDate)
+    for (let i = 0; i < 366; i++) {
+      const dStr = check.toISOString().slice(0,10)
+      if (datesSet.has(dStr)) { streak++; check.setDate(check.getDate()-1) }
+      else break
+    }
+
+    // Last 14 days dots
+    const dots = []
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate()-i)
+      dots.push(datesSet.has(d.toISOString().slice(0,10)))
+    }
+
+    habits.push({ name, total: datesSet.size, streak, daysSince, dots, lastDate })
+  })
+
+  return habits.sort((a,b) => b.streak - a.streak)
+}
+
+window.renderHabitosSection = function() {
+  const root = document.getElementById('habitos-root')
+  if (!root) return
+  const habits = computeHabitStreaks()
+  if (!habits.length) {
+    root.innerHTML = `<div style="color:var(--text-muted);font-size:13px;padding:8px 0;">
+      Añade <code style="color:#4ade80;">#hábito</code> junto con otro tag para trackear rachas.<br>
+      Ej: <code>Fui al gym #hábito #gimnasio</code> en la barra de comandos.</div>`
+    return
+  }
+  root.innerHTML = habits.map(h => {
+    const streakColor = h.streak >= 7 ? '#4ade80' : h.streak >= 3 ? '#fbbf24' : '#f87171'
+    const absent = h.daysSince !== null && h.daysSince > 1
+    const absentBadge = absent ? `<span style="font-size:10px;background:rgba(248,113,113,0.12);color:#f87171;padding:1px 7px;border-radius:5px;flex-shrink:0;">${h.daysSince}d ausente</span>` : ''
+    const dots = h.dots.map(active =>
+      `<div class="habit-dot" style="background:${active?'#4ade80':'rgba(255,255,255,0.08)'}; ${active?'box-shadow:0 0 4px rgba(74,222,128,0.4)':''}"></div>`
+    ).join('')
+    return `<div class="habit-row">
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <span style="font-size:13px;color:#a855f7;font-weight:700;">#${h.name}</span>
+          <span style="font-size:12px;color:${streakColor};font-weight:800;">${h.streak} 🔥</span>
+          ${absentBadge}
+        </div>
+        <div class="habit-dots">${dots}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">últimas 14 días · ${h.total} registros totales · último: ${h.lastDate||'—'}</div>
+      </div>
+    </div>`
+  }).join('')
+}
+
+// ── Alertas Contextuales de Hábitos ────────────────────────
+function checkHabitAlerts() {
+  const el = document.getElementById('habit-alerts')
+  if (!el) return
+  const habits = computeHabitStreaks()
+  const absent = habits.filter(h => h.daysSince !== null && h.daysSince >= 3)
+  if (!absent.length) { el.style.display = 'none'; return }
+  el.style.display = 'block'
+  el.innerHTML = absent.map(h => `
+    <div class="habit-alert-item">
+      <span style="font-size:18px;flex-shrink:0;">⚠️</span>
+      <span>Llevas <b>${h.daysSince} días</b> sin un nodo <span style="color:#a855f7;font-weight:700;">#${h.name}</span></span>
+      <button onclick="injectHabitTag('${h.name}')" style="margin-left:auto;background:rgba(251,191,36,0.12);border:1px solid rgba(251,191,36,0.25);color:#fbbf24;border-radius:8px;padding:4px 12px;cursor:pointer;font-size:12px;flex-shrink:0;">+ Registrar</button>
+    </div>`).join('')
+}
+
+window.injectHabitTag = function(tag) {
+  const inp = document.getElementById('nexus-input')
+  if (inp) {
+    inp.value = `#hábito #${tag} `
+    inp.focus()
+  }
 }
 
 // ═══════════════════════════════════════════════════════════

@@ -1037,6 +1037,10 @@
     <!-- PANEL DE COMANDOS -->
     <div id="view-feed" class="view-section active">
       <div class="view-header"><h1 class="view-title">Historial de Operaciones</h1></div>
+      <!-- Alertas de hábitos -->
+      <div id="habit-alerts" style="display:none; margin-bottom:16px;"></div>
+      <!-- Pulso Semanal (colapsable) -->
+      <div id="pulso-semanal" style="margin-bottom:20px; display:none;"></div>
       <div id="feed-root" class="feed-container"></div>
     </div>
 
@@ -1381,6 +1385,15 @@
       <div class="settings-card" style="margin-bottom:20px;">
         <div style="font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:16px;">🔗 Etiquetas que Siempre Aparecen Juntas</div>
         <div id="tag-cooccur"></div>
+      </div>
+
+      <!-- Hábitos -->
+      <div class="settings-card" style="margin-bottom:20px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+          <div style="font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em;">🔁 Tracking de Hábitos</div>
+          <span style="font-size:11px; color:var(--text-dim);">Nodos con etiqueta <code style="color:#4ade80;">#hábito</code></span>
+        </div>
+        <div id="habitos-root"></div>
       </div>
 
       <!-- Vista por Tag — nodos -->
@@ -2721,6 +2734,25 @@
     /* ── IDE SUGGEST ── */
     .ide-row:hover { background: rgba(0,246,255,0.06) !important; }
 
+    /* ── PULSO SEMANAL ── */
+    .pulso-card {
+      background: linear-gradient(135deg, rgba(0,246,255,0.04) 0%, rgba(168,85,247,0.04) 100%);
+      border: 1px solid rgba(0,246,255,0.15);
+      border-radius: 16px; padding: 18px 20px;
+    }
+    .pulso-kpi { display:flex; flex-direction:column; align-items:center; gap:4px; padding:14px 10px;
+      background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:12px; }
+    .pulso-kpi-val { font-size:20px; font-weight:800; font-family:'JetBrains Mono',monospace; }
+    .pulso-kpi-lbl { font-size:10px; color:var(--text-muted); text-align:center; text-transform:uppercase; letter-spacing:0.06em; }
+    /* ── HABIT TRACKER ── */
+    .habit-row { display:flex; align-items:center; gap:12px; padding:10px 0;
+      border-bottom:1px solid rgba(255,255,255,0.05); }
+    .habit-dots { display:flex; gap:3px; }
+    .habit-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+    /* ── HABIT ALERT ── */
+    .habit-alert-item { display:flex; align-items:center; gap:10px; padding:10px 14px;
+      background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.2);
+      border-radius:10px; margin-bottom:8px; font-size:13px; }
     /* ── GLOBAL SEARCH ── */
     .gs-result-row {
       display: flex; flex-direction: column; gap: 4px;
