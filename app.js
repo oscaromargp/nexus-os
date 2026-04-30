@@ -2947,6 +2947,9 @@ window.switchView = function(viewName) {
   document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'))
   const target = document.getElementById(`view-${viewName}`)
   if (target) target.classList.add('active')
+  activeView = viewName
+  // Render on-demand views
+  if (viewName === 'tags') window.renderTagsView()
 }
 
 // ── COLLAPSIBLE PANELS ───────────────────────────────────────────────────────
@@ -4573,6 +4576,173 @@ function initFxWidget() {
   refreshFxWidget()
   if (fxIntervalId) clearInterval(fxIntervalId)
   fxIntervalId = setInterval(refreshFxWidget, 60_000)
+}
+
+// ═══════════════════════════════════════════════════════════
+// INTELIGENCIA DE TAGS — Sprint 11
+// ═══════════════════════════════════════════════════════════
+
+function extractTagData() {
+  const freq = {}
+  const lastUsed = {}
+  const pairFreq = {}
+  const tagNodeMap = {}
+
+  allNodes.forEach(n => {
+    const raw = n.metadata?.tags || []
+    const tags = raw.map(t => t.replace(/^#/,'').toLowerCase().trim()).filter(Boolean)
+    const date = n.metadata?.date || (n.created_at ? n.created_at.slice(0,10) : null)
+    tags.forEach(t => {
+      freq[t] = (freq[t] || 0) + 1
+      if (date && (!lastUsed[t] || date > lastUsed[t])) lastUsed[t] = date
+      if (!tagNodeMap[t]) tagNodeMap[t] = []
+      tagNodeMap[t].push(n)
+    })
+    if (tags.length >= 2) {
+      for (let i = 0; i < tags.length; i++) {
+        for (let j = i+1; j < tags.length; j++) {
+          const key = [tags[i], tags[j]].sort().join('|')
+          pairFreq[key] = (pairFreq[key] || 0) + 1
+        }
+      }
+    }
+  })
+  return { freq, lastUsed, pairFreq, tagNodeMap }
+}
+
+window.renderTagsView = function() {
+  const { freq, lastUsed, pairFreq, tagNodeMap } = extractTagData()
+  const sorted = Object.entries(freq).sort((a,b) => b[1]-a[1])
+  const maxFreq = sorted[0]?.[1] || 1
+
+  // Tag Cloud
+  const cloud = document.getElementById('tag-cloud')
+  if (cloud) {
+    if (!sorted.length) {
+      cloud.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">Aún no hay etiquetas. Empieza a etiquetar tus nodos con #.</span>'
+    } else {
+      const palette = ['#a855f7','#00f0ff','#4ade80','#f87171','#fbbf24','#60a5fa','#f97316','#34d399']
+      cloud.innerHTML = sorted.map(([tag, count]) => {
+        const ratio = count / maxFreq
+        const size = 11 + Math.round(ratio * 22)
+        const op = 0.5 + ratio * 0.5
+        const color = palette[tag.charCodeAt(0) % palette.length]
+        return `<span onclick="openTagFolder('${esc(tag)}')" title="${count} nodo${count>1?'s':''}"
+          style="font-size:${size}px;color:${color};opacity:${op};cursor:pointer;
+                 background:${color}18;border:1px solid ${color}30;border-radius:100px;
+                 padding:3px 12px;transition:all 0.2s;font-weight:${ratio>0.5?700:500};"
+          onmouseover="this.style.opacity=1;this.style.transform='scale(1.08)'"
+          onmouseout="this.style.opacity='${op}';this.style.transform=''"
+          >#${tag} <sup style="font-size:9px;">${count}</sup></span>`
+      }).join('')
+    }
+  }
+
+  // Top 10 con tendencia mensual
+  const top10El = document.getElementById('tag-top10')
+  if (top10El) {
+    const now = new Date()
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10)
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().slice(0,10)
+    const top = sorted.slice(0, 10)
+    top10El.innerHTML = top.length ? top.map(([tag, count], idx) => {
+      const nodes = tagNodeMap[tag] || []
+      const cThis = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= thisMonthStart }).length
+      const cPrev = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= prevMonthStart && d < thisMonthStart }).length
+      const trend = cThis > cPrev ? '↑' : cThis < cPrev ? '↓' : '→'
+      const tColor = trend==='↑'?'#4ade80':trend==='↓'?'#f87171':'#94a3b8'
+      const bar = Math.round((count/maxFreq)*100)
+      return `<div onclick="openTagFolder('${esc(tag)}')" style="display:flex;align-items:center;gap:10px;padding:6px 4px;cursor:pointer;border-radius:8px;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background=''">
+        <span style="font-size:11px;color:var(--text-dim);width:16px;text-align:right;flex-shrink:0;">${idx+1}</span>
+        <span style="font-size:13px;color:#a855f7;flex:1;font-weight:600;">#${tag}</span>
+        <div style="width:60px;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;flex-shrink:0;">
+          <div style="width:${bar}%;height:100%;background:#a855f7;border-radius:3px;"></div>
+        </div>
+        <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;flex-shrink:0;">${count}</span>
+        <span style="font-size:13px;color:${tColor};flex-shrink:0;" title="Este mes:${cThis} / Anterior:${cPrev}">${trend}</span>
+      </div>`
+    }).join('') : '<span style="color:var(--text-muted);font-size:13px;">Sin etiquetas aún.</span>'
+  }
+
+  // Durmientes (sin uso >30 días)
+  const dormEl = document.getElementById('tag-dormant')
+  if (dormEl) {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30)
+    const cutoffStr = cutoff.toISOString().slice(0,10)
+    const dormant = Object.entries(lastUsed)
+      .filter(([,d]) => d < cutoffStr)
+      .sort((a,b) => a[1].localeCompare(b[1]))
+      .slice(0,10)
+    dormEl.innerHTML = dormant.length
+      ? dormant.map(([tag,date]) => `
+          <div onclick="openTagFolder('${esc(tag)}')" style="display:flex;align-items:center;gap:10px;padding:5px 4px;cursor:pointer;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+            <span style="font-size:13px;color:#94a3b8;">#${tag}</span>
+            <span style="font-size:11px;color:var(--text-dim);margin-left:auto;">último: ${date}</span>
+            <span style="font-size:10px;background:rgba(248,113,113,0.12);color:#f87171;padding:1px 7px;border-radius:5px;flex-shrink:0;">dormida</span>
+          </div>`).join('')
+      : '<span style="color:#4ade80;font-size:13px;">✓ Todas tus etiquetas están activas.</span>'
+  }
+
+  // Co-ocurrencias
+  const coEl = document.getElementById('tag-cooccur')
+  if (coEl) {
+    const topPairs = Object.entries(pairFreq).filter(([,c])=>c>=2).sort((a,b)=>b[1]-a[1]).slice(0,12)
+    coEl.innerHTML = topPairs.length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:10px;">${topPairs.map(([pair,count])=>{
+          const [a,b]=pair.split('|')
+          return `<div onclick="openTagFolderMulti('${esc(a)}','${esc(b)}')" style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.15s;" onmouseover="this.style.background='rgba(168,85,247,0.15)'" onmouseout="this.style.background='rgba(168,85,247,0.08)'">
+            <span style="color:#a855f7;font-size:13px;font-weight:600;">#${a}</span>
+            <span style="color:var(--text-dim);font-size:11px;">+</span>
+            <span style="color:#a855f7;font-size:13px;font-weight:600;">#${b}</span>
+            <span style="background:rgba(168,85,247,0.25);color:#a855f7;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:2px;">${count}×</span>
+          </div>`}).join('')}</div>`
+      : '<span style="color:var(--text-muted);font-size:13px;">Se necesitan nodos con 2+ etiquetas para detectar co-ocurrencias.</span>'
+  }
+
+  // Reset tag folder
+  const lbl = document.getElementById('tag-folder-label')
+  const fld = document.getElementById('tag-folder-nodes')
+  if (lbl) lbl.textContent = 'Selecciona una etiqueta de la nube ↑'
+  if (fld) fld.innerHTML = ''
+}
+
+window.openTagFolder = function(tag) {
+  const nodes = allNodes.filter(n =>
+    (n.metadata?.tags||[]).map(t=>t.replace(/^#/,'').toLowerCase()).includes(tag.toLowerCase())
+  )
+  renderTagFolder(tag, nodes)
+}
+
+window.openTagFolderMulti = function(tagA, tagB) {
+  const nodes = allNodes.filter(n => {
+    const tags = (n.metadata?.tags||[]).map(t=>t.replace(/^#/,'').toLowerCase())
+    return tags.includes(tagA.toLowerCase()) && tags.includes(tagB.toLowerCase())
+  })
+  renderTagFolder(`${tagA} + ${tagB}`, nodes)
+}
+
+function renderTagFolder(label, nodes) {
+  const lbl = document.getElementById('tag-folder-label')
+  const fld = document.getElementById('tag-folder-nodes')
+  if (lbl) lbl.textContent = `#${label} — ${nodes.length} nodo${nodes.length!==1?'s':''}`
+  if (!fld) return
+  if (!nodes.length) { fld.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">Ningún nodo con esta etiqueta.</div>'; return }
+  fld.innerHTML = nodes.map(n => {
+    const cfg = TYPE_LABELS[n.type] || { icon:'💡', label:'Nota', color:'#94a3b8' }
+    const date = n.metadata?.date || (n.created_at ? n.created_at.slice(0,10) : '')
+    const amtRaw = n.metadata?.amount
+    const amtStr = amtRaw ? `<span style="color:${cfg.color};font-weight:700;font-size:12px;margin-left:8px;">${n.type==='income'?'+':'-'}$${(+amtRaw).toLocaleString('es-MX')}</span>` : ''
+    return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--glass-border);border-radius:10px;margin-bottom:8px;cursor:pointer;transition:background 0.15s;" onclick="openCardModal('${n.id}')" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background=''">
+      <span style="font-size:16px;flex-shrink:0;">${cfg.icon}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.label||n.content)}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">${date}</div>
+      </div>
+      ${amtStr}
+      <span style="background:rgba(255,255,255,0.05);color:${cfg.color};font-size:10px;padding:1px 7px;border-radius:5px;flex-shrink:0;">${cfg.label}</span>
+    </div>`
+  }).join('')
+  document.getElementById('tag-folder-header')?.scrollIntoView({ behavior:'smooth', block:'start' })
 }
 
 // ═══════════════════════════════════════════════════════════

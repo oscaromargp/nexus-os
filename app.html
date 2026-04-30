@@ -1022,6 +1022,7 @@
       <button class="nav-item" data-view="contacts"><span class="nav-icon">👥</span> Contactos</button>
       <button class="nav-item" data-view="agenda"><span class="nav-icon">💳</span> Agenda Financiera</button>
       <button class="nav-item" data-view="herramientas"><span class="nav-icon">🧮</span> Herramientas</button>
+      <button class="nav-item" data-view="tags"><span class="nav-icon">🏷️</span> Inteligencia Tags</button>
       <button class="nav-item" data-view="settings"><span class="nav-icon">⚙️</span> Configuración</button>
       <button class="nav-item" data-view="ayuda"><span class="nav-icon">❓</span> Ayuda</button>
     </div>
@@ -1347,6 +1348,50 @@
     </div>
 
     <!-- SETTINGS -->
+    <!-- INTELIGENCIA DE TAGS ──────────────────────────────── -->
+    <div id="view-tags" class="view-section">
+      <div class="view-header">
+        <h1 class="view-title">🏷️ Inteligencia de Tags</h1>
+        <button onclick="renderTagsView()" class="nav-item" style="border:1px solid var(--glass-border); font-size:12px; padding:6px 14px;">🔄 Actualizar</button>
+      </div>
+
+      <!-- Tag Cloud -->
+      <div class="settings-card" style="margin-bottom:20px;">
+        <div style="font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:16px;">☁️ Nube de Etiquetas</div>
+        <div id="tag-cloud" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; min-height:60px;"></div>
+      </div>
+
+      <!-- Top 10 + Tendencias + Durmientes -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
+
+        <div class="settings-card">
+          <div style="font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:16px;">🔥 Top 10 Etiquetas</div>
+          <div id="tag-top10"></div>
+        </div>
+
+        <div class="settings-card">
+          <div style="font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:16px;">😴 Etiquetas Durmientes <span style="font-size:10px; font-weight:400; opacity:0.6;">(sin uso &gt;30 días)</span></div>
+          <div id="tag-dormant"></div>
+        </div>
+
+      </div>
+
+      <!-- Co-ocurrencias -->
+      <div class="settings-card" style="margin-bottom:20px;">
+        <div style="font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:16px;">🔗 Etiquetas que Siempre Aparecen Juntas</div>
+        <div id="tag-cooccur"></div>
+      </div>
+
+      <!-- Vista por Tag — nodos -->
+      <div class="settings-card">
+        <div style="font-size:13px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:12px;">📂 Nodos por Etiqueta</div>
+        <div id="tag-folder-header" style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+          <span id="tag-folder-label" style="font-size:15px; font-weight:800; color:var(--accent-cyan);">Selecciona una etiqueta de la nube ↑</span>
+        </div>
+        <div id="tag-folder-nodes"></div>
+      </div>
+    </div>
+
     <div id="view-settings" class="view-section">
       <div class="view-header"><h1 class="view-title">Preferencias del Sistema</h1></div>
       <div class="settings-card">
