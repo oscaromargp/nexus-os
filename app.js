@@ -1345,41 +1345,124 @@ function renderFinance(nodes) {
   `
 
   const net = income - expense
-  // Saldo de la cuenta: balance inicial + movimientos
   const activeAcc   = accounts.find(a => a.id === activeAccount)
-  const initBalance = activeAccount !== 'all' ? (activeAcc?.metadata?.balance || 0) : null
-  const accBalance  = initBalance !== null ? initBalance + income - expense : null
-  const balLabel    = activeAccount !== 'all' ? `💳 ${esc(activeAcc?.metadata?.label||'Cuenta')}` : '⚖ SALDO NETO'
-  const balValue    = accBalance !== null ? accBalance : net
-  const balColor    = balValue >= 0 ? '#00f6ff' : '#fb923c'
-  const balBg       = balValue >= 0 ? 'rgba(0,246,255,0.06)' : 'rgba(251,146,60,0.06)'
-  const balBorder   = balValue >= 0 ? 'rgba(0,246,255,0.2)' : 'rgba(251,146,60,0.2)'
-  const balSub      = activeAccount !== 'all'
-    ? `Saldo inicial: $${initBalance.toLocaleString()} ${balValue>=0?'✅':'⚠️'}`
-    : (net>=0?'✅ Positivo':'⚠️ Déficit')
+  const initBalance = activeAccount !== 'all' ? (activeAcc?.metadata?.balance || 0) : 0
+  const accBalance  = activeAccount !== 'all' ? initBalance + income - expense : net
 
-  const statsHtml = `
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:28px;">
-      <div style="background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2); border-radius:14px; padding:20px; position:relative; overflow:hidden;">
-        <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:40px;opacity:0.06;pointer-events:none;">↑</div>
-        <div style="font-size:10px; color:#6ee7b7; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">↑ INGRESOS${activeAccount!=='all'?' · '+esc(activeAcc?.metadata?.label||''):''}</div>
-        <div id="fin-kpi-income" style="font-size:24px; font-weight:800; color:#4ade80; font-family:'JetBrains Mono',monospace;">+$${income.toLocaleString()}</div>
-        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${txs.filter(n=>n.type==='income').length} transacciones</div>
+  // ── DASHBOARD "TODAS LAS CUENTAS" ─────────────────────────────
+  let statsHtml = ''
+  if (activeAccount === 'all') {
+    // Fila de tarjetas por cuenta (una por cada cuenta registrada)
+    const allTxs = nodes.filter(n => n.type==='income'||n.type==='expense'||n.type==='loan')
+    const accountCards = accounts.length > 0
+      ? accounts.map(a => {
+          const aInc  = allTxs.filter(n=>n.type==='income'  && n.metadata?.account_id===a.id).reduce((s,n)=>s+(n.metadata?.amount||0),0)
+          const aExp  = allTxs.filter(n=>n.type==='expense' && n.metadata?.account_id===a.id).reduce((s,n)=>s+(n.metadata?.amount||0),0)
+          const aInit = a.metadata?.balance || 0
+          const aBal  = aInit + aInc - aExp
+          const aClr  = a.metadata?.color || '#4ade80'
+          const aBg   = aBal >= 0 ? `${aClr}12` : 'rgba(248,113,113,0.08)'
+          const aBdr  = aBal >= 0 ? `${aClr}30` : 'rgba(248,113,113,0.25)'
+          const aBalClr = aBal >= 0 ? aClr : '#f87171'
+          return `<div onclick="setActiveAccount('${a.id}')" style="cursor:pointer;background:${aBg};border:1px solid ${aBdr};border-radius:14px;padding:16px 18px;transition:transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <span style="width:10px;height:10px;border-radius:50%;background:${aClr};flex-shrink:0;"></span>
+              <span style="font-size:11px;font-weight:800;color:${aClr};letter-spacing:0.5px;">${esc(a.metadata?.label||a.content)}</span>
+            </div>
+            <div style="font-size:20px;font-weight:800;color:${aBalClr};font-family:'JetBrains Mono',monospace;margin-bottom:6px;">${aBal>=0?'+':''}\$${aBal.toLocaleString()}</div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);">
+              <span>↑ $${aInc.toLocaleString()}</span>
+              <span>↓ $${aExp.toLocaleString()}</span>
+            </div>
+          </div>`
+        }).join('')
+      : `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:20px;font-size:12px;">Sin cuentas. Crea una con <b>+ Cuenta</b></div>`
+
+    // Top 3 categorías de gasto (por tags)
+    const tagTotals = {}
+    allTxs.filter(n=>n.type==='expense').forEach(n => {
+      ;(n.metadata?.tags||[]).forEach(t => {
+        if (!tagTotals[t]) tagTotals[t] = 0
+        tagTotals[t] += n.metadata?.amount || 0
+      })
+    })
+    const topTags = Object.entries(tagTotals).sort((a,b)=>b[1]-a[1]).slice(0,3)
+    const topTagsHtml = topTags.length > 0
+      ? topTags.map(([tag, amt]) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="font-size:11px;color:var(--text-muted);">${tag}</span>
+          <span style="font-size:11px;font-weight:700;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${amt.toLocaleString()}</span>
+        </div>`).join('')
+      : '<div style="font-size:11px;color:var(--text-dim);">Sin datos de categorías</div>'
+
+    const consolidatedInc = allTxs.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+    const consolidatedExp = allTxs.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+    const consolidatedNet = consolidatedInc - consolidatedExp
+    const cNetClr = consolidatedNet >= 0 ? '#00f6ff' : '#fb923c'
+
+    statsHtml = `
+    <div style="margin-bottom:28px;">
+      <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1.5px;margin-bottom:12px;">💼 BALANCE POR CUENTA — clic para ver detalle</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px;">
+        ${accountCards}
       </div>
-      <div style="background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.2); border-radius:14px; padding:20px; position:relative; overflow:hidden;">
-        <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:40px;opacity:0.06;pointer-events:none;">↓</div>
-        <div style="font-size:10px; color:#fca5a5; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">↓ GASTOS${activeAccount!=='all'?' · '+esc(activeAcc?.metadata?.label||''):''}</div>
-        <div id="fin-kpi-expense" style="font-size:24px; font-weight:800; color:#f87171; font-family:'JetBrains Mono',monospace;">-$${expense.toLocaleString()}</div>
-        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${txs.filter(n=>n.type==='expense').length} transacciones</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+        <div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:14px;padding:16px;">
+          <div style="font-size:10px;color:#6ee7b7;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">↑ TOTAL INGRESOS</div>
+          <div id="fin-kpi-income" style="font-size:22px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${consolidatedInc.toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${allTxs.filter(n=>n.type==='income').length} transacciones</div>
+        </div>
+        <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:14px;padding:16px;">
+          <div style="font-size:10px;color:#fca5a5;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">↓ TOTAL GASTOS</div>
+          <div id="fin-kpi-expense" style="font-size:22px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${consolidatedExp.toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${allTxs.filter(n=>n.type==='expense').length} transacciones</div>
+        </div>
+        <div style="background:${consolidatedNet>=0?'rgba(0,246,255,0.06)':'rgba(251,146,60,0.06)'};border:1px solid ${consolidatedNet>=0?'rgba(0,246,255,0.2)':'rgba(251,146,60,0.2)'};border-radius:14px;padding:16px;">
+          <div style="font-size:10px;color:${cNetClr};font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">⚖ NETO CONSOLIDADO</div>
+          <div id="fin-kpi-net" style="font-size:22px;font-weight:800;color:${cNetClr};font-family:'JetBrains Mono',monospace;">${consolidatedNet>=0?'+':''}\$${consolidatedNet.toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${consolidatedNet>=0?'✅ Flujo positivo':'⚠️ Déficit acumulado'}</div>
+        </div>
       </div>
-      <div style="background:${balBg}; border:1px solid ${balBorder}; border-radius:14px; padding:20px; position:relative; overflow:hidden;">
-        <div style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:40px;opacity:0.06;pointer-events:none;">⚖</div>
-        <div style="font-size:10px; color:${balColor}; font-weight:800; letter-spacing:1.5px; margin-bottom:10px;">${balLabel}</div>
-        <div id="fin-kpi-net" style="font-size:24px; font-weight:800; color:${balColor}; font-family:'JetBrains Mono',monospace;">${balValue>=0?'+':''}\$${balValue.toLocaleString()}</div>
-        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${balSub}</div>
+      ${topTags.length > 0 ? `<div style="margin-top:16px;background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:12px;padding:14px 16px;">
+        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:10px;">🏷 TOP CATEGORÍAS DE GASTO</div>
+        ${topTagsHtml}
+      </div>` : ''}
+    </div>`
+
+  } else {
+    // ── DASHBOARD CUENTA ESPECÍFICA ────────────────────────────────
+    const aClr = activeAcc?.metadata?.color || '#00f6ff'
+    const txCount = txs.length
+    const avgExp  = txs.filter(n=>n.type==='expense').length > 0
+      ? expense / txs.filter(n=>n.type==='expense').length : 0
+    const maxTx   = [...txs].sort((a,b)=>(b.metadata?.amount||0)-(a.metadata?.amount||0))[0]
+    const balClr  = accBalance >= 0 ? aClr : '#fb923c'
+    const balBg   = accBalance >= 0 ? `${aClr}0d` : 'rgba(251,146,60,0.06)'
+    const balBdr  = accBalance >= 0 ? `${aClr}30` : 'rgba(251,146,60,0.25)'
+
+    statsHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:28px;">
+      <div style="background:${balBg};border:1px solid ${balBdr};border-radius:14px;padding:18px;grid-column:span 1;">
+        <div style="font-size:9px;color:${balClr};font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">💳 SALDO ACTUAL</div>
+        <div id="fin-kpi-net" style="font-size:22px;font-weight:800;color:${balClr};font-family:'JetBrains Mono',monospace;">${accBalance>=0?'+':''}\$${accBalance.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">Inicial: $${initBalance.toLocaleString()}</div>
       </div>
-    </div>
-  `
+      <div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:14px;padding:18px;">
+        <div style="font-size:9px;color:#6ee7b7;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">↑ INGRESOS</div>
+        <div id="fin-kpi-income" style="font-size:22px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${income.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${txs.filter(n=>n.type==='income').length} mov.</div>
+      </div>
+      <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:14px;padding:18px;">
+        <div style="font-size:9px;color:#fca5a5;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">↓ GASTOS</div>
+        <div id="fin-kpi-expense" style="font-size:22px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${expense.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">Prom: $${Math.round(avgExp).toLocaleString()}</div>
+      </div>
+      <div style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:14px;padding:18px;">
+        <div style="font-size:9px;color:#c4b5fd;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">📊 MOVIMIENTOS</div>
+        <div style="font-size:22px;font-weight:800;color:#a78bfa;font-family:'JetBrains Mono',monospace;">${txCount}</div>
+        ${maxTx ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Mayor: ${esc(maxTx.metadata?.label||maxTx.content)}">Mayor: $${(maxTx.metadata?.amount||0).toLocaleString()}</div>` : ''}
+      </div>
+    </div>`
+  }
 
   const rowsHtml = txs.length === 0
     ? '<div style="text-align:center; color:var(--text-muted); padding:40px;">Sin transacciones. Escribe <b>+$1000 Salario</b> o <b>-$200 Renta</b></div>'
@@ -4236,6 +4319,85 @@ window.stopAudioRecord = (context) => {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  NODOS — IMPORT CSV MASIVO
+// ═══════════════════════════════════════════════════════════════
+const NODE_CSV_HEADERS = ['contenido','tipo','monto','etiquetas','fecha','notas']
+const NODE_VALID_TYPES = new Set(['note','kanban','income','expense','persona','contact','proyecto','event'])
+
+window.downloadNodeTemplate = () => {
+  const header = NODE_CSV_HEADERS.join(',')
+  const examples = [
+    '"Revisar informe Q2","kanban","","#trabajo #urgente","2026-05-01","Revisar con el equipo antes del viernes"',
+    '"Pago freelance mayo","income","15000","#freelance #design","2026-05-15","Proyecto web landing"',
+    '"Renta oficina","expense","8500","#renta #fijo","2026-05-01","Transferencia BBVA"',
+    '"Reflexión sobre el producto","note","","#idea #startup","","Pensar en el modelo de precios"',
+    '"Juan Pérez electricista","persona","","#proveedor #electricista","","Tel: 612 123 4567"',
+  ].join('\n')
+  const csv  = `${header}\n${examples}\n`
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url  = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = 'nexus_nodos_plantilla.csv'; a.click()
+  URL.revokeObjectURL(url)
+  showToast('📄 Plantilla descargada')
+}
+
+window.importNodesCSV = async (input) => {
+  const resultEl = document.getElementById('nodes-import-result')
+  const file = input.files?.[0]
+  if (!file) return
+  const text = await file.text()
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) {
+    if (resultEl) { resultEl.style.cssText = 'display:block;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);color:#f87171;'; resultEl.textContent = '⚠️ CSV vacío o sin filas de datos.' }
+    return
+  }
+  // Parse headers
+  const parseCell = c => c?.trim().replace(/^"|"$/g,'').replace(/""/g,'"') || ''
+  const headers   = lines[0].split(',').map(h => parseCell(h).toLowerCase())
+  const idxOf = k => headers.indexOf(k)
+
+  let imported = 0, errors = 0, skipped = 0
+  const errDetails = []
+
+  for (let i = 1; i < lines.length; i++) {
+    const cells   = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)?.map(parseCell) || []
+    const content = cells[idxOf('contenido')] || cells[0] || ''
+    const tipo    = (cells[idxOf('tipo')] || 'note').toLowerCase().trim()
+    const monto   = parseFloat(cells[idxOf('monto')] || '0') || 0
+    const tags    = (cells[idxOf('etiquetas')] || '').split(/\s+/).filter(t=>t.startsWith('#'))
+    const fecha   = cells[idxOf('fecha')] || ''
+    const notas   = cells[idxOf('notas')] || ''
+
+    if (!content) { skipped++; continue }
+    if (!NODE_VALID_TYPES.has(tipo)) {
+      errDetails.push(`Fila ${i+1}: tipo "${tipo}" inválido`)
+      errors++; continue
+    }
+
+    const meta = { label: content, tags, notas }
+    if (monto > 0) meta.amount = monto
+    if (fecha)    meta.fecha   = fecha
+
+    try {
+      await insertDirectNode(tipo, content, meta)
+      imported++
+    } catch(e) {
+      errDetails.push(`Fila ${i+1}: ${e.message}`)
+      errors++
+    }
+  }
+
+  input.value = ''
+  const ok = imported > 0
+  const msg = `✅ ${imported} nodos importados${skipped?` · ${skipped} filas vacías ignoradas`:''}${errors?` · ⚠️ ${errors} errores`:''}`
+  if (resultEl) {
+    resultEl.style.cssText = `display:block;background:${ok?'rgba(74,222,128,0.1)':'rgba(248,113,113,0.1)'};border:1px solid ${ok?'rgba(74,222,128,0.3)':'rgba(248,113,113,0.3)'};color:${ok?'#4ade80':'#f87171'};`
+    resultEl.innerHTML = msg + (errDetails.length ? `<br><small>${errDetails.slice(0,3).join(' | ')}</small>` : '')
+  }
+  showToast(msg)
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  CONTACTOS — EXPORT / IMPORT CSV
 // ═══════════════════════════════════════════════════════════════
 const CONTACT_CSV_HEADERS = [
@@ -4337,6 +4499,7 @@ async function refreshFxWidget() {
 
   const pairs = [
     { from:'USD',  to:'MXN',  label:'USD',  icon:'🇺🇸', crypto:false },
+    { from:'EUR',  to:'MXN',  label:'EUR',  icon:'🇪🇺', crypto:false },
     { from:'btc',  to:'mxn',  label:'BTC',  icon:'₿',   crypto:true  },
     { from:'eth',  to:'mxn',  label:'ETH',  icon:'Ξ',   crypto:true  },
     { from:'xrp',  to:'mxn',  label:'XRP',  icon:'✕',   crypto:true  },

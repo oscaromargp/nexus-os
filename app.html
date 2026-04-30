@@ -44,30 +44,80 @@
 
     /* ── LIGHT THEME ── */
     [data-theme="light"] {
-      --bg-deep: #f0f4f8;
-      --bg-panel: #ffffff;
-      --bg-widget: #f8fafc;
-      --glass-bg: rgba(255,255,255,0.85);
-      --glass-border: hsla(var(--h), 60%, 50%, 0.2);
-      --glass-border-bright: hsla(var(--h), 60%, 50%, 0.4);
-      --text-main: #111827;
-      --text-muted: #4b5563;
-      --text-dim: #9ca3af;
+      --bg-deep:   #eef2f7;
+      --bg-panel:  #ffffff;
+      --bg-widget: #f5f7fa;
+      --glass-bg:  rgba(255,255,255,0.92);
+      --glass-border:        rgba(0,0,0,0.10);
+      --glass-border-bright: rgba(0,0,0,0.18);
+      --text-main:  #111827;
+      --text-muted: #374151;
+      --text-dim:   #6b7280;
     }
+    /* Body */
     [data-theme="light"] body {
-      background-image: radial-gradient(circle at 50% -20%, hsla(var(--h),100%,50%,0.04),transparent 50%);
+      background: var(--bg-deep);
+      background-image: radial-gradient(circle at 50% -10%, rgba(0,180,200,0.06), transparent 50%);
+      color: #111827;
     }
-    [data-theme="light"] .nav-sidebar,
-    [data-theme="light"] aside {
-      background: rgba(255,255,255,0.95);
-      border-color: rgba(0,0,0,0.08);
-    }
-    [data-theme="light"] .feed-item { background: #fff; border-color: rgba(0,0,0,0.08); }
-    [data-theme="light"] .feed-item:hover { background: #f8fafc; }
-    [data-theme="light"] .settings-card { background: #fff; border-color: rgba(0,0,0,0.08); }
-    [data-theme="light"] .nav-item { color: #374151; }
-    [data-theme="light"] .nav-item.active { background: rgba(0,200,220,0.12); }
-    [data-theme="light"] input, [data-theme="light"] select, [data-theme="light"] textarea { background: #f3f4f6; color: #111; border-color: rgba(0,0,0,0.12); }
+    /* Layout panels */
+    [data-theme="light"] #nexus-layout { background: var(--bg-deep); }
+    [data-theme="light"] .nav-sidebar  { background: #ffffff; border-right-color: rgba(0,0,0,0.08); }
+    [data-theme="light"] aside         { background: #ffffff; border-left-color:  rgba(0,0,0,0.08); }
+    [data-theme="light"] .main-content { background: var(--bg-deep); }
+    /* Nav items */
+    [data-theme="light"] .nav-item            { color: #374151 !important; }
+    [data-theme="light"] .nav-item:hover      { background: rgba(0,180,200,0.08); color: #0d9488 !important; }
+    [data-theme="light"] .nav-item.active     { background: rgba(0,180,200,0.14); color: #0d9488 !important; }
+    [data-theme="light"] .nav-label           { color: #6b7280; }
+    /* Cards & Panels */
+    [data-theme="light"] .settings-card       { background: #fff; border-color: rgba(0,0,0,0.08); color: #111827; }
+    [data-theme="light"] .widget-box          { background: #fff; border-color: rgba(0,0,0,0.08); }
+    [data-theme="light"] .widget-label        { color: #374151; }
+    /* Feed */
+    [data-theme="light"] .feed-item           { background: #fff; border-color: rgba(0,0,0,0.08); }
+    [data-theme="light"] .feed-item:hover     { background: #f0f9ff; border-color: rgba(0,180,200,0.3); transform: translateX(4px); }
+    [data-theme="light"] .feed-time           { color: #6b7280; }
+    /* Notes */
+    [data-theme="light"] .note-keep          { background: #fff; border-color: rgba(0,0,0,0.08) !important; color: #111827; }
+    /* Kanban */
+    [data-theme="light"] .kanban-col-header  { color: #374151; }
+    [data-theme="light"] .task-card          { background: #fff; border-color: rgba(0,0,0,0.08); color: #111827; }
+    /* Modals */
+    [data-theme="light"] .modal-overlay      { background: rgba(0,0,0,0.35); }
+    [data-theme="light"] .modal-box          { background: #fff; border-color: rgba(0,0,0,0.10); color: #111827; }
+    [data-theme="light"] .modal-title        { color: #111827; }
+    [data-theme="light"] .modal-label        { color: #374151; }
+    [data-theme="light"] .modal-input        { background: #f3f4f6; color: #111827; border-color: rgba(0,0,0,0.12); }
+    /* Inputs globales */
+    [data-theme="light"] input:not([type=checkbox]):not([type=radio]):not([type=color]),
+    [data-theme="light"] select,
+    [data-theme="light"] textarea            { background: #f3f4f6 !important; color: #111827 !important; border-color: rgba(0,0,0,0.12) !important; }
+    [data-theme="light"] input::placeholder,
+    [data-theme="light"] textarea::placeholder { color: #9ca3af; }
+    /* Contact cards */
+    [data-theme="light"] .contact-card       { background: #fff; border-color: rgba(0,0,0,0.08); color: #111827; }
+    [data-theme="light"] .contact-card:hover { background: #f0f9ff; }
+    /* Spotlight */
+    [data-theme="light"] #spotlight-container    { background: #fff; border-top-color: rgba(0,0,0,0.10); box-shadow: 0 -4px 24px rgba(0,0,0,0.10); }
+    [data-theme="light"] #nexus-input            { color: #111827; }
+    [data-theme="light"] #nexus-input::placeholder { color: #6b7280; }
+    [data-theme="light"] .spotlight-prompt       { color: #0d9488; }
+    /* View titles */
+    [data-theme="light"] .view-title        { color: #111827; }
+    [data-theme="light"] h1, [data-theme="light"] h2, [data-theme="light"] h3 { color: #111827; }
+    /* Text helpers */
+    [data-theme="light"] [style*="color:var(--text-muted)"] { color: #374151 !important; }
+    [data-theme="light"] [style*="color:var(--text-dim)"]   { color: #6b7280 !important; }
+    [data-theme="light"] [style*="color:#fff"]              { color: #111827 !important; }
+    [data-theme="light"] [style*="color:#f0f6fc"]           { color: #111827 !important; }
+    /* Scrollbars */
+    [data-theme="light"] ::-webkit-scrollbar-track { background: #f0f4f8; }
+    [data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+    /* Buttons */
+    [data-theme="light"] .btn-ghost         { background: #f3f4f6; color: #374151; border-color: rgba(0,0,0,0.12); }
+    [data-theme="light"] .btn-ghost:hover   { background: #e5e7eb; }
+    [data-theme="light"] kbd               { background: rgba(0,0,0,0.08); color: #374151; }
 
     /* ── BASE & LAYOUT ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1364,10 +1414,41 @@
          </div>
          
          <div class="settings-group" style="padding-top: 20px; border-top: 1px solid hsla(0,0%,100%,0.05);">
-           <label class="settings-label">Nexus Data Import (CSV)</label>
-           <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">Carga masiva de nodos, personas o finanzas. Formato: contenido, tipo, metadata_json</p>
-           <textarea id="csv-import-area" class="input-field" rows="3" placeholder="Mi tarea,kanban,{}\nJuan Perez,persona,{}"></textarea>
-           <button id="btn-import-csv" class="nav-item" style="width:100%; justify-content:center; margin-top: 10px; border: 1px solid var(--accent-cyan); color: var(--accent-cyan);">EJECUTAR IMPORTACIÓN</button>
+           <label class="settings-label">Importación Masiva de Nodos (CSV)</label>
+           <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 14px;">Importa tareas, notas, ingresos o gastos en lote. Descarga la plantilla, llénala con tus datos y súbela. <b style="color:var(--accent-cyan);">El formato debe respetarse exactamente para evitar errores.</b></p>
+
+           <!-- Formato guiado -->
+           <div style="background:rgba(0,0,0,0.2);border:1px solid var(--glass-border);border-radius:12px;padding:14px 16px;margin-bottom:14px;">
+             <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:10px;">COLUMNAS DEL CSV</div>
+             <div style="display:flex;flex-direction:column;gap:6px;">
+               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
+                 <code style="color:var(--accent-cyan);">contenido</code><span style="color:var(--text-muted);">Texto del nodo. Obligatorio.</span>
+               </div>
+               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
+                 <code style="color:var(--accent-cyan);">tipo</code><span style="color:var(--text-muted);">note · kanban · income · expense · persona · contact</span>
+               </div>
+               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
+                 <code style="color:var(--accent-cyan);">monto</code><span style="color:var(--text-muted);">Número. Solo para income/expense.</span>
+               </div>
+               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
+                 <code style="color:var(--accent-cyan);">etiquetas</code><span style="color:var(--text-muted);">Tags separados por espacio. Ej: #trabajo #pendiente</span>
+               </div>
+               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
+                 <code style="color:var(--accent-cyan);">fecha</code><span style="color:var(--text-muted);">Formato YYYY-MM-DD. Ej: 2026-04-30</span>
+               </div>
+               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
+                 <code style="color:var(--accent-cyan);">notas</code><span style="color:var(--text-muted);">Texto adicional opcional.</span>
+               </div>
+             </div>
+           </div>
+
+           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+             <button onclick="downloadNodeTemplate()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:9px;padding:8px 16px;color:var(--text-muted);cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;">📄 Descargar Plantilla</button>
+             <label style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);border-radius:9px;padding:8px 16px;color:#60a5fa;cursor:pointer;font-size:12px;font-weight:700;">
+               ⬆ Importar CSV<input id="nodes-csv-input" type="file" accept=".csv" style="display:none;" onchange="importNodesCSV(this)" />
+             </label>
+           </div>
+           <div id="nodes-import-result" style="display:none;font-size:12px;padding:10px 14px;border-radius:8px;margin-top:4px;"></div>
          </div>
 
          <div class="settings-group" style="padding-top: 20px; border-top: 1px solid hsla(0,0%,100%,0.05);">
