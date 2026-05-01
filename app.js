@@ -5530,6 +5530,9 @@ window.openPaymentModal = (contactId, serviceId = null, projectTag = '') => {
   document.getElementById('pay-project-tag').value   = projectTag || ''
   document.getElementById('pay-quality-note').value  = ''
   document.querySelectorAll('#pay-stars [data-star]').forEach(s => s.style.opacity = '0.3')
+  // Auto-select expense_type: proveedores → servicio, others → material
+  const typeEl = document.getElementById('pay-expense-type')
+  if (typeEl) typeEl.value = (contact.metadata?.cType === 'proveedor') ? 'servicio' : 'material'
 
   // Initial split row
   document.getElementById('pay-splits-container').innerHTML = ''
@@ -5656,8 +5659,14 @@ window.savePayment = async () => {
     splits.push({ amount: amt, method, account_id: accId||undefined, account_name: accObj?.name || (method==='efectivo'?'Efectivo':'Sin especificar') })
   })
 
+  // expense_type: read from selector, auto-detect if not overridden
+  let expenseType = document.getElementById('pay-expense-type')?.value || 'servicio'
+  // Auto-detect: if no service linked and no proveedor cType, guess material
+  if (!selSvcId && contact.metadata?.cType !== 'proveedor') expenseType = 'material'
+
   const tags = ['#gasto']
   if (projTag) tags.push('#' + projTag)
+  if (expenseType) tags.push('#' + expenseType)
 
   const label = [selSvc?.name||'Pago', m.name||contact.content, projTag].filter(Boolean).join(' — ')
   const meta = {
@@ -5666,6 +5675,7 @@ window.savePayment = async () => {
     service_id:      selSvcId || undefined,
     service_name:    selSvc?.name || undefined,
     project_tag:     projTag || undefined,
+    expense_type:    expenseType,
     splits:          splits.length ? splits : undefined,
     quality_note:    qualNote || undefined,
     quality_rating:  paymentRating || undefined,
@@ -5684,6 +5694,46 @@ window.savePayment = async () => {
   closePaymentModal()
   renderAll()
   showToast(`Pago de $${total.toLocaleString('es-MX')} registrado`)
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROVEEDOR PICKER — "Contratar sin cotización" (Sprint 4C)
+// ═══════════════════════════════════════════════════════════
+
+window.openProveedorPicker = (projectTag = '') => {
+  document.getElementById('prov-picker-project-tag').value = projectTag
+  document.getElementById('prov-picker-search').value = ''
+  filterProveedorPicker('')
+  document.getElementById('proveedor-picker-modal').classList.remove('hidden')
+}
+
+window.closeProveedorPicker = () => document.getElementById('proveedor-picker-modal').classList.add('hidden')
+
+window.filterProveedorPicker = (q = '') => {
+  const provs = allNodes.filter(n => n.type === 'contact' && n.metadata?.cType === 'proveedor')
+  const filtered = q ? provs.filter(p => (p.metadata?.name||p.content).toLowerCase().includes(q.toLowerCase())) : provs
+  const list = document.getElementById('prov-picker-list')
+  const projTag = document.getElementById('prov-picker-project-tag').value
+  if (!filtered.length) {
+    list.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Sin resultados</div>`
+    return
+  }
+  list.innerHTML = filtered.map(p => {
+    const name = esc(p.metadata?.name || p.content)
+    const spec = esc(p.metadata?.specialty || '')
+    const clr  = p.metadata?.color || '#fb923c'
+    return `<div onclick="closeProveedorPicker();openPaymentModal('${p.id}',null,'${projTag}')"
+               style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;background:rgba(255,255,255,0.04);cursor:pointer;transition:background 0.15s;"
+               onmouseenter="this.style.background='rgba(255,255,255,0.08)'"
+               onmouseleave="this.style.background='rgba(255,255,255,0.04)'">
+      <div style="width:34px;height:34px;border-radius:50%;background:${clr}20;color:${clr};display:grid;place-items:center;font-size:14px;font-weight:800;flex-shrink:0;">${name.charAt(0)}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${name}</div>
+        ${spec ? `<div style="font-size:11px;color:var(--text-muted);">${spec}</div>` : ''}
+      </div>
+      <span style="font-size:12px;color:var(--text-muted);">→</span>
+    </div>`
+  }).join('')
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -5862,7 +5912,8 @@ window.openProjectDashboard = (projectId) => {
         <div style="display:flex;gap:8px;flex-shrink:0;">
           <span style="font-size:11px;font-weight:700;background:${rCfg.color}20;color:${rCfg.color};border-radius:6px;padding:4px 10px;">${rCfg.label}</span>
           <button onclick="openProyectoModal('${p.id}')" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;">✏️ Editar</button>
-          <button onclick="openCotizacionModal()" style="background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.35);color:#fb923c;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">+ Cotización</button>
+          <button onclick="openCotizacionModal(null,'${tagStr[0]||''}')" style="background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.35);color:#fb923c;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">+ Cotización</button>
+          <button onclick="openProveedorPicker('${tagStr[0]||''}')" style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">🔧 Sin cotización</button>
         </div>
       </div>
 
@@ -5922,7 +5973,7 @@ window.openProjectDashboard = (projectId) => {
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">📄 COTIZACIONES</div>
-          <button onclick="openCotizacionModal()" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Nueva</button>
+          <button onclick="openCotizacionModal(null,'${tagStr[0]||''}')" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Nueva</button>
         </div>
         ${cots.length === 0 ? `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Sin cotizaciones aún</div>` :
           Object.entries(cotsByCat).map(([cat,cs]) => `
@@ -5984,7 +6035,7 @@ window.openProjectDashboard = (projectId) => {
 
 let currentCotizacionId = null
 
-window.openCotizacionModal = (id = null) => {
+window.openCotizacionModal = (id = null, prefillProjectTag = '') => {
   const c = id ? allNodes.find(n => n.id === id) : null
   const m = c?.metadata || {}
   currentCotizacionId = id
@@ -5992,7 +6043,7 @@ window.openCotizacionModal = (id = null) => {
   document.getElementById('cot-label').value         = m.label || c?.content || ''
   document.getElementById('cot-amount').value        = m.amount || ''
   document.getElementById('cot-status').value        = m.status || 'pendiente'
-  document.getElementById('cot-project-tag').value  = m.project_tag || ''
+  document.getElementById('cot-project-tag').value  = m.project_tag || prefillProjectTag || ''
   document.getElementById('cot-notes').value         = m.notes || ''
   const catEl = document.getElementById('cot-category')
   if (catEl) catEl.value = m.category || ''

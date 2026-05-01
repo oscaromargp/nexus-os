@@ -2185,10 +2185,20 @@
         <div id="pay-split-warn" style="font-size:11px;color:#f87171;margin-top:6px;display:none;">⚠️ La suma de partes no coincide con el total</div>
       </div>
 
-      <!-- Proyecto / Evento -->
-      <div class="modal-field">
-        <label class="modal-label">Proyecto / Evento (etiqueta, sin #)</label>
-        <input type="text" id="pay-project-tag" class="modal-input" placeholder="Ej: bodaxyz, casatulum, eventomayo..." />
+      <!-- Proyecto / Tipo -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Proyecto (sin #)</label>
+          <input type="text" id="pay-project-tag" class="modal-input" placeholder="casatulum, tulum2026..." />
+        </div>
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Tipo de gasto</label>
+          <select id="pay-expense-type" class="modal-input">
+            <option value="servicio">🔧 Servicio</option>
+            <option value="material">🧱 Material / Compra</option>
+            <option value="overhead">📋 Overhead / Admin</option>
+          </select>
+        </div>
       </div>
 
       <!-- Nota de calidad -->
@@ -2204,6 +2214,22 @@
         <button class="btn-ghost" onclick="closePaymentModal()">Cancelar</button>
         <button class="btn-primary" onclick="savePayment()">Registrar pago</button>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PICKER PROVEEDOR (Sin cotización) ───────────── -->
+  <div id="proveedor-picker-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeProveedorPicker()">
+    <div class="modal-box" style="max-width:400px;">
+      <div class="modal-header">
+        <h3 class="modal-title">🔧 Contratar sin cotización</h3>
+        <button class="modal-close" onclick="closeProveedorPicker()">✕</button>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Buscar proveedor</label>
+        <input type="text" id="prov-picker-search" class="modal-input" placeholder="Nombre del proveedor..." oninput="filterProveedorPicker(this.value)" />
+      </div>
+      <div id="prov-picker-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
+      <input type="hidden" id="prov-picker-project-tag" />
     </div>
   </div>
 
