@@ -757,6 +757,25 @@ function showToast(msg) {
   }, 3000)
 }
 
+function showEnrichPrompt(id, name) {
+  document.getElementById('enrich-prompt')?.remove()
+  const el = document.createElement('div')
+  el.id = 'enrich-prompt'
+  el.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--glass-bg);border:1px solid rgba(0,246,255,0.4);border-radius:14px;padding:14px 20px;z-index:9999;display:flex;align-items:center;gap:16px;box-shadow:0 8px 32px rgba(0,0,0,0.5);backdrop-filter:blur(20px);max-width:440px;width:calc(100% - 40px);animation:fadeInUp 0.3s ease;'
+  el.innerHTML = `
+    <div style="flex:1;">
+      <div style="font-size:13px;color:var(--text-primary);font-weight:600;">🔧 ${esc(name)} guardado</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-top:3px;">¿Deseas ver y enriquecer la ficha completa?</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-shrink:0;">
+      <button onclick="document.getElementById('enrich-prompt').remove()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;">Ahora no</button>
+      <button onclick="document.getElementById('enrich-prompt').remove();openContactSheet('${id}')" style="background:rgba(0,246,255,0.15);border:1px solid rgba(0,246,255,0.4);color:#00f6ff;border-radius:8px;padding:6px 14px;font-size:12px;cursor:pointer;font-weight:600;">Ver ficha →</button>
+    </div>
+  `
+  document.body.appendChild(el)
+  setTimeout(() => { if (el.parentNode) { el.style.opacity='0'; el.style.transition='opacity 0.5s'; setTimeout(()=>el.remove(),500) } }, 9000)
+}
+
 function showDemoBanner() {
   const banner = document.createElement('div')
   banner.style.cssText = 'position:fixed; top:0; left:var(--sidebar-width); right:var(--widget-width); background:rgba(234,179,8,0.2); color:#eab308; font-size:10px; font-weight:800; text-align:center; padding:4px; z-index:1000; border-bottom:1px solid rgba(234,179,8,0.3); backdrop-filter:blur(10px);'
@@ -3996,6 +4015,11 @@ function renderCSheetTab(tab, c) {
       <div class="csh-field"><span class="csh-label">📞 Teléfono</span><span>${esc(m.phone||'—')}</span></div>
       <div class="csh-field"><span class="csh-label">⭐ Rating</span><span>${'⭐'.repeat(m.rating||3)} <span style="color:var(--text-dim);font-size:11px;">(${m.rating||3}/5)</span></span></div>
       <div class="csh-field"><span class="csh-label">🚦 Estado</span><span>${PROV_STATUS_LABEL[m.prov_status||'activo']||'—'}</span></div>
+      ${m.rfc ? `<div class="csh-field"><span class="csh-label">🪪 RFC</span><div style="display:flex;align-items:center;gap:8px;"><code style="font-family:monospace;font-size:13px;letter-spacing:0.05em;">${esc(m.rfc)}</code><button onclick="navigator.clipboard.writeText('${esc(m.rfc)}').then(()=>showToast('RFC copiado'))" style="background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f6ff;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">📋</button></div></div>` : ''}
+      ${m.address ? `<div class="csh-field"><span class="csh-label">🏠 Dirección</span><span>${esc(m.address)}</span></div>` : ''}
+      ${m.pay_day ? `<div class="csh-field"><span class="csh-label">📅 Día de pago</span><span>Día <strong style="color:var(--accent-cyan);">${m.pay_day}</strong> de cada mes</span></div>` : ''}
+      ${m.clabe ? `<div class="csh-field" style="flex-direction:column;align-items:flex-start;gap:6px;"><span class="csh-label">🏦 Cuenta (${esc(m.bank_name||'banco')})</span><div style="display:flex;align-items:center;gap:8px;"><code style="font-family:monospace;font-size:13px;letter-spacing:0.05em;">${esc(m.clabe)}</code><button onclick="navigator.clipboard.writeText('${esc(m.clabe)}').then(()=>showToast('CLABE copiada'))" style="background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f6ff;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">📋 Copiar</button></div></div>` : (m.bank_name ? `<div class="csh-field"><span class="csh-label">🏦 Banco</span><span>${esc(m.bank_name)}</span></div>` : '')}
+      ${m.accepts_crypto ? `<div class="csh-field"><span class="csh-label">🪙 Cripto</span><span style="color:#a78bfa;">✓ Acepta ${esc(m.crypto_nets||'cripto')}</span></div>` : ''}
       <div class="csh-field"><span class="csh-label">💸 Total pagado</span><span style="color:#f87171;font-weight:700;">${totalPaid > 0 ? '-$'+totalPaid.toLocaleString('es-MX') : '—'}</span></div>
       <div class="csh-field"><span class="csh-label">🕐 Última interacción</span><span>${lastDate}</span></div>
     `})() : cType === 'bank' ? `
@@ -4135,6 +4159,18 @@ window.openContactModal = (id = null) => {
   if (document.getElementById('cm-prov-phone'))     document.getElementById('cm-prov-phone').value     = m.phone || ''
   if (document.getElementById('cm-prov-status'))    document.getElementById('cm-prov-status').value    = m.prov_status || 'activo'
   if (document.getElementById('cm-prov-rating'))    document.getElementById('cm-prov-rating').value    = String(m.rating || 3)
+  // Phase 1 — Proveedor extra fields
+  if (document.getElementById('cm-prov-rfc'))     document.getElementById('cm-prov-rfc').value     = m.rfc || ''
+  if (document.getElementById('cm-prov-pay-day')) document.getElementById('cm-prov-pay-day').value = m.pay_day || ''
+  if (document.getElementById('cm-prov-address')) document.getElementById('cm-prov-address').value = m.address || ''
+  if (document.getElementById('cm-prov-bank'))    document.getElementById('cm-prov-bank').value    = m.bank_name || ''
+  if (document.getElementById('cm-prov-clabe'))   document.getElementById('cm-prov-clabe').value   = m.clabe || ''
+  if (document.getElementById('cm-prov-crypto'))  {
+    const cb = document.getElementById('cm-prov-crypto')
+    cb.checked = !!m.accepts_crypto
+    const netEl = document.getElementById('cm-prov-crypto-net')
+    if (netEl) { netEl.style.display = m.accepts_crypto ? 'flex' : 'none'; netEl.value = m.crypto_nets || '' }
+  }
   document.getElementById('cm-notes').value  = m.notes || ''
   document.getElementById('cm-delete').style.display = c ? 'inline-flex' : 'none'
 
@@ -4178,12 +4214,19 @@ window.saveContact = async () => {
       company: document.getElementById('cm-company').value.trim(),
       rfc:     document.getElementById('cm-rfc')?.value.trim() || undefined,
     } : cType==='proveedor' ? {
-      specialty:   document.getElementById('cm-prov-specialty')?.value.trim() || '',
-      zone:        document.getElementById('cm-prov-zone')?.value.trim() || '',
-      price:       document.getElementById('cm-prov-price')?.value.trim() || '',
-      phone:       document.getElementById('cm-prov-phone')?.value.trim() || '',
-      prov_status: document.getElementById('cm-prov-status')?.value || 'activo',
-      rating:      parseInt(document.getElementById('cm-prov-rating')?.value || '3'),
+      specialty:      document.getElementById('cm-prov-specialty')?.value.trim() || '',
+      zone:           document.getElementById('cm-prov-zone')?.value.trim() || '',
+      price:          document.getElementById('cm-prov-price')?.value.trim() || '',
+      phone:          document.getElementById('cm-prov-phone')?.value.trim() || '',
+      prov_status:    document.getElementById('cm-prov-status')?.value || 'activo',
+      rating:         parseInt(document.getElementById('cm-prov-rating')?.value || '3'),
+      rfc:            document.getElementById('cm-prov-rfc')?.value.trim().toUpperCase() || undefined,
+      pay_day:        document.getElementById('cm-prov-pay-day')?.value ? parseInt(document.getElementById('cm-prov-pay-day').value) : undefined,
+      address:        document.getElementById('cm-prov-address')?.value.trim() || undefined,
+      bank_name:      document.getElementById('cm-prov-bank')?.value.trim() || undefined,
+      clabe:          document.getElementById('cm-prov-clabe')?.value.trim() || undefined,
+      accepts_crypto: document.getElementById('cm-prov-crypto')?.checked || false,
+      crypto_nets:    document.getElementById('cm-prov-crypto-net')?.value.trim() || undefined,
     } : cType==='bank' ? {
       bank_name:  document.getElementById('cm-bank-name').value.trim(),
       clabe:      document.getElementById('cm-clabe').value.trim(),
@@ -4211,9 +4254,15 @@ window.saveContact = async () => {
       if (data?.[0]) allNodes.unshift(data[0])
     }
   }
+  const isNewProveedor = cType === 'proveedor' && !currentContactId
   closeContactModal()
   renderAll()
   showToast(`Contacto "${name}" guardado`)
+  // Prompt contextual para nuevos proveedores
+  if (isNewProveedor) {
+    const saved = allNodes.find(n => n.type === 'contact' && n.metadata?.name === name && n.metadata?.cType === 'proveedor')
+    if (saved) setTimeout(() => showEnrichPrompt(saved.id, name), 400)
+  }
 }
 
 window.deleteContact = async () => {

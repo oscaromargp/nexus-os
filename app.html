@@ -2650,6 +2650,24 @@
           </select>
         </div>
       </div>
+      <!-- Proveedor extra fields (Phase 1) -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">RFC / Fiscal</label><input type="text" id="cm-prov-rfc" class="modal-input" placeholder="XAXX010101000" style="font-family:monospace; text-transform:uppercase;" /></div>
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Día de pago</label><input type="number" id="cm-prov-pay-day" class="modal-input" placeholder="Ej: 15" min="1" max="31" /></div>
+      </div>
+      <div class="modal-field"><label class="modal-label">Dirección</label><input type="text" id="cm-prov-address" class="modal-input" placeholder="Calle, No., Col., Ciudad..." /></div>
+      <div style="border-top:1px solid rgba(255,255,255,0.07); padding-top:12px; margin-top:2px;">
+        <label class="modal-label" style="display:block; margin-bottom:8px; font-size:10px;">💳 DATOS BANCARIOS (para pago)</label>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="modal-field" style="margin-bottom:0;"><label class="modal-label" style="font-size:9px;">Banco</label><input type="text" id="cm-prov-bank" class="modal-input" placeholder="BBVA, Santander..." /></div>
+          <div class="modal-field" style="margin-bottom:0;"><label class="modal-label" style="font-size:9px;">CLABE (18 dígitos)</label><input type="text" id="cm-prov-clabe" class="modal-input" placeholder="012345678901234567" style="font-family:monospace;" maxlength="18" /></div>
+        </div>
+      </div>
+      <div style="display:flex; align-items:center; gap:10px; margin-top:12px; padding:10px 12px; background:rgba(167,139,250,0.05); border:1px solid rgba(167,139,250,0.15); border-radius:10px;">
+        <input type="checkbox" id="cm-prov-crypto" style="width:16px;height:16px;cursor:pointer;accent-color:#a78bfa;" onchange="document.getElementById('cm-prov-crypto-net').style.display=this.checked?'flex':'none'" />
+        <label for="cm-prov-crypto" class="modal-label" style="cursor:pointer; margin:0; color:var(--text-primary);">🪙 Acepta cripto</label>
+        <input type="text" id="cm-prov-crypto-net" class="modal-input" placeholder="XRP, BTC, ETH, USDT..." style="display:none; flex:1; margin:0; padding:6px 10px; font-size:12px;" />
+      </div>
     </div>
     <!-- Crypto fields -->
     <div id="cm-crypto-fields" style="display:none;">
