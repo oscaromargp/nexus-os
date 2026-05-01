@@ -2926,9 +2926,10 @@ function fmt$(n) {
 }
 
 // ── AGENDA MODAL ──────────────────────────────────────────────────────────────
-window.openAgendaModal = (type) => {
+window.openAgendaModal = (type, prefillProjectTag = '') => {
   agendaItemType = type
   editingAgendaId = null
+  window._agendaPrefillProject = prefillProjectTag
   agendaColor = type === 'card' ? '#60a5fa' : type === 'subscription' ? '#a78bfa' : '#fb923c'
   const titles = { card:'Nueva Tarjeta de Crédito', subscription:'Nueva Suscripción / Servicio', bill:'Nuevo Pago Fijo' }
   document.getElementById('agenda-modal-title').textContent = titles[type] || 'Nuevo Ítem'
@@ -3044,8 +3045,15 @@ window.saveAgendaItem = async () => {
         return d.toISOString().split('T')[0]
       })()
     }
+    // Pre-fill project tag if opened from project dashboard
+    if (window._agendaPrefillProject) {
+      meta.project_tag = window._agendaPrefillProject
+      if (!meta.tags) meta.tags = []
+      if (!meta.tags.includes('#'+window._agendaPrefillProject)) meta.tags.push('#'+window._agendaPrefillProject)
+    }
   }
   closeAgendaModal()
+  window._agendaPrefillProject = ''
   await insertDirectNode(agendaItemType, name, meta)
 }
 window.deleteAgendaItem = async (nodeId) => {
@@ -3061,6 +3069,69 @@ window.toggleBillPaid = async (nodeId) => {
   renderAll()
   if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
     await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', nodeId)
+}
+
+// ═══════════════════════════════════════════════════════════
+// DEMO DATA SEEDER — Sprint 5D
+// 3 proyectos genéricos: casa, boda, estudio freelance
+// ═══════════════════════════════════════════════════════════
+window.seedDemoData = async () => {
+  if (!confirm('⚠️ Esto insertará datos de demostración. ¿Continuar?')) return
+  const uid = currentUser?.id
+  const bypass = localStorage.getItem('nexus_admin_bypass') === 'true'
+  const now = () => new Date().toISOString()
+  const makeNode = (type, content, metadata) => ({ owner_id:uid, type, content, metadata, created_at:now() })
+
+  // Helper: insert locally + to supabase
+  const ins = async (nodes) => {
+    for (const n of nodes) {
+      if (bypass) { allNodes.unshift({id:'demo_'+Math.random().toString(36).substr(2,8),...n}) }
+      else { const {data} = await supabase.from('nodes').insert(n).select(); if(data?.[0]) allNodes.unshift(data[0]) }
+    }
+  }
+
+  // ── 1. Proyecto: Remodelación Casa ──────────────────────
+  await ins([
+    makeNode('proyecto','Remodelación Casa Playa',{label:'Remodelación Casa Playa',budget:480000,rol:'administrador',desc:'Remodelación integral — cocina, baños y terraza',tags:['#proyecto','#casaplaya'],color:'#2dd4bf'}),
+    makeNode('contact','Ing. Roberto Díaz',{name:'Ing. Roberto Díaz',cType:'proveedor',specialty:'Construcción general',phone:'612-111-2233',tags:['#proveedor']}),
+    makeNode('contact','Electroservicios Luna',{name:'Electroservicios Luna',cType:'proveedor',specialty:'Eléctrico',tags:['#proveedor']}),
+    makeNode('contact','Luis Armando Vargas',{name:'Luis Armando Vargas',cType:'persona',tags:['#persona']}),
+    makeNode('cotizacion','Remodelación cocina completa',{label:'Remodelación cocina completa',amount:85000,status:'aceptada',category:'Albañilería',project_tag:'casaplaya',tags:['#cotizacion','#casaplaya']}),
+    makeNode('cotizacion','Instalación eléctrica 220V terraza',{label:'Instalación eléctrica 220V terraza',amount:32000,status:'aceptada',category:'Eléctrico',project_tag:'casaplaya',tags:['#cotizacion','#casaplaya']}),
+    makeNode('cotizacion','Impermeabilización techo',{label:'Impermeabilización techo',amount:28000,status:'pendiente',category:'Impermeabilización',project_tag:'casaplaya',tags:['#cotizacion','#casaplaya']}),
+    makeNode('expense','Pago anticipo — Remodelación cocina',{label:'Pago anticipo — Remodelación cocina',amount:42500,project_tag:'casaplaya',expense_type:'servicio',tags:['#gasto','#casaplaya']}),
+    makeNode('bill','Agua potable — Casa Playa',{label:'Agua potable — Casa Playa',amount:450,dayOfMonth:5,project_tag:'casaplaya',tags:['#casaplaya']}),
+    makeNode('bill','CFE — Casa Playa',{label:'CFE — Casa Playa',amount:1800,dayOfMonth:15,project_tag:'casaplaya',tags:['#casaplaya']}),
+    makeNode('bill','Internet Telmex — Casa Playa',{label:'Internet Telmex — Casa Playa',amount:599,dayOfMonth:20,project_tag:'casaplaya',tags:['#casaplaya']}),
+  ])
+
+  // ── 2. Proyecto: Boda García ────────────────────────────
+  await ins([
+    makeNode('proyecto','Boda García-Mendoza',{label:'Boda García-Mendoza',budget:220000,rol:'administrador',desc:'Coordinación integral de boda para 150 personas',tags:['#proyecto','#bodagarcia'],color:'#f472b6'}),
+    makeNode('contact','Salón Los Arcos',{name:'Salón Los Arcos',cType:'proveedor',specialty:'Renta de salón',tags:['#proveedor']}),
+    makeNode('contact','Chef Mario Ríos',{name:'Chef Mario Ríos',cType:'proveedor',specialty:'Catering / Chef',tags:['#proveedor']}),
+    makeNode('cotizacion','Renta salón + mobiliario 8 horas',{label:'Renta salón + mobiliario 8 horas',amount:65000,status:'aceptada',category:'Renta de mobiliario',project_tag:'bodagarcia',tags:['#cotizacion','#bodagarcia']}),
+    makeNode('cotizacion','Catering 150 personas — menú premium',{label:'Catering 150 personas — menú premium',amount:75000,status:'aceptada',category:'Catering / Chef',project_tag:'bodagarcia',tags:['#cotizacion','#bodagarcia']}),
+    makeNode('cotizacion','Flores y decoración',{label:'Flores y decoración',amount:28000,status:'pendiente',category:'Decoración',project_tag:'bodagarcia',tags:['#cotizacion','#bodagarcia']}),
+    makeNode('cotizacion','Fotografía y video del evento',{label:'Fotografía y video del evento',amount:22000,status:'pendiente',category:'Fotografía de evento',project_tag:'bodagarcia',tags:['#cotizacion','#bodagarcia']}),
+    makeNode('expense','Anticipo salón Los Arcos — 50%',{label:'Anticipo salón Los Arcos — 50%',amount:32500,project_tag:'bodagarcia',expense_type:'servicio',tags:['#gasto','#bodagarcia']}),
+  ])
+
+  // ── 3. Proyecto: Estudio Freelance ──────────────────────
+  await ins([
+    makeNode('proyecto','Estudio Foto & Video',{label:'Estudio Foto & Video',budget:95000,rol:'dueño',desc:'Acondicionamiento de estudio para fotografía y producción',tags:['#proyecto','#estudiofreelance'],color:'#818cf8'}),
+    makeNode('contact','Electrónica Profesional SA',{name:'Electrónica Profesional SA',cType:'proveedor',specialty:'Eléctrico / Iluminación',tags:['#proveedor']}),
+    makeNode('cotizacion','Instalación rieles y dimmer para luces estudio',{label:'Instalación rieles y dimmer para luces estudio',amount:18500,status:'aceptada',category:'Eléctrico',project_tag:'estudiofreelance',tags:['#cotizacion','#estudiofreelance']}),
+    makeNode('cotizacion','Pintura y tratamiento acústico paredes',{label:'Pintura y tratamiento acústico paredes',amount:14000,status:'aceptada',category:'Pintura',project_tag:'estudiofreelance',tags:['#cotizacion','#estudiofreelance']}),
+    makeNode('cotizacion','Carpintería — mesa de dirección y racks',{label:'Carpintería — mesa de dirección y racks',amount:22000,status:'rechazada',category:'Carpintería',project_tag:'estudiofreelance',tags:['#cotizacion','#estudiofreelance']}),
+    makeNode('cotizacion','Carpintería alternativa — mesa DM',{label:'Carpintería alternativa — mesa DM',amount:14500,status:'pendiente',category:'Carpintería',project_tag:'estudiofreelance',tags:['#cotizacion','#estudiofreelance']}),
+    makeNode('expense','Pago instalación eléctrica — 100%',{label:'Pago instalación eléctrica — 100%',amount:18500,project_tag:'estudiofreelance',expense_type:'servicio',tags:['#gasto','#estudiofreelance']}),
+    makeNode('bill','Internet fibra — Estudio',{label:'Internet fibra — Estudio',amount:799,dayOfMonth:1,project_tag:'estudiofreelance',tags:['#estudiofreelance']}),
+  ])
+
+  renderAll()
+  switchView('proyectos')
+  showToast('✅ Datos de demostración insertados — 3 proyectos listos')
 }
 
 // Logout
@@ -3090,6 +3161,28 @@ window.switchView = function(viewName) {
   // Render on-demand views
   if (viewName === 'tags') { window.renderTagsView(); window.renderHabitosSection() }
   if (viewName === 'proyectos') renderProyectos()
+  // Crónica legacy → redirige a Tiempo tab Pasado
+  if (viewName === 'cronica') { switchView('calendar'); switchTiempoTab('pasado'); return }
+}
+
+window.switchTiempoTab = (tab) => {
+  const futuro = document.getElementById('tiempo-panel-futuro')
+  const pasado = document.getElementById('tiempo-panel-pasado')
+  const btnF = document.getElementById('tiempo-tab-futuro')
+  const btnP = document.getElementById('tiempo-tab-pasado')
+  if (!futuro || !pasado) return
+  if (tab === 'futuro') {
+    futuro.style.display = ''; pasado.style.display = 'none'
+    if (btnF) { btnF.style.background = 'var(--accent-cyan)'; btnF.style.color = '#000'; btnF.style.fontWeight = '700' }
+    if (btnP) { btnP.style.background = 'transparent'; btnP.style.color = 'var(--text-muted)'; btnP.style.fontWeight = '600' }
+  } else {
+    futuro.style.display = 'none'; pasado.style.display = ''
+    if (btnP) { btnP.style.background = 'var(--accent-cyan)'; btnP.style.color = '#000'; btnP.style.fontWeight = '700' }
+    if (btnF) { btnF.style.background = 'transparent'; btnF.style.color = 'var(--text-muted)'; btnF.style.fontWeight = '600' }
+    // Auto-set crónica a hoy si no tiene fecha
+    const dateEl = document.getElementById('cronica-date')
+    if (dateEl && !dateEl.value) { dateEl.value = new Date().toISOString().slice(0,10); if (typeof renderCronicaView === 'function') renderCronicaView() }
+  }
 }
 
 // ── COLLAPSIBLE PANELS ───────────────────────────────────────────────────────
@@ -6241,6 +6334,61 @@ window.openProjectDashboard = (projectId) => {
             </div>`
         }).join('')}
       </div>` : ''}
+
+      <!-- Pagos Fijos del proyecto -->
+      ${(() => {
+        const CATS_PAGO = ['Agua','Luz / Electricidad','Gas','Internet','Teléfono','Jardinero','Alberca / Piscina','Seguridad','Mantenimiento','Renta','Otro servicio fijo']
+        const pagosFijos = allNodes.filter(n =>
+          (n.type==='bill'||n.type==='subscription') &&
+          tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)
+        )
+        const today = new Date()
+        const upcomingDays = 15
+        const upcoming = pagosFijos.filter(n => {
+          const day = n.metadata?.dayOfMonth
+          if (!day) return false
+          const next = new Date(today.getFullYear(), today.getMonth(), day)
+          if (next < today) next.setMonth(next.getMonth()+1)
+          return (next-today)/(1000*60*60*24) <= upcomingDays
+        }).sort((a,b)=>(a.metadata?.dayOfMonth||31)-(b.metadata?.dayOfMonth||31))
+
+        return `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+              <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">📅 PAGOS FIJOS DEL PROYECTO</div>
+              <button onclick="openAgendaModal('bill','${tagStr[0]||''}')" style="font-size:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
+            </div>
+            ${upcoming.length ? `<div style="margin-bottom:10px;padding:10px;background:rgba(167,139,250,0.05);border-radius:8px;">
+              <div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:8px;">⏰ PRÓXIMOS ${upcomingDays} DÍAS</div>
+              ${upcoming.map(n=>{
+                const day=n.metadata?.dayOfMonth; const amt=n.metadata?.amount||0
+                return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;">
+                  <span style="font-size:11px;background:rgba(167,139,250,0.15);color:#a78bfa;border-radius:4px;padding:1px 6px;font-weight:700;flex-shrink:0;">día ${day}</span>
+                  <span style="flex:1;font-size:12px;color:var(--text-primary);">${esc(n.metadata?.label||n.content)}</span>
+                  <span style="font-size:12px;font-weight:700;font-family:monospace;color:#fb923c;">$${amt.toLocaleString('es-MX')}</span>
+                  <button onclick="toggleBillPaid('${n.id}')" style="font-size:10px;background:${n.metadata?.paid?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.05)'};border:1px solid ${n.metadata?.paid?'rgba(74,222,128,0.3)':'rgba(255,255,255,0.1)'};color:${n.metadata?.paid?'#4ade80':'var(--text-muted)'};border-radius:5px;padding:2px 7px;cursor:pointer;">${n.metadata?.paid?'✓ Pagado':'Marcar'}</button>
+                </div>`
+              }).join('')}
+            </div>` : ''}
+            ${pagosFijos.length === 0 ? `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Sin pagos fijos registrados para este proyecto</div>` :
+              pagosFijos.map(n => {
+                const amt = n.metadata?.amount||0
+                const day = n.metadata?.dayOfMonth
+                return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                  ${day?`<span style="font-size:10px;color:var(--text-muted);background:rgba(255,255,255,0.06);border-radius:4px;padding:1px 6px;flex-shrink:0;">día ${day}</span>`:''}
+                  <span style="flex:1;font-size:13px;color:var(--text-primary);">${esc(n.metadata?.label||n.content)}</span>
+                  <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;">$${amt.toLocaleString('es-MX')}</span>
+                  <span style="font-size:9px;color:${n.metadata?.paid?'#4ade80':'#fb923c'};font-weight:700;">${n.metadata?.paid?'✓ Pagado':'Pendiente'}</span>
+                  <button onclick="deleteAgendaItem('${n.id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;">×</button>
+                </div>`
+              }).join('')
+            }
+            ${pagosFijos.length > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;">
+              <span style="font-size:11px;color:var(--text-muted);">Total mensual estimado</span>
+              <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;">$${pagosFijos.reduce((s,n)=>s+(+n.metadata?.amount||0),0).toLocaleString('es-MX')}</span>
+            </div>` : ''}
+          </div>`
+      })()}
 
       <!-- Cotizaciones por categoría -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">

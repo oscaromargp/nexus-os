@@ -1017,8 +1017,7 @@
       <button class="nav-item" data-view="kanban"><span class="nav-icon">📌</span> Muro Táctico</button>
       <button class="nav-item" data-view="finance"><span class="nav-icon">💹</span> Bio-Finanzas</button>
       <button class="nav-item" data-view="notes"><span class="nav-icon">🧠</span> Bóveda Neural</button>
-      <button class="nav-item" data-view="calendar"><span class="nav-icon">📅</span> Línea de Tiempo</button>
-      <button class="nav-item" data-view="cronica"><span class="nav-icon">📖</span> Crónica</button>
+      <button class="nav-item" data-view="calendar"><span class="nav-icon">📅</span> Tiempo & Crónica</button>
       <button class="nav-item" data-view="contacts"><span class="nav-icon">👥</span> Contactos</button>
       <button class="nav-item" data-view="proyectos"><span class="nav-icon">🏗️</span> Proyectos</button>
       <button class="nav-item" data-view="agenda"><span class="nav-icon">💳</span> Agenda Financiera</button>
@@ -1074,35 +1073,47 @@
 
     <!-- LÍNEA DE TIEMPO -->
     <div id="view-calendar" class="view-section">
-      <div class="view-header">
-        <h1 class="view-title">📅 Calendario Táctico</h1>
-        <button onclick="openEventModal(null,null)" style="background:var(--accent-cyan);color:#000;border:none;border-radius:10px;padding:9px 18px;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:0.03em;">+ Nuevo Evento</button>
+      <!-- Tab toggle Futuro / Pasado -->
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:20px;background:rgba(255,255,255,0.04);border-radius:12px;padding:4px;width:fit-content;">
+        <button id="tiempo-tab-futuro" onclick="switchTiempoTab('futuro')" style="padding:8px 24px;border-radius:9px;border:none;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.2s;background:var(--accent-cyan);color:#000;">📅 Futuro</button>
+        <button id="tiempo-tab-pasado" onclick="switchTiempoTab('pasado')" style="padding:8px 24px;border-radius:9px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.2s;background:transparent;color:var(--text-muted);">📖 Pasado</button>
       </div>
-      <div id="calendar-controls" style="display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
-        <button id="cal-prev" class="nav-item" style="border:1px solid rgba(255,255,255,0.1); padding:6px 14px;">◀</button>
-        <span id="cal-month-title" style="font-weight:800; font-size:17px; flex:1; text-align:center; min-width:180px;">---</span>
-        <button id="cal-next" class="nav-item" style="border:1px solid rgba(255,255,255,0.1); padding:6px 14px;">▶</button>
-        <div style="display:flex; gap:6px; margin-left:auto; flex-wrap:wrap;">
-          <button id="cal-today" class="fin-tab">Hoy</button>
-          <button id="cal-view-month" class="fin-tab fin-tab-active">Mes</button>
-          <button id="cal-view-week" class="fin-tab">Semana</button>
-          <button id="cal-view-day" class="fin-tab">Día</button>
-          <button id="cal-export" class="fin-tab" style="margin-left:4px; opacity:0.6;">⬇ CSV</button>
+
+      <!-- SUB-VISTA: Futuro (Calendario) -->
+      <div id="tiempo-panel-futuro">
+        <div class="view-header" style="margin-bottom:16px;">
+          <h1 class="view-title">📅 Línea de Tiempo</h1>
+          <button onclick="openEventModal(null,null)" style="background:var(--accent-cyan);color:#000;border:none;border-radius:10px;padding:9px 18px;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:0.03em;">+ Nuevo Evento</button>
         </div>
+        <div id="calendar-controls" style="display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap;">
+          <button id="cal-prev" class="nav-item" style="border:1px solid rgba(255,255,255,0.1); padding:6px 14px;">◀</button>
+          <span id="cal-month-title" style="font-weight:800; font-size:17px; flex:1; text-align:center; min-width:180px;">---</span>
+          <button id="cal-next" class="nav-item" style="border:1px solid rgba(255,255,255,0.1); padding:6px 14px;">▶</button>
+          <div style="display:flex; gap:6px; margin-left:auto; flex-wrap:wrap;">
+            <button id="cal-today" class="fin-tab">Hoy</button>
+            <button id="cal-view-month" class="fin-tab fin-tab-active">Mes</button>
+            <button id="cal-view-week" class="fin-tab">Semana</button>
+            <button id="cal-view-day" class="fin-tab">Día</button>
+            <button id="cal-export" class="fin-tab" style="margin-left:4px; opacity:0.6;">⬇ CSV</button>
+          </div>
+        </div>
+        <div id="cal-days-root" style="display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:rgba(255,255,255,0.05); border-radius:12px; overflow:hidden;"></div>
       </div>
-      <div id="cal-days-root" style="display:grid; grid-template-columns:repeat(7,1fr); gap:1px; background:rgba(255,255,255,0.05); border-radius:12px; overflow:hidden;"></div>
+
+      <!-- SUB-VISTA: Pasado (Crónica) -->
+      <div id="tiempo-panel-pasado" style="display:none;">
+        <div class="view-header" style="margin-bottom:16px;"><h1 class="view-title">📖 Crónica del Día</h1></div>
+        <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; flex-wrap:wrap;">
+          <input type="date" id="cronica-date" class="modal-input" style="width:auto; min-width:160px;" />
+          <button onclick="renderCronicaView()" class="nav-item" style="border:1px solid var(--glass-border);">Ver</button>
+          <span id="cronica-stats" style="font-size:12px; color:var(--text-muted);"></span>
+        </div>
+        <div id="cronica-root" style="display:grid; grid-template-columns:repeat(3,1fr); gap:20px; align-items:start;"></div>
+      </div>
     </div>
 
-    <!-- CRÓNICA -->
-    <div id="view-cronica" class="view-section">
-      <div class="view-header"><h1 class="view-title">Crónica del Día</h1></div>
-      <div style="display:flex; align-items:center; gap:16px; margin-bottom:24px; flex-wrap:wrap;">
-        <input type="date" id="cronica-date" class="modal-input" style="width:auto; min-width:160px;" />
-        <button onclick="renderCronicaView()" class="nav-item" style="border:1px solid var(--glass-border);">Ver</button>
-        <span id="cronica-stats" style="font-size:12px; color:var(--text-muted);"></span>
-      </div>
-      <div id="cronica-root" style="display:grid; grid-template-columns:repeat(3,1fr); gap:20px; align-items:start;"></div>
-    </div>
+    <!-- CRÓNICA legacy (oculto — contenido migrado a view-calendar) -->
+    <div id="view-cronica" class="view-section" style="display:none!important;"></div>
 
     <!-- CONTACTOS -->
     <div id="view-contacts" class="view-section">
