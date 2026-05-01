@@ -3987,6 +3987,155 @@ function renderContacts() {
 }
 
 // ── Contact Sheet (slide-in) ──────────────
+// ── Servicios y Cuentas de cobro — renderizado en ficha ──────────────────────
+
+function renderProvServices(c) {
+  const services = c.metadata?.services || []
+  const btnStyle = 'background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-weight:600;'
+  const delStyle = 'background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px;'
+  return `
+  <div style="margin-top:16px;border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:0.08em;">💼 SERVICIOS</span>
+      <button onclick="openServiceModal('${c.id}')" style="${btnStyle}">+ Añadir servicio</button>
+    </div>
+    ${services.length ? services.map(s => `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${esc(s.name)}</div>
+          <div style="font-size:11px;color:var(--text-muted);">$${(+s.price||0).toLocaleString('es-MX')} / ${esc(s.unit||'servicio')}</div>
+        </div>
+        <button onclick="openPaymentModal('${c.id}','${s.id}')" style="background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;font-weight:700;">💸 Pagar</button>
+        <button onclick="deleteProvService('${c.id}','${s.id}')" style="${delStyle}" title="Eliminar servicio">✕</button>
+      </div>`).join('')
+    : `<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">Sin servicios. Añade uno para agilizar registros de pago.</div>`}
+  </div>`
+}
+
+function renderContactAccounts(c) {
+  const accounts = c.metadata?.contact_accounts || []
+  const btnStyle = 'background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-weight:600;'
+  const delStyle = 'background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px;'
+  return `
+  <div style="margin-top:16px;border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:0.08em;">🏦 CUENTAS DE COBRO</span>
+      <button onclick="openContactAccountModal('${c.id}')" style="${btnStyle}">+ Añadir cuenta</button>
+    </div>
+    ${accounts.length ? accounts.map(a => `
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${esc(a.name)}</div>
+          ${a.clabe ? `<code style="font-size:11px;font-family:monospace;color:var(--text-muted);">${esc(a.clabe)}</code>` : ''}
+          ${a.handle ? `<span style="font-size:11px;color:var(--text-muted);">${esc(a.handle)}</span>` : ''}
+          ${a.type && a.type!=='bank' ? `<span style="font-size:10px;background:rgba(167,139,250,0.1);color:#a78bfa;border-radius:4px;padding:1px 5px;margin-left:4px;">${a.type}</span>` : ''}
+        </div>
+        ${a.clabe ? `<button onclick="navigator.clipboard.writeText('${esc(a.clabe)}').then(()=>showToast('CLABE copiada'))" style="background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.2);color:#00f6ff;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">📋</button>` : ''}
+        <button onclick="deleteContactAccount('${c.id}','${a.id}')" style="${delStyle}" title="Eliminar cuenta">✕</button>
+      </div>`).join('')
+    : `<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">Sin cuentas. Añade la(s) cuenta(s) donde te cobra este proveedor.</div>`}
+  </div>`
+}
+
+// ── CRUD servicios ────────────────────────────────────────────────────────────
+let editingServiceContactId = null
+
+window.openServiceModal = (contactId) => {
+  editingServiceContactId = contactId
+  document.getElementById('svc-name').value  = ''
+  document.getElementById('svc-price').value = ''
+  document.getElementById('svc-unit').value  = 'servicio'
+  document.getElementById('svc-notes').value = ''
+  document.getElementById('service-modal').classList.remove('hidden')
+}
+
+window.closeServiceModal = () => document.getElementById('service-modal').classList.add('hidden')
+
+window.saveService = async () => {
+  const name = document.getElementById('svc-name').value.trim()
+  if (!name) { showToast('El nombre del servicio es obligatorio'); return }
+  const node = allNodes.find(n => n.id === editingServiceContactId)
+  if (!node) return
+  const service = {
+    id:    'svc_' + Date.now(),
+    name,
+    price: parseFloat(document.getElementById('svc-price').value) || 0,
+    unit:  document.getElementById('svc-unit').value.trim() || 'servicio',
+    notes: document.getElementById('svc-notes').value.trim() || undefined,
+  }
+  node.metadata.services = [...(node.metadata.services || []), service]
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', node.id)
+  closeServiceModal()
+  renderAll()
+  setTimeout(() => openContactSheet(editingServiceContactId), 150)
+  showToast(`Servicio "${name}" añadido`)
+}
+
+window.deleteProvService = async (contactId, serviceId) => {
+  const node = allNodes.find(n => n.id === contactId)
+  if (!node) return
+  node.metadata.services = (node.metadata.services || []).filter(s => s.id !== serviceId)
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', node.id)
+  renderAll()
+  setTimeout(() => openContactSheet(contactId), 150)
+}
+
+// ── CRUD cuentas de cobro ─────────────────────────────────────────────────────
+let editingAccountContactId = null
+
+window.openContactAccountModal = (contactId) => {
+  editingAccountContactId = contactId
+  document.getElementById('cacc-name').value   = ''
+  document.getElementById('cacc-type').value   = 'bank'
+  document.getElementById('cacc-clabe').value  = ''
+  document.getElementById('cacc-handle').value = ''
+  document.getElementById('cacc-clabe-row').style.display  = ''
+  document.getElementById('cacc-handle-row').style.display = 'none'
+  document.getElementById('contact-account-modal').classList.remove('hidden')
+}
+
+window.closeContactAccountModal = () => document.getElementById('contact-account-modal').classList.add('hidden')
+
+window.caccTypeChange = () => {
+  const t = document.getElementById('cacc-type').value
+  document.getElementById('cacc-clabe-row').style.display  = t === 'bank' ? '' : 'none'
+  document.getElementById('cacc-handle-row').style.display = t !== 'bank' ? '' : 'none'
+}
+
+window.saveContactAccount = async () => {
+  const name = document.getElementById('cacc-name').value.trim()
+  if (!name) { showToast('El nombre del banco/billetera es obligatorio'); return }
+  const node = allNodes.find(n => n.id === editingAccountContactId)
+  if (!node) return
+  const t = document.getElementById('cacc-type').value
+  const account = {
+    id:     'cacc_' + Date.now(),
+    name,
+    type:   t,
+    clabe:  t === 'bank'  ? document.getElementById('cacc-clabe').value.trim()  || undefined : undefined,
+    handle: t !== 'bank'  ? document.getElementById('cacc-handle').value.trim() || undefined : undefined,
+  }
+  node.metadata.contact_accounts = [...(node.metadata.contact_accounts || []), account]
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', node.id)
+  closeContactAccountModal()
+  renderAll()
+  setTimeout(() => openContactSheet(editingAccountContactId), 150)
+  showToast(`Cuenta "${name}" añadida`)
+}
+
+window.deleteContactAccount = async (contactId, accountId) => {
+  const node = allNodes.find(n => n.id === contactId)
+  if (!node) return
+  node.metadata.contact_accounts = (node.metadata.contact_accounts || []).filter(a => a.id !== accountId)
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', node.id)
+  renderAll()
+  setTimeout(() => openContactSheet(contactId), 150)
+}
+
 window.openContactSheet = (id) => {
   const c = allNodes.find(n => n.id === id)
   if (!c) return
@@ -4058,6 +4207,8 @@ function renderCSheetTab(tab, c) {
       ${m.accepts_crypto ? `<div class="csh-field"><span class="csh-label">🪙 Cripto</span><span style="color:#a78bfa;">✓ Acepta ${esc(m.crypto_nets||'cripto')}</span></div>` : ''}
       <div class="csh-field"><span class="csh-label">💸 Total pagado</span><span style="color:#f87171;font-weight:700;">${totalPaid > 0 ? '-$'+totalPaid.toLocaleString('es-MX') : '—'}</span></div>
       <div class="csh-field"><span class="csh-label">🕐 Última interacción</span><span>${lastDate}</span></div>
+      ${renderProvServices(c)}
+      ${renderContactAccounts(c)}
     `})() : cType === 'bank' ? `
       <div class="csh-field"><span class="csh-label">🏦 Banco</span><span>${esc(m.bank_name||'—')}</span></div>
       <div class="csh-field" style="flex-direction:column;align-items:flex-start;gap:4px;">
@@ -4081,9 +4232,12 @@ function renderCSheetTab(tab, c) {
       </div>
       ${m.memo ? `<div class="csh-field"><span class="csh-label">🏷 Memo</span><span>${esc(m.memo)}</span></div>` : ''}
     `
+    const payBtn = (cType === 'proveedor')
+      ? `<button onclick="openPaymentModal('${c.id}')" style="width:100%;margin-top:14px;padding:10px;background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.35);color:#fb923c;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.03em;">💸 Registrar Pago</button>`
+      : ''
     body.innerHTML = `<div style="display:flex;flex-direction:column;gap:0;">${fields}
       <div class="csh-field" style="align-items:flex-start;"><span class="csh-label">📝 Notas</span><span style="white-space:pre-wrap;">${esc(m.notes||'—')}</span></div>
-    </div>
+    </div>${payBtn}
     <style>
       .csh-field { display:flex; gap:16px; padding:14px 0; border-bottom:1px solid rgba(255,255,255,0.05); align-items:center; }
       .csh-label { font-size:11px; font-weight:700; color:var(--text-muted); min-width:90px; text-transform:uppercase; letter-spacing:0.04em; }

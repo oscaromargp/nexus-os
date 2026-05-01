@@ -2144,6 +2144,57 @@
     </div>
   </div>
 
+  <!-- MODAL: SERVICIO DEL PROVEEDOR ──────────────────────── -->
+  <div id="service-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeServiceModal()">
+    <div class="modal-box" style="max-width:380px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Añadir Servicio</h3>
+        <button class="modal-close" onclick="closeServiceModal()">✕</button>
+      </div>
+      <div class="modal-field"><label class="modal-label">Nombre del servicio *</label>
+        <input type="text" id="svc-name" class="modal-input" placeholder="Ej: Bartender, Limpieza, Electricidad..." /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Precio $</label>
+          <input type="number" id="svc-price" class="modal-input" placeholder="0" min="0" step="0.01" /></div>
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Por unidad</label>
+          <input type="text" id="svc-unit" class="modal-input" placeholder="evento, visita, hora..." value="servicio" /></div>
+      </div>
+      <div class="modal-field"><label class="modal-label">Notas (opcional)</label>
+        <input type="text" id="svc-notes" class="modal-input" placeholder="Condiciones, horario, equipo incluido..." /></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeServiceModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveService()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CUENTA DE COBRO DEL CONTACTO ─────────────────── -->
+  <div id="contact-account-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeContactAccountModal()">
+    <div class="modal-box" style="max-width:380px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Añadir Cuenta de Cobro</h3>
+        <button class="modal-close" onclick="closeContactAccountModal()">✕</button>
+      </div>
+      <div class="modal-field"><label class="modal-label">Banco / Billetera *</label>
+        <input type="text" id="cacc-name" class="modal-input" placeholder="BBVA, Azteca, Mercado Pago, Spin Oxxo..." /></div>
+      <div class="modal-field"><label class="modal-label">Tipo</label>
+        <select id="cacc-type" class="modal-input" onchange="caccTypeChange()">
+          <option value="bank">🏦 Banco (CLABE)</option>
+          <option value="digital">📱 Billetera digital (handle)</option>
+          <option value="crypto">🪙 Cripto (wallet)</option>
+        </select>
+      </div>
+      <div id="cacc-clabe-row" class="modal-field"><label class="modal-label">CLABE (18 dígitos)</label>
+        <input type="text" id="cacc-clabe" class="modal-input" placeholder="012345678901234567" style="font-family:monospace;" maxlength="18" /></div>
+      <div id="cacc-handle-row" class="modal-field" style="display:none;"><label class="modal-label">Handle / Dirección</label>
+        <input type="text" id="cacc-handle" class="modal-input" placeholder="@usuario, rXXXX (XRP), 0x... (ETH)" style="font-family:monospace;" /></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeContactAccountModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveContactAccount()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: COTIZACIÓN ──────────────────────────────────── -->
   <div id="cotizacion-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeCotizacionModal()">
     <div class="modal-box" style="max-width:480px;">
