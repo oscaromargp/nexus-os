@@ -1065,6 +1065,7 @@ function renderAll() {
   renderContacts()
   renderAgenda(allNodes)
   renderFilterBar()
+  renderSemaforoCuentas()
   renderPulsoSemanal()
   checkHabitAlerts()
   // Keep Fuse index in sync with allNodes
@@ -1646,8 +1647,11 @@ function renderFinance(nodes) {
   animateStatEl('fin-kpi-expense', expense)
   animateStatEl('fin-kpi-net',     net)
 
-  // Render charts after DOM is painted
-  if (finChartsVisible) setTimeout(() => renderFinanceCharts(nodes), 0)
+  // Render charts after DOM is painted — filtradas por cuenta activa
+  if (finChartsVisible) {
+    const chartNodes = activeAccount === 'all' ? nodes : nodes.filter(n => n.metadata?.account_id === activeAccount || n.type === 'account')
+    setTimeout(() => renderFinanceCharts(chartNodes), 0)
+  }
 }
 
 window.setActiveAccount = (id) => {
@@ -4894,6 +4898,46 @@ function renderTagFolder(label, nodes) {
 // ═══════════════════════════════════════════════════════════
 
 // ── Pulso Semanal ──────────────────────────────────────────
+function renderSemaforoCuentas() {
+  const el = document.getElementById('semaforo-cuentas')
+  if (!el) return
+  const accounts = allNodes.filter(n => n.type === 'account')
+  if (!accounts.length) { el.innerHTML = ''; return }
+
+  const allTxs = allNodes.filter(n => n.type === 'income' || n.type === 'expense')
+  const cards = accounts.map(a => {
+    const inc  = allTxs.filter(n => n.type === 'income'  && n.metadata?.account_id === a.id).reduce((s,n) => s+(n.metadata?.amount||0), 0)
+    const exp  = allTxs.filter(n => n.type === 'expense' && n.metadata?.account_id === a.id).reduce((s,n) => s+(n.metadata?.amount||0), 0)
+    const bal  = (a.metadata?.balance || 0) + inc - exp
+    const clr  = a.metadata?.color || '#4ade80'
+    const neg  = bal < 0
+    const icon = neg ? '🔴' : bal === 0 ? '⚪' : '🟢'
+    return { a, bal, clr, neg, icon, inc, exp }
+  })
+
+  const totalNet = cards.reduce((s, c) => s + c.bal, 0)
+  const anyNeg   = cards.some(c => c.neg)
+
+  el.innerHTML = `
+    <div style="background:rgba(255,255,255,0.02);border:1px solid ${anyNeg?'rgba(248,113,113,0.25)':'rgba(255,255,255,0.06)'};border-radius:14px;padding:12px 16px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:0.08em;flex-shrink:0;">💳 CUENTAS</span>
+        ${cards.map(({a, bal, clr, neg, icon}) => `
+          <div onclick="switchView('finance');setTimeout(()=>setActiveAccount('${a.id}'),200)"
+               style="display:flex;align-items:center;gap:6px;background:${neg?'rgba(248,113,113,0.08)':clr+'11'};border:1px solid ${neg?'rgba(248,113,113,0.3)':clr+'33'};border-radius:8px;padding:5px 10px;cursor:pointer;transition:all 0.15s;"
+               title="Ver en Bio-Finanzas">
+            <span style="font-size:11px;">${icon}</span>
+            <span style="font-size:11px;color:var(--text-primary);font-weight:600;">${esc(a.metadata?.label||a.content)}</span>
+            <span style="font-size:11px;font-family:monospace;font-weight:800;color:${neg?'#f87171':clr};">${neg?'-':''}$${Math.abs(bal).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0})}</span>
+          </div>`).join('')}
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          <span style="font-size:10px;color:var(--text-muted);">NETO</span>
+          <span style="font-size:13px;font-family:monospace;font-weight:800;color:${totalNet<0?'#f87171':'#4ade80'};">${totalNet<0?'-':''}$${Math.abs(totalNet).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:0})}</span>
+        </div>
+      </div>
+    </div>`
+}
+
 function renderPulsoSemanal() {
   const el = document.getElementById('pulso-semanal')
   if (!el) return
