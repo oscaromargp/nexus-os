@@ -3030,6 +3030,7 @@ window.switchView = function(viewName) {
   activeView = viewName
   // Render on-demand views
   if (viewName === 'tags') { window.renderTagsView(); window.renderHabitosSection() }
+  if (viewName === 'proyectos') renderProyectos()
 }
 
 // ── COLLAPSIBLE PANELS ───────────────────────────────────────────────────────
@@ -5683,6 +5684,298 @@ window.savePayment = async () => {
   closePaymentModal()
   renderAll()
   showToast(`Pago de $${total.toLocaleString('es-MX')} registrado`)
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROYECTOS — Vista Dedicada (Sprint 4B)
+// ═══════════════════════════════════════════════════════════
+
+function renderProyectos() {
+  const root = document.getElementById('proyectos-root')
+  if (!root) return
+  const proyectos = allNodes.filter(n => n.type === 'proyecto').sort((a,b) => new Date(b.created_at)-new Date(a.created_at))
+
+  if (!proyectos.length) {
+    root.innerHTML = `
+      <div style="padding:48px 24px;text-align:center;color:var(--text-muted);">
+        <div style="font-size:48px;margin-bottom:16px;">🏗️</div>
+        <div style="font-size:16px;font-weight:600;margin-bottom:8px;">Sin proyectos aún</div>
+        <div style="font-size:13px;">Escribe <code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;">#proyecto Casa Tulum</code> en el panel de comandos para crear uno.</div>
+      </div>`
+    return
+  }
+
+  root.innerHTML = `
+    <div style="padding:20px 24px 12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+        <h1 style="margin:0;font-size:22px;font-weight:800;color:var(--text-primary);">🏗️ Proyectos</h1>
+        <span style="font-size:12px;color:var(--text-muted);">${proyectos.length} proyecto${proyectos.length!==1?'s':''}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
+        ${proyectos.map(p => renderProjectCard(p)).join('')}
+      </div>
+    </div>`
+}
+
+function renderProjectCard(p) {
+  const m = p.metadata || {}
+  const budget = m.budget || 0
+  const rol = m.rol || 'dueño'
+  const rolCfg = { dueño:{label:'👑 Dueño',color:'#f59e0b'}, ejecutor:{label:'⚙️ Ejecutor',color:'#60a5fa'}, colaborador:{label:'🤝 Colaborador',color:'#a78bfa'} }
+  const rCfg = rolCfg[rol] || rolCfg.dueño
+
+  // Linked nodes
+  const linkedIds = m.linkedTo || []
+  const linked = linkedIds.map(id => allNodes.find(n => n.id === id)).filter(Boolean)
+  const tagStr = (m.tags||[]).filter(t=>t.startsWith('#')).map(t=>t.slice(1).toLowerCase())
+  // Also find by project_tag for backwards compat
+  const byTag = tagStr.length ? allNodes.filter(n => n.type==='cotizacion' && tagStr.includes((n.metadata?.project_tag||'').toLowerCase())) : []
+  const allLinked = [...new Map([...linked,...byTag].map(n=>[n.id,n])).values()]
+
+  // Cotizaciones
+  const cots = allLinked.filter(n => n.type === 'cotizacion')
+  const aceptadas = cots.filter(n => n.metadata?.status === 'aceptada')
+  const comprometido = aceptadas.reduce((s,n) => s + (+n.metadata?.amount||0), 0)
+
+  // Pagos (gastos vinculados)
+  const pagos = allLinked.filter(n => n.type === 'expense' || n.type === 'gasto')
+  const pagado = pagos.reduce((s,n) => s + (+n.metadata?.amount||0), 0)
+
+  const pendiente = Math.max(0, comprometido - pagado)
+  const sinComprometer = Math.max(0, budget - comprometido)
+  const overBudget = comprometido > budget && budget > 0
+
+  const pct = budget > 0 ? Math.min(100, Math.round((comprometido/budget)*100)) : 0
+  const gaugeColor = overBudget ? '#f87171' : pct > 75 ? '#fb923c' : '#4ade80'
+
+  const taskCount = allLinked.filter(n => n.type==='tarea'||n.type==='task').length
+
+  return `
+    <div onclick="openProjectDashboard('${p.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;"
+         onmouseenter="this.style.borderColor='rgba(255,255,255,0.15)';this.style.transform='translateY(-2px)'"
+         onmouseleave="this.style.borderColor='var(--border)';this.style.transform='translateY(0)'">
+      ${overBudget ? `<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#f87171,#fb923c);"></div>` : ''}
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:15px;font-weight:800;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.label||p.content)}</div>
+          ${m.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.desc)}</div>` : ''}
+        </div>
+        <span style="font-size:10px;font-weight:700;background:${rCfg.color}20;color:${rCfg.color};border-radius:6px;padding:2px 8px;white-space:nowrap;flex-shrink:0;">${rCfg.label}</span>
+      </div>
+      ${budget > 0 ? `
+        <div style="margin-bottom:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+            <span style="font-size:10px;font-weight:700;color:var(--text-muted);">PRESUPUESTO</span>
+            <span style="font-size:13px;font-weight:800;font-family:monospace;color:var(--text-primary);">$${budget.toLocaleString('es-MX')}</span>
+          </div>
+          <div style="height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${gaugeColor};border-radius:3px;transition:width 0.5s;"></div>
+          </div>
+          <div style="font-size:10px;color:${gaugeColor};margin-top:4px;font-weight:600;">${pct}% comprometido${overBudget?' ⚠️ Excede presupuesto':''}</div>
+        </div>` : ''}
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
+        <div style="background:rgba(74,222,128,0.06);border-radius:8px;padding:8px;text-align:center;">
+          <div style="font-size:11px;font-weight:800;font-family:monospace;color:#4ade80;">$${comprometido.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+          <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">Comprometido</div>
+        </div>
+        <div style="background:rgba(96,165,250,0.06);border-radius:8px;padding:8px;text-align:center;">
+          <div style="font-size:11px;font-weight:800;font-family:monospace;color:#60a5fa;">$${pagado.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+          <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">Pagado</div>
+        </div>
+        <div style="background:rgba(251,146,60,0.06);border-radius:8px;padding:8px;text-align:center;">
+          <div style="font-size:11px;font-weight:800;font-family:monospace;color:#fb923c;">$${pendiente.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+          <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">Pendiente</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        ${cots.length ? `<span style="font-size:11px;color:var(--text-muted);">📄 ${cots.length} cotización${cots.length!==1?'es':''} (${aceptadas.length} aceptada${aceptadas.length!==1?'s':''})</span>` : ''}
+        ${taskCount ? `<span style="font-size:11px;color:var(--text-muted);">✅ ${taskCount} tarea${taskCount!==1?'s':''}</span>` : ''}
+      </div>
+    </div>`
+}
+
+window.openProjectDashboard = (projectId) => {
+  const p = allNodes.find(n => n.id === projectId)
+  if (!p) return
+  const m = p.metadata || {}
+  const budget = m.budget || 0
+  const rol = m.rol || 'dueño'
+  const rolCfg = { dueño:{label:'👑 Dueño',color:'#f59e0b'}, ejecutor:{label:'⚙️ Ejecutor',color:'#60a5fa'}, colaborador:{label:'🤝 Colaborador',color:'#a78bfa'} }
+  const rCfg = rolCfg[rol] || rolCfg.dueño
+
+  // Gather linked nodes (hard + soft via project_tag)
+  const linkedIds = m.linkedTo || []
+  const linked = linkedIds.map(id => allNodes.find(n => n.id === id)).filter(Boolean)
+  const tagStr = (m.tags||[]).filter(t=>t.startsWith('#')).map(t=>t.slice(1).toLowerCase())
+  const byTag = tagStr.length ? allNodes.filter(n =>
+    (n.type==='cotizacion'||n.type==='expense'||n.type==='gasto'||n.type==='tarea') &&
+    tagStr.includes((n.metadata?.project_tag||'').toLowerCase())
+  ) : []
+  const allLinked = [...new Map([...linked,...byTag].map(n=>[n.id,n])).values()]
+
+  // 5-metric computation
+  const cots = allLinked.filter(n => n.type === 'cotizacion')
+  const aceptadas = cots.filter(n => n.metadata?.status === 'aceptada')
+  const pendientes = cots.filter(n => n.metadata?.status === 'pendiente')
+  const comprometido = aceptadas.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
+  const pagos = allLinked.filter(n => n.type==='expense'||n.type==='gasto')
+  const pagado = pagos.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
+  const pendientePago = Math.max(0, comprometido - pagado)
+  const sinComprometer = Math.max(0, budget - comprometido)
+  const overBudget = comprometido > budget && budget > 0
+  const pct = budget > 0 ? Math.min(100, Math.round((comprometido/budget)*100)) : 0
+  const gaugeColor = overBudget ? '#f87171' : pct > 75 ? '#fb923c' : '#4ade80'
+
+  // Group cotizaciones by category
+  const cotsByCat = {}
+  cots.forEach(c => {
+    const cat = c.metadata?.category || 'Sin categoría'
+    if (!cotsByCat[cat]) cotsByCat[cat] = []
+    cotsByCat[cat].push(c)
+  })
+
+  // Proveedores contratados (from aceptadas with provider_id)
+  const provMap = {}
+  aceptadas.forEach(c => {
+    if (!c.metadata?.provider_id) return
+    if (!provMap[c.metadata.provider_id]) provMap[c.metadata.provider_id] = { cotizaciones:[], pagos:[] }
+    provMap[c.metadata.provider_id].cotizaciones.push(c)
+  })
+  pagos.forEach(g => {
+    const pid = g.metadata?.contact_id
+    if (pid && provMap[pid]) provMap[pid].pagos.push(g)
+  })
+
+  // Tareas
+  const tareas = allLinked.filter(n => n.type==='tarea'||n.type==='task')
+
+  const root = document.getElementById('proyectos-root')
+  root.innerHTML = `
+    <div style="padding:20px 24px;">
+      <!-- Back + header -->
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
+        <button onclick="renderProyectos()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:7px 14px;cursor:pointer;font-size:13px;flex-shrink:0;">← Proyectos</button>
+        <div style="flex:1;min-width:0;">
+          <h1 style="margin:0;font-size:22px;font-weight:800;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.label||p.content)}</h1>
+          ${m.desc ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${esc(m.desc)}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;flex-shrink:0;">
+          <span style="font-size:11px;font-weight:700;background:${rCfg.color}20;color:${rCfg.color};border-radius:6px;padding:4px 10px;">${rCfg.label}</span>
+          <button onclick="openProyectoModal('${p.id}')" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;">✏️ Editar</button>
+          <button onclick="openCotizacionModal()" style="background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.35);color:#fb923c;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">+ Cotización</button>
+        </div>
+      </div>
+
+      ${overBudget ? `<div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;"><span style="font-size:18px;">⚠️</span><div><div style="font-size:13px;font-weight:700;color:#f87171;">Presupuesto excedido</div><div style="font-size:12px;color:var(--text-muted);">Comprometido $${comprometido.toLocaleString('es-MX')} / Presupuesto $${budget.toLocaleString('es-MX')}</div></div></div>` : ''}
+
+      <!-- 5-metric panel -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
+        ${[
+          {label:'Presupuesto',val:budget,color:'#a78bfa',icon:'💰',show:budget>0},
+          {label:'Comprometido',val:comprometido,color:'#4ade80',icon:'📋',show:true},
+          {label:'Pagado',val:pagado,color:'#60a5fa',icon:'✅',show:true},
+          {label:'Pend. de pago',val:pendientePago,color:'#fb923c',icon:'⏳',show:true},
+          {label:'Sin comprometer',val:sinComprometer,color:'#94a3b8',icon:'🔵',show:budget>0},
+        ].filter(x=>x.show).map(x=>`
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+            <div style="font-size:18px;margin-bottom:6px;">${x.icon}</div>
+            <div style="font-size:14px;font-weight:800;font-family:monospace;color:${x.color};">$${x.val.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${x.label}</div>
+          </div>`).join('')}
+      </div>
+
+      ${budget > 0 ? `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:700;color:var(--text-muted);">USO DE PRESUPUESTO</span>
+          <span style="font-size:12px;font-weight:700;color:${gaugeColor};">${pct}%</span>
+        </div>
+        <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${gaugeColor};border-radius:4px;transition:width 0.6s;"></div>
+        </div>
+      </div>` : ''}
+
+      <!-- Proveedores contratados -->
+      ${Object.keys(provMap).length ? `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
+        <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;margin-bottom:14px;">⚙️ PROVEEDORES CONTRATADOS</div>
+        ${Object.entries(provMap).map(([pid, pd]) => {
+          const prov = allNodes.find(n => n.id === pid)
+          const provName = prov?.metadata?.name || prov?.content || 'Proveedor'
+          const acordado = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+          const pagadoProv = pd.pagos.reduce((s,g)=>s+(+g.metadata?.amount||0),0)
+          const pendProv = Math.max(0, acordado - pagadoProv)
+          const excedente = pagadoProv > acordado
+          return `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+              <div style="width:32px;height:32px;border-radius:50%;background:rgba(251,146,60,0.12);color:#fb923c;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0;">${esc(provName.charAt(0).toUpperCase())}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${esc(provName)}</div>
+                <div style="font-size:11px;color:var(--text-muted);">Acordado: <span style="color:#4ade80;font-family:monospace;">$${acordado.toLocaleString('es-MX')}</span> · Pagado: <span style="color:#60a5fa;font-family:monospace;">$${pagadoProv.toLocaleString('es-MX')}</span>${pendProv>0?` · Pendiente: <span style="color:#fb923c;font-family:monospace;">$${pendProv.toLocaleString('es-MX')}</span>`:''}${excedente?` <span style="color:#f87171;font-weight:700;">⚠️ Excedente</span>`:''}</div>
+              </div>
+              ${prov ? `<button onclick="openPaymentModal('${pid}',null,'${tagStr[0]||''}')" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:11px;flex-shrink:0;">💸 Pagar</button>` : ''}
+            </div>`
+        }).join('')}
+      </div>` : ''}
+
+      <!-- Cotizaciones por categoría -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">📄 COTIZACIONES</div>
+          <button onclick="openCotizacionModal()" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Nueva</button>
+        </div>
+        ${cots.length === 0 ? `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Sin cotizaciones aún</div>` :
+          Object.entries(cotsByCat).map(([cat,cs]) => `
+            <div style="margin-bottom:14px;">
+              <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+                <span style="background:rgba(255,255,255,0.06);border-radius:4px;padding:2px 8px;">${esc(cat)}</span>
+                <span>$${cs.reduce((s,c)=>s+(+c.metadata?.amount||0),0).toLocaleString('es-MX')}</span>
+              </div>
+              ${cs.map(c => {
+                const stCfg = COT_STATUS[c.metadata?.status] || COT_STATUS.pendiente
+                const prov = c.metadata?.provider_id ? allNodes.find(n=>n.id===c.metadata.provider_id) : null
+                return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);" onclick="openCotizacionModal('${c.id}')" >
+                  <span style="flex:1;font-size:13px;color:var(--text-primary);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.metadata?.label||c.content)}</span>
+                  ${prov ? `<span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">${esc(prov.metadata?.name||prov.content)}</span>` : ''}
+                  <span style="font-size:12px;font-weight:800;font-family:monospace;color:#fb923c;flex-shrink:0;">$${(+c.metadata?.amount||0).toLocaleString('es-MX')}</span>
+                  <span style="font-size:9px;padding:2px 7px;border-radius:4px;background:${stCfg.color}22;color:${stCfg.color};font-weight:700;flex-shrink:0;">${stCfg.label}</span>
+                  ${c.metadata?.status !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${c.id}','aceptada')" style="color:#4ade80;cursor:pointer;font-size:14px;flex-shrink:0;" title="Aceptar">✅</span>` : ''}
+                </div>`
+              }).join('')}
+            </div>`
+          ).join('')
+        }
+        ${pendientes.length ? `<div style="margin-top:12px;padding:10px;background:rgba(251,146,60,0.05);border-radius:8px;font-size:11px;color:var(--text-muted);">⏳ ${pendientes.length} cotización${pendientes.length!==1?'es':''} pendiente${pendientes.length!==1?'s':''} de resolver</div>` : ''}
+      </div>
+
+      <!-- Materiales / Compras (pagos sin proveedor de servicio) -->
+      ${(() => {
+        const materiales = pagos.filter(g => !g.metadata?.service_id && !provMap[g.metadata?.contact_id])
+        if (!materiales.length) return ''
+        const totalMat = materiales.reduce((s,g)=>s+(+g.metadata?.amount||0),0)
+        return `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
+            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;margin-bottom:14px;">🧱 MATERIALES / COMPRAS <span style="font-size:12px;font-weight:800;font-family:monospace;color:#94a3b8;margin-left:8px;">$${totalMat.toLocaleString('es-MX')}</span></div>
+            ${materiales.map(g=>`
+              <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                <span style="flex:1;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.metadata?.label||g.content)}</span>
+                <span style="font-size:12px;font-weight:800;font-family:monospace;color:#60a5fa;">$${(+g.metadata?.amount||0).toLocaleString('es-MX')}</span>
+                <span style="font-size:10px;color:var(--text-muted);">${(g.created_at||'').slice(0,10)}</span>
+              </div>`).join('')}
+          </div>`
+      })()}
+
+      <!-- Tareas -->
+      ${tareas.length ? `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
+        <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;margin-bottom:14px;">✅ TAREAS (${tareas.length})</div>
+        ${tareas.map(t=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="font-size:13px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.metadata?.label||t.content)}</span>
+            ${t.metadata?.status ? `<span style="font-size:10px;color:var(--text-muted);">${esc(t.metadata.status)}</span>` : ''}
+          </div>`).join('')}
+      </div>` : ''}
+    </div>`
 }
 
 // ═══════════════════════════════════════════════════════════

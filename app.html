@@ -1020,6 +1020,7 @@
       <button class="nav-item" data-view="calendar"><span class="nav-icon">📅</span> Línea de Tiempo</button>
       <button class="nav-item" data-view="cronica"><span class="nav-icon">📖</span> Crónica</button>
       <button class="nav-item" data-view="contacts"><span class="nav-icon">👥</span> Contactos</button>
+      <button class="nav-item" data-view="proyectos"><span class="nav-icon">🏗️</span> Proyectos</button>
       <button class="nav-item" data-view="agenda"><span class="nav-icon">💳</span> Agenda Financiera</button>
       <button class="nav-item" data-view="herramientas"><span class="nav-icon">🧮</span> Herramientas</button>
       <button class="nav-item" data-view="tags"><span class="nav-icon">🏷️</span> Inteligencia Tags</button>
@@ -1126,6 +1127,11 @@
         <button class="contact-filter-btn"         data-ctype="crypto"    onclick="setContactFilter('crypto',this)">₿ Cripto</button>
       </div>
       <div id="contacts-root" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px;"></div>
+    </div>
+
+    <!-- ════ PROYECTOS ════ -->
+    <div id="view-proyectos" class="view-section">
+      <div id="proyectos-root"></div>
     </div>
 
     <!-- ════ AGENDA FINANCIERA ════ -->
