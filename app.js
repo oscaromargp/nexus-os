@@ -53,14 +53,22 @@ const NOTE_COLORS = {
 
 // Feed color config — must be before boot IIFE
 const TYPE_CONFIG = {
-  kanban:   { label: '#TAREA',    color: '#a78bfa', border: 'rgba(139,92,246,0.4)', bg: 'rgba(139,92,246,0.06)' },
-  note:     { label: '#NOTA',     color: '#60a5fa', border: 'rgba(96,165,250,0.4)',  bg: 'rgba(96,165,250,0.06)' },
-  income:   { label: '#INGRESO',  color: '#4ade80', border: 'rgba(74,222,128,0.4)',  bg: 'rgba(74,222,128,0.06)' },
-  expense:  { label: '#GASTO',    color: '#f87171', border: 'rgba(248,113,113,0.4)', bg: 'rgba(248,113,113,0.06)' },
-  persona:  { label: '#PERSONA',  color: '#fdba74', border: 'rgba(251,146,60,0.4)',  bg: 'rgba(251,146,60,0.06)' },
-  proyecto: { label: '#PROYECTO', color: '#2dd4bf', border: 'rgba(45,212,191,0.4)',  bg: 'rgba(45,212,191,0.06)' },
-  account:  { label: '#CUENTA',   color: '#94a3b8', border: 'rgba(148,163,184,0.4)', bg: 'rgba(148,163,184,0.06)' },
+  kanban:     { label: '#TAREA',      color: '#a78bfa', border: 'rgba(139,92,246,0.4)',  bg: 'rgba(139,92,246,0.06)' },
+  note:       { label: '#NOTA',       color: '#60a5fa', border: 'rgba(96,165,250,0.4)',  bg: 'rgba(96,165,250,0.06)' },
+  income:     { label: '#INGRESO',    color: '#4ade80', border: 'rgba(74,222,128,0.4)',  bg: 'rgba(74,222,128,0.06)' },
+  expense:    { label: '#GASTO',      color: '#f87171', border: 'rgba(248,113,113,0.4)', bg: 'rgba(248,113,113,0.06)' },
+  persona:    { label: '#PERSONA',    color: '#fdba74', border: 'rgba(251,146,60,0.4)',  bg: 'rgba(251,146,60,0.06)' },
+  proyecto:   { label: '#PROYECTO',   color: '#2dd4bf', border: 'rgba(45,212,191,0.4)',  bg: 'rgba(45,212,191,0.06)' },
+  account:    { label: '#CUENTA',     color: '#94a3b8', border: 'rgba(148,163,184,0.4)', bg: 'rgba(148,163,184,0.06)' },
+  cotizacion: { label: '#COTIZACIÓN', color: '#fb923c', border: 'rgba(251,146,60,0.4)',  bg: 'rgba(251,146,60,0.06)' },
 }
+
+const COT_STATUS = {
+  pendiente:  { label:'⏳ Pendiente',  color:'#fb923c' },
+  aceptada:   { label:'✅ Aceptada',   color:'#4ade80' },
+  rechazada:  { label:'❌ Rechazada',  color:'#f87171' },
+}
+const ROL_LABEL = { dueño:'👑 Dueño', ejecutor:'⚙️ Ejecutor', colaborador:'🤝 Colaborador' }
 
 // ─────────────────────────────────────────
 // Boot
@@ -609,6 +617,17 @@ function parseNode(text) {
     cleanContent = t.replace('#proyecto', '').trim()
     metadata.label = cleanContent
   }
+  else if (t.includes('#cotizacion') || t.includes('#cotización')) {
+    type = 'cotizacion'
+    metadata.tags.push('#cotizacion')
+    metadata.status = 'pendiente'
+    const amtMatch = t.match(/\$(\d+(?:[\.,]\d+)?)/)
+    if (amtMatch) metadata.amount = parseFloat(amtMatch[1].replace(',', ''))
+    const projMatch = t.match(/@(\w+)/)
+    if (projMatch) metadata.project_tag = projMatch[1].toLowerCase()
+    cleanContent = t.replace(/#cotizaci[oó]n/,'').replace(/\$[\d.,]+/,'').replace(/@\w+/,'').trim()
+    metadata.label = cleanContent
+  }
   // 3. Nota por defecto
   else {
     type = 'note'
@@ -1078,14 +1097,15 @@ function updateStats(nodes) {
 
 // TYPE_FILTERS — pills para el panel de comandos
 const TYPE_FILTERS = [
-  { type:'income',   label:'💰 Ingresos',  color:'#4ade80' },
-  { type:'expense',  label:'💸 Gastos',    color:'#f87171' },
-  { type:'kanban',   label:'📌 Tareas',    color:'#a78bfa' },
-  { type:'note',     label:'🧠 Notas',     color:'#60a5fa' },
-  { type:'contact',  label:'👥 Contactos', color:'#34d399' },
-  { type:'event',    label:'📅 Eventos',   color:'#fb923c' },
-  { type:'account',  label:'🏦 Cuentas',   color:'#facc15' },
-  { type:'loan',     label:'💳 Préstamos', color:'#c084fc' },
+  { type:'income',     label:'💰 Ingresos',    color:'#4ade80' },
+  { type:'expense',    label:'💸 Gastos',      color:'#f87171' },
+  { type:'kanban',     label:'📌 Tareas',      color:'#a78bfa' },
+  { type:'note',       label:'🧠 Notas',       color:'#60a5fa' },
+  { type:'contact',    label:'👥 Contactos',   color:'#34d399' },
+  { type:'cotizacion', label:'📄 Cotizaciones',color:'#fb923c' },
+  { type:'event',      label:'📅 Eventos',     color:'#fb923c' },
+  { type:'account',    label:'🏦 Cuentas',     color:'#facc15' },
+  { type:'loan',       label:'💳 Préstamos',   color:'#c084fc' },
 ]
 
 function feedItemHtml(n) {
@@ -1105,7 +1125,19 @@ function feedItemHtml(n) {
         </div>
       </div>
       ${amount}
-      ${n.type==='proyecto' ? `<span onclick="event.stopPropagation();openProjectView('${n.id}')" title="Vista de Proyecto" style="color:#60a5fa;cursor:pointer;padding:4px;flex-shrink:0;font-size:13px;">📁</span>` : ''}
+      ${n.type==='proyecto' ? `
+        <span onclick="event.stopPropagation();openProyectoModal('${n.id}')" title="Editar proyecto" style="color:#2dd4bf;cursor:pointer;padding:4px;flex-shrink:0;font-size:13px;" title="Editar presupuesto/rol">✏️</span>
+        <span onclick="event.stopPropagation();openProjectView('${n.id}')" title="Vista de Proyecto" style="color:#60a5fa;cursor:pointer;padding:4px;flex-shrink:0;font-size:13px;">📁</span>
+      ` : ''}
+      ${n.type==='cotizacion' ? (() => {
+        const st = n.metadata?.status || 'pendiente'
+        const stCfg = COT_STATUS[st] || COT_STATUS.pendiente
+        const amt = n.metadata?.amount ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:#fb923c;flex-shrink:0;font-size:12px;">$${(+n.metadata.amount).toLocaleString('es-MX')}</span>` : ''
+        const statusBadge = `<span style="font-size:9px;padding:2px 7px;border-radius:4px;background:${stCfg.color}22;color:${stCfg.color};font-weight:700;flex-shrink:0;">${stCfg.label}</span>`
+        const quickBtns = st !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${n.id}','aceptada')" title="Aceptar" style="color:#4ade80;cursor:pointer;padding:4px;flex-shrink:0;font-size:14px;">✅</span>` : ''
+        const editBtn = `<span onclick="event.stopPropagation();openCotizacionModal('${n.id}')" title="Editar" style="color:#fb923c;cursor:pointer;padding:4px;flex-shrink:0;font-size:13px;">✏️</span>`
+        return amt + statusBadge + quickBtns + editBtn
+      })() : ''}
       <span onclick="event.stopPropagation();if(confirm('¿Eliminar?')){deleteNode('${n.id}')}" style="color:var(--text-dim);cursor:pointer;padding:4px;flex-shrink:0;">✕</span>
     </div>`
 }
@@ -4472,7 +4504,7 @@ window.stopAudioRecord = (context) => {
 //  NODOS — IMPORT CSV MASIVO
 // ═══════════════════════════════════════════════════════════════
 const NODE_CSV_HEADERS = ['contenido','tipo','monto','etiquetas','fecha','notas']
-const NODE_VALID_TYPES = new Set(['note','kanban','income','expense','persona','contact','proyecto','event'])
+const NODE_VALID_TYPES = new Set(['note','kanban','income','expense','persona','contact','proyecto','event','cotizacion'])
 
 window.downloadNodeTemplate = () => {
   const header = NODE_CSV_HEADERS.join(',')
@@ -5176,14 +5208,45 @@ window.openProjectView = function(nodeId) {
     return tags.some(t => nTags.includes(t))
   })
 
+  // Budget & rol header
+  const budget   = node.metadata?.budget || 0
+  const rol      = node.metadata?.rol || ''
+  const totalExp = related.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const totalInc = related.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const pct      = budget > 0 ? Math.min(100, Math.round(totalExp/budget*100)) : 0
+  const gaugeColor = pct >= 90 ? '#f87171' : pct >= 70 ? '#fb923c' : '#4ade80'
+
+  const budgetHtml = budget > 0 ? `
+    <div style="grid-column:1/-1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;margin-bottom:2px;">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        ${rol ? `<span style="font-size:11px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.3);color:#2dd4bf;border-radius:6px;padding:3px 10px;">${ROL_LABEL[rol]||rol}</span>` : ''}
+        <div style="flex:1;min-width:200px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-size:11px;color:var(--text-muted);font-weight:700;">PRESUPUESTO</span>
+            <span style="font-size:11px;font-family:monospace;color:${gaugeColor};font-weight:700;">${pct}% — $${totalExp.toLocaleString('es-MX')} / $${budget.toLocaleString('es-MX')}</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.06);border-radius:6px;height:8px;overflow:hidden;">
+            <div style="width:${pct}%;height:100%;background:${gaugeColor};border-radius:6px;transition:width 0.4s;"></div>
+          </div>
+        </div>
+        ${totalInc > 0 ? `<span style="font-size:12px;color:#4ade80;font-weight:700;font-family:monospace;">+$${totalInc.toLocaleString('es-MX')} ingresado</span>` : ''}
+        <button onclick="openProyectoModal('${nodeId}')" style="background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.3);color:#2dd4bf;border-radius:8px;padding:5px 12px;font-size:11px;cursor:pointer;font-weight:600;">✏️ Editar</button>
+      </div>
+    </div>` : `
+    <div style="grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;padding:8px 4px;">
+      <span style="font-size:11px;color:var(--text-dim);">${rol ? ROL_LABEL[rol]||rol : 'Sin presupuesto asignado'}</span>
+      <button onclick="openProyectoModal('${nodeId}')" style="background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.3);color:#2dd4bf;border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600;">+ Presupuesto / Rol</button>
+    </div>`
+
   // Group by type
   const groups = {
-    kanban:  { label:'📌 Tareas', color:'#a78bfa', nodes:[] },
-    expense: { label:'💸 Gastos', color:'#f87171', nodes:[] },
-    income:  { label:'💰 Ingresos', color:'#4ade80', nodes:[] },
-    contact: { label:'👤 Contactos', color:'#fbbf24', nodes:[] },
-    note:    { label:'💡 Notas', color:'#94a3b8', nodes:[] },
-    other:   { label:'📦 Otros', color:'#60a5fa', nodes:[] },
+    cotizacion: { label:'📄 Cotizaciones', color:'#fb923c', nodes:[] },
+    kanban:     { label:'📌 Tareas',       color:'#a78bfa', nodes:[] },
+    expense:    { label:'💸 Gastos',       color:'#f87171', nodes:[] },
+    income:     { label:'💰 Ingresos',     color:'#4ade80', nodes:[] },
+    contact:    { label:'👤 Contactos',    color:'#fbbf24', nodes:[] },
+    note:       { label:'💡 Notas',        color:'#94a3b8', nodes:[] },
+    other:      { label:'📦 Otros',        color:'#60a5fa', nodes:[] },
   }
   related.forEach(n => {
     const k = groups[n.type] ? n.type : 'other'
@@ -5193,21 +5256,26 @@ window.openProjectView = function(nodeId) {
   const body = document.getElementById('pv-body')
   const nonEmpty = Object.values(groups).filter(g => g.nodes.length)
   if (!nonEmpty.length) {
-    body.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:40px;font-size:14px;">
+    body.innerHTML = budgetHtml + `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:40px;font-size:14px;">
       Sin nodos relacionados aún.<br>Comparte etiquetas con otros nodos o vincúlalos desde el modal de tarea.
     </div>`
   } else {
-    body.innerHTML = nonEmpty.map(g => `
+    body.innerHTML = budgetHtml + nonEmpty.map(g => `
       <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;min-width:0;">
         <div style="font-size:12px;font-weight:700;color:${g.color};text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px;">${g.label} (${g.nodes.length})</div>
         ${g.nodes.slice(0,8).map(n => {
           const lbl = n.metadata?.label || n.content || '(sin título)'
           const amtRaw = n.metadata?.amount
+          const isCot = n.type === 'cotizacion'
+          const st = isCot ? (COT_STATUS[n.metadata?.status] || COT_STATUS.pendiente) : null
           const amtStr = amtRaw ? `<span style="color:${g.color};font-weight:700;font-size:12px;margin-left:4px;">${n.type==='income'?'+':'-'}$${(+amtRaw).toLocaleString('es-MX')}</span>` : ''
+          const cotAmt = isCot && amtRaw ? `<span style="color:#fb923c;font-weight:700;font-size:12px;font-family:monospace;">$${(+amtRaw).toLocaleString('es-MX')}</span>` : ''
+          const stBadge = st ? `<span style="font-size:9px;background:${st.color}22;color:${st.color};border-radius:4px;padding:1px 6px;font-weight:700;">${st.label}</span>` : ''
+          const quickAcc = isCot && n.metadata?.status !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${n.id}','aceptada')" style="color:#4ade80;cursor:pointer;font-size:13px;padding:2px 4px;" title="Aceptar">✅</span>` : ''
           const date = n.metadata?.date || (n.created_at ? n.created_at.slice(0,10) : '')
-          return `<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="closeProjectView();setTimeout(()=>openCardModal('${n.id}'),100)">
+          return `<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;gap:8px;cursor:pointer;" onclick="closeProjectView();setTimeout(()=>${isCot?`openCotizacionModal('${n.id}')`:`openCardModal('${n.id}')`},100)">
             <span style="font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(lbl)}</span>
-            ${amtStr}
+            ${isCot ? cotAmt + stBadge + quickAcc : amtStr}
             ${date ? `<span style="font-size:10px;color:var(--text-dim);flex-shrink:0;">${date}</span>` : ''}
           </div>`
         }).join('')}
@@ -5219,6 +5287,127 @@ window.openProjectView = function(nodeId) {
 window.closeProjectView = function() {
   const modal = document.getElementById('project-view-modal')
   if (modal) modal.style.display = 'none'
+}
+
+// ═══════════════════════════════════════════════════════════
+// COTIZACIONES — Phase 2
+// ═══════════════════════════════════════════════════════════
+
+let currentCotizacionId = null
+
+window.openCotizacionModal = (id = null) => {
+  const c = id ? allNodes.find(n => n.id === id) : null
+  const m = c?.metadata || {}
+  currentCotizacionId = id
+  document.getElementById('cot-modal-title').textContent = c ? 'Editar Cotización' : 'Nueva Cotización'
+  document.getElementById('cot-label').value         = m.label || c?.content || ''
+  document.getElementById('cot-amount').value        = m.amount || ''
+  document.getElementById('cot-status').value        = m.status || 'pendiente'
+  document.getElementById('cot-project-tag').value  = m.project_tag || ''
+  document.getElementById('cot-notes').value         = m.notes || ''
+  // Populate provider dropdown
+  const provs = allNodes.filter(n => n.type === 'contact' && n.metadata?.cType === 'proveedor')
+  const sel = document.getElementById('cot-provider')
+  sel.innerHTML = `<option value="">Sin proveedor</option>` +
+    provs.map(p => `<option value="${p.id}" ${m.provider_id===p.id?'selected':''}>${esc(p.metadata?.name||p.content)}</option>`).join('')
+  document.getElementById('cot-delete').style.display = c ? 'inline-flex' : 'none'
+  document.getElementById('cotizacion-modal').classList.remove('hidden')
+}
+
+window.closeCotizacionModal = () => document.getElementById('cotizacion-modal').classList.add('hidden')
+
+window.saveCotizacion = async () => {
+  const label = document.getElementById('cot-label').value.trim()
+  if (!label) { showToast('La descripción es obligatoria'); return }
+  const projTag = document.getElementById('cot-project-tag').value.trim().toLowerCase()
+  const tags = ['#cotizacion']
+  if (projTag) tags.push('#' + projTag)
+  const meta = {
+    label,
+    amount:      parseFloat(document.getElementById('cot-amount').value) || 0,
+    status:      document.getElementById('cot-status').value,
+    provider_id: document.getElementById('cot-provider').value || undefined,
+    project_tag: projTag || undefined,
+    notes:       document.getElementById('cot-notes').value.trim() || undefined,
+    tags,
+  }
+  if (currentCotizacionId) {
+    const node = allNodes.find(n => n.id === currentCotizacionId)
+    if (node) { node.content = label; node.metadata = meta }
+    if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+      await supabase.from('nodes').update({ content:label, metadata:meta }).eq('id', currentCotizacionId)
+  } else {
+    if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+      allNodes.unshift({ id:Math.random().toString(36).substr(2,9), type:'cotizacion', content:label, metadata:meta, created_at:new Date().toISOString() })
+    } else {
+      const { data } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'cotizacion', content:label, metadata:meta }).select()
+      if (data?.[0]) allNodes.unshift(data[0])
+    }
+  }
+  closeCotizacionModal()
+  renderAll()
+  showToast(`Cotización "${label}" guardada`)
+}
+
+window.deleteCotizacion = async () => {
+  if (!currentCotizacionId || !confirm('¿Eliminar esta cotización?')) return
+  allNodes = allNodes.filter(n => n.id !== currentCotizacionId)
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').delete().eq('id', currentCotizacionId)
+  closeCotizacionModal()
+  renderAll()
+}
+
+window.changeCotizacionStatus = async (id, status) => {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  node.metadata = { ...node.metadata, status }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ metadata:node.metadata }).eq('id', id)
+  renderAll()
+  const msgs = { aceptada:'✅ Cotización aceptada', rechazada:'❌ Cotización rechazada', pendiente:'⏳ Pendiente' }
+  showToast(msgs[status] || 'Estado actualizado')
+}
+
+// ═══════════════════════════════════════════════════════════
+// PROYECTO MODAL — Phase 2
+// ═══════════════════════════════════════════════════════════
+
+let currentProyectoId = null
+
+window.openProyectoModal = (id) => {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  currentProyectoId = id
+  const m = node.metadata || {}
+  document.getElementById('proy-label').value  = m.label || node.content || ''
+  document.getElementById('proy-budget').value = m.budget || ''
+  document.getElementById('proy-rol').value    = m.rol || 'dueño'
+  document.getElementById('proy-desc').value   = m.desc || m.notes || ''
+  document.getElementById('proyecto-modal').classList.remove('hidden')
+}
+
+window.closeProyectoModal = () => document.getElementById('proyecto-modal').classList.add('hidden')
+
+window.saveProyecto = async () => {
+  if (!currentProyectoId) return
+  const node = allNodes.find(n => n.id === currentProyectoId)
+  if (!node) return
+  const label = document.getElementById('proy-label').value.trim() || node.metadata?.label || node.content
+  const budgetVal = parseFloat(document.getElementById('proy-budget').value)
+  node.metadata = {
+    ...node.metadata,
+    label,
+    budget: budgetVal > 0 ? budgetVal : undefined,
+    rol:    document.getElementById('proy-rol').value,
+    desc:   document.getElementById('proy-desc').value.trim() || undefined,
+  }
+  node.content = label
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ content:label, metadata:node.metadata }).eq('id', currentProyectoId)
+  closeProyectoModal()
+  renderAll()
+  showToast('Proyecto actualizado')
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -5237,8 +5426,9 @@ const TYPE_LABELS = {
   proyecto: { icon:'📁', label:'Proyecto',  color:'#60a5fa' },
   contact:  { icon:'👤', label:'Contacto',  color:'#fbbf24' },
   account:  { icon:'🏦', label:'Cuenta',    color:'#34d399' },
-  event:    { icon:'📅', label:'Evento',    color:'#34d399' },
-  agenda:   { icon:'📋', label:'Agenda',    color:'#f97316' },
+  event:      { icon:'📅', label:'Evento',      color:'#34d399' },
+  agenda:     { icon:'📋', label:'Agenda',      color:'#f97316' },
+  cotizacion: { icon:'📄', label:'Cotización',  color:'#fb923c' },
 }
 
 function buildFuseIndex() {

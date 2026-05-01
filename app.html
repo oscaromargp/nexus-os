@@ -2142,6 +2142,81 @@
     </div>
   </div>
 
+  <!-- MODAL: COTIZACIÓN ──────────────────────────────────── -->
+  <div id="cotizacion-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeCotizacionModal()">
+    <div class="modal-box" style="max-width:480px;">
+      <div class="modal-header">
+        <h3 id="cot-modal-title" class="modal-title">Nueva Cotización</h3>
+        <button class="modal-close" onclick="closeCotizacionModal()">✕</button>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Descripción *</label>
+        <input type="text" id="cot-label" class="modal-input" placeholder="Ej: Instalación paneles solares Casa Tulum" />
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Monto ($)</label><input type="number" id="cot-amount" class="modal-input" placeholder="0.00" step="0.01" min="0" /></div>
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Estado</label>
+          <select id="cot-status" class="modal-input">
+            <option value="pendiente">⏳ Pendiente</option>
+            <option value="aceptada">✅ Aceptada</option>
+            <option value="rechazada">❌ Rechazada</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Proveedor</label>
+        <select id="cot-provider" class="modal-input"><option value="">Sin proveedor</option></select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Proyecto / Etiqueta (sin #)</label>
+        <input type="text" id="cot-project-tag" class="modal-input" placeholder="Ej: casatulum, paneles, tulum2026" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Condiciones / Notas</label>
+        <textarea id="cot-notes" class="modal-input" rows="2" placeholder="Vigencia, garantía, forma de pago..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeCotizacionModal()">Cancelar</button>
+        <button class="btn-danger" id="cot-delete" style="display:none;" onclick="deleteCotizacion()">Eliminar</button>
+        <button class="btn-primary" onclick="saveCotizacion()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PROYECTO ─────────────────────────────────────── -->
+  <div id="proyecto-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeProyectoModal()">
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-header">
+        <h3 class="modal-title">Editar Proyecto</h3>
+        <button class="modal-close" onclick="closeProyectoModal()">✕</button>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Nombre del proyecto</label>
+        <input type="text" id="proy-label" class="modal-input" placeholder="Ej: Casa Tulum" />
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Presupuesto total ($)</label><input type="number" id="proy-budget" class="modal-input" placeholder="0" step="1000" min="0" /></div>
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Mi rol</label>
+          <select id="proy-rol" class="modal-input">
+            <option value="dueño">👑 Dueño</option>
+            <option value="ejecutor">⚙️ Ejecutor</option>
+            <option value="colaborador">🤝 Colaborador</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Descripción / Contexto</label>
+        <textarea id="proy-desc" class="modal-input" rows="2" placeholder="Objetivos, fechas clave, notas..."></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeProyectoModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveProyecto()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: BUSCADOR GLOBAL ─────────────────────────────── -->
   <div id="global-search-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9500; align-items:flex-start; justify-content:center; padding-top:80px; backdrop-filter:blur(10px);" onclick="if(event.target===this) closeGlobalSearch()">
     <div style="background:var(--bg-panel); border:1px solid var(--glass-border-bright); border-radius:20px; width:100%; max-width:680px; margin:0 16px; box-shadow:0 40px 80px rgba(0,0,0,0.8), 0 0 40px rgba(0,246,255,0.08); overflow:hidden;">
