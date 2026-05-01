@@ -2144,6 +2144,63 @@
     </div>
   </div>
 
+  <!-- MODAL: PAGO ASISTIDO ───────────────────────────────── -->
+  <div id="payment-modal" class="modal-overlay hidden" onclick="if(event.target===this)closePaymentModal()">
+    <div class="modal-box" style="max-width:520px;">
+      <div class="modal-header">
+        <h3 class="modal-title">💸 Registrar Pago</h3>
+        <button class="modal-close" onclick="closePaymentModal()">✕</button>
+      </div>
+
+      <!-- Proveedor info (read-only) -->
+      <div id="pay-provider-info" style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.2);border-radius:10px;margin-bottom:4px;"></div>
+
+      <!-- Servicio -->
+      <div class="modal-field">
+        <label class="modal-label">Servicio prestado</label>
+        <select id="pay-service" class="modal-input" onchange="payServiceChange()">
+          <option value="">Sin servicio específico</option>
+        </select>
+      </div>
+
+      <!-- Total -->
+      <div class="modal-field">
+        <label class="modal-label">Total del pago $</label>
+        <input type="number" id="pay-total" class="modal-input" placeholder="0.00" step="0.01" min="0" oninput="paySyncTotal()" />
+      </div>
+
+      <!-- Splits -->
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label class="modal-label" style="margin:0;">¿Cómo se pagó?</label>
+          <button onclick="addPaySplit()" style="background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;">+ Agregar parte</button>
+        </div>
+        <div id="pay-splits-container"></div>
+        <div id="pay-split-warn" style="font-size:11px;color:#f87171;margin-top:6px;display:none;">⚠️ La suma de partes no coincide con el total</div>
+      </div>
+
+      <!-- Proyecto / Evento -->
+      <div class="modal-field">
+        <label class="modal-label">Proyecto / Evento (etiqueta, sin #)</label>
+        <input type="text" id="pay-project-tag" class="modal-input" placeholder="Ej: bodaxyz, casatulum, eventomayo..." />
+      </div>
+
+      <!-- Nota de calidad -->
+      <div class="modal-field" style="margin-bottom:4px;">
+        <label class="modal-label">Nota de calidad (opcional)</label>
+        <input type="text" id="pay-quality-note" class="modal-input" placeholder="Excelente trabajo, muy puntual..." />
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;" id="pay-stars">
+        ${[1,2,3,4,5].map(i=>`<span onclick="setPayRating(${i})" data-star="${i}" style="font-size:22px;cursor:pointer;opacity:0.3;transition:opacity 0.1s;">⭐</span>`).join('')}
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closePaymentModal()">Cancelar</button>
+        <button class="btn-primary" onclick="savePayment()">Registrar pago</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: SERVICIO DEL PROVEEDOR ──────────────────────── -->
   <div id="service-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeServiceModal()">
     <div class="modal-box" style="max-width:380px;">

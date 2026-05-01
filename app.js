@@ -5488,6 +5488,201 @@ window.closeProjectView = function() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// PAGO ASISTIDO — Phase 3D
+// ═══════════════════════════════════════════════════════════
+
+let paymentContactId = null
+let paymentRating    = 0
+let paySplitCount    = 0
+
+window.openPaymentModal = (contactId, serviceId = null) => {
+  paymentContactId = contactId
+  paymentRating    = 0
+  paySplitCount    = 0
+
+  const contact = allNodes.find(n => n.id === contactId)
+  if (!contact) return
+  const m = contact.metadata || {}
+
+  // Proveedor info header
+  const clr = m.color || '#fb923c'
+  document.getElementById('pay-provider-info').innerHTML = `
+    <div style="width:38px;height:38px;border-radius:50%;background:${clr}20;color:${clr};display:grid;place-items:center;font-size:18px;font-weight:800;flex-shrink:0;">${contactInitials(m.name||contact.content)}</div>
+    <div>
+      <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${esc(m.name||contact.content)}</div>
+      <div style="font-size:11px;color:var(--text-muted);">${esc(m.specialty||'Proveedor')}</div>
+    </div>`
+
+  // Populate services
+  const services = m.services || []
+  const sel = document.getElementById('pay-service')
+  sel.innerHTML = `<option value="">Sin servicio específico</option>` +
+    services.map(s => `<option value="${s.id}" data-price="${s.price}" ${s.id===serviceId?'selected':''}>
+      ${esc(s.name)} — $${(+s.price||0).toLocaleString('es-MX')}/${esc(s.unit||'servicio')}
+    </option>`).join('')
+
+  // Pre-fill amount from service price if pre-selected
+  const selSvc = services.find(s => s.id === serviceId)
+  document.getElementById('pay-total').value = selSvc?.price || ''
+
+  // Reset fields
+  document.getElementById('pay-project-tag').value   = ''
+  document.getElementById('pay-quality-note').value  = ''
+  document.querySelectorAll('#pay-stars [data-star]').forEach(s => s.style.opacity = '0.3')
+
+  // Initial split row
+  document.getElementById('pay-splits-container').innerHTML = ''
+  document.getElementById('pay-split-warn').style.display = 'none'
+  addPaySplit()
+
+  document.getElementById('payment-modal').classList.remove('hidden')
+}
+
+window.closePaymentModal = () => document.getElementById('payment-modal').classList.add('hidden')
+
+window.payServiceChange = () => {
+  const opt = document.getElementById('pay-service').selectedOptions[0]
+  const price = opt?.dataset?.price
+  if (price) document.getElementById('pay-total').value = price
+  paySyncTotal()
+}
+
+window.addPaySplit = () => {
+  paySplitCount++
+  const idx = paySplitCount
+  const contact = allNodes.find(n => n.id === paymentContactId)
+  const contactAccounts = contact?.metadata?.contact_accounts || []
+
+  const accountOpts = contactAccounts.map(a =>
+    `<option value="${a.id}" data-name="${esc(a.name)}">${esc(a.name)}${a.clabe?' — '+a.clabe.slice(-4):''}${a.handle?' — '+a.handle:''}</option>`
+  ).join('')
+
+  const row = document.createElement('div')
+  row.id = `pay-split-${idx}`
+  row.style.cssText = 'display:grid;grid-template-columns:90px 120px 1fr auto;gap:8px;align-items:center;margin-bottom:8px;'
+  row.innerHTML = `
+    <input  type="number" placeholder="$0" min="0" step="0.01"
+            class="modal-input" style="padding:7px 10px;font-size:13px;font-family:monospace;"
+            id="split-amt-${idx}" oninput="paySyncTotal()" />
+    <select class="modal-input" style="padding:7px 10px;font-size:12px;" id="split-method-${idx}" onchange="splitMethodChange(${idx})">
+      <option value="efectivo">💵 Efectivo</option>
+      <option value="transferencia">📲 Transferencia</option>
+      <option value="tarjeta">💳 Tarjeta</option>
+      <option value="cripto">🪙 Cripto</option>
+    </select>
+    <div id="split-dest-${idx}" style="display:flex;gap:6px;align-items:center;">
+      <select class="modal-input" style="padding:7px 10px;font-size:12px;flex:1;" id="split-acc-${idx}" onchange="splitAccChange(${idx})">
+        <option value="">En mano / sin cuenta</option>
+        ${accountOpts}
+        <option value="__new__">+ Nueva cuenta...</option>
+      </select>
+    </div>
+    <button onclick="removePaySplit(${idx})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px;padding:4px 6px;" title="Quitar">✕</button>`
+  document.getElementById('pay-splits-container').appendChild(row)
+  // Efectivo default → hide account selector
+  splitMethodChange(idx)
+}
+
+window.removePaySplit = (idx) => {
+  document.getElementById(`pay-split-${idx}`)?.remove()
+  paySyncTotal()
+}
+
+window.splitMethodChange = (idx) => {
+  const method = document.getElementById(`split-method-${idx}`)?.value
+  const dest   = document.getElementById(`split-dest-${idx}`)
+  if (!dest) return
+  if (method === 'efectivo') {
+    dest.innerHTML = '<span style="font-size:12px;color:var(--text-dim);padding:0 4px;">En mano</span>'
+  } else {
+    const contact = allNodes.find(n => n.id === paymentContactId)
+    const cas = contact?.metadata?.contact_accounts || []
+    const opts = cas.map(a => `<option value="${a.id}">${esc(a.name)}${a.clabe?' — '+a.clabe.slice(-4):''}${a.handle?' — '+a.handle:''}</option>`).join('')
+    dest.innerHTML = `<select class="modal-input" style="padding:7px 10px;font-size:12px;flex:1;" id="split-acc-${idx}" onchange="splitAccChange(${idx})">
+      <option value="">Sin especificar cuenta</option>${opts}<option value="__new__">+ Nueva cuenta...</option></select>`
+  }
+}
+
+window.splitAccChange = (idx) => {
+  const acc = document.getElementById(`split-acc-${idx}`)
+  if (acc?.value === '__new__') {
+    acc.value = ''
+    closePaymentModal()
+    openContactAccountModal(paymentContactId)
+  }
+}
+
+window.paySyncTotal = () => {
+  const total = parseFloat(document.getElementById('pay-total')?.value) || 0
+  const rows  = document.querySelectorAll('#pay-splits-container > div[id^="pay-split-"]')
+  let sum = 0
+  rows.forEach(row => {
+    const idx = row.id.replace('pay-split-','')
+    sum += parseFloat(document.getElementById(`split-amt-${idx}`)?.value) || 0
+  })
+  const warn = document.getElementById('pay-split-warn')
+  if (warn) warn.style.display = (total > 0 && rows.length > 1 && Math.abs(sum - total) > 0.01) ? '' : 'none'
+}
+
+window.setPayRating = (n) => {
+  paymentRating = n
+  document.querySelectorAll('#pay-stars [data-star]').forEach(s => {
+    s.style.opacity = parseInt(s.dataset.star) <= n ? '1' : '0.25'
+  })
+}
+
+window.savePayment = async () => {
+  const contact = allNodes.find(n => n.id === paymentContactId)
+  if (!contact) return
+  const m = contact.metadata || {}
+
+  const total      = parseFloat(document.getElementById('pay-total').value) || 0
+  const selSvcId   = document.getElementById('pay-service').value
+  const selSvc     = (m.services||[]).find(s => s.id === selSvcId)
+  const projTag    = document.getElementById('pay-project-tag').value.trim().toLowerCase()
+  const qualNote   = document.getElementById('pay-quality-note').value.trim()
+
+  // Build splits
+  const rows   = document.querySelectorAll('#pay-splits-container > div[id^="pay-split-"]')
+  const splits = []
+  rows.forEach(row => {
+    const idx    = row.id.replace('pay-split-','')
+    const amt    = parseFloat(document.getElementById(`split-amt-${idx}`)?.value) || 0
+    const method = document.getElementById(`split-method-${idx}`)?.value || 'efectivo'
+    const accEl  = document.getElementById(`split-acc-${idx}`)
+    const accId  = accEl?.value || ''
+    const accObj = (m.contact_accounts||[]).find(a => a.id === accId)
+    splits.push({ amount: amt, method, account_id: accId||undefined, account_name: accObj?.name || (method==='efectivo'?'Efectivo':'Sin especificar') })
+  })
+
+  const tags = ['#gasto']
+  if (projTag) tags.push('#' + projTag)
+
+  const label = [selSvc?.name||'Pago', m.name||contact.content, projTag].filter(Boolean).join(' — ')
+  const meta = {
+    label, amount: total,
+    contact_id:      paymentContactId,
+    service_id:      selSvcId || undefined,
+    service_name:    selSvc?.name || undefined,
+    project_tag:     projTag || undefined,
+    splits:          splits.length ? splits : undefined,
+    quality_note:    qualNote || undefined,
+    quality_rating:  paymentRating || undefined,
+    tags,
+  }
+
+  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+    allNodes.unshift({ id: 'pay_'+Date.now(), type:'expense', content:label, metadata:meta, created_at:new Date().toISOString() })
+  } else {
+    const { data } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'expense', content:label, metadata:meta }).select()
+    if (data?.[0]) allNodes.unshift(data[0])
+  }
+  closePaymentModal()
+  renderAll()
+  showToast(`Pago de $${total.toLocaleString('es-MX')} registrado`)
+}
+
+// ═══════════════════════════════════════════════════════════
 // COTIZACIONES — Phase 2
 // ═══════════════════════════════════════════════════════════
 
