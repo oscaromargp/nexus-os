@@ -70,6 +70,54 @@ const COT_STATUS = {
 }
 const ROL_LABEL = { dueño:'👑 Dueño', ejecutor:'⚙️ Ejecutor', colaborador:'🤝 Colaborador' }
 
+// ── Roles de miembros de proyecto ───────────────────────────────────────────
+const MIEMBRO_ROLES = [
+  { id:'financiador',    label:'💰 Financiador',   desc:'Aporta el capital' },
+  { id:'administrador',  label:'🗂️ Administrador',  desc:'Coordina y supervisa' },
+  { id:'ejecutor',       label:'🔧 Ejecutor',       desc:'Realiza el trabajo' },
+  { id:'supervisor',     label:'👁️ Supervisor',     desc:'Revisa y aprueba' },
+  { id:'colaborador',    label:'🤝 Colaborador',    desc:'Apoyo y participación' },
+]
+
+// ── Categorías de trabajo (estandarizadas) ──────────────────────────────────
+const CATEGORIAS_TRABAJO = [
+  { grupo:'🏠 Hogar & Propiedad', items:[
+    'Eléctrico','Plomería','Gas','Agua / Pipas','Internet / Telecom',
+    'Teléfono','Limpieza','Jardinería','Alberca / Piscina',
+    'Seguridad / Vigilancia','Control de plagas','Fumigación',
+  ]},
+  { grupo:'🏗️ Construcción & Remodelación', items:[
+    'Albañilería','Civil / Estructura','Herrería','Carpintería',
+    'Pintura','Impermeabilización','Acabados / Pisos',
+    'Vidriería / Aluminio','Demolición','Excavación',
+  ]},
+  { grupo:'🚗 Vehículos', items:[
+    'Lavado / Detailing','Mantenimiento mecánico','Gasolina / Combustible',
+    'Llantas / Vulcanizadora','Seguro vehículo','Grúa / Auxilio vial',
+  ]},
+  { grupo:'💼 Servicios Profesionales', items:[
+    'Administración','Legal / Notaría','Contabilidad / Fiscal',
+    'Diseño gráfico','Diseño arquitectónico','Fotografía / Video',
+    'Marketing / Publicidad','Consultoría','Ingeniería',
+  ]},
+  { grupo:'📦 Logística & Suministros', items:[
+    'Transporte / Flete','Materiales / Ferretería',
+    'Renta de equipo / Maquinaria','Bodegaje / Almacén',
+  ]},
+  { grupo:'🎉 Eventos & Entretenimiento', items:[
+    'Catering / Chef','Música / DJ / Entretenimiento',
+    'Decoración','Renta de mobiliario','Fotografía de evento',
+    'Coordinación de evento',
+  ]},
+  { grupo:'🌿 Naturaleza & Exterior', items:[
+    'Poda / Tala','Paisajismo','Riego / Aspersores',
+    'Tratamiento de suelo',
+  ]},
+  { grupo:'📋 General', items:[
+    'Overhead / Administrativo','Imprevistos','Otro',
+  ]},
+]
+
 // ─────────────────────────────────────────
 // Boot
 // ─────────────────────────────────────────
@@ -2604,15 +2652,24 @@ function renderAgenda(nodes) {
   const today  = new Date()
   const todayN = today.getDate()
 
+  // ── Filtrar por cuentas seleccionadas ────────────────────────
+  const accFilter = (n) => agendaPlanAccounts.size === 0 || agendaPlanAccounts.has(n.metadata?.account_id)
+  const subsF  = subs.filter(accFilter)
+  const billsF = bills.filter(accFilter)
+  const cardsF = cards.filter(accFilter)
+  const accLabel = agendaPlanAccounts.size === 0
+    ? 'todas las cuentas'
+    : `${agendaPlanAccounts.size} cuenta${agendaPlanAccounts.size!==1?'s':''}`
+
   // ── KPIs ─────────────────────────────────────────────────────
-  const totalSubs  = subs.reduce((s, n) => s + (n.metadata?.amount || 0), 0)
-  const totalBills = bills.filter(b => !b.metadata?.paid).reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const totalSubs  = subsF.reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const totalBills = billsF.filter(b => !b.metadata?.paid).reduce((s, n) => s + (n.metadata?.amount || 0), 0)
   const totalFixed = totalSubs + totalBills
   const kpis = [
-    { label:'Gasto fijo mensual', value:fmt$(totalFixed), color:'#fb923c' },
-    { label:'Suscripciones activas', value: subs.length, color:'#a78bfa' },
-    { label:'Tarjetas registradas', value: cards.length, color:'#60a5fa' },
-    { label:'Pagos pendientes', value: bills.filter(b => !b.metadata?.paid).length, color:'#f87171' },
+    { label:`Gasto fijo (${accLabel})`, value:fmt$(totalFixed), color:'#fb923c' },
+    { label:'Suscripciones activas', value: subsF.length, color:'#a78bfa' },
+    { label:'Tarjetas registradas', value: cardsF.length, color:'#60a5fa' },
+    { label:'Pagos pendientes', value: billsF.filter(b => !b.metadata?.paid).length, color:'#f87171' },
   ]
   const kpiEl = document.getElementById('agenda-kpis')
   if (kpiEl) kpiEl.innerHTML = kpis.map(k => `
@@ -5699,6 +5756,52 @@ window.savePayment = async () => {
 }
 
 // ═══════════════════════════════════════════════════════════
+// CATEGORY PICKER — Estandarización de categorías (Sprint 5A)
+// ═══════════════════════════════════════════════════════════
+
+window.openCategoryPicker = () => {
+  document.getElementById('cat-picker-search').value = ''
+  filterCategoryPicker('')
+  document.getElementById('category-picker-modal').classList.remove('hidden')
+}
+window.closeCategoryPicker = () => document.getElementById('category-picker-modal').classList.add('hidden')
+
+window.selectCategory = (cat) => {
+  cat = (cat||'').trim()
+  if (!cat) return
+  document.getElementById('cot-category').value = cat
+  document.getElementById('cot-category-text').textContent = cat
+  document.getElementById('cot-category-text').style.color = 'var(--text-primary)'
+  closeCategoryPicker()
+}
+
+window.filterCategoryPicker = (q = '') => {
+  const body = document.getElementById('cat-picker-body')
+  const ql = q.toLowerCase()
+  const current = document.getElementById('cot-category').value
+  body.innerHTML = CATEGORIAS_TRABAJO.map(grupo => {
+    const items = grupo.items.filter(i => !ql || i.toLowerCase().includes(ql))
+    if (!items.length) return ''
+    return `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:7px;letter-spacing:0.06em;">${esc(grupo.grupo)}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          ${items.map(item => {
+            const sel = item === current
+            return `<button onclick="selectCategory('${esc(item)}')"
+              style="font-size:12px;padding:4px 12px;border-radius:20px;cursor:pointer;transition:all 0.15s;
+                     background:${sel?'rgba(96,165,250,0.2)':'rgba(255,255,255,0.05)'};
+                     border:1px solid ${sel?'rgba(96,165,250,0.5)':'rgba(255,255,255,0.1)'};
+                     color:${sel?'#60a5fa':'var(--text-primary)'};font-weight:${sel?'700':'400'};">
+              ${esc(item)}
+            </button>`
+          }).join('')}
+        </div>
+      </div>`
+  }).join('')
+}
+
+// ═══════════════════════════════════════════════════════════
 // PROVEEDOR PICKER — "Contratar sin cotización" (Sprint 4C)
 // ═══════════════════════════════════════════════════════════
 
@@ -6047,13 +6150,13 @@ window.openCotizacionModal = (id = null, prefillProjectTag = '') => {
   document.getElementById('cot-status').value        = m.status || 'pendiente'
   document.getElementById('cot-project-tag').value  = m.project_tag || prefillProjectTag || ''
   document.getElementById('cot-notes').value         = m.notes || ''
+  const catVal = m.category || ''
   const catEl = document.getElementById('cot-category')
-  if (catEl) catEl.value = m.category || ''
-  // Populate category datalist with existing categories
-  const catDl = document.getElementById('cot-category-list')
-  if (catDl) {
-    const cats = [...new Set(allNodes.filter(n=>n.type==='cotizacion'&&n.metadata?.category).map(n=>n.metadata.category))]
-    catDl.innerHTML = cats.map(c=>`<option value="${esc(c)}">`).join('')
+  if (catEl) catEl.value = catVal
+  const catText = document.getElementById('cot-category-text')
+  if (catText) {
+    catText.textContent = catVal || 'Seleccionar...'
+    catText.style.color = catVal ? 'var(--text-primary)' : 'var(--text-muted)'
   }
   // Populate provider dropdown
   const provs = allNodes.filter(n => n.type === 'contact' && n.metadata?.cType === 'proveedor')

@@ -2217,6 +2217,25 @@
     </div>
   </div>
 
+  <!-- MODAL: CATEGORY PICKER ─────────────────────────────── -->
+  <div id="category-picker-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeCategoryPicker()">
+    <div class="modal-box" style="max-width:540px;max-height:80vh;display:flex;flex-direction:column;">
+      <div class="modal-header">
+        <h3 class="modal-title">🏷️ Categoría de trabajo</h3>
+        <button class="modal-close" onclick="closeCategoryPicker()">✕</button>
+      </div>
+      <input type="text" id="cat-picker-search" class="modal-input" placeholder="Buscar categoría..." oninput="filterCategoryPicker(this.value)" style="margin-bottom:12px;" />
+      <div id="cat-picker-body" style="overflow-y:auto;flex:1;"></div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+        <label class="modal-label">O escribe una categoría personalizada</label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="cat-custom-input" class="modal-input" placeholder="Ej: Albañilería especializada..." style="flex:1;" />
+          <button onclick="selectCategory(document.getElementById('cat-custom-input').value)" class="btn-primary" style="flex-shrink:0;">Usar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: PICKER PROVEEDOR (Sin cotización) ───────────── -->
   <div id="proveedor-picker-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeProveedorPicker()">
     <div class="modal-box" style="max-width:400px;">
@@ -2317,8 +2336,11 @@
         </div>
         <div class="modal-field" style="margin-bottom:0;">
           <label class="modal-label">Categoría</label>
-          <input type="text" id="cot-category" class="modal-input" list="cot-category-list" placeholder="Eléctrico, Civil, Mano de obra..." />
-          <datalist id="cot-category-list"></datalist>
+          <div id="cot-category-display" onclick="openCategoryPicker()" class="modal-input" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;min-height:38px;">
+            <span id="cot-category-text" style="color:var(--text-muted);font-size:13px;">Seleccionar...</span>
+            <span style="font-size:10px;color:var(--text-muted);">▼</span>
+          </div>
+          <input type="hidden" id="cot-category" />
         </div>
       </div>
       <div class="modal-field">
