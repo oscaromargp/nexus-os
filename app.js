@@ -1068,6 +1068,8 @@ function renderAll() {
   renderSemaforoCuentas()
   renderPulsoSemanal()
   checkHabitAlerts()
+  // Proyectos: re-render solo si la vista está activa (evita overhead en cada keystroke)
+  if (activeView === 'proyectos') renderProyectos()
   // Keep Fuse index in sync with allNodes
   if (typeof buildFuseIndex === 'function') buildFuseIndex()
 }
