@@ -2217,6 +2217,36 @@
     </div>
   </div>
 
+  <!-- MODAL: MIEMBRO DE PROYECTO ─────────────────────────── -->
+  <div id="member-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeMemberModal()">
+    <div class="modal-box" style="max-width:420px;">
+      <div class="modal-header">
+        <h3 class="modal-title">👤 Añadir miembro</h3>
+        <button class="modal-close" onclick="closeMemberModal()">✕</button>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Persona / Contacto</label>
+        <input type="text" id="member-search" class="modal-input" placeholder="Buscar contacto..." oninput="filterMemberSearch(this.value)" autocomplete="off" />
+        <div id="member-search-results" style="max-height:160px;overflow-y:auto;margin-top:6px;display:flex;flex-direction:column;gap:4px;"></div>
+        <input type="hidden" id="member-contact-id" />
+        <div id="member-selected-name" style="display:none;margin-top:8px;padding:8px 12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);border-radius:8px;font-size:13px;font-weight:600;color:#60a5fa;"></div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Rol en el proyecto</label>
+        <div id="member-role-picker" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+        <input type="hidden" id="member-role" value="colaborador" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Nota (opcional)</label>
+        <input type="text" id="member-notes" class="modal-input" placeholder="Ej: electricista principal, 50% del costo..." />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeMemberModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveMember()">Añadir al proyecto</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: CATEGORY PICKER ─────────────────────────────── -->
   <div id="category-picker-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeCategoryPicker()">
     <div class="modal-box" style="max-width:540px;max-height:80vh;display:flex;flex-direction:column;">

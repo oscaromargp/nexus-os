@@ -5842,6 +5842,110 @@ window.filterProveedorPicker = (q = '') => {
 }
 
 // ═══════════════════════════════════════════════════════════
+// PROJECT MEMBERS — Sprint 5B
+// ═══════════════════════════════════════════════════════════
+
+let memberProjectId = null
+let memberSelectedContactId = null
+
+window.openMemberModal = (projectId) => {
+  memberProjectId = projectId
+  memberSelectedContactId = null
+  document.getElementById('member-search').value = ''
+  document.getElementById('member-search-results').innerHTML = ''
+  document.getElementById('member-contact-id').value = ''
+  document.getElementById('member-selected-name').style.display = 'none'
+  document.getElementById('member-notes').value = ''
+  // Render role picker
+  const picker = document.getElementById('member-role-picker')
+  picker.innerHTML = MIEMBRO_ROLES.map((r, i) => `
+    <button onclick="selectMemberRole('${r.id}',this)"
+      data-role="${r.id}"
+      style="font-size:12px;padding:6px 12px;border-radius:8px;cursor:pointer;transition:all 0.15s;
+             background:${i===2?'rgba(96,165,250,0.15)':'rgba(255,255,255,0.05)'};
+             border:1px solid ${i===2?'rgba(96,165,250,0.4)':'rgba(255,255,255,0.1)'};
+             color:${i===2?'#60a5fa':'var(--text-muted)'};font-weight:${i===2?'700':'400'};"
+      title="${esc(r.desc)}">
+      ${esc(r.label)}
+    </button>`).join('')
+  document.getElementById('member-role').value = 'ejecutor'
+  document.getElementById('member-modal').classList.remove('hidden')
+}
+
+window.closeMemberModal = () => document.getElementById('member-modal').classList.add('hidden')
+
+window.selectMemberRole = (roleId, btn) => {
+  document.getElementById('member-role').value = roleId
+  document.querySelectorAll('#member-role-picker button').forEach(b => {
+    const sel = b.dataset.role === roleId
+    b.style.background = sel ? 'rgba(96,165,250,0.15)' : 'rgba(255,255,255,0.05)'
+    b.style.border = `1px solid ${sel?'rgba(96,165,250,0.4)':'rgba(255,255,255,0.1)'}`
+    b.style.color = sel ? '#60a5fa' : 'var(--text-muted)'
+    b.style.fontWeight = sel ? '700' : '400'
+  })
+}
+
+window.filterMemberSearch = (q = '') => {
+  const res = document.getElementById('member-search-results')
+  if (!q) { res.innerHTML = ''; return }
+  const contacts = allNodes.filter(n => n.type === 'contact' &&
+    (n.metadata?.name||n.content).toLowerCase().includes(q.toLowerCase()))
+  res.innerHTML = contacts.slice(0,8).map(c => {
+    const name = esc(c.metadata?.name || c.content)
+    const type = c.metadata?.cType || 'persona'
+    const clr = type === 'proveedor' ? '#fb923c' : '#60a5fa'
+    return `<div onclick="selectMemberContact('${c.id}','${name}')"
+      style="padding:8px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);"
+      onmouseenter="this.style.background='rgba(255,255,255,0.08)'"
+      onmouseleave="this.style.background='rgba(255,255,255,0.04)'">
+      <div style="width:28px;height:28px;border-radius:50%;background:${clr}20;color:${clr};display:grid;place-items:center;font-size:12px;font-weight:800;flex-shrink:0;">${name.charAt(0)}</div>
+      <div style="flex:1;">
+        <div style="font-size:13px;color:var(--text-primary);">${name}</div>
+        <div style="font-size:10px;color:var(--text-muted);">${type}</div>
+      </div>
+    </div>`
+  }).join('') || `<div style="padding:10px;text-align:center;color:var(--text-muted);font-size:12px;">Sin resultados — puedes crear el contacto primero</div>`
+}
+
+window.selectMemberContact = (id, name) => {
+  memberSelectedContactId = id
+  document.getElementById('member-contact-id').value = id
+  document.getElementById('member-search').value = ''
+  document.getElementById('member-search-results').innerHTML = ''
+  const sel = document.getElementById('member-selected-name')
+  sel.textContent = '✓ ' + name
+  sel.style.display = 'block'
+}
+
+window.saveMember = async () => {
+  const contactId = document.getElementById('member-contact-id').value
+  if (!contactId) { showToast('Selecciona un contacto primero'); return }
+  const role  = document.getElementById('member-role').value
+  const notes = document.getElementById('member-notes').value.trim()
+  const project = allNodes.find(n => n.id === memberProjectId)
+  if (!project) return
+  const members = project.metadata.members || []
+  members.push({ contact_id: contactId, role, notes: notes || undefined, added_at: new Date().toISOString() })
+  project.metadata = { ...project.metadata, members }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ metadata: project.metadata }).eq('id', memberProjectId)
+  closeMemberModal()
+  openProjectDashboard(memberProjectId)
+  showToast('Miembro añadido al proyecto')
+}
+
+window.removeMember = async (projectId, contactId) => {
+  if (!confirm('¿Quitar este miembro del proyecto?')) return
+  const project = allNodes.find(n => n.id === projectId)
+  if (!project) return
+  project.metadata = { ...project.metadata, members: (project.metadata.members||[]).filter(m => m.contact_id !== contactId) }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ metadata: project.metadata }).eq('id', projectId)
+  openProjectDashboard(projectId)
+  showToast('Miembro eliminado')
+}
+
+// ═══════════════════════════════════════════════════════════
 // PROYECTOS — Vista Dedicada (Sprint 4B)
 // ═══════════════════════════════════════════════════════════
 
@@ -5942,6 +6046,21 @@ function renderProjectCard(p) {
           <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">Pendiente</div>
         </div>
       </div>
+      <!-- Avatar stack del equipo -->
+      ${(() => {
+        const members = m.members || []
+        if (!members.length) return ''
+        const avatars = members.slice(0,5).map(mb => {
+          const c = allNodes.find(n => n.id === mb.contact_id)
+          const name = c ? (c.metadata?.name||c.content) : '?'
+          const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
+          const rolCfg2 = { financiador:'#f59e0b', administrador:'#60a5fa', ejecutor:'#fb923c', supervisor:'#a78bfa', colaborador:'#4ade80' }
+          const clr = rolCfg2[mb.role] || '#94a3b8'
+          return `<div style="width:26px;height:26px;border-radius:50%;background:${clr}20;color:${clr};border:2px solid var(--surface);display:grid;place-items:center;font-size:10px;font-weight:800;margin-right:-8px;" title="${esc(name)}">${initials}</div>`
+        }).join('')
+        const extra = members.length > 5 ? `<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,0.06);color:var(--text-muted);border:2px solid var(--surface);display:grid;place-items:center;font-size:9px;font-weight:700;margin-right:-8px;">+${members.length-5}</div>` : ''
+        return `<div style="display:flex;align-items:center;margin-bottom:10px;">${avatars}${extra}</div>`
+      })()}
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
         ${cots.length ? `<span style="font-size:11px;color:var(--text-muted);">📄 ${cots.length} cotización${cots.length!==1?'es':''} (${aceptadas.length} aceptada${aceptadas.length!==1?'s':''})</span>` : ''}
         ${taskCount ? `<span style="font-size:11px;color:var(--text-muted);">✅ ${taskCount} tarea${taskCount!==1?'s':''}</span>` : ''}
@@ -6023,6 +6142,55 @@ window.openProjectDashboard = (projectId) => {
       </div>
 
       ${overBudget ? `<div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;"><span style="font-size:18px;">⚠️</span><div><div style="font-size:13px;font-weight:700;color:#f87171;">Presupuesto excedido</div><div style="font-size:12px;color:var(--text-muted);">Comprometido $${comprometido.toLocaleString('es-MX')} / Presupuesto $${budget.toLocaleString('es-MX')}</div></div></div>` : ''}
+
+      <!-- Equipo del proyecto -->
+      ${(() => {
+        const members = m.members || []
+        if (!members.length) return `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:20px;display:flex;align-items:center;gap:14px;">
+            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">👥 EQUIPO</div>
+            <button onclick="openMemberModal('${p.id}')" style="font-size:12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:4px 12px;cursor:pointer;">+ Añadir persona</button>
+          </div>`
+        const roleOrder = ['financiador','administrador','supervisor','ejecutor','colaborador']
+        const grouped = {}
+        members.forEach(mb => {
+          const k = mb.role || 'colaborador'
+          if (!grouped[k]) grouped[k] = []
+          grouped[k].push(mb)
+        })
+        const roleCfg = { financiador:{label:'💰 Financiador',color:'#f59e0b'}, administrador:{label:'🗂️ Admin',color:'#60a5fa'}, ejecutor:{label:'🔧 Ejecutor',color:'#fb923c'}, supervisor:{label:'👁️ Supervisor',color:'#a78bfa'}, colaborador:{label:'🤝 Colaborador',color:'#4ade80'} }
+        return `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+              <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">👥 EQUIPO (${members.length})</div>
+              <button onclick="openMemberModal('${p.id}')" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
+            </div>
+            ${roleOrder.filter(r=>grouped[r]).map(role => {
+              const cfg = roleCfg[role] || {label:role,color:'#94a3b8'}
+              return `
+                <div style="margin-bottom:12px;">
+                  <div style="font-size:10px;font-weight:700;color:${cfg.color};margin-bottom:8px;">${cfg.label}</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    ${grouped[role].map(mb => {
+                      const c = allNodes.find(n => n.id === mb.contact_id)
+                      const name = c ? (c.metadata?.name||c.content) : 'Sin nombre'
+                      const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
+                      const isProv = c?.metadata?.cType === 'proveedor'
+                      return `<div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:7px 12px;position:relative;" title="${esc(mb.notes||'')}">
+                        <div style="width:28px;height:28px;border-radius:50%;background:${cfg.color}20;color:${cfg.color};display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;">${initials}</div>
+                        <div>
+                          <div style="font-size:12px;font-weight:600;color:var(--text-primary);">${esc(name)}</div>
+                          ${mb.notes?`<div style="font-size:10px;color:var(--text-muted);">${esc(mb.notes)}</div>`:''}
+                        </div>
+                        ${isProv?`<button onclick="openPaymentModal('${mb.contact_id}',null,'${tagStr[0]||''}')" style="font-size:10px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:5px;padding:2px 7px;cursor:pointer;flex-shrink:0;">💸</button>`:''}
+                        <button onclick="removeMember('${p.id}','${mb.contact_id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0;" title="Quitar">×</button>
+                      </div>`
+                    }).join('')}
+                  </div>
+                </div>`
+            }).join('')}
+          </div>`
+      })()}
 
       <!-- 5-metric panel -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
