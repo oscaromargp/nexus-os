@@ -5495,7 +5495,7 @@ let paymentContactId = null
 let paymentRating    = 0
 let paySplitCount    = 0
 
-window.openPaymentModal = (contactId, serviceId = null) => {
+window.openPaymentModal = (contactId, serviceId = null, projectTag = '') => {
   paymentContactId = contactId
   paymentRating    = 0
   paySplitCount    = 0
@@ -5525,8 +5525,8 @@ window.openPaymentModal = (contactId, serviceId = null) => {
   const selSvc = services.find(s => s.id === serviceId)
   document.getElementById('pay-total').value = selSvc?.price || ''
 
-  // Reset fields
-  document.getElementById('pay-project-tag').value   = ''
+  // Reset fields (project-tag pre-filled if coming from anticipo)
+  document.getElementById('pay-project-tag').value   = projectTag || ''
   document.getElementById('pay-quality-note').value  = ''
   document.querySelectorAll('#pay-stars [data-star]').forEach(s => s.style.opacity = '0.3')
 
@@ -5671,12 +5671,15 @@ window.savePayment = async () => {
     tags,
   }
 
+  let savedPayId = null
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
-    allNodes.unshift({ id: 'pay_'+Date.now(), type:'expense', content:label, metadata:meta, created_at:new Date().toISOString() })
+    savedPayId = 'pay_'+Date.now()
+    allNodes.unshift({ id: savedPayId, type:'expense', content:label, metadata:meta, created_at:new Date().toISOString() })
   } else {
     const { data } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'expense', content:label, metadata:meta }).select()
-    if (data?.[0]) allNodes.unshift(data[0])
+    if (data?.[0]) { allNodes.unshift(data[0]); savedPayId = data[0].id }
   }
+  if (savedPayId && projTag) await autoLinkToProject(savedPayId, projTag)
   closePaymentModal()
   renderAll()
   showToast(`Pago de $${total.toLocaleString('es-MX')} registrado`)
@@ -5698,6 +5701,14 @@ window.openCotizacionModal = (id = null) => {
   document.getElementById('cot-status').value        = m.status || 'pendiente'
   document.getElementById('cot-project-tag').value  = m.project_tag || ''
   document.getElementById('cot-notes').value         = m.notes || ''
+  const catEl = document.getElementById('cot-category')
+  if (catEl) catEl.value = m.category || ''
+  // Populate category datalist with existing categories
+  const catDl = document.getElementById('cot-category-list')
+  if (catDl) {
+    const cats = [...new Set(allNodes.filter(n=>n.type==='cotizacion'&&n.metadata?.category).map(n=>n.metadata.category))]
+    catDl.innerHTML = cats.map(c=>`<option value="${esc(c)}">`).join('')
+  }
   // Populate provider dropdown
   const provs = allNodes.filter(n => n.type === 'contact' && n.metadata?.cType === 'proveedor')
   const sel = document.getElementById('cot-provider')
@@ -5709,14 +5720,30 @@ window.openCotizacionModal = (id = null) => {
 
 window.closeCotizacionModal = () => document.getElementById('cotizacion-modal').classList.add('hidden')
 
+// ── Helper: vínculo duro cotización/pago → proyecto ──────────────────────────
+async function autoLinkToProject(nodeId, projectTag) {
+  if (!projectTag) return
+  const project = allNodes.find(n =>
+    n.type === 'proyecto' &&
+    (n.metadata?.tags || []).some(t => t.replace(/^#/,'').toLowerCase() === projectTag.toLowerCase())
+  )
+  if (!project) return
+  const linked = project.metadata.linkedTo || []
+  if (linked.includes(nodeId)) return
+  project.metadata = { ...project.metadata, linkedTo: [...linked, nodeId] }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ metadata: project.metadata }).eq('id', project.id)
+}
+
 window.saveCotizacion = async () => {
   const label = document.getElementById('cot-label').value.trim()
   if (!label) { showToast('La descripción es obligatoria'); return }
-  const projTag = document.getElementById('cot-project-tag').value.trim().toLowerCase()
+  const projTag  = document.getElementById('cot-project-tag').value.trim().toLowerCase()
+  const category = document.getElementById('cot-category')?.value.trim() || undefined
   const tags = ['#cotizacion']
   if (projTag) tags.push('#' + projTag)
   const meta = {
-    label,
+    label, category,
     amount:      parseFloat(document.getElementById('cot-amount').value) || 0,
     status:      document.getElementById('cot-status').value,
     provider_id: document.getElementById('cot-provider').value || undefined,
@@ -5724,6 +5751,7 @@ window.saveCotizacion = async () => {
     notes:       document.getElementById('cot-notes').value.trim() || undefined,
     tags,
   }
+  let savedId = currentCotizacionId
   if (currentCotizacionId) {
     const node = allNodes.find(n => n.id === currentCotizacionId)
     if (node) { node.content = label; node.metadata = meta }
@@ -5731,12 +5759,14 @@ window.saveCotizacion = async () => {
       await supabase.from('nodes').update({ content:label, metadata:meta }).eq('id', currentCotizacionId)
   } else {
     if (localStorage.getItem('nexus_admin_bypass') === 'true') {
-      allNodes.unshift({ id:Math.random().toString(36).substr(2,9), type:'cotizacion', content:label, metadata:meta, created_at:new Date().toISOString() })
+      const tmpNode = { id:Math.random().toString(36).substr(2,9), type:'cotizacion', content:label, metadata:meta, created_at:new Date().toISOString() }
+      allNodes.unshift(tmpNode); savedId = tmpNode.id
     } else {
       const { data } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'cotizacion', content:label, metadata:meta }).select()
-      if (data?.[0]) allNodes.unshift(data[0])
+      if (data?.[0]) { allNodes.unshift(data[0]); savedId = data[0].id }
     }
   }
+  await autoLinkToProject(savedId, projTag)
   closeCotizacionModal()
   renderAll()
   showToast(`Cotización "${label}" guardada`)
@@ -5757,9 +5787,32 @@ window.changeCotizacionStatus = async (id, status) => {
   node.metadata = { ...node.metadata, status }
   if (localStorage.getItem('nexus_admin_bypass') !== 'true')
     await supabase.from('nodes').update({ metadata:node.metadata }).eq('id', id)
+  // Auto-link to project when accepting
+  if (status === 'aceptada' && node.metadata.project_tag) {
+    await autoLinkToProject(id, node.metadata.project_tag)
+  }
   renderAll()
   const msgs = { aceptada:'✅ Cotización aceptada', rechazada:'❌ Cotización rechazada', pendiente:'⏳ Pendiente' }
   showToast(msgs[status] || 'Estado actualizado')
+  // Anticipo prompt when accepting
+  if (status === 'aceptada') {
+    const prov = node.metadata.provider_id ? allNodes.find(n => n.id === node.metadata.provider_id) : null
+    const amt  = node.metadata.amount || 0
+    setTimeout(() => {
+      const banner = document.createElement('div')
+      banner.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1e293b;border:1px solid rgba(74,222,128,0.4);border-radius:12px;padding:14px 20px;display:flex;align-items:center;gap:14px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.5);max-width:420px;width:90%;'
+      banner.innerHTML = `
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;color:#4ade80;">✅ Cotización aceptada</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:2px;">¿Registrar anticipo o pago inicial${prov?` a ${esc(prov.metadata?.name||prov.content)}`:''} ($${amt.toLocaleString('es-MX')})?</div>
+        </div>
+        <button onclick="this.closest('div[style]').remove()" style="background:transparent;border:1px solid rgba(148,163,184,0.3);color:#94a3b8;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:11px;flex-shrink:0;">Ahora no</button>
+        ${prov ? `<button onclick="this.closest('div[style]').remove();openPaymentModal('${prov.id}',null,'${node.metadata.project_tag||''}')" style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.4);color:#4ade80;border-radius:6px;padding:4px 12px;cursor:pointer;font-size:11px;font-weight:600;flex-shrink:0;">💸 Pagar</button>` : ''}
+      `
+      document.body.appendChild(banner)
+      setTimeout(() => { banner.style.transition='opacity 0.5s'; banner.style.opacity='0'; setTimeout(()=>banner.remove(),500) }, 10000)
+    }, 500)
+  }
 }
 
 // ═══════════════════════════════════════════════════════════

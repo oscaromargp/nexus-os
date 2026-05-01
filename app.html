@@ -2278,9 +2278,16 @@
         <label class="modal-label">Proveedor</label>
         <select id="cot-provider" class="modal-input"><option value="">Sin proveedor</option></select>
       </div>
-      <div class="modal-field">
-        <label class="modal-label">Proyecto / Etiqueta (sin #)</label>
-        <input type="text" id="cot-project-tag" class="modal-input" placeholder="Ej: casatulum, paneles, tulum2026" />
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Proyecto / Etiqueta (sin #)</label>
+          <input type="text" id="cot-project-tag" class="modal-input" placeholder="casatulum, tulum2026" />
+        </div>
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Categoría</label>
+          <input type="text" id="cot-category" class="modal-input" list="cot-category-list" placeholder="Eléctrico, Civil, Mano de obra..." />
+          <datalist id="cot-category-list"></datalist>
+        </div>
       </div>
       <div class="modal-field">
         <label class="modal-label">Condiciones / Notas</label>
