@@ -200,6 +200,19 @@ loadSystemSettings()
   updateOfflineBar()
 })()
 
+// ── Global error handler — toast en pantalla en vez de crash silencioso ─────────
+window.onerror = (msg, _src, line, _col, err) => {
+  const text = (err?.message || String(msg)).slice(0, 120)
+  console.error('[nexus:error]', text, 'línea', line)
+  showToast(`⚠️ ${text}`)
+  return false
+}
+window.onunhandledrejection = (e) => {
+  const text = (e.reason?.message || String(e.reason)).slice(0, 120)
+  console.error('[nexus:rejection]', text)
+  showToast(`⚠️ ${text}`)
+}
+
 function setupRealtimeSubscription() {
   supabase
     .channel('public:nodes')
@@ -1142,29 +1155,43 @@ function getFilteredNodes() {
 window.setTypeFilter = (type) => { activeTypeFilter = activeTypeFilter === type ? null : type; renderAll() }
 window.toggleFeedGroup = () => { feedGrouped = !feedGrouped; renderAll() }
 
+// ── Mapa de renders por vista — lazy render (Phase C) ───────────────────────────
+const VIEW_RENDER_MAP = {
+  feed:      (nodes) => { renderFeed(nodes); renderFilterBar(); renderSemaforoCuentas(); renderPulsoSemanal() },
+  kanban:    (nodes) => renderKanban(nodes),
+  notes:     (nodes) => renderNotes(nodes),
+  finance:   (nodes) => renderFinance(nodes),
+  calendar:  (nodes) => renderCalendar(nodes),
+  cronica:   (nodes) => renderCronica(nodes),
+  contacts:  ()      => renderContacts(),
+  agenda:    ()      => renderAgenda(allNodes),
+  proyectos: ()      => renderProyectos(),
+}
+
 function renderAll() {
-  // Fix 5: safe wrapper — un fallo en una vista no bloquea las demás
+  // safe wrapper — un fallo en una sección no bloquea las demás
   const safe = (fn, ...args) => {
-    try { fn(...args) } catch (e) { console.warn('[renderAll] fallo en', fn.name || fn, e) }
+    try { fn(...args) } catch (e) { console.warn('[renderAll]', fn.name || '?', e) }
   }
   const nodes = getFilteredNodes()
+  // Siempre: stats globales, alertas, búsqueda
   safe(updateStats, nodes)
-  safe(renderFeed, nodes)
-  safe(renderKanban, nodes)
-  safe(renderNotes, nodes)
-  safe(renderFinance, nodes)
-  safe(renderCalendar, nodes)
-  safe(renderCronica, nodes)
-  safe(renderContacts)
-  safe(renderAgenda, allNodes)
-  safe(renderFilterBar)
+  safe(checkHabitAlerts)
+  if (typeof buildFuseIndex === 'function') safe(buildFuseIndex)
+  // Feed siempre: semáforo y pulso son widgets del panel principal
   safe(renderSemaforoCuentas)
   safe(renderPulsoSemanal)
-  safe(checkHabitAlerts)
-  // Proyectos: re-render solo si la vista está activa (evita overhead en cada keystroke)
-  if (activeView === 'proyectos') safe(renderProyectos)
-  // Keep Fuse index in sync with allNodes
-  if (typeof buildFuseIndex === 'function') safe(buildFuseIndex)
+  // Lazy: solo renderiza la vista activa
+  const viewFn = VIEW_RENDER_MAP[activeView]
+  if (viewFn) safe(viewFn, nodes)
+  else {
+    // Fallback: render todas las vistas conocidas para vistas no mapeadas (tags, herramientas…)
+    safe(renderFeed, nodes); safe(renderFilterBar)
+    safe(renderKanban, nodes); safe(renderNotes, nodes)
+    safe(renderFinance, nodes); safe(renderCalendar, nodes)
+    safe(renderCronica, nodes); safe(renderContacts)
+    safe(renderAgenda, allNodes)
+  }
 }
 
 function renderFilterBar() {
@@ -3192,9 +3219,12 @@ window.switchView = function(viewName) {
   const target = document.getElementById(`view-${viewName}`)
   if (target) target.classList.add('active')
   activeView = viewName
-  // Render on-demand views
-  if (viewName === 'tags') { window.renderTagsView(); window.renderHabitosSection() }
-  if (viewName === 'proyectos') renderProyectos()
+  // Lazy render — dispara el render de la nueva vista activa
+  const nodes = getFilteredNodes()
+  const viewFn = VIEW_RENDER_MAP[viewName]
+  if (viewFn) { try { viewFn(nodes) } catch(e) { console.warn('[switchView]', e) } }
+  // Vistas especiales no en el mapa
+  if (viewName === 'tags') { window.renderTagsView?.(); window.renderHabitosSection?.() }
   // Crónica legacy → redirige a Tiempo tab Pasado
   if (viewName === 'cronica') { switchView('calendar'); switchTiempoTab('pasado'); return }
 }
@@ -6204,44 +6234,40 @@ function renderProjectCard(p) {
     </div>`
 }
 
-window.openProjectDashboard = (projectId) => {
+// ── Helpers de cómputo del dashboard de proyecto ────────────────────────────────
+function _computeProjData(projectId) {
   const p = allNodes.find(n => n.id === projectId)
-  if (!p) return
+  if (!p) return null
   const m = p.metadata || {}
   const budget = m.budget || 0
   const rol = m.rol || 'dueño'
   const rolCfg = { dueño:{label:'👑 Dueño',color:'#f59e0b'}, ejecutor:{label:'⚙️ Ejecutor',color:'#60a5fa'}, colaborador:{label:'🤝 Colaborador',color:'#a78bfa'} }
   const rCfg = rolCfg[rol] || rolCfg.dueño
 
-  // Gather linked nodes (hard + soft via project_tag)
   const linkedIds = m.linkedTo || []
   const linked = linkedIds.map(id => allNodes.find(n => n.id === id)).filter(Boolean)
   const tagStr = (m.tags||[]).filter(t=>t.startsWith('#')).map(t=>t.slice(1).toLowerCase())
-  // projSlug: el slug real (no 'proyecto') para pasar a cotizaciones y pagos
   const projSlug = m.project_slug || tagStr.find(t => t !== 'proyecto') || tagStr[0] || ''
   const byTag = projSlug ? allNodes.filter(n => {
     if (!(n.type==='cotizacion'||n.type==='expense'||n.type==='gasto'||n.type==='tarea')) return false
-    const pt  = (n.metadata?.project_tag||'').toLowerCase()
-    const nt  = (n.metadata?.tags||[]).map(t => t.toLowerCase())
-    // Soft-link: project_tag match OR any node tag matches projSlug (gastos tagueados con #slug)
+    const pt = (n.metadata?.project_tag||'').toLowerCase()
+    const nt = (n.metadata?.tags||[]).map(t => t.toLowerCase())
     return pt === projSlug || tagStr.some(s => s !== 'proyecto' && pt === s) || nt.includes('#' + projSlug)
   }) : []
   const allLinked = [...new Map([...linked,...byTag].map(n=>[n.id,n])).values()]
 
-  // 5-metric computation
-  const cots = allLinked.filter(n => n.type === 'cotizacion')
-  const aceptadas = cots.filter(n => n.metadata?.status === 'aceptada')
-  const pendientes = cots.filter(n => n.metadata?.status === 'pendiente')
-  const comprometido = aceptadas.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
-  const pagos = allLinked.filter(n => n.type==='expense'||n.type==='gasto')
-  const pagado = pagos.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
-  const pendientePago = Math.max(0, comprometido - pagado)
-  const sinComprometer = Math.max(0, budget - comprometido)
-  const overBudget = comprometido > budget && budget > 0
-  const pct = budget > 0 ? Math.min(100, Math.round((comprometido/budget)*100)) : 0
-  const gaugeColor = overBudget ? '#f87171' : pct > 75 ? '#fb923c' : '#4ade80'
+  const cots        = allLinked.filter(n => n.type === 'cotizacion')
+  const aceptadas   = cots.filter(n => n.metadata?.status === 'aceptada')
+  const pendientes  = cots.filter(n => n.metadata?.status === 'pendiente')
+  const comprometido= aceptadas.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
+  const pagos       = allLinked.filter(n => n.type==='expense'||n.type==='gasto')
+  const pagado      = pagos.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
+  const pendientePago   = Math.max(0, comprometido - pagado)
+  const sinComprometer  = Math.max(0, budget - comprometido)
+  const overBudget  = comprometido > budget && budget > 0
+  const pct         = budget > 0 ? Math.min(100, Math.round((comprometido/budget)*100)) : 0
+  const gaugeColor  = overBudget ? '#f87171' : pct > 75 ? '#fb923c' : '#4ade80'
 
-  // Group cotizaciones by category
   const cotsByCat = {}
   cots.forEach(c => {
     const cat = c.metadata?.category || 'Sin categoría'
@@ -6249,7 +6275,6 @@ window.openProjectDashboard = (projectId) => {
     cotsByCat[cat].push(c)
   })
 
-  // Proveedores contratados (from aceptadas with provider_id)
   const provMap = {}
   aceptadas.forEach(c => {
     if (!c.metadata?.provider_id) return
@@ -6261,10 +6286,24 @@ window.openProjectDashboard = (projectId) => {
     if (pid && provMap[pid]) provMap[pid].pagos.push(g)
   })
 
-  // Tareas
   const tareas = allLinked.filter(n => n.type==='tarea'||n.type==='task')
 
+  return { p, m, budget, rol, rCfg, tagStr, projSlug, allLinked,
+           cots, aceptadas, pendientes, comprometido, pagos, pagado,
+           pendientePago, sinComprometer, overBudget, pct, gaugeColor,
+           cotsByCat, provMap, tareas }
+}
+
+window.openProjectDashboard = (projectId) => {
+  const d = _computeProjData(projectId)
+  if (!d) return
+  const { p, m, budget, rCfg, tagStr, projSlug, allLinked,
+          cots, aceptadas, pendientes, comprometido, pagos, pagado,
+          pendientePago, sinComprometer, overBudget, pct, gaugeColor,
+          cotsByCat, provMap, tareas } = d
+
   const root = document.getElementById('proyectos-root')
+  const _safe = (fn, fallback = '') => { try { return fn() } catch(e) { console.warn('[dash]', e); return fallback } }
   root.innerHTML = `
     <div style="padding:20px 24px;">
       <!-- Back + header -->
@@ -6285,7 +6324,7 @@ window.openProjectDashboard = (projectId) => {
       ${overBudget ? `<div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;"><span style="font-size:18px;">⚠️</span><div><div style="font-size:13px;font-weight:700;color:#f87171;">Presupuesto excedido</div><div style="font-size:12px;color:var(--text-muted);">Comprometido $${comprometido.toLocaleString('es-MX')} / Presupuesto $${budget.toLocaleString('es-MX')}</div></div></div>` : ''}
 
       <!-- Equipo del proyecto -->
-      ${(() => {
+      ${_safe(() => {
         const members = m.members || []
         if (!members.length) return `
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:20px;display:flex;align-items:center;gap:14px;">
@@ -6384,7 +6423,7 @@ window.openProjectDashboard = (projectId) => {
       </div>` : ''}
 
       <!-- Pagos Fijos del proyecto -->
-      ${(() => {
+      ${_safe(() => {
         const CATS_PAGO = ['Agua','Luz / Electricidad','Gas','Internet','Teléfono','Jardinero','Alberca / Piscina','Seguridad','Mantenimiento','Renta','Otro servicio fijo']
         const pagosFijos = allNodes.filter(n =>
           (n.type==='bill'||n.type==='subscription') &&
@@ -6469,7 +6508,7 @@ window.openProjectDashboard = (projectId) => {
       </div>
 
       <!-- Materiales / Compras (pagos sin proveedor de servicio) -->
-      ${(() => {
+      ${_safe(() => {
         const materiales = pagos.filter(g => !g.metadata?.service_id && !provMap[g.metadata?.contact_id])
         if (!materiales.length) return ''
         const totalMat = materiales.reduce((s,g)=>s+(+g.metadata?.amount||0),0)
@@ -6534,13 +6573,17 @@ window.openCotizacionModal = (id = null, prefillProjectTag = '') => {
 window.closeCotizacionModal = () => document.getElementById('cotizacion-modal').classList.add('hidden')
 
 // ── Helper: vínculo duro cotización/pago → proyecto ──────────────────────────
-async function autoLinkToProject(nodeId, projectTag) {
+async function autoLinkToProject(nodeId, projectTag, _retry = 0) {
   if (!projectTag) return
   const project = allNodes.find(n =>
     n.type === 'proyecto' &&
     (n.metadata?.tags || []).some(t => t.replace(/^#/,'').toLowerCase() === projectTag.toLowerCase())
   )
-  if (!project) return
+  if (!project) {
+    // Retry una vez tras 400ms — cubre el caso donde loadNodes no terminó aún
+    if (_retry === 0) setTimeout(() => autoLinkToProject(nodeId, projectTag, 1), 400)
+    return
+  }
   const linked = project.metadata.linkedTo || []
   if (linked.includes(nodeId)) return
   project.metadata = { ...project.metadata, linkedTo: [...linked, nodeId] }
