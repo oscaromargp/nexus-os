@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/versión-2.14-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/versión-2.15-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/estado-activo-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Vercel"/>
   <img src="https://img.shields.io/badge/PRs-welcome-orange?style=for-the-badge" alt="PRs"/>
