@@ -995,6 +995,33 @@
 }
 .modal-box.fullscreen .modal-actions { flex-shrink: 0; }
 
+    /* ── QuickCreate ── */
+    .qc-type-btn {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; padding: 14px 8px; background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+      cursor: pointer; color: var(--text-secondary); font-size: 12px;
+      font-weight: 700; font-family: inherit; transition: all 0.15s; line-height: 1.2;
+    }
+    .qc-type-btn:hover { background: rgba(0,246,255,0.08); border-color: rgba(0,246,255,0.3); color: #00f6ff; }
+    .qc-type-btn span.qc-icon { font-size: 20px; }
+    .qc-back-btn {
+      display: flex; align-items: center; gap: 6px; background: none; border: none;
+      color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 0 0 16px 0;
+      font-family: inherit; opacity: 0.7; transition: opacity 0.15s;
+    }
+    .qc-back-btn:hover { opacity: 1; color: var(--accent-cyan); }
+    .qc-ctx-btn {
+      background: rgba(0,246,255,0.06); border: 1px solid rgba(0,246,255,0.2);
+      border-radius: 9px; color: var(--accent-cyan); padding: 7px 14px;
+      cursor: pointer; font-size: 12px; font-weight: 700; font-family: inherit;
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .qc-ctx-btn:hover { background: rgba(0,246,255,0.12); }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .modal-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; padding: 2px 6px; border-radius: 6px; line-height: 1; }
+    .modal-close:hover { background: rgba(255,255,255,0.06); color: #fff; }
+
     @media print {
       nav#sidebar, aside#widgets-sidebar, #spotlight-container { display: none !important; }
       #nexus-layout { grid-template-columns: 1fr !important; grid-template-areas: "main" !important; }
@@ -1048,7 +1075,10 @@
 
     <!-- MURO TÁCTICO (TRELLO RECONSTRUCTION) -->
     <div id="view-kanban" class="view-section">
-      <div class="view-header"><h1 class="view-title">Planificación Operativa</h1></div>
+      <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <h1 class="view-title">Planificación Operativa</h1>
+        <button onclick="openQuickCreate('kanban')" class="qc-ctx-btn">+ Nueva tarea</button>
+      </div>
       <div id="kanban-root" class="kanban-board">
         <!-- Generado por JS -->
       </div>
@@ -1056,7 +1086,13 @@
 
     <!-- BIO-FINANZAS -->
     <div id="view-finance" class="view-section">
-      <div class="view-header"><h1 class="view-title">Status Financiero</h1></div>
+      <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <h1 class="view-title">Status Financiero</h1>
+        <div style="display:flex;gap:8px;">
+          <button onclick="openQuickCreate('expense')" class="qc-ctx-btn" style="color:#f87171;border-color:rgba(248,113,113,0.25);background:rgba(248,113,113,0.06);">- Gasto</button>
+          <button onclick="openQuickCreate('income')" class="qc-ctx-btn" style="color:#4ade80;border-color:rgba(74,222,128,0.25);background:rgba(74,222,128,0.06);">+ Ingreso</button>
+        </div>
+      </div>
       <div class="finance-hero">
         <span id="dominance-label" style="font-size: 12px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.3em; font-weight: 700;">Balance Neto Consolidado</span>
         <div id="dominance-balance">$0</div>
@@ -1142,6 +1178,10 @@
 
     <!-- ════ PROYECTOS ════ -->
     <div id="view-proyectos" class="view-section">
+      <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <h1 class="view-title">Proyectos Activos</h1>
+        <button onclick="openQuickCreate('proyecto')" class="qc-ctx-btn">+ Nuevo Proyecto</button>
+      </div>
       <div id="proyectos-root"></div>
     </div>
 
@@ -1204,9 +1244,118 @@
       </div>
 
       <!-- Pagos fijos / Bills -->
-      <div>
+      <div style="margin-bottom:28px;">
         <h3 style="font-size:14px;font-weight:800;color:#fb923c;margin-bottom:12px;">📋 Pagos Fijos del Mes</h3>
         <div id="agenda-bills" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+
+      <!-- ══════ PORTAFOLIO CRYPTO ══════ -->
+      <div id="crypto-portfolio-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+          <h3 style="font-size:14px;font-weight:800;color:#a78bfa;">💎 Portafolio Crypto</h3>
+          <div style="display:flex;gap:8px;">
+            <button onclick="openCryptoPurchaseModal()" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.3);border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;color:#a78bfa;cursor:pointer;font-family:inherit;">+ Registrar compra</button>
+          </div>
+        </div>
+
+        <!-- KPI summary row -->
+        <div id="crypto-kpi-row" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px;"></div>
+
+        <!-- Per-coin table -->
+        <div class="settings-card" style="padding:0;overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;" id="crypto-coins-table">
+            <thead>
+              <tr style="background:rgba(255,255,255,0.03);">
+                <th style="text-align:left;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;letter-spacing:.06em;">MONEDA</th>
+                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;">HOLDINGS</th>
+                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;">INVERTIDO</th>
+                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;">VALOR ACTUAL</th>
+                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;">GANANCIA/PÉRD.</th>
+                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;width:40px;"></th>
+              </tr>
+            </thead>
+            <tbody id="crypto-coins-body">
+              <tr><td colspan="6" style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px;">Sin compras registradas — haz clic en <strong style="color:#a78bfa;">+ Registrar compra</strong> para comenzar</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Historial de compras (colapsable) -->
+        <details style="margin-top:16px;">
+          <summary style="font-size:13px;font-weight:700;color:var(--text-muted);cursor:pointer;padding:8px 0;user-select:none;">📋 Historial de compras</summary>
+          <div id="crypto-history" style="margin-top:12px;display:flex;flex-direction:column;gap:6px;"></div>
+        </details>
+      </div>
+    </div>
+
+    <!-- MODAL: CRYPTO PURCHASE -->
+    <div id="crypto-purchase-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeCryptoPurchaseModal()" style="z-index:9500;">
+      <div class="modal-box" style="max-width:420px;">
+        <div class="modal-header">
+          <h3 class="modal-title" style="margin-bottom:0;">💎 Registrar compra crypto</h3>
+          <button class="modal-close" onclick="closeCryptoPurchaseModal()">✕</button>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label">Moneda</label>
+          <select id="cp-coin" class="modal-input">
+            <option value="XRP">XRP (Ripple)</option>
+            <option value="BTC">BTC (Bitcoin)</option>
+            <option value="ETH">ETH (Ethereum)</option>
+            <option value="USDT">USDT (Tether)</option>
+            <option value="SOL">SOL (Solana)</option>
+            <option value="MANA">MANA (Decentraland)</option>
+            <option value="ADA">ADA (Cardano)</option>
+            <option value="OTRO">Otra moneda...</option>
+          </select>
+        </div>
+        <div id="cp-coin-custom-wrap" style="display:none;" class="modal-field">
+          <label class="modal-label">Símbolo de la moneda</label>
+          <input id="cp-coin-custom" class="modal-input" placeholder="Ej: DOGE, LINK, UNI..." style="text-transform:uppercase;" />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="modal-field">
+            <label class="modal-label">Fecha de compra</label>
+            <input id="cp-date" type="date" class="modal-input" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Pesos invertidos ($)</label>
+            <input id="cp-pesos" type="number" min="0" step="0.01" class="modal-input" placeholder="100" />
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="modal-field">
+            <label class="modal-label">Monedas recibidas</label>
+            <input id="cp-coins" type="number" min="0" step="any" class="modal-input" placeholder="45.2" oninput="cpAutoPrice()" />
+          </div>
+          <div class="modal-field">
+            <label class="modal-label">Precio unitario (auto)</label>
+            <input id="cp-price" type="number" min="0" step="any" class="modal-input" placeholder="2.21" oninput="cpAutoCoins()" />
+          </div>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:16px;line-height:1.5;">El precio unitario se calcula automáticamente al ingresar pesos ÷ monedas, o viceversa.</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" onclick="closeCryptoPurchaseModal()">Cancelar</button>
+          <button class="btn-primary" onclick="saveCryptoPurchase()">Guardar compra →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: CRYPTO UPDATE PRICE -->
+    <div id="crypto-price-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeCryptoPriceModal()" style="z-index:9500;">
+      <div class="modal-box" style="max-width:360px;">
+        <div class="modal-header">
+          <h3 class="modal-title" style="margin-bottom:0;" id="cpm-title">Actualizar precio</h3>
+          <button class="modal-close" onclick="closeCryptoPriceModal()">✕</button>
+        </div>
+        <div class="modal-field">
+          <label class="modal-label" id="cpm-label">Precio actual por moneda (en pesos MXN)</label>
+          <input id="cpm-price" type="number" min="0" step="any" class="modal-input" placeholder="Ej: 11.50" />
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:16px;">Consulta el precio actual en <a href="https://coinmarketcap.com" target="_blank" style="color:#a78bfa;">CoinMarketCap</a> o tu exchange favorito.</p>
+        <div class="modal-actions">
+          <button class="btn-ghost" onclick="closeCryptoPriceModal()">Cancelar</button>
+          <button class="btn-primary" onclick="saveCryptoPrice()">Actualizar →</button>
+        </div>
       </div>
     </div>
 
@@ -2174,6 +2323,9 @@
            <span>↑↓ navegar</span><span>Tab / → completar</span><span>Esc cerrar</span>
          </div>
        </div>
+       <button onclick="openQuickCreate()" title="Crear nodo visualmente (sin escribir)" style="background:linear-gradient(135deg,rgba(0,246,255,0.12),rgba(167,139,250,0.08)); border:1px solid rgba(0,246,255,0.25); border-radius:10px; color:#00f6ff; padding:6px 14px; cursor:pointer; display:flex; align-items:center; gap:5px; font-size:12px; font-weight:800; white-space:nowrap; flex-shrink:0; transition:all 0.2s; font-family:inherit;" onmouseover="this.style.background='rgba(0,246,255,0.18)'" onmouseout="this.style.background='linear-gradient(135deg,rgba(0,246,255,0.12),rgba(167,139,250,0.08))'">
+         + Nuevo
+       </button>
        <span class="spotlight-prompt">›</span>
        <input id="nexus-input" type="text" placeholder="Inyectar comando o pensamiento..." autofocus autocomplete="off" />
        <button onclick="openGlobalSearch()" title="Buscar en todos los nodos (Ctrl+K)" style="background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); border-radius:10px; color:var(--text-muted); padding:6px 12px; cursor:pointer; display:flex; align-items:center; gap:6px; font-size:12px; white-space:nowrap; transition:all 0.2s; flex-shrink:0;" onmouseover="this.style.background='rgba(0,246,255,0.08)'; this.style.color='var(--accent-cyan)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'; this.style.color='var(--text-muted)'">
@@ -3297,6 +3449,54 @@
     })
   }
 </script>
+
+<!-- ═══════════════ MODAL: QUICKCREATE ═══════════════ -->
+<div id="quickcreate-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeQuickCreate()" style="z-index:9600;">
+  <div class="modal-box" style="max-width:460px;">
+    <div class="modal-header">
+      <h3 class="modal-title" style="margin-bottom:0;">✨ ¿Qué quieres registrar?</h3>
+      <button class="modal-close" onclick="closeQuickCreate()">✕</button>
+    </div>
+
+    <!-- TYPE PICKER -->
+    <div id="qc-type-picker" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:4px;">
+      <button class="qc-type-btn" onclick="qcShowForm('note')">
+        <span class="qc-icon">📝</span><span>Nota</span>
+      </button>
+      <button class="qc-type-btn" onclick="qcShowForm('kanban')">
+        <span class="qc-icon">✅</span><span>Tarea</span>
+      </button>
+      <button class="qc-type-btn" onclick="qcShowForm('expense')">
+        <span class="qc-icon">💸</span><span>Gasto</span>
+      </button>
+      <button class="qc-type-btn" onclick="qcShowForm('income')">
+        <span class="qc-icon">💰</span><span>Ingreso</span>
+      </button>
+      <button class="qc-type-btn" onclick="qcShowForm('proyecto')">
+        <span class="qc-icon">🏗️</span><span>Proyecto</span>
+      </button>
+      <button class="qc-type-btn" onclick="qcShowForm('contact')">
+        <span class="qc-icon">👤</span><span>Contacto</span>
+      </button>
+      <button class="qc-type-btn" onclick="qcShowForm('cotizacion')">
+        <span class="qc-icon">📄</span><span>Cotización</span>
+      </button>
+      <button class="qc-type-btn" onclick="qcShowForm('event')">
+        <span class="qc-icon">📅</span><span>Evento</span>
+      </button>
+    </div>
+
+    <!-- FORM AREA (hidden until type selected) -->
+    <div id="qc-form-area" style="display:none;">
+      <button class="qc-back-btn" onclick="qcBackToPicker()">← Cambiar tipo</button>
+      <div id="qc-form-content"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeQuickCreate()">Cancelar</button>
+        <button class="btn-primary" onclick="qcSubmit()">Guardar →</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════ MODAL: BIENVENIDA (onboarding primera vez) ═══════════════ -->
 <div id="welcome-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:99999; align-items:center; justify-content:center; padding:24px; backdrop-filter:blur(16px); transition:opacity 0.3s;" onclick="if(event.target===this)closeWelcomeModal()">

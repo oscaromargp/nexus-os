@@ -3063,6 +3063,9 @@ function renderAgenda(nodes) {
           <button onclick="deleteAgendaItem('${b.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Eliminar">✕</button>
         </div>`
       }).join('')
+
+  // Crypto portfolio
+  renderCryptoPortfolio()
 }
 
 function fmt$(n) {
@@ -7228,4 +7231,524 @@ window.showShortcutCheatsheet = () => {
     <p style="font-size:11px;color:#64748b;margin-top:14px;text-align:center;">Presiona Esc o haz clic afuera para cerrar</p>
   </div>`
   document.body.appendChild(el)
+}
+
+// ══════════════════════════════════════════════════════════════
+// QUICKCREATE — entrada visual sin parser manual
+// ══════════════════════════════════════════════════════════════
+
+/** Builds a <select> of account names from allNodes */
+function _qcAccountSelect(id = 'qc-account') {
+  const accounts = allNodes
+    .filter(n => n.type === 'account' || n.metadata?.account_hint)
+    .reduce((acc, n) => {
+      const name = n.metadata?.name || n.metadata?.account_hint || n.content
+      if (name && !acc.includes(name.toLowerCase())) acc.push(name.toLowerCase())
+      return acc
+    }, ['efectivo', 'bbva', 'banamex', 'nu', 'hsbc'])
+  const opts = [...new Set(accounts)].map(a => `<option value="${a}">${a}</option>`).join('')
+  return `<select id="${id}" class="modal-input">${opts}</select>`
+}
+
+/** Builds a <select> of project slugs */
+function _qcProjectSelect(id = 'qc-project', allowEmpty = true) {
+  const projects = allNodes.filter(n => n.type === 'proyecto')
+  const emptyOpt = allowEmpty ? '<option value="">— Sin proyecto —</option>' : ''
+  const opts = projects.map(n => {
+    const slug = n.metadata?.project_slug || ''
+    const label = n.metadata?.label || n.content
+    return `<option value="${slug}">${label}</option>`
+  }).join('')
+  return `<select id="${id}" class="modal-input">${emptyOpt}${opts}</select>`
+}
+
+const QC_FORMS = {
+  note: () => `
+    <div class="modal-field">
+      <label class="modal-label">Nota</label>
+      <textarea id="qc-f1" class="modal-input" rows="3" placeholder="Escribe tu idea, contexto o recordatorio..." style="resize:vertical;"></textarea>
+    </div>`,
+
+  kanban: () => `
+    <div class="modal-field">
+      <label class="modal-label">Descripción de la tarea</label>
+      <input id="qc-f1" class="modal-input" placeholder="Ej: Llamar al arquitecto" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Proyecto (opcional)</label>
+      ${_qcProjectSelect('qc-project')}
+    </div>`,
+
+  expense: () => `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="modal-field">
+        <label class="modal-label">Monto ($)</label>
+        <input id="qc-amount" class="modal-input" type="number" min="0" step="0.01" placeholder="1200" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Cuenta</label>
+        ${_qcAccountSelect('qc-account')}
+      </div>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Descripción</label>
+      <input id="qc-f1" class="modal-input" placeholder="Ej: cemento, gasolina, comida..." />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Proyecto (opcional)</label>
+      ${_qcProjectSelect('qc-project')}
+    </div>`,
+
+  income: () => `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="modal-field">
+        <label class="modal-label">Monto ($)</label>
+        <input id="qc-amount" class="modal-input" type="number" min="0" step="0.01" placeholder="25000" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Cuenta</label>
+        ${_qcAccountSelect('qc-account')}
+      </div>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Descripción</label>
+      <input id="qc-f1" class="modal-input" placeholder="Ej: anticipo cliente, pago servicio..." />
+    </div>`,
+
+  proyecto: () => `
+    <div class="modal-field">
+      <label class="modal-label">Nombre del proyecto</label>
+      <input id="qc-f1" class="modal-input" placeholder="Ej: Casa Tulum 2025" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Presupuesto total (opcional)</label>
+      <input id="qc-budget" class="modal-input" type="number" min="0" placeholder="500000" />
+    </div>`,
+
+  contact: () => `
+    <div class="modal-field">
+      <label class="modal-label">Nombre completo</label>
+      <input id="qc-f1" class="modal-input" placeholder="Ej: Carlos García" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Profesión / rol</label>
+      <input id="qc-f2" class="modal-input" placeholder="Ej: electricista, arquitecto, contador..." />
+    </div>`,
+
+  cotizacion: () => `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="modal-field">
+        <label class="modal-label">Monto ($)</label>
+        <input id="qc-amount" class="modal-input" type="number" min="0" placeholder="45000" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Proyecto</label>
+        ${_qcProjectSelect('qc-project', false)}
+      </div>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Descripción del servicio</label>
+      <input id="qc-f1" class="modal-input" placeholder="Ej: instalación eléctrica completa" />
+    </div>`,
+
+  event: () => `
+    <div class="modal-field">
+      <label class="modal-label">Evento</label>
+      <input id="qc-f1" class="modal-input" placeholder="Ej: reunión con arquitecto" />
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="modal-field">
+        <label class="modal-label">Fecha</label>
+        <input id="qc-date" class="modal-input" type="date" />
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Hora (opcional)</label>
+        <input id="qc-time" class="modal-input" type="time" />
+      </div>
+    </div>`,
+}
+
+let _qcCurrentType = null
+
+window.openQuickCreate = function(type = null) {
+  const modal = document.getElementById('quickcreate-modal')
+  if (!modal) return
+  modal.classList.remove('hidden')
+  modal.style.display = 'flex'
+  if (type) {
+    qcShowForm(type)
+  } else {
+    document.getElementById('qc-type-picker').style.display = 'grid'
+    document.getElementById('qc-form-area').style.display = 'none'
+  }
+}
+
+window.closeQuickCreate = function() {
+  const modal = document.getElementById('quickcreate-modal')
+  if (!modal) return
+  modal.classList.add('hidden')
+  modal.style.display = 'none'
+  _qcCurrentType = null
+}
+
+window.qcShowForm = function(type) {
+  _qcCurrentType = type
+  document.getElementById('qc-type-picker').style.display = 'none'
+  const formArea = document.getElementById('qc-form-area')
+  formArea.style.display = 'block'
+  const formContent = document.getElementById('qc-form-content')
+  formContent.innerHTML = QC_FORMS[type] ? QC_FORMS[type]() : ''
+  // Auto-set today's date for events
+  if (type === 'event') {
+    const dateInput = document.getElementById('qc-date')
+    if (dateInput) dateInput.value = new Date().toISOString().split('T')[0]
+  }
+  // Focus first input
+  setTimeout(() => formContent.querySelector('input,textarea')?.focus(), 50)
+}
+
+window.qcBackToPicker = function() {
+  _qcCurrentType = null
+  document.getElementById('qc-type-picker').style.display = 'grid'
+  document.getElementById('qc-form-area').style.display = 'none'
+}
+
+window.qcSubmit = function() {
+  const type = _qcCurrentType
+  if (!type) return
+
+  let parserText = ''
+  const v = id => document.getElementById(id)?.value?.trim() || ''
+
+  switch (type) {
+    case 'note':
+      parserText = v('qc-f1')
+      if (!parserText) { showToast('⚠️ Escribe algo para la nota'); return }
+      break
+
+    case 'kanban': {
+      const desc = v('qc-f1')
+      if (!desc) { showToast('⚠️ Describe la tarea'); return }
+      const proj = v('qc-project')
+      parserText = `#tarea ${desc}${proj ? ' #' + proj : ''}`
+      break
+    }
+
+    case 'expense': {
+      const amt = v('qc-amount')
+      if (!amt) { showToast('⚠️ Ingresa el monto'); return }
+      const desc = v('qc-f1') || 'Gasto'
+      const acct = v('qc-account') || 'efectivo'
+      const proj = v('qc-project')
+      parserText = `-$${amt} ${desc} @${acct}${proj ? ' #' + proj : ''}`
+      break
+    }
+
+    case 'income': {
+      const amt = v('qc-amount')
+      if (!amt) { showToast('⚠️ Ingresa el monto'); return }
+      const desc = v('qc-f1') || 'Ingreso'
+      const acct = v('qc-account') || 'efectivo'
+      parserText = `+$${amt} ${desc} @${acct}`
+      break
+    }
+
+    case 'proyecto': {
+      const name = v('qc-f1')
+      if (!name) { showToast('⚠️ Dale un nombre al proyecto'); return }
+      const budget = v('qc-budget')
+      parserText = `#proyecto ${name}`
+      // budget gets added via metadata after insert — handled separately
+      if (budget && +budget > 0) {
+        // Store budget to inject after node creation
+        window._qcPendingBudget = +budget
+        window._qcPendingProjectName = name
+      }
+      break
+    }
+
+    case 'contact': {
+      const name = v('qc-f1')
+      if (!name) { showToast('⚠️ Escribe el nombre del contacto'); return }
+      const role = v('qc-f2')
+      parserText = `#persona ${name}${role ? ' ' + role : ''}`
+      break
+    }
+
+    case 'cotizacion': {
+      const amt = v('qc-amount')
+      if (!amt) { showToast('⚠️ Ingresa el monto de la cotización'); return }
+      const desc = v('qc-f1') || 'Servicio'
+      const proj = v('qc-project')
+      parserText = `#cotizacion $${amt} ${desc}${proj ? ' @' + proj : ''}`
+      break
+    }
+
+    case 'event': {
+      const desc = v('qc-f1')
+      if (!desc) { showToast('⚠️ Describe el evento'); return }
+      const date = v('qc-date')
+      const time = v('qc-time')
+      parserText = `${desc}${date ? ' ' + date : ''}${time ? ' ' + time : ''}`
+      break
+    }
+
+    default:
+      return
+  }
+
+  // Inject into the main input and fire
+  const input = document.getElementById('nexus-input')
+  if (input) {
+    input.value = parserText
+    input.dispatchEvent(new Event('input'))
+    // Simulate Enter to trigger insertNode
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+  }
+
+  closeQuickCreate()
+}
+
+// ══════════════════════════════════════════════════════════════
+// PORTAFOLIO CRYPTO — Agenda Financiera
+// ══════════════════════════════════════════════════════════════
+
+const CRYPTO_STORAGE_KEY = 'nexus_crypto_portfolio'
+
+/** Load portfolio from localStorage (no server needed for crypto data) */
+function loadCryptoPortfolio() {
+  try {
+    return JSON.parse(localStorage.getItem(CRYPTO_STORAGE_KEY) || '{"purchases":[],"prices":{}}')
+  } catch { return { purchases: [], prices: {} } }
+}
+
+function saveCryptoPortfolio(portfolio) {
+  localStorage.setItem(CRYPTO_STORAGE_KEY, JSON.stringify(portfolio))
+}
+
+/** Aggregate purchases by coin → {coin, holdings, invested, price} */
+function getCryptoCoins(portfolio) {
+  const coinMap = {}
+  for (const p of portfolio.purchases) {
+    const c = p.coin.toUpperCase()
+    if (!coinMap[c]) coinMap[c] = { coin: c, holdings: 0, invested: 0 }
+    coinMap[c].holdings += Number(p.coins) || 0
+    coinMap[c].invested += Number(p.pesos) || 0
+  }
+  return Object.values(coinMap).map(c => ({
+    ...c,
+    price: portfolio.prices[c.coin] || 0,
+    currentValue: c.holdings * (portfolio.prices[c.coin] || 0),
+  }))
+}
+
+function fmtCrypto(n) {
+  if (!n && n !== 0) return '—'
+  return '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function fmtCoins(n) {
+  if (!n && n !== 0) return '—'
+  return Number(n).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 6 })
+}
+
+window.renderCryptoPortfolio = function() {
+  const portfolio = loadCryptoPortfolio()
+  const coins = getCryptoCoins(portfolio)
+
+  // ── KPI row ────────────────────────────────────────────────
+  const totalInvested = coins.reduce((s, c) => s + c.invested, 0)
+  const totalCurrent  = coins.reduce((s, c) => s + c.currentValue, 0)
+  const totalGain     = totalCurrent - totalInvested
+  const totalPct      = totalInvested > 0 ? ((totalGain / totalInvested) * 100).toFixed(1) : 0
+  const gainColor     = totalGain >= 0 ? '#4ade80' : '#f87171'
+
+  const kpiEl = document.getElementById('crypto-kpi-row')
+  if (kpiEl) kpiEl.innerHTML = [
+    { label: 'Total invertido', val: fmtCrypto(totalInvested), color: '#a78bfa' },
+    { label: 'Valor actual',    val: totalCurrent > 0 ? fmtCrypto(totalCurrent) : '—', color: '#60a5fa' },
+    { label: 'Ganancia / Pérd.', val: totalCurrent > 0 ? `${totalGain >= 0 ? '+' : ''}${fmtCrypto(totalGain)}` : '—', color: gainColor },
+    { label: 'Rendimiento',     val: totalCurrent > 0 ? `${totalGain >= 0 ? '+' : ''}${totalPct}%` : '—', color: gainColor },
+    { label: 'Monedas en cartera', val: String(coins.length), color: '#fbbf24' },
+    { label: 'Compras totales',  val: String(portfolio.purchases.length), color: '#94a3b8' },
+  ].map(k => `
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px 16px;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:6px;">${k.label}</div>
+      <div style="font-size:18px;font-weight:800;color:${k.color};font-family:'JetBrains Mono',monospace;">${k.val}</div>
+    </div>`).join('')
+
+  // ── Per-coin table ─────────────────────────────────────────
+  const tbody = document.getElementById('crypto-coins-body')
+  if (!tbody) return
+
+  if (coins.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px;">Sin compras registradas — haz clic en <strong style="color:#a78bfa;">+ Registrar compra</strong> para comenzar</td></tr>`
+  } else {
+    tbody.innerHTML = coins.map(c => {
+      const hasPrice = c.price > 0
+      const gain     = c.currentValue - c.invested
+      const gainPct  = c.invested > 0 ? ((gain / c.invested) * 100).toFixed(1) : null
+      const gainClr  = gain >= 0 ? '#4ade80' : '#f87171'
+      return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+        <td style="padding:12px 16px;">
+          <div style="font-weight:800;color:#fff;font-size:13px;">${esc(c.coin)}</div>
+        </td>
+        <td style="text-align:right;padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#e2e8f0;">${fmtCoins(c.holdings)}</td>
+        <td style="text-align:right;padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#a78bfa;">${fmtCrypto(c.invested)}</td>
+        <td style="text-align:right;padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:${hasPrice?'#60a5fa':'var(--text-muted)'};">
+          ${hasPrice ? fmtCrypto(c.currentValue) : `<button onclick="openCryptoPriceModal('${c.coin}')" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);border-radius:6px;padding:3px 8px;font-size:10px;color:#a78bfa;cursor:pointer;font-family:inherit;">Ingresar precio</button>`}
+        </td>
+        <td style="text-align:right;padding:12px 16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:${hasPrice?gainClr:'var(--text-dim)'};">
+          ${hasPrice ? `${gain >= 0?'+':''}${fmtCrypto(gain)}<span style="font-size:10px;opacity:0.7;margin-left:4px;">(${gain>=0?'+':''}${gainPct}%)</span>` : '—'}
+        </td>
+        <td style="padding:12px 8px;text-align:right;">
+          <button onclick="openCryptoPriceModal('${c.coin}')" title="Actualizar precio" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;" onmouseover="this.style.color='#a78bfa'" onmouseout="this.style.color='var(--text-dim)'">✏️</button>
+        </td>
+      </tr>`
+    }).join('')
+  }
+
+  // ── Purchase history ───────────────────────────────────────
+  const histEl = document.getElementById('crypto-history')
+  if (histEl) {
+    const sorted = [...portfolio.purchases].sort((a, b) => new Date(b.date) - new Date(a.date))
+    histEl.innerHTML = sorted.length === 0
+      ? `<p style="color:var(--text-muted);font-size:12px;">Sin historial.</p>`
+      : sorted.map((p, i) => {
+          const realIdx = portfolio.purchases.indexOf(p)
+          return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:10px;">
+            <div style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;flex-shrink:0;">${p.date}</div>
+            <div style="font-weight:700;color:#a78bfa;font-size:12px;flex-shrink:0;">${esc(p.coin)}</div>
+            <div style="flex:1;font-size:12px;color:var(--text-secondary);">
+              <span style="color:#4ade80;">${fmtCrypto(p.pesos)}</span> → <span style="color:#e2e8f0;">${fmtCoins(p.coins)} ${esc(p.coin)}</span>
+              ${p.price ? `<span style="color:var(--text-muted);font-size:10px;"> @ ${fmtCrypto(p.price)}/u</span>` : ''}
+            </div>
+            <button onclick="deleteCryptoPurchase(${realIdx})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:11px;" title="Eliminar compra">✕</button>
+          </div>`
+        }).join('')
+  }
+}
+
+// ── Modals ─────────────────────────────────────────────────────
+
+window.openCryptoPurchaseModal = function() {
+  const modal = document.getElementById('crypto-purchase-modal')
+  if (!modal) return
+  modal.classList.remove('hidden')
+  modal.style.display = 'flex'
+  const dateInput = document.getElementById('cp-date')
+  if (dateInput) dateInput.value = new Date().toISOString().split('T')[0]
+  document.getElementById('cp-pesos')?.focus()
+}
+
+window.closeCryptoPurchaseModal = function() {
+  const modal = document.getElementById('crypto-purchase-modal')
+  if (modal) { modal.classList.add('hidden'); modal.style.display = 'none' }
+  // Reset custom coin
+  document.getElementById('cp-coin-custom-wrap').style.display = 'none'
+  document.getElementById('cp-coin').value = 'XRP'
+  document.getElementById('cp-pesos').value = ''
+  document.getElementById('cp-coins').value = ''
+  document.getElementById('cp-price').value = ''
+}
+
+document.addEventListener('change', e => {
+  if (e.target.id === 'cp-coin') {
+    const customWrap = document.getElementById('cp-coin-custom-wrap')
+    if (customWrap) customWrap.style.display = e.target.value === 'OTRO' ? 'block' : 'none'
+  }
+})
+
+window.cpAutoPrice = function() {
+  const pesos = parseFloat(document.getElementById('cp-pesos')?.value) || 0
+  const coins = parseFloat(document.getElementById('cp-coins')?.value) || 0
+  if (pesos > 0 && coins > 0) {
+    const priceEl = document.getElementById('cp-price')
+    if (priceEl && !priceEl.matches(':focus')) priceEl.value = (pesos / coins).toFixed(6)
+  }
+}
+
+window.cpAutoCoins = function() {
+  const pesos = parseFloat(document.getElementById('cp-pesos')?.value) || 0
+  const price = parseFloat(document.getElementById('cp-price')?.value) || 0
+  if (pesos > 0 && price > 0) {
+    const coinsEl = document.getElementById('cp-coins')
+    if (coinsEl && !coinsEl.matches(':focus')) coinsEl.value = (pesos / price).toFixed(6)
+  }
+}
+
+window.saveCryptoPurchase = function() {
+  const coinSel = document.getElementById('cp-coin')?.value
+  const coin = coinSel === 'OTRO'
+    ? (document.getElementById('cp-coin-custom')?.value?.trim().toUpperCase() || 'OTRO')
+    : coinSel
+  const date  = document.getElementById('cp-date')?.value
+  const pesos = parseFloat(document.getElementById('cp-pesos')?.value)
+  const coins = parseFloat(document.getElementById('cp-coins')?.value)
+  const price = parseFloat(document.getElementById('cp-price')?.value) || 0
+
+  if (!coin)    { showToast('⚠️ Selecciona una moneda'); return }
+  if (!date)    { showToast('⚠️ Ingresa la fecha'); return }
+  if (!pesos || pesos <= 0) { showToast('⚠️ Ingresa los pesos invertidos'); return }
+  if (!coins || coins <= 0) { showToast('⚠️ Ingresa las monedas recibidas'); return }
+
+  const portfolio = loadCryptoPortfolio()
+  portfolio.purchases.push({ coin, date, pesos, coins, price })
+  saveCryptoPortfolio(portfolio)
+
+  closeCryptoPurchaseModal()
+  renderCryptoPortfolio()
+  showToast(`✅ Compra de ${coins} ${coin} registrada`)
+}
+
+// ── Update price ─────────────────────────────────────────────
+
+let _cpPriceCoin = null
+
+window.openCryptoPriceModal = function(coin) {
+  _cpPriceCoin = coin
+  const modal = document.getElementById('crypto-price-modal')
+  if (!modal) return
+  modal.classList.remove('hidden')
+  modal.style.display = 'flex'
+  const titleEl = document.getElementById('cpm-title')
+  if (titleEl) titleEl.textContent = `Precio actual: ${coin}`
+  const labelEl = document.getElementById('cpm-label')
+  if (labelEl) labelEl.textContent = `Precio actual de ${coin} en pesos MXN`
+  const priceEl = document.getElementById('cpm-price')
+  if (priceEl) {
+    const portfolio = loadCryptoPortfolio()
+    priceEl.value = portfolio.prices[coin] || ''
+    priceEl.focus()
+    priceEl.select()
+  }
+}
+
+window.closeCryptoPriceModal = function() {
+  const modal = document.getElementById('crypto-price-modal')
+  if (modal) { modal.classList.add('hidden'); modal.style.display = 'none' }
+  _cpPriceCoin = null
+}
+
+window.saveCryptoPrice = function() {
+  if (!_cpPriceCoin) return
+  const price = parseFloat(document.getElementById('cpm-price')?.value)
+  if (!price || price <= 0) { showToast('⚠️ Precio inválido'); return }
+
+  const portfolio = loadCryptoPortfolio()
+  portfolio.prices[_cpPriceCoin] = price
+  saveCryptoPortfolio(portfolio)
+
+  closeCryptoPriceModal()
+  renderCryptoPortfolio()
+  showToast(`✅ Precio de ${_cpPriceCoin} actualizado: ${fmtCrypto(price)}`)
+}
+
+window.deleteCryptoPurchase = function(idx) {
+  if (!confirm('¿Eliminar esta compra del historial?')) return
+  const portfolio = loadCryptoPortfolio()
+  portfolio.purchases.splice(idx, 1)
+  saveCryptoPortfolio(portfolio)
+  renderCryptoPortfolio()
+  showToast('🗑 Compra eliminada')
 }
