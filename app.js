@@ -229,15 +229,76 @@ function setupRealtimeSubscription() {
       } else if (payload.eventType === 'DELETE') {
         allNodes = allNodes.filter(n => n.id !== payload.old.id)
       }
+      saveNodesToCache(allNodes)
       renderAll()
     })
     .subscribe()
 }
 
+// ── Cache localStorage — offline fallback ────────────────────────────────────
+const NODES_CACHE_KEY = 'nexus_nodes_cache'
+const NODES_CACHE_MAX = 500   // máximo de nodos a cachear (los más recientes)
+
+function saveNodesToCache(nodes) {
+  try {
+    const slice = nodes.slice(0, NODES_CACHE_MAX)
+    localStorage.setItem(NODES_CACHE_KEY, JSON.stringify(slice))
+  } catch (e) {
+    // QuotaExceededError — no bloquea la app
+    console.warn('[cache] no se pudo guardar en localStorage:', e.message)
+  }
+}
+
+function loadNodesFromCache() {
+  try {
+    const raw = localStorage.getItem(NODES_CACHE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
 async function loadNodes() {
-  const { data, error } = await supabase.from('nodes').select('*').eq('owner_id', currentUser.id).order('created_at', { ascending: false })
-  if (!error) allNodes = data || []
-  renderAll()
+  // Renderiza inmediatamente desde caché mientras llega Supabase
+  const cached = loadNodesFromCache()
+  if (cached?.length) {
+    allNodes = cached
+    renderAll()
+    showToast(`📦 ${cached.length} nodos desde caché — sincronizando...`, 2500)
+  }
+
+  const { data, error } = await supabase
+    .from('nodes').select('*')
+    .eq('owner_id', currentUser.id)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    if (!cached?.length) showToast('⚠️ Sin conexión — no hay datos en caché')
+    console.error('[loadNodes]', error)
+  } else {
+    allNodes = data || []
+    saveNodesToCache(allNodes)
+    renderAll()
+  }
+
+  // Muestra el onboarding solo la primera vez (no en admin bypass)
+  if (!localStorage.getItem('nexus_onboarded') && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    setTimeout(() => {
+      const m = document.getElementById('welcome-modal')
+      if (m) m.style.display = 'flex'
+    }, 800)
+  }
+}
+
+// ── Welcome modal ─────────────────────────────────────────────────────────────
+window.closeWelcomeModal = () => {
+  const m = document.getElementById('welcome-modal')
+  if (m) { m.style.opacity = '0'; setTimeout(() => { m.style.display = 'none'; m.style.opacity = '' }, 300) }
+  localStorage.setItem('nexus_onboarded', '1')
+}
+window.trywelcomeExample = (txt) => {
+  window.closeWelcomeModal()
+  setTimeout(() => {
+    if (nexusInput) { nexusInput.value = txt; nexusInput.focus(); nexusInput.dispatchEvent(new Event('input')) }
+  }, 350)
 }
 
 // ─────────────────────────────────────────
@@ -825,10 +886,12 @@ async function insertNodeRaw(raw, metadataOverrides={}) {
   const idx = allNodes.findIndex(n => n.id === tempId)
   if (!error && inserted?.[0]) {
     if (idx !== -1) allNodes[idx] = inserted[0]; else allNodes.unshift(inserted[0])
+    saveNodesToCache(allNodes)
     renderAll(); showToast(`NODO INYECTADO: ${type.toUpperCase()}`)
   } else {
     const q = loadOfflineQueue(); q.push({ payload }); saveOfflineQueue(q)
     if (idx !== -1) allNodes[idx] = { ...tempNode, _offline: true }
+    saveNodesToCache(allNodes)
     renderAll(); updateOfflineBar(); showToast('⚠️ Guardado localmente — se sincronizará al reconectar')
   }
 }
@@ -907,15 +970,36 @@ function showDemoBanner() {
 // Spotlight Input
 const nexusInput = document.getElementById('nexus-input')
 
+// ── Placeholder rotativo — enseña la sintaxis sin tutoriales ────────────────────
+const PLACEHOLDER_HINTS = [
+  'Inyecta un pensamiento o comando...',
+  '-$1200 cemento @efectivo #casatulum  →  💸 gasto vinculado al proyecto',
+  '#tarea confirmar entrega de ventanas  →  📌 kanban',
+  '+$25000 anticipo cliente @bbva  →  💰 ingreso',
+  '#cotizacion $45000 eléctrico @casatulum  →  📄 cotización',
+  '#proyecto Casa Tulum  →  🏗️ nuevo proyecto',
+  '#persona Carlos García electricista  →  👤 contacto CRM',
+  'reunión con el arquitecto mañana 9am  →  📝 nota libre',
+]
+let _phIdx = 0
+;(function _cyclePlaceholder() {
+  if (nexusInput && document.activeElement !== nexusInput && !nexusInput.value) {
+    _phIdx = (_phIdx + 1) % PLACEHOLDER_HINTS.length
+    nexusInput.placeholder = PLACEHOLDER_HINTS[_phIdx]
+  }
+  setTimeout(_cyclePlaceholder, 3800)
+})()
+
 // ── IDE AUTOCOMPLETE ENGINE ──────────────────────────────────────────────────
 const IDE_COMMANDS = [
-  { icon:'📌', prefix:'#tarea ',   tpl:'#tarea [descripción de la tarea]',       desc:'Tarea → Muro Táctico',    color:'#a78bfa', cat:'Comandos' },
-  { icon:'💰', prefix:'+$',        tpl:'+$[monto] [descripción] @[cuenta]',       desc:'Ingreso → Bio-Finanzas',  color:'#4ade80', cat:'Comandos' },
-  { icon:'💸', prefix:'-$',        tpl:'-$[monto] [descripción] @[cuenta]',       desc:'Gasto → Bio-Finanzas',    color:'#f87171', cat:'Comandos' },
-  { icon:'👤', prefix:'#persona ', tpl:'#persona [nombre] — [empresa/rol]',       desc:'Contacto → CRM',          color:'#fdba74', cat:'Comandos' },
-  { icon:'📁', prefix:'#proyecto ',tpl:'#proyecto [nombre] [descripción]',        desc:'Proyecto → Bóveda',       color:'#60a5fa', cat:'Comandos' },
-  { icon:'💡', prefix:'#idea ',    tpl:'#idea [descripción de la idea]',          desc:'Idea → Bóveda Neural',    color:'#fbbf24', cat:'Comandos' },
-  { icon:'📅', prefix:'📅 ',       tpl:'📅 [evento] [fecha opcional]',            desc:'Evento → Calendario',     color:'#34d399', cat:'Comandos' },
+  { icon:'📌', prefix:'#tarea ',      tpl:'#tarea [descripción de la tarea]',             desc:'Tarea → Muro Táctico',    color:'#a78bfa', cat:'Comandos' },
+  { icon:'💰', prefix:'+$',           tpl:'+$[monto] [descripción] @[cuenta]',             desc:'Ingreso → Bio-Finanzas',  color:'#4ade80', cat:'Comandos' },
+  { icon:'💸', prefix:'-$',           tpl:'-$[monto] [desc] @[cuenta] #[proyecto]',        desc:'Gasto → Bio-Finanzas',    color:'#f87171', cat:'Comandos' },
+  { icon:'📄', prefix:'#cotizacion ', tpl:'#cotizacion $[monto] [desc] @[proyecto]',       desc:'Cotización → Proyectos',  color:'#fb923c', cat:'Comandos' },
+  { icon:'🏗️', prefix:'#proyecto ',  tpl:'#proyecto [nombre del proyecto]',               desc:'Proyecto → Dashboard',    color:'#2dd4bf', cat:'Comandos' },
+  { icon:'👤', prefix:'#persona ',    tpl:'#persona [nombre] — [empresa/rol]',             desc:'Contacto → CRM',          color:'#fdba74', cat:'Comandos' },
+  { icon:'💡', prefix:'#idea ',       tpl:'#idea [descripción de la idea]',               desc:'Idea → Bóveda Neural',    color:'#fbbf24', cat:'Comandos' },
+  { icon:'📅', prefix:'📅 ',          tpl:'📅 [evento] [fecha opcional]',                 desc:'Evento → Calendario',     color:'#34d399', cat:'Comandos' },
 ]
 
 let ideIdx = -1   // currently highlighted suggestion index
@@ -5006,6 +5090,170 @@ window.exportContactsCSV = () => {
   showToast(`⬇ ${contacts.length} contactos exportados`)
 }
 
+// ══════════════════════════════════════════════════════════════
+//  IMPORTADOR CSV BANCARIO — auto-detección de columnas
+// ══════════════════════════════════════════════════════════════
+// Columnas soportadas (case-insensitive, sin acentos):
+//   fecha / date / f.operacion
+//   descripcion / concepto / description / referencia
+//   retiro / cargo / debit
+//   deposito / abono / credit
+//   monto / importe / amount  (positivo=ingreso, negativo=gasto)
+
+let _bankCsvRows = []  // filas parseadas pendientes de confirmar
+
+function _normHeader(h) {
+  return h.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]/g,'')
+}
+
+function _matchCol(headers, ...candidates) {
+  for (const c of candidates) {
+    const idx = headers.indexOf(c)
+    if (idx !== -1) return idx
+  }
+  return -1
+}
+
+function _parseAmount(str) {
+  if (!str) return 0
+  return parseFloat(str.replace(/[$,\s]/g,'').replace(',','.')) || 0
+}
+
+window.previewBankCSV = (input) => {
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const text = e.target.result
+    const lines = text.split(/\r?\n/).filter(l => l.trim())
+    if (lines.length < 2) { showToast('CSV sin datos'); return }
+
+    const parseCell = c => c?.trim().replace(/^"|"$/g,'').replace(/""/g,'"') || ''
+    const rawHeaders = lines[0].split(',').map(parseCell)
+    const headers = rawHeaders.map(_normHeader)
+
+    // Detectar columnas
+    const iDate  = _matchCol(headers,'fecha','date','foperacion','fechaoperacion','fecoperacion')
+    const iDesc  = _matchCol(headers,'descripcion','concepto','description','referencia','detalle','concepto')
+    const iDeb   = _matchCol(headers,'retiro','cargo','debit','debito')
+    const iCred  = _matchCol(headers,'deposito','abono','credit','credito')
+    const iAmt   = _matchCol(headers,'monto','importe','amount','valor')
+
+    if (iDesc === -1 && iAmt === -1 && iDeb === -1) {
+      document.getElementById('bank-csv-preview').innerHTML =
+        `<div style="color:#f87171;font-size:12px;padding:10px;background:rgba(248,113,113,0.08);border-radius:8px;">⚠️ No se reconocieron columnas. Encabezados detectados: <code>${rawHeaders.join(', ')}</code></div>`
+      return
+    }
+
+    // Parsear filas
+    _bankCsvRows = []
+    for (let i = 1; i < lines.length; i++) {
+      const cells = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)?.map(parseCell) || []
+      const desc  = cells[iDesc !== -1 ? iDesc : 0] || ''
+      const date  = iDate !== -1 ? cells[iDate] : ''
+      let amount  = 0, txType = 'expense'
+
+      if (iAmt !== -1) {
+        amount = _parseAmount(cells[iAmt])
+        txType = amount >= 0 ? 'income' : 'expense'
+        amount = Math.abs(amount)
+      } else {
+        const deb  = _parseAmount(iDeb  !== -1 ? cells[iDeb]  : '')
+        const cred = _parseAmount(iCred !== -1 ? cells[iCred] : '')
+        if (deb > 0)  { amount = deb;  txType = 'expense' }
+        if (cred > 0) { amount = cred; txType = 'income'  }
+      }
+
+      if (!desc || amount === 0) continue
+      _bankCsvRows.push({ desc, date, amount, txType })
+    }
+
+    if (!_bankCsvRows.length) {
+      document.getElementById('bank-csv-preview').innerHTML =
+        `<div style="color:#fb923c;font-size:12px;padding:10px;background:rgba(251,146,60,0.08);border-radius:8px;">⚠️ No se encontraron filas con datos válidos.</div>`
+      return
+    }
+
+    const incomes  = _bankCsvRows.filter(r => r.txType === 'income')
+    const expenses = _bankCsvRows.filter(r => r.txType === 'expense')
+    const totalInc = incomes.reduce((s,r) => s+r.amount, 0)
+    const totalExp = expenses.reduce((s,r) => s+r.amount, 0)
+
+    // Preview con resumen + primeras 10 filas
+    const rows = _bankCsvRows.slice(0,10).map(r => `
+      <tr>
+        <td style="padding:5px 8px;color:${r.txType==='income'?'#4ade80':'#f87171'};font-size:11px;">${r.txType==='income'?'↑ INGRESO':'↓ GASTO'}</td>
+        <td style="padding:5px 8px;font-size:12px;color:var(--text-primary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.desc)}</td>
+        <td style="padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:12px;color:${r.txType==='income'?'#4ade80':'#f87171'};text-align:right;">$${r.amount.toLocaleString('es-MX',{minimumFractionDigits:2})}</td>
+        <td style="padding:5px 8px;font-size:11px;color:var(--text-muted);">${r.date}</td>
+      </tr>`).join('')
+
+    document.getElementById('bank-csv-preview').innerHTML = `
+      <div style="background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;padding:12px 16px;margin-bottom:10px;">
+        <div style="display:flex;gap:24px;flex-wrap:wrap;font-size:12px;">
+          <span>📊 <strong style="color:#fff;">${_bankCsvRows.length}</strong> transacciones detectadas</span>
+          <span>💰 Ingresos: <strong style="color:#4ade80;">${incomes.length} — $${totalInc.toLocaleString('es-MX',{maximumFractionDigits:0})}</strong></span>
+          <span>💸 Gastos: <strong style="color:#f87171;">${expenses.length} — $${totalExp.toLocaleString('es-MX',{maximumFractionDigits:0})}</strong></span>
+        </div>
+      </div>
+      <div style="overflow-x:auto;border:1px solid rgba(255,255,255,0.07);border-radius:8px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.07);">
+            <th style="padding:6px 8px;font-size:10px;color:var(--text-muted);text-align:left;">TIPO</th>
+            <th style="padding:6px 8px;font-size:10px;color:var(--text-muted);text-align:left;">DESCRIPCIÓN</th>
+            <th style="padding:6px 8px;font-size:10px;color:var(--text-muted);text-align:right;">MONTO</th>
+            <th style="padding:6px 8px;font-size:10px;color:var(--text-muted);text-align:left;">FECHA</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${_bankCsvRows.length > 10 ? `<div style="text-align:center;padding:8px;font-size:11px;color:var(--text-muted);">… y ${_bankCsvRows.length-10} más</div>` : ''}
+      </div>`
+
+    document.getElementById('bank-csv-import-btn').style.display = 'inline-block'
+  }
+  reader.readAsText(file, 'UTF-8')
+}
+
+window.importBankCSV = async () => {
+  if (!_bankCsvRows.length) { showToast('Primero selecciona un CSV'); return }
+  const account = document.getElementById('bank-csv-account')?.value.trim().toLowerCase() || ''
+  const tagRaw  = document.getElementById('bank-csv-tag')?.value.trim() || ''
+  const extraTag = tagRaw ? (tagRaw.startsWith('#') ? tagRaw : '#' + tagRaw) : ''
+
+  const btn = document.getElementById('bank-csv-import-btn')
+  if (btn) btn.disabled = true
+
+  let ok = 0, fail = 0
+  for (const row of _bankCsvRows) {
+    try {
+      const prefix = row.txType === 'income' ? '+$' : '-$'
+      const acPart = account ? ` @${account}` : ''
+      const tagPart = extraTag ? ` ${extraTag}` : ''
+      const raw = `${prefix}${row.amount} ${row.desc}${acPart}${tagPart}`
+      await insertNodeRaw(raw)
+      ok++
+    } catch(e) {
+      fail++
+    }
+    // Pequeña pausa para no saturar Supabase
+    if (ok % 20 === 0) await new Promise(r => setTimeout(r, 100))
+  }
+
+  _bankCsvRows = []
+  if (btn) { btn.disabled = false; btn.style.display = 'none' }
+  document.getElementById('bank-csv-input').value = ''
+
+  const resultEl = document.getElementById('bank-csv-result')
+  const msg = `✅ ${ok} transacciones importadas${fail ? ` · ⚠️ ${fail} errores` : ''}`
+  if (resultEl) {
+    resultEl.style.cssText = `display:block;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:8px;padding:10px 14px;`
+    resultEl.textContent = msg
+  }
+  showToast(msg)
+}
+
 window.importContactsCSV = async (input) => {
   const file = input.files?.[0]; if (!file) return
   const text = await file.text()
@@ -6872,19 +7120,112 @@ window.gsNavigateTo = function(nodeId, type) {
   }, 250)
 }
 
-// Keyboard shortcut Ctrl+K / Cmd+K to open search
+// ── Keyboard shortcuts globales ──────────────────────────────────────────────
+// Inspirados en Linear: velocidad de operación sin ratón.
+//
+//  k           → Foco en el input principal (nueva entrada)
+//  Ctrl/Cmd+K  → Búsqueda global
+//  Ctrl/Cmd+/  → Mostrar cheatsheet de shortcuts
+//  1-8         → Cambiar vista directamente
+//  Escape      → Cerrar cualquier modal abierto
+//
+const NEXUS_VIEW_KEYS = {
+  '1': 'feed', '2': 'kanban', '3': 'finance', '4': 'notes',
+  '5': 'calendar', '6': 'proyectos', '7': 'contacts', '8': 'agenda',
+}
+
 document.addEventListener('keydown', e => {
+  // Ignorar cuando el foco está en un input/textarea/select
+  const tag = document.activeElement?.tagName
+  const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    || document.activeElement?.isContentEditable
+
+  // ── Escape — cierra modales en cascada ──────────────────────────────────
+  if (e.key === 'Escape') {
+    const checks = [
+      ['welcome-modal',         () => window.closeWelcomeModal?.()],
+      ['global-search-modal',   () => window.closeGlobalSearch?.()],
+      ['cotizacion-modal',      () => window.closeCotizacionModal?.()],
+      ['payment-modal',         () => window.closePaymentModal?.()],
+      ['proyecto-modal',        () => window.closeProyectoModal?.()],
+      ['contact-sheet',         () => window.closeContactSheet?.()],
+      ['card-modal',            () => window.closeCardModal?.()],
+      ['note-edit-modal',       () => window.closeNoteModal?.()],
+      ['account-modal',         () => window.closeAccountModal?.()],
+      ['transfer-modal',        () => window.closeTransferModal?.()],
+      ['finance-detail-modal',  () => window.closeFinanceDetail?.()],
+    ]
+    for (const [id, fn] of checks) {
+      const el = document.getElementById(id)
+      const visible = el && (el.style.display === 'flex' || !el.classList.contains('hidden'))
+      if (visible) { fn(); return }
+    }
+    return
+  }
+
+  // ── Shortcuts que requieren no estar editando ────────────────────────────
+  if (isEditing) return
+
+  // k → foco en el input principal
+  if (e.key === 'k' && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault()
+    nexusInput?.focus()
+    nexusInput?.select()
+    return
+  }
+
+  // Ctrl/Cmd+K → búsqueda global
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault()
     const modal = document.getElementById('global-search-modal')
-    if (modal && modal.style.display !== 'none') {
-      window.closeGlobalSearch()
-    } else {
-      window.openGlobalSearch()
-    }
+    if (modal && modal.style.display !== 'none') window.closeGlobalSearch?.()
+    else window.openGlobalSearch?.()
+    return
   }
-  if (e.key === 'Escape') {
-    const modal = document.getElementById('global-search-modal')
-    if (modal && modal.style.display !== 'none') window.closeGlobalSearch()
+
+  // Ctrl/Cmd+/ → cheatsheet
+  if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+    e.preventDefault()
+    window.showShortcutCheatsheet?.()
+    return
+  }
+
+  // 1-8 → cambio de vista
+  if (NEXUS_VIEW_KEYS[e.key] && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault()
+    window.switchView(NEXUS_VIEW_KEYS[e.key])
+    return
   }
 })
+
+// ── Cheatsheet modal ──────────────────────────────────────────────────────────
+window.showShortcutCheatsheet = () => {
+  let el = document.getElementById('shortcut-cheatsheet')
+  if (el) { el.style.display = el.style.display === 'none' ? 'flex' : 'none'; return }
+  el = document.createElement('div')
+  el.id = 'shortcut-cheatsheet'
+  el.onclick = () => { el.style.display = 'none' }
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:99998;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px);'
+  const ROWS = [
+    ['k',         'Foco en input — nueva entrada'],
+    ['Ctrl+K',    'Búsqueda global'],
+    ['Ctrl+/',    'Este cheatsheet'],
+    ['1 – 8',     'Cambiar vista (Panel / Kanban / Finanzas / Notas / Tiempo / Proyectos / Contactos / Agenda)'],
+    ['Esc',       'Cerrar modal activo'],
+    ['↑ ↓',       'Navegar sugerencias del parser'],
+    ['Tab / →',   'Completar sugerencia'],
+    ['Enter',     'Guardar entrada / confirmar'],
+  ]
+  el.innerHTML = `<div onclick="event.stopPropagation()" style="background:#0d1117;border:1px solid rgba(0,246,255,0.2);border-radius:16px;padding:28px 32px;min-width:420px;max-width:520px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <span style="font-size:14px;font-weight:800;color:#fff;letter-spacing:0.04em;">⌨️ Keyboard Shortcuts</span>
+      <button onclick="document.getElementById('shortcut-cheatsheet').style.display='none'" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;font-size:18px;">×</button>
+    </div>
+    ${ROWS.map(([k,d])=>`<div style="display:flex;align-items:center;gap:16px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+      <kbd style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:5px;padding:3px 8px;color:#00f0ff;white-space:nowrap;flex-shrink:0;">${k}</kbd>
+      <span style="font-size:13px;color:#94a3b8;">${d}</span>
+    </div>`).join('')}
+    <p style="font-size:11px;color:#64748b;margin-top:14px;text-align:center;">Presiona Esc o haz clic afuera para cerrar</p>
+  </div>`
+  document.body.appendChild(el)
+}
