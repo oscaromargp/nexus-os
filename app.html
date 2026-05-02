@@ -2422,6 +2422,14 @@
         <label class="modal-label">Descripción / Contexto</label>
         <textarea id="proy-desc" class="modal-input" rows="2" placeholder="Objetivos, fechas clave, notas..."></textarea>
       </div>
+      <div style="background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px; padding:10px 14px; margin-bottom:16px;">
+        <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.06em;">🏷️ Etiqueta del proyecto (úsala en el parser)</div>
+        <div id="proy-slug-display" style="font-size:14px; font-weight:600; color:#2dd4bf; font-family:monospace;">(se generará al guardar)</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
+          Gastos: <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px;">-$5000 pintura @efectivo #villamarina</code><br>
+          Cotizaciones: <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px;">#cotizacion $18000 impermeabilización @villamarina</code>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn-ghost" onclick="closeProyectoModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveProyecto()">Guardar</button>

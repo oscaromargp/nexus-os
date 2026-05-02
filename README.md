@@ -158,7 +158,7 @@ El corazón de Nexus OS. Escribe una línea en el campo de entrada — el sistem
 | Patrón | Tipo | Ejemplo |
 |---|---|---|
 | `#tarea` | ✅ Tarea / Kanban | `#tarea llamar al arquitecto #casatulum` |
-| `-$monto @cuenta` | 💸 Gasto | `-$850 gasolina @efectivo` |
+| `-$monto @cuenta #proyecto` | 💸 Gasto | `-$850 cemento @efectivo #casatulum` |
 | `+$monto @cuenta` | 💰 Ingreso | `+$12000 pago cliente @bbva` |
 | `#cotizacion $monto @proyecto` | 📄 Cotización | `#cotizacion $45000 instalación eléctrica @casatulum` |
 | `#proyecto` | 🏗️ Proyecto | `#proyecto Casa Tulum` |
@@ -170,8 +170,8 @@ El corazón de Nexus OS. Escribe una línea en el campo de entrada — el sistem
 | Símbolo | Función |
 |---|---|
 | `@cuenta` | Vincula el movimiento a una cuenta (efectivo, bbva, crypto…) |
-| `#tag` | Etiqueta libre para búsqueda y agrupación |
-| `@proyecto` en gasto/cotización | Auto-link duro al proyecto en el dashboard |
+| `#tag` | Etiqueta libre — en gastos, si coincide con el slug de un proyecto, aparece en "Pagado" del dashboard |
+| `@proyecto` en cotización | Auto-link duro al proyecto en el dashboard |
 
 ### Ejemplos reales
 

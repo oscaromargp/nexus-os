@@ -118,6 +118,38 @@ const CATEGORIAS_TRABAJO = [
   ]},
 ]
 
+// ── Variables de módulo que el boot IIFE necesita — deben estar antes del IIFE ──
+let fxIntervalId = null   // usado por initFxWidget() llamado desde boot
+
+// ── TYPE_FILTERS — aquí para evitar TDZ con boot IIFE síncrono ──────────────
+// TYPE_FILTERS — pills para el panel de comandos
+const TYPE_FILTERS = [
+  { type:'income',     label:'💰 Ingresos',    color:'#4ade80' },
+  { type:'expense',    label:'💸 Gastos',      color:'#f87171' },
+  { type:'kanban',     label:'📌 Tareas',      color:'#a78bfa' },
+  { type:'note',       label:'🧠 Notas',       color:'#60a5fa' },
+  { type:'contact',    label:'👥 Contactos',   color:'#34d399' },
+  { type:'cotizacion', label:'📄 Cotizaciones',color:'#fb923c' },
+  { type:'event',      label:'📅 Eventos',     color:'#fb923c' },
+  { type:'account',    label:'🏦 Cuentas',     color:'#facc15' },
+  { type:'loan',       label:'💳 Préstamos',   color:'#c084fc' },
+]
+
+// TYPE_LABELS — íconos y etiquetas por tipo de nodo
+const TYPE_LABELS = {
+  income:     { icon:'💰', label:'Ingreso',     color:'#4ade80' },
+  expense:    { icon:'💸', label:'Gasto',       color:'#f87171' },
+  kanban:     { icon:'📌', label:'Tarea',       color:'#a78bfa' },
+  note:       { icon:'💡', label:'Nota',        color:'#94a3b8' },
+  persona:    { icon:'👤', label:'Contacto',    color:'#fbbf24' },
+  proyecto:   { icon:'📁', label:'Proyecto',    color:'#60a5fa' },
+  contact:    { icon:'👤', label:'Contacto',    color:'#fbbf24' },
+  account:    { icon:'🏦', label:'Cuenta',      color:'#34d399' },
+  event:      { icon:'📅', label:'Evento',      color:'#34d399' },
+  agenda:     { icon:'📋', label:'Agenda',      color:'#f97316' },
+  cotizacion: { icon:'📄', label:'Cotización',  color:'#fb923c' },
+}
+
 // ─────────────────────────────────────────
 // Boot
 // ─────────────────────────────────────────
@@ -137,6 +169,8 @@ const CATEGORIAS_TRABAJO = [
        ]
      }
      showDemoBanner()
+     // Fix 4: setTimeout evita TDZ si alguna const se declara después del IIFE
+     setTimeout(() => renderAll(), 0)
   } else {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) { window.location.href = '/'; return }
@@ -145,7 +179,6 @@ const CATEGORIAS_TRABAJO = [
     await loadNodes()
     setupRealtimeSubscription()
   }
-  renderAll()
   initTickers()
   initWorldClock()
   restorePanels()
@@ -637,11 +670,14 @@ function parseNode(text) {
       metadata.amount = parseFloat(match[1].replace('+$', '').replace('-$', ''))
       metadata.currency = 'USD'
       const rawLabel = match[2] || (isIncome ? 'Ingreso' : 'Gasto')
-      metadata.label = rawLabel.replace(/@\w+/g, '').trim() || (isIncome ? 'Ingreso' : 'Gasto')
+      metadata.label = rawLabel.replace(/@\w+/g, '').replace(/#\w+/g, '').trim() || (isIncome ? 'Ingreso' : 'Gasto')
       cleanContent = metadata.label
       if (acHint) metadata.account_hint = acHint
+      // Extrae #hashtags del texto para vinculación a proyectos (ej: -$500 pintura @efectivo #villamarina)
+      const hashTags = [...t.matchAll(/#(\w+)/g)].map(m => '#' + m[1].toLowerCase())
+      if (hashTags.length) metadata.tags = hashTags
     }
-  } 
+  }
   // 2. Supertags: #tarea, #persona, #proyecto
   else if (t.includes('#tarea')) {
     type = 'kanban'
@@ -661,9 +697,14 @@ function parseNode(text) {
   }
   else if (t.includes('#proyecto')) {
     type = 'proyecto'
-    metadata.tags.push('#proyecto')
     cleanContent = t.replace('#proyecto', '').trim()
     metadata.label = cleanContent
+    // Auto-genera slug único a partir del nombre para que autoLinkToProject funcione
+    const slug = cleanContent.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quita acentos
+      .replace(/[^a-z0-9]/g, '')                        // solo alfanumérico
+    metadata.tags = ['#proyecto', ...(slug ? ['#' + slug] : [])]
+    metadata.project_slug = slug || undefined
   }
   else if (t.includes('#cotizacion') || t.includes('#cotización')) {
     type = 'cotizacion'
@@ -1102,24 +1143,28 @@ window.setTypeFilter = (type) => { activeTypeFilter = activeTypeFilter === type 
 window.toggleFeedGroup = () => { feedGrouped = !feedGrouped; renderAll() }
 
 function renderAll() {
+  // Fix 5: safe wrapper — un fallo en una vista no bloquea las demás
+  const safe = (fn, ...args) => {
+    try { fn(...args) } catch (e) { console.warn('[renderAll] fallo en', fn.name || fn, e) }
+  }
   const nodes = getFilteredNodes()
-  updateStats(nodes)
-  renderFeed(nodes)
-  renderKanban(nodes)
-  renderNotes(nodes)
-  renderFinance(nodes)
-  renderCalendar(nodes)
-  renderCronica(nodes)
-  renderContacts()
-  renderAgenda(allNodes)
-  renderFilterBar()
-  renderSemaforoCuentas()
-  renderPulsoSemanal()
-  checkHabitAlerts()
+  safe(updateStats, nodes)
+  safe(renderFeed, nodes)
+  safe(renderKanban, nodes)
+  safe(renderNotes, nodes)
+  safe(renderFinance, nodes)
+  safe(renderCalendar, nodes)
+  safe(renderCronica, nodes)
+  safe(renderContacts)
+  safe(renderAgenda, allNodes)
+  safe(renderFilterBar)
+  safe(renderSemaforoCuentas)
+  safe(renderPulsoSemanal)
+  safe(checkHabitAlerts)
   // Proyectos: re-render solo si la vista está activa (evita overhead en cada keystroke)
-  if (activeView === 'proyectos') renderProyectos()
+  if (activeView === 'proyectos') safe(renderProyectos)
   // Keep Fuse index in sync with allNodes
-  if (typeof buildFuseIndex === 'function') buildFuseIndex()
+  if (typeof buildFuseIndex === 'function') safe(buildFuseIndex)
 }
 
 function renderFilterBar() {
@@ -1146,18 +1191,7 @@ function updateStats(nodes) {
   document.getElementById('w-nodes-count').textContent = allNodes.filter(n=>n.type==='kanban').length
 }
 
-// TYPE_FILTERS — pills para el panel de comandos
-const TYPE_FILTERS = [
-  { type:'income',     label:'💰 Ingresos',    color:'#4ade80' },
-  { type:'expense',    label:'💸 Gastos',      color:'#f87171' },
-  { type:'kanban',     label:'📌 Tareas',      color:'#a78bfa' },
-  { type:'note',       label:'🧠 Notas',       color:'#60a5fa' },
-  { type:'contact',    label:'👥 Contactos',   color:'#34d399' },
-  { type:'cotizacion', label:'📄 Cotizaciones',color:'#fb923c' },
-  { type:'event',      label:'📅 Eventos',     color:'#fb923c' },
-  { type:'account',    label:'🏦 Cuentas',     color:'#facc15' },
-  { type:'loan',       label:'💳 Préstamos',   color:'#c084fc' },
-]
+// TYPE_FILTERS — movido al bloque de constantes (antes del boot IIFE)
 
 function feedItemHtml(n) {
   const tc = TYPE_CONFIG[n.type] || { label:`#${n.type.toUpperCase()}`, color:'var(--accent-cyan)', border:'rgba(0,246,255,0.3)', bg:'rgba(0,246,255,0.04)' }
@@ -3579,7 +3613,8 @@ async function initTickers() {
 }
 
 // ── THEME TOGGLE ────────────────────────────────────────────────
-window.setTheme = (theme) => {
+// Declarada como function para que el hoisting la haga disponible antes del boot
+function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme)
   localStorage.setItem('nexus_theme', theme)
   const darkBtn  = document.getElementById('theme-dark-btn')
@@ -3589,6 +3624,7 @@ window.setTheme = (theme) => {
   if (darkBtn)  { darkBtn.style.border  = theme === 'dark'  ? accentOn : accentOff; darkBtn.style.color  = theme === 'dark'  ? '#fff' : 'var(--text-muted)' }
   if (lightBtn) { lightBtn.style.border = theme === 'light' ? accentOn : accentOff; lightBtn.style.color = theme === 'light' ? '#fff' : 'var(--text-muted)' }
 }
+window.setTheme = setTheme // exponer para onclick en HTML
 
 function applyStoredTheme() {
   const theme = localStorage.getItem('nexus_theme') || 'dark'
@@ -4983,7 +5019,7 @@ window.importContactsCSV = async (input) => {
 // ═══════════════════════════════════════════════════════════════
 //  SIDEBAR — TIPO DE CAMBIO EN VIVO
 // ═══════════════════════════════════════════════════════════════
-let fxIntervalId = null
+// let fxIntervalId — movido antes del boot IIFE para evitar TDZ
 
 async function refreshFxWidget() {
   const container = document.getElementById('fx-table')
@@ -6042,7 +6078,8 @@ window.removeMember = async (projectId, contactId) => {
 // PROYECTOS — Vista Dedicada (Sprint 4B)
 // ═══════════════════════════════════════════════════════════
 
-function renderProyectos() {
+// Exposed to window so onclick="renderProyectos()" in dashboard back button works
+window.renderProyectos = function renderProyectos() {
   const root = document.getElementById('proyectos-root')
   if (!root) return
   const proyectos = allNodes.filter(n => n.type === 'proyecto').sort((a,b) => new Date(b.created_at)-new Date(a.created_at))
@@ -6080,8 +6117,14 @@ function renderProjectCard(p) {
   const linkedIds = m.linkedTo || []
   const linked = linkedIds.map(id => allNodes.find(n => n.id === id)).filter(Boolean)
   const tagStr = (m.tags||[]).filter(t=>t.startsWith('#')).map(t=>t.slice(1).toLowerCase())
-  // Also find by project_tag for backwards compat
-  const byTag = tagStr.length ? allNodes.filter(n => n.type==='cotizacion' && tagStr.includes((n.metadata?.project_tag||'').toLowerCase())) : []
+  const cardSlug = m.project_slug || tagStr.find(t => t !== 'proyecto') || tagStr[0] || ''
+  // Find linked by linkedTo[] + by project_tag OR #hashtag match (soft links)
+  const byTag = cardSlug ? allNodes.filter(n => {
+    if (!(n.type==='cotizacion'||n.type==='expense'||n.type==='gasto')) return false
+    const pt = (n.metadata?.project_tag||'').toLowerCase()
+    const nt = (n.metadata?.tags||[]).map(t => t.toLowerCase())
+    return pt === cardSlug || nt.includes('#' + cardSlug)
+  }) : []
   const allLinked = [...new Map([...linked,...byTag].map(n=>[n.id,n])).values()]
 
   // Cotizaciones
@@ -6174,10 +6217,15 @@ window.openProjectDashboard = (projectId) => {
   const linkedIds = m.linkedTo || []
   const linked = linkedIds.map(id => allNodes.find(n => n.id === id)).filter(Boolean)
   const tagStr = (m.tags||[]).filter(t=>t.startsWith('#')).map(t=>t.slice(1).toLowerCase())
-  const byTag = tagStr.length ? allNodes.filter(n =>
-    (n.type==='cotizacion'||n.type==='expense'||n.type==='gasto'||n.type==='tarea') &&
-    tagStr.includes((n.metadata?.project_tag||'').toLowerCase())
-  ) : []
+  // projSlug: el slug real (no 'proyecto') para pasar a cotizaciones y pagos
+  const projSlug = m.project_slug || tagStr.find(t => t !== 'proyecto') || tagStr[0] || ''
+  const byTag = projSlug ? allNodes.filter(n => {
+    if (!(n.type==='cotizacion'||n.type==='expense'||n.type==='gasto'||n.type==='tarea')) return false
+    const pt  = (n.metadata?.project_tag||'').toLowerCase()
+    const nt  = (n.metadata?.tags||[]).map(t => t.toLowerCase())
+    // Soft-link: project_tag match OR any node tag matches projSlug (gastos tagueados con #slug)
+    return pt === projSlug || tagStr.some(s => s !== 'proyecto' && pt === s) || nt.includes('#' + projSlug)
+  }) : []
   const allLinked = [...new Map([...linked,...byTag].map(n=>[n.id,n])).values()]
 
   // 5-metric computation
@@ -6229,8 +6277,8 @@ window.openProjectDashboard = (projectId) => {
         <div style="display:flex;gap:8px;flex-shrink:0;">
           <span style="font-size:11px;font-weight:700;background:${rCfg.color}20;color:${rCfg.color};border-radius:6px;padding:4px 10px;">${rCfg.label}</span>
           <button onclick="openProyectoModal('${p.id}')" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;">✏️ Editar</button>
-          <button onclick="openCotizacionModal(null,'${tagStr[0]||''}')" style="background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.35);color:#fb923c;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">+ Cotización</button>
-          <button onclick="openProveedorPicker('${tagStr[0]||''}')" style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">🔧 Sin cotización</button>
+          <button onclick="openCotizacionModal(null,'${projSlug}')" style="background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.35);color:#fb923c;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">+ Cotización</button>
+          <button onclick="openProveedorPicker('${projSlug}')" style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">🔧 Sin cotización</button>
         </div>
       </div>
 
@@ -6275,7 +6323,7 @@ window.openProjectDashboard = (projectId) => {
                           <div style="font-size:12px;font-weight:600;color:var(--text-primary);">${esc(name)}</div>
                           ${mb.notes?`<div style="font-size:10px;color:var(--text-muted);">${esc(mb.notes)}</div>`:''}
                         </div>
-                        ${isProv?`<button onclick="openPaymentModal('${mb.contact_id}',null,'${tagStr[0]||''}')" style="font-size:10px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:5px;padding:2px 7px;cursor:pointer;flex-shrink:0;">💸</button>`:''}
+                        ${isProv?`<button onclick="openPaymentModal('${mb.contact_id}',null,'${projSlug}')" style="font-size:10px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:5px;padding:2px 7px;cursor:pointer;flex-shrink:0;">💸</button>`:''}
                         <button onclick="removeMember('${p.id}','${mb.contact_id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0;" title="Quitar">×</button>
                       </div>`
                     }).join('')}
@@ -6330,7 +6378,7 @@ window.openProjectDashboard = (projectId) => {
                 <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${esc(provName)}</div>
                 <div style="font-size:11px;color:var(--text-muted);">Acordado: <span style="color:#4ade80;font-family:monospace;">$${acordado.toLocaleString('es-MX')}</span> · Pagado: <span style="color:#60a5fa;font-family:monospace;">$${pagadoProv.toLocaleString('es-MX')}</span>${pendProv>0?` · Pendiente: <span style="color:#fb923c;font-family:monospace;">$${pendProv.toLocaleString('es-MX')}</span>`:''}${excedente?` <span style="color:#f87171;font-weight:700;">⚠️ Excedente</span>`:''}</div>
               </div>
-              ${prov ? `<button onclick="openPaymentModal('${pid}',null,'${tagStr[0]||''}')" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:11px;flex-shrink:0;">💸 Pagar</button>` : ''}
+              ${prov ? `<button onclick="openPaymentModal('${pid}',null,'${projSlug}')" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:11px;flex-shrink:0;">💸 Pagar</button>` : ''}
             </div>`
         }).join('')}
       </div>` : ''}
@@ -6356,7 +6404,7 @@ window.openProjectDashboard = (projectId) => {
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
               <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">📅 PAGOS FIJOS DEL PROYECTO</div>
-              <button onclick="openAgendaModal('bill','${tagStr[0]||''}')" style="font-size:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
+              <button onclick="openAgendaModal('bill','${projSlug}')" style="font-size:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
             </div>
             ${upcoming.length ? `<div style="margin-bottom:10px;padding:10px;background:rgba(167,139,250,0.05);border-radius:8px;">
               <div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:8px;">⏰ PRÓXIMOS ${upcomingDays} DÍAS</div>
@@ -6394,7 +6442,7 @@ window.openProjectDashboard = (projectId) => {
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">📄 COTIZACIONES</div>
-          <button onclick="openCotizacionModal(null,'${tagStr[0]||''}')" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Nueva</button>
+          <button onclick="openCotizacionModal(null,'${projSlug}')" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Nueva</button>
         </div>
         ${cots.length === 0 ? `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Sin cotizaciones aún</div>` :
           Object.entries(cotsByCat).map(([cat,cs]) => `
@@ -6595,6 +6643,13 @@ window.openProyectoModal = (id) => {
   document.getElementById('proy-budget').value = m.budget || ''
   document.getElementById('proy-rol').value    = m.rol || 'dueño'
   document.getElementById('proy-desc').value   = m.desc || m.notes || ''
+  // Mostrar slug actual (o calculado) para que el usuario sepa qué usar en el parser
+  const slugDisplay = document.getElementById('proy-slug-display')
+  if (slugDisplay) {
+    const slug = m.project_slug || (m.tags||[]).find(t=>t!=='#proyecto'&&t.startsWith('#'))?.slice(1) || ''
+    slugDisplay.textContent = slug ? '#' + slug : '(se generará al guardar)'
+    slugDisplay.style.color = slug ? '#2dd4bf' : '#94a3b8'
+  }
   document.getElementById('proyecto-modal').classList.remove('hidden')
 }
 
@@ -6606,12 +6661,27 @@ window.saveProyecto = async () => {
   if (!node) return
   const label = document.getElementById('proy-label').value.trim() || node.metadata?.label || node.content
   const budgetVal = parseFloat(document.getElementById('proy-budget').value)
+
+  // Preservar tags existentes o generar slug automático
+  const existingTags = node.metadata?.tags || []
+  const hasCustomTag = existingTags.some(t => t !== '#proyecto' && t.startsWith('#'))
+  let projectTags = existingTags
+  let projectSlug = node.metadata?.project_slug
+  if (!hasCustomTag) {
+    projectSlug = label.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '')
+    projectTags = ['#proyecto', ...(projectSlug ? ['#' + projectSlug] : [])]
+  }
+
   node.metadata = {
     ...node.metadata,
     label,
     budget: budgetVal > 0 ? budgetVal : undefined,
     rol:    document.getElementById('proy-rol').value,
     desc:   document.getElementById('proy-desc').value.trim() || undefined,
+    tags:   projectTags,
+    project_slug: projectSlug || undefined,
   }
   node.content = label
   if (localStorage.getItem('nexus_admin_bypass') !== 'true')
@@ -6627,20 +6697,7 @@ window.saveProyecto = async () => {
 
 let fuseInstance = null
 let searchDebounceTimer = null
-
-const TYPE_LABELS = {
-  income:   { icon:'💰', label:'Ingreso',   color:'#4ade80' },
-  expense:  { icon:'💸', label:'Gasto',     color:'#f87171' },
-  kanban:   { icon:'📌', label:'Tarea',     color:'#a78bfa' },
-  note:     { icon:'💡', label:'Nota',      color:'#94a3b8' },
-  persona:  { icon:'👤', label:'Contacto',  color:'#fbbf24' },
-  proyecto: { icon:'📁', label:'Proyecto',  color:'#60a5fa' },
-  contact:  { icon:'👤', label:'Contacto',  color:'#fbbf24' },
-  account:  { icon:'🏦', label:'Cuenta',    color:'#34d399' },
-  event:      { icon:'📅', label:'Evento',      color:'#34d399' },
-  agenda:     { icon:'📋', label:'Agenda',      color:'#f97316' },
-  cotizacion: { icon:'📄', label:'Cotización',  color:'#fb923c' },
-}
+// TYPE_LABELS — movido al bloque de constantes (antes del boot IIFE)
 
 function buildFuseIndex() {
   const docs = allNodes.map(n => ({
