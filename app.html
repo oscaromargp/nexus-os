@@ -2555,6 +2555,9 @@
           <select id="cot-status" class="modal-input">
             <option value="pendiente">⏳ Pendiente</option>
             <option value="aceptada">✅ Aceptada</option>
+            <option value="en_proceso">🔄 En proceso</option>
+            <option value="parcial">🔶 Pago parcial</option>
+            <option value="pagada">💰 Pagada</option>
             <option value="rechazada">❌ Rechazada</option>
           </select>
         </div>
@@ -3449,6 +3452,49 @@
     })
   }
 </script>
+
+<!-- ═══════════════ MODAL: PROJECT HEALTH (Odoo project.update) ═══════════════ -->
+<div id="project-health-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeHealthModal()" style="z-index:9650;">
+  <div class="modal-box" style="max-width:440px;">
+    <div class="modal-header">
+      <h3 class="modal-title" style="margin-bottom:0;">📊 Estado del proyecto</h3>
+      <button class="modal-close" onclick="closeHealthModal()">✕</button>
+    </div>
+
+    <!-- Status picker -->
+    <div class="modal-field">
+      <label class="modal-label">Estado de salud</label>
+      <select id="phm-status" class="modal-input" onchange="phm_updateColors()" style="font-weight:700;transition:border-color .2s,color .2s;">
+        <option value="on_track">🟢 En curso — todo va bien</option>
+        <option value="at_risk">🟡 En riesgo — hay alertas</option>
+        <option value="off_track">🔴 Atrasado — requiere acción</option>
+        <option value="on_hold">🔵 Pausado — en espera</option>
+        <option value="done">🟣 Terminado — completado</option>
+      </select>
+    </div>
+
+    <!-- Progress slider -->
+    <div class="modal-field">
+      <label class="modal-label">Avance general — <span id="phm-progress-val" style="color:var(--accent-cyan);">0%</span></label>
+      <input id="phm-progress" type="range" min="0" max="100" step="5" value="0"
+             oninput="document.getElementById('phm-progress-val').textContent=this.value+'%'"
+             style="width:100%;accent-color:var(--accent-cyan);cursor:pointer;" />
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);margin-top:3px;"><span>0%</span><span>50%</span><span>100%</span></div>
+    </div>
+
+    <!-- Note -->
+    <div class="modal-field">
+      <label class="modal-label">Nota del reporte (opcional)</label>
+      <textarea id="phm-note" class="modal-input" rows="3" placeholder="Ej: La estructura está al 40%. Esperando entrega de materiales el 15 de marzo..."
+                style="resize:vertical;"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeHealthModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveHealthModal()">Guardar estado →</button>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════ MODAL: QUICKCREATE ═══════════════ -->
 <div id="quickcreate-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeQuickCreate()" style="z-index:9600;">

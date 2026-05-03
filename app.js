@@ -63,10 +63,14 @@ const TYPE_CONFIG = {
   cotizacion: { label: '#COTIZACIÓN', color: '#fb923c', border: 'rgba(251,146,60,0.4)',  bg: 'rgba(251,146,60,0.06)' },
 }
 
+// Odoo account.move.payment_state — extendido para cotizaciones
 const COT_STATUS = {
-  pendiente:  { label:'⏳ Pendiente',  color:'#fb923c' },
-  aceptada:   { label:'✅ Aceptada',   color:'#4ade80' },
-  rechazada:  { label:'❌ Rechazada',  color:'#f87171' },
+  pendiente:   { label:'⏳ Pendiente',    color:'#fb923c', next:'aceptada'   },
+  aceptada:    { label:'✅ Aceptada',     color:'#4ade80', next:'en_proceso' },
+  en_proceso:  { label:'🔄 En proceso',   color:'#60a5fa', next:'parcial'    },
+  parcial:     { label:'🔶 Pago parcial', color:'#fbbf24', next:'pagada'     },
+  pagada:      { label:'💰 Pagada',       color:'#a78bfa', next:null         },
+  rechazada:   { label:'❌ Rechazada',    color:'#f87171', next:null         },
 }
 const ROL_LABEL = { dueño:'👑 Dueño', ejecutor:'⚙️ Ejecutor', colaborador:'🤝 Colaborador' }
 
@@ -343,13 +347,27 @@ function renderKanban(nodes) {
                  ondragend="this.style.opacity='1'"
                  onclick="openCardModal('${n.id}')">
               ${(() => { const imgs = n.metadata?.images; if (!imgs?.length) return ''; const src = typeof imgs[0]==='string' ? imgs[0] : (imgs[0].url||imgs[0].data||''); return src ? `<div style="margin:-12px -12px 10px -12px;height:120px;overflow:hidden;border-radius:8px 8px 0 0;"><img src="${src}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.style.display='none'"/></div>` : '' })()}
+              ${(() => {
+                const isPrio = n.metadata?.priority === '1'
+                const dl = n.metadata?.date_deadline
+                const today = new Date().toISOString().split('T')[0]
+                const isOverdue = dl && dl < today && n.metadata?.status !== 'done'
+                const projTag = n.metadata?.project_tag
+                const projNode = projTag ? allNodes.find(p => p.type==='proyecto' && p.metadata?.project_slug === projTag) : null
+                const badges = []
+                if (isPrio) badges.push(`<span style="font-size:9px;background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);border-radius:5px;padding:1px 5px;font-weight:700;">⭐ ALTA</span>`)
+                if (dl) badges.push(`<span style="font-size:9px;background:${isOverdue?'rgba(248,113,113,0.15)':'rgba(148,163,184,0.1)'};color:${isOverdue?'#f87171':'#94a3b8'};border:1px solid ${isOverdue?'rgba(248,113,113,0.3)':'rgba(148,163,184,0.2)'};border-radius:5px;padding:1px 5px;">${isOverdue?'🔴':'📅'} ${dl}</span>`)
+                if (projNode) badges.push(`<span style="font-size:9px;background:rgba(45,212,191,0.1);color:#2dd4bf;border:1px solid rgba(45,212,191,0.2);border-radius:5px;padding:1px 5px;">🏗️ ${esc(projNode.metadata?.label||projTag)}</span>`)
+                return badges.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">${badges.join('')}</div>` : ''
+              })()}
               <div class="trello-card-title">${esc(n.metadata?.label || n.content)}</div>
               <div class="trello-card-meta">
                  ${(n.metadata?.comments || []).length > 0 ? `<span>💬 ${(n.metadata?.comments || []).length}</span>` : ''}
+                 ${n.metadata?.subtasks?.length ? `<span>⤷ ${n.metadata.subtasks.length}</span>` : ''}
               </div>
               <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
                  ${(n.metadata?.tags || [])
-                   .filter(t => t.toLowerCase() !== `#${n.type.toLowerCase()}`)
+                   .filter(t => t.toLowerCase() !== '#tarea' && t.toLowerCase() !== `#${(n.metadata?.project_tag||'__')}`)
                    .map(t => `<span class="tag-pill" onclick="event.stopPropagation(); setFilter('${t}')" style="background:var(--accent-cyan-dim); color:var(--accent-cyan); font-size:8px; padding:1px 4px; border-radius:3px; cursor:pointer;">${t}</span>`).join('')}
               </div>
             </div>
@@ -758,6 +776,29 @@ function parseNode(text) {
     metadata.status = 'todo'
     metadata.tags.push('#tarea')
     cleanContent = t.replace('#tarea', '').trim()
+    // ! al inicio o final → prioridad alta (Odoo-style)
+    if (/^!|!$/.test(cleanContent)) {
+      metadata.priority = '1'
+      cleanContent = cleanContent.replace(/^!|!$/g, '').trim()
+    } else {
+      metadata.priority = '0'
+    }
+    // Fecha límite: detecta patrón YYYY-MM-DD en el texto
+    const dlMatch = cleanContent.match(/\b(\d{4}-\d{2}-\d{2})\b/)
+    if (dlMatch) {
+      metadata.date_deadline = dlMatch[1]
+      cleanContent = cleanContent.replace(dlMatch[1], '').trim()
+    }
+    // #proyecto-slug para vincular tarea a proyecto
+    const taskProjMatch = cleanContent.match(/#(\w+)/)
+    if (taskProjMatch) {
+      const slug = taskProjMatch[1].toLowerCase()
+      if (slug !== 'tarea') {
+        metadata.project_tag = slug
+        metadata.tags.push('#' + slug)
+        cleanContent = cleanContent.replace('#' + taskProjMatch[1], '').trim()
+      }
+    }
     metadata.label = cleanContent
   }
   else if (t.includes('#persona')) {
@@ -6408,14 +6449,17 @@ function renderProjectCard(p) {
   }) : []
   const allLinked = [...new Map([...linked,...byTag].map(n=>[n.id,n])).values()]
 
-  // Cotizaciones
+  // Cotizaciones — Odoo extended states
   const cots = allLinked.filter(n => n.type === 'cotizacion')
-  const aceptadas = cots.filter(n => n.metadata?.status === 'aceptada')
+  const ESTADOS_COMPROMETIDOS_CARD = ['aceptada','en_proceso','parcial','pagada']
+  const aceptadas = cots.filter(n => ESTADOS_COMPROMETIDOS_CARD.includes(n.metadata?.status))
   const comprometido = aceptadas.reduce((s,n) => s + (+n.metadata?.amount||0), 0)
 
-  // Pagos (gastos vinculados)
+  // Pagos (gastos vinculados + cotizaciones pagadas)
   const pagos = allLinked.filter(n => n.type === 'expense' || n.type === 'gasto')
+  const cotsPagadas2 = cots.filter(n => n.metadata?.status === 'pagada')
   const pagado = pagos.reduce((s,n) => s + (+n.metadata?.amount||0), 0)
+             + cotsPagadas2.reduce((s,n) => s + (+n.metadata?.amount||0), 0)
 
   const pendiente = Math.max(0, comprometido - pagado)
   const sinComprometer = Math.max(0, budget - comprometido)
@@ -6426,18 +6470,46 @@ function renderProjectCard(p) {
 
   const taskCount = allLinked.filter(n => n.type==='tarea'||n.type==='task').length
 
+  // ── Health badge (Odoo project.update.status) ────────────────
+  const health = m.health || {}
+  const HEALTH_CFG = {
+    on_track: { emoji:'🟢', label:'En curso',  color:'#4ade80' },
+    at_risk:  { emoji:'🟡', label:'En riesgo', color:'#fbbf24' },
+    off_track:{ emoji:'🔴', label:'Atrasado',  color:'#f87171' },
+    on_hold:  { emoji:'🔵', label:'Pausado',   color:'#60a5fa' },
+    done:     { emoji:'🟣', label:'Terminado', color:'#a78bfa' },
+  }
+  const hCfg = HEALTH_CFG[health.status] || null
+  const STAGE_CFG = {
+    planning: { label:'Planificación', color:'#94a3b8' },
+    active:   { label:'En ejecución', color:'#4ade80' },
+    on_hold:  { label:'Pausado',       color:'#fbbf24' },
+    done:     { label:'Terminado',     color:'#a78bfa' },
+  }
+  const stageCfg = STAGE_CFG[m.stage] || null
+  // Milestones progress
+  const mils = m.milestones || []
+  const milDone = mils.filter(ms => ms.is_reached).length
+  const milOverdue = mils.filter(ms => !ms.is_reached && ms.deadline && ms.deadline < new Date().toISOString().split('T')[0]).length
+
   return `
-    <div onclick="openProjectDashboard('${p.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;"
-         onmouseenter="this.style.borderColor='rgba(255,255,255,0.15)';this.style.transform='translateY(-2px)'"
-         onmouseleave="this.style.borderColor='var(--border)';this.style.transform='translateY(0)'">
-      ${overBudget ? `<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#f87171,#fb923c);"></div>` : ''}
+    <div onclick="openProjectDashboard('${p.id}')" style="background:var(--surface);border:1px solid ${hCfg ? hCfg.color+'44' : 'var(--border)'};border-radius:14px;padding:20px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;"
+         onmouseenter="this.style.borderColor='${hCfg ? hCfg.color+'88' : 'rgba(255,255,255,0.15)'}';this.style.transform='translateY(-2px)'"
+         onmouseleave="this.style.borderColor='${hCfg ? hCfg.color+'44' : 'var(--border)'}';this.style.transform='translateY(0)'">
+      ${hCfg ? `<div style="position:absolute;top:0;left:0;right:0;height:3px;background:${hCfg.color};opacity:0.7;"></div>` :
+               overBudget ? `<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#f87171,#fb923c);"></div>` : ''}
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;">
         <div style="flex:1;min-width:0;">
           <div style="font-size:15px;font-weight:800;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.label||p.content)}</div>
           ${m.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.desc)}</div>` : ''}
         </div>
-        <span style="font-size:10px;font-weight:700;background:${rCfg.color}20;color:${rCfg.color};border-radius:6px;padding:2px 8px;white-space:nowrap;flex-shrink:0;">${rCfg.label}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+          <span style="font-size:10px;font-weight:700;background:${rCfg.color}20;color:${rCfg.color};border-radius:6px;padding:2px 8px;white-space:nowrap;">${rCfg.label}</span>
+          ${hCfg ? `<span style="font-size:10px;font-weight:700;background:${hCfg.color}15;color:${hCfg.color};border-radius:6px;padding:2px 8px;white-space:nowrap;">${hCfg.emoji} ${hCfg.label}</span>` : ''}
+          ${stageCfg && !hCfg ? `<span style="font-size:10px;color:${stageCfg.color};opacity:0.8;">${stageCfg.label}</span>` : ''}
+        </div>
       </div>
+      ${health.note ? `<div style="font-size:11px;color:var(--text-muted);background:rgba(255,255,255,0.03);border-left:2px solid ${hCfg?.color||'var(--border)'};padding:6px 10px;border-radius:0 6px 6px 0;margin-bottom:12px;font-style:italic;">${esc(health.note)}</div>` : ''}
       ${budget > 0 ? `
         <div style="margin-bottom:14px;">
           <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
@@ -6479,8 +6551,10 @@ function renderProjectCard(p) {
         return `<div style="display:flex;align-items:center;margin-bottom:10px;">${avatars}${extra}</div>`
       })()}
       <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        ${cots.length ? `<span style="font-size:11px;color:var(--text-muted);">📄 ${cots.length} cotización${cots.length!==1?'es':''} (${aceptadas.length} aceptada${aceptadas.length!==1?'s':''})</span>` : ''}
-        ${taskCount ? `<span style="font-size:11px;color:var(--text-muted);">✅ ${taskCount} tarea${taskCount!==1?'s':''}</span>` : ''}
+        ${cots.length ? `<span style="font-size:11px;color:var(--text-muted);">📄 ${cots.length} cot. (${aceptadas.length} ✓)</span>` : ''}
+        ${taskCount ? `<span style="font-size:11px;color:var(--text-muted);">✅ ${taskCount} tareas</span>` : ''}
+        ${mils.length ? `<span style="font-size:11px;color:${milOverdue?'#f87171':'var(--text-muted)'};">🏁 ${milDone}/${mils.length} hitos${milOverdue?` ⚠️${milOverdue}`:''}</span>` : ''}
+        ${health.progress != null ? `<span style="font-size:11px;color:var(--text-muted);">📊 ${health.progress}%</span>` : ''}
       </div>
     </div>`
 }
@@ -6508,11 +6582,16 @@ function _computeProjData(projectId) {
   const allLinked = [...new Map([...linked,...byTag].map(n=>[n.id,n])).values()]
 
   const cots        = allLinked.filter(n => n.type === 'cotizacion')
-  const aceptadas   = cots.filter(n => n.metadata?.status === 'aceptada')
+  // Odoo payment_state: aceptada + en_proceso + parcial + pagada → comprometido
+  const ESTADOS_COMPROMETIDOS = ['aceptada','en_proceso','parcial','pagada']
+  const aceptadas   = cots.filter(n => ESTADOS_COMPROMETIDOS.includes(n.metadata?.status))
   const pendientes  = cots.filter(n => n.metadata?.status === 'pendiente')
   const comprometido= aceptadas.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
   const pagos       = allLinked.filter(n => n.type==='expense'||n.type==='gasto')
+  // cotizaciones 'pagada' también suman a pagado directamente
+  const cotsPagadas = cots.filter(n => n.metadata?.status === 'pagada')
   const pagado      = pagos.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
+                    + cotsPagadas.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
   const pendientePago   = Math.max(0, comprometido - pagado)
   const sinComprometer  = Math.max(0, budget - comprometido)
   const overBudget  = comprometido > budget && budget > 0
@@ -6573,6 +6652,65 @@ window.openProjectDashboard = (projectId) => {
       </div>
 
       ${overBudget ? `<div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;"><span style="font-size:18px;">⚠️</span><div><div style="font-size:13px;font-weight:700;color:#f87171;">Presupuesto excedido</div><div style="font-size:12px;color:var(--text-muted);">Comprometido $${comprometido.toLocaleString('es-MX')} / Presupuesto $${budget.toLocaleString('es-MX')}</div></div></div>` : ''}
+
+      <!-- ── SALUD DEL PROYECTO (Odoo project.update) ── -->
+      ${_safe(() => {
+        const h = m.health || {}
+        const HCFG = { on_track:{emoji:'🟢',label:'En curso',color:'#4ade80'}, at_risk:{emoji:'🟡',label:'En riesgo',color:'#fbbf24'}, off_track:{emoji:'🔴',label:'Atrasado',color:'#f87171'}, on_hold:{emoji:'🔵',label:'Pausado',color:'#60a5fa'}, done:{emoji:'🟣',label:'Terminado',color:'#a78bfa'} }
+        const hc = HCFG[h.status] || null
+        const STAGES = [{v:'planning',l:'📐 Planificación'},{v:'active',l:'🚀 En ejecución'},{v:'on_hold',l:'⏸️ Pausado'},{v:'done',l:'✅ Terminado'}]
+        return `
+          <div style="background:var(--surface);border:1px solid ${hc?hc.color+'44':'var(--border)'};border-radius:12px;padding:16px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:${hc||h.note||h.progress!=null?'14px':'0'};">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">SALUD DEL PROYECTO</span>
+                ${hc?`<span style="font-size:12px;font-weight:700;background:${hc.color}18;color:${hc.color};border-radius:6px;padding:3px 10px;">${hc.emoji} ${hc.label}</span>`:''}
+                <select onchange="projSetStage('${p.id}',this.value)" onclick="event.stopPropagation()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:3px 8px;color:var(--text-secondary);font-size:11px;font-family:inherit;">
+                  ${STAGES.map(s=>`<option value="${s.v}" ${m.stage===s.v?'selected':''}>${s.l}</option>`).join('')}
+                </select>
+              </div>
+              <button onclick="openHealthModal('${p.id}')" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;">📊 Actualizar estado</button>
+            </div>
+            ${h.progress!=null ? `
+              <div style="margin-bottom:${h.note?'10px':'0'};">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+                  <span style="font-size:11px;color:var(--text-muted);">Avance general</span>
+                  <span style="font-size:11px;font-weight:700;color:${hc?.color||'var(--accent-cyan)'};">${h.progress}%</span>
+                </div>
+                <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+                  <div style="height:100%;width:${h.progress}%;background:${hc?.color||'#00f6ff'};border-radius:3px;transition:width .6s;"></div>
+                </div>
+              </div>` : ''}
+            ${h.note ? `<div style="font-size:12px;color:var(--text-muted);font-style:italic;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;border-left:3px solid ${hc?.color||'var(--border)'};">"${esc(h.note)}"</div>` : ''}
+            ${h.updated_at ? `<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">Última actualización: ${h.updated_at}</div>` : ''}
+          </div>`
+      })}
+
+      <!-- ── HITOS (Odoo project.milestone) ── -->
+      ${_safe(() => {
+        const mils = m.milestones || []
+        const today = new Date().toISOString().split('T')[0]
+        return `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${mils.length?'14px':'0'};">
+              <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">🏁 HITOS DEL PROYECTO</span>
+              <button onclick="openMilestoneForm('${p.id}')" style="font-size:11px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Hito</button>
+            </div>
+            ${mils.length === 0 ? `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px;">Sin hitos definidos — agrega checkpoints clave del proyecto</div>` :
+              mils.map((ms,i) => {
+                const overdue = !ms.is_reached && ms.deadline && ms.deadline < today
+                const clr = ms.is_reached ? '#4ade80' : overdue ? '#f87171' : '#2dd4bf'
+                return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                  <button onclick="toggleMilestone('${p.id}',${i})" style="width:20px;height:20px;border-radius:50%;border:2px solid ${clr};background:${ms.is_reached?clr:'transparent'};cursor:pointer;display:grid;place-items:center;flex-shrink:0;font-size:11px;color:${ms.is_reached?'#000':'transparent'};">✓</button>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.6;':''}">${esc(ms.name)}</div>
+                    ${ms.deadline ? `<div style="font-size:10px;color:${clr};">${overdue?'⚠️ Vencido: ':'📅 '}${ms.deadline}</div>` : ''}
+                  </div>
+                  <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Eliminar">✕</button>
+                </div>`
+              }).join('')}
+          </div>`
+      })}
 
       <!-- Equipo del proyecto -->
       ${_safe(() => {
@@ -6899,7 +7037,7 @@ window.changeCotizacionStatus = async (id, status) => {
     await autoLinkToProject(id, node.metadata.project_tag)
   }
   renderAll()
-  const msgs = { aceptada:'✅ Cotización aceptada', rechazada:'❌ Cotización rechazada', pendiente:'⏳ Pendiente' }
+  const msgs = { aceptada:'✅ Cotización aceptada', rechazada:'❌ Cotización rechazada', pendiente:'⏳ Pendiente', en_proceso:'🔄 Trabajo en proceso', parcial:'🔶 Pago parcial registrado', pagada:'💰 Cotización pagada completamente' }
   showToast(msgs[status] || 'Estado actualizado')
   // Anticipo prompt when accepting
   if (status === 'aceptada') {
@@ -7751,4 +7889,143 @@ window.deleteCryptoPurchase = function(idx) {
   saveCryptoPortfolio(portfolio)
   renderCryptoPortfolio()
   showToast('🗑 Compra eliminada')
+}
+
+// ══════════════════════════════════════════════════════════════
+// ODOO PATTERNS — Project Health + Milestones + Stage
+// ══════════════════════════════════════════════════════════════
+
+// ── Stage (Odoo project.project.stage) ──────────────────────
+
+window.projSetStage = async function(projectId, stage) {
+  const node = allNodes.find(n => n.id === projectId)
+  if (!node) return
+  node.metadata = { ...(node.metadata || {}), stage }
+  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
+  if (error) { showToast('⚠️ Error al guardar etapa'); return }
+  showToast(`✅ Etapa actualizada: ${stage}`)
+  renderAll()
+}
+
+// ── Health Modal (Odoo project.update) ──────────────────────
+
+let _healthProjectId = null
+
+window.openHealthModal = function(projectId) {
+  _healthProjectId = projectId
+  const node = allNodes.find(n => n.id === projectId)
+  const h = node?.metadata?.health || {}
+  const modal = document.getElementById('project-health-modal')
+  if (!modal) return
+  // Pre-fill form
+  const sel = document.getElementById('phm-status')
+  if (sel) sel.value = h.status || 'on_track'
+  const prog = document.getElementById('phm-progress')
+  if (prog) { prog.value = h.progress ?? 0; document.getElementById('phm-progress-val').textContent = (h.progress ?? 0) + '%' }
+  const note = document.getElementById('phm-note')
+  if (note) note.value = h.note || ''
+  phm_updateColors()
+  modal.classList.remove('hidden'); modal.style.display = 'flex'
+}
+
+window.closeHealthModal = function() {
+  const modal = document.getElementById('project-health-modal')
+  if (modal) { modal.classList.add('hidden'); modal.style.display = 'none' }
+  _healthProjectId = null
+}
+
+window.phm_updateColors = function() {
+  const STATUS_COLORS = { on_track:'#4ade80', at_risk:'#fbbf24', off_track:'#f87171', on_hold:'#60a5fa', done:'#a78bfa' }
+  const sel = document.getElementById('phm-status')
+  if (!sel) return
+  const c = STATUS_COLORS[sel.value] || '#94a3b8'
+  sel.style.borderColor = c
+  sel.style.color = c
+}
+
+window.saveHealthModal = async function() {
+  if (!_healthProjectId) return
+  const status   = document.getElementById('phm-status')?.value
+  const progress = parseInt(document.getElementById('phm-progress')?.value || '0')
+  const note     = document.getElementById('phm-note')?.value.trim()
+
+  const node = allNodes.find(n => n.id === _healthProjectId)
+  if (!node) return
+
+  node.metadata = {
+    ...(node.metadata || {}),
+    health: {
+      status,
+      progress,
+      note: note || null,
+      updated_at: new Date().toISOString().split('T')[0],
+    }
+  }
+
+  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', _healthProjectId)
+  if (error) { showToast('⚠️ Error al guardar'); return }
+
+  closeHealthModal()
+  showToast('✅ Estado del proyecto actualizado')
+  renderAll()
+  // Re-open dashboard to reflect changes
+  openProjectDashboard(_healthProjectId)
+}
+
+// ── Milestones (Odoo project.milestone) ─────────────────────
+
+window.openMilestoneForm = function(projectId) {
+  const name = prompt('Nombre del hito:')
+  if (!name?.trim()) return
+  const deadline = prompt('Fecha límite (YYYY-MM-DD) — opcional:') || null
+  addMilestone(projectId, name.trim(), deadline?.trim() || null)
+}
+
+async function addMilestone(projectId, name, deadline) {
+  const node = allNodes.find(n => n.id === projectId)
+  if (!node) return
+  const ms = {
+    id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+    name,
+    deadline: deadline || null,
+    is_reached: false,
+    reached_date: null,
+    created_at: new Date().toISOString(),
+  }
+  node.metadata = { ...(node.metadata || {}), milestones: [...(node.metadata?.milestones || []), ms] }
+  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
+  if (error) { showToast('⚠️ Error al guardar hito'); return }
+  showToast(`🏁 Hito "${name}" creado`)
+  renderAll(); openProjectDashboard(projectId)
+}
+
+window.toggleMilestone = async function(projectId, idx) {
+  const node = allNodes.find(n => n.id === projectId)
+  if (!node) return
+  const mils = [...(node.metadata?.milestones || [])]
+  if (!mils[idx]) return
+  mils[idx] = {
+    ...mils[idx],
+    is_reached: !mils[idx].is_reached,
+    reached_date: !mils[idx].is_reached ? new Date().toISOString().split('T')[0] : null,
+  }
+  node.metadata = { ...(node.metadata || {}), milestones: mils }
+  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
+  if (error) { showToast('⚠️ Error al actualizar'); return }
+  const done = mils[idx].is_reached
+  showToast(done ? `✅ Hito "${mils[idx].name}" alcanzado` : `↩️ Hito reabierto`)
+  renderAll(); openProjectDashboard(projectId)
+}
+
+window.deleteMilestone = async function(projectId, idx) {
+  if (!confirm('¿Eliminar este hito?')) return
+  const node = allNodes.find(n => n.id === projectId)
+  if (!node) return
+  const mils = [...(node.metadata?.milestones || [])]
+  mils.splice(idx, 1)
+  node.metadata = { ...(node.metadata || {}), milestones: mils }
+  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
+  if (error) { showToast('⚠️ Error al eliminar'); return }
+  showToast('🗑 Hito eliminado')
+  renderAll(); openProjectDashboard(projectId)
 }

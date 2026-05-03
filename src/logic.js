@@ -39,6 +39,26 @@ export function parseNode(text) {
     metadata.status = 'todo'
     metadata.tags.push('#tarea')
     cleanContent = t.replace('#tarea', '').trim()
+    if (/^!|!$/.test(cleanContent)) {
+      metadata.priority = '1'
+      cleanContent = cleanContent.replace(/^!|!$/g, '').trim()
+    } else {
+      metadata.priority = '0'
+    }
+    const dlMatch = cleanContent.match(/\b(\d{4}-\d{2}-\d{2})\b/)
+    if (dlMatch) {
+      metadata.date_deadline = dlMatch[1]
+      cleanContent = cleanContent.replace(dlMatch[1], '').trim()
+    }
+    const taskProjMatch = cleanContent.match(/#(\w+)/)
+    if (taskProjMatch) {
+      const slug = taskProjMatch[1].toLowerCase()
+      if (slug !== 'tarea') {
+        metadata.project_tag = slug
+        metadata.tags.push('#' + slug)
+        cleanContent = cleanContent.replace('#' + taskProjMatch[1], '').trim()
+      }
+    }
     metadata.label = cleanContent
   }
   else if (t.includes('#persona')) {
@@ -105,11 +125,14 @@ export function computeProjData(projectId, allNodes) {
   const allLinked = [...new Map([...linked,...byTag].map(n=>[n.id,n])).values()]
 
   const cots        = allLinked.filter(n => n.type === 'cotizacion')
-  const aceptadas   = cots.filter(n => n.metadata?.status === 'aceptada')
+  const ESTADOS_COMPROMETIDOS = ['aceptada','en_proceso','parcial','pagada']
+  const aceptadas   = cots.filter(n => ESTADOS_COMPROMETIDOS.includes(n.metadata?.status))
   const pendientes  = cots.filter(n => n.metadata?.status === 'pendiente')
   const comprometido= aceptadas.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
   const pagos       = allLinked.filter(n => n.type==='expense'||n.type==='gasto')
+  const cotsPagadas = cots.filter(n => n.metadata?.status === 'pagada')
   const pagado      = pagos.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
+                    + cotsPagadas.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
   const pendientePago   = Math.max(0, comprometido - pagado)
   const sinComprometer  = Math.max(0, budget - comprometido)
   const overBudget  = comprometido > budget && budget > 0
