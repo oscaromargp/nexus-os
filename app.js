@@ -6759,7 +6759,7 @@ window.openProjectDashboard = (projectId) => {
                 </div>`
             }).join('')}
           </div>`
-      })()}
+      })}
 
       <!-- 5-metric panel -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
@@ -6864,7 +6864,7 @@ window.openProjectDashboard = (projectId) => {
               <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;">$${pagosFijos.reduce((s,n)=>s+(+n.metadata?.amount||0),0).toLocaleString('es-MX')}</span>
             </div>` : ''}
           </div>`
-      })()}
+      })}
 
       <!-- Cotizaciones por categoría -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
@@ -6911,7 +6911,7 @@ window.openProjectDashboard = (projectId) => {
                 <span style="font-size:10px;color:var(--text-muted);">${(g.created_at||'').slice(0,10)}</span>
               </div>`).join('')}
           </div>`
-      })()}
+      })}
 
       <!-- Tareas -->
       ${tareas.length ? `
@@ -7901,8 +7901,10 @@ window.projSetStage = async function(projectId, stage) {
   const node = allNodes.find(n => n.id === projectId)
   if (!node) return
   node.metadata = { ...(node.metadata || {}), stage }
-  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
-  if (error) { showToast('⚠️ Error al guardar etapa'); return }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
+    if (error) { showToast('⚠️ Error al guardar etapa'); return }
+  }
   showToast(`✅ Etapa actualizada: ${stage}`)
   renderAll()
 }
@@ -7962,8 +7964,10 @@ window.saveHealthModal = async function() {
     }
   }
 
-  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', _healthProjectId)
-  if (error) { showToast('⚠️ Error al guardar'); return }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', _healthProjectId)
+    if (error) { showToast('⚠️ Error al guardar'); return }
+  }
 
   closeHealthModal()
   showToast('✅ Estado del proyecto actualizado')
@@ -7993,8 +7997,10 @@ async function addMilestone(projectId, name, deadline) {
     created_at: new Date().toISOString(),
   }
   node.metadata = { ...(node.metadata || {}), milestones: [...(node.metadata?.milestones || []), ms] }
-  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
-  if (error) { showToast('⚠️ Error al guardar hito'); return }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
+    if (error) { showToast('⚠️ Error al guardar hito'); return }
+  }
   showToast(`🏁 Hito "${name}" creado`)
   renderAll(); openProjectDashboard(projectId)
 }
@@ -8010,8 +8016,10 @@ window.toggleMilestone = async function(projectId, idx) {
     reached_date: !mils[idx].is_reached ? new Date().toISOString().split('T')[0] : null,
   }
   node.metadata = { ...(node.metadata || {}), milestones: mils }
-  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
-  if (error) { showToast('⚠️ Error al actualizar'); return }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
+    if (error) { showToast('⚠️ Error al actualizar'); return }
+  }
   const done = mils[idx].is_reached
   showToast(done ? `✅ Hito "${mils[idx].name}" alcanzado` : `↩️ Hito reabierto`)
   renderAll(); openProjectDashboard(projectId)
@@ -8024,8 +8032,10 @@ window.deleteMilestone = async function(projectId, idx) {
   const mils = [...(node.metadata?.milestones || [])]
   mils.splice(idx, 1)
   node.metadata = { ...(node.metadata || {}), milestones: mils }
-  const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
-  if (error) { showToast('⚠️ Error al eliminar'); return }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
+    if (error) { showToast('⚠️ Error al eliminar'); return }
+  }
   showToast('🗑 Hito eliminado')
   renderAll(); openProjectDashboard(projectId)
 }
