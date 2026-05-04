@@ -3452,7 +3452,11 @@ function playClick() {
 window.togglePanel = function(which) {
   const cls = which === 'nav' ? 'nav-collapsed' : 'side-collapsed'
   const collapsed = document.body.classList.toggle(cls)
-  localStorage.setItem('nexus_' + cls, collapsed ? '1' : '0')
+  if (collapsed) {
+    localStorage.setItem('nexus_' + cls, '1')
+  } else {
+    localStorage.removeItem('nexus_' + cls)   // default = open, no key needed
+  }
   const btn = document.getElementById('toggle-' + which)
   if (!btn) return
   if (which === 'nav')  btn.textContent = collapsed ? '▶' : '◀'
@@ -3466,10 +3470,26 @@ function restorePanels() {
     document.body.classList.add('nav-collapsed')
     const b = document.getElementById('toggle-nav'); if (b) b.textContent = '▶'
   }
+  // Sidebar derecha: default OPEN — only collapse if explicitly set to '1'
   if (localStorage.getItem('nexus_side-collapsed') === '1') {
     document.body.classList.add('side-collapsed')
     const b = document.getElementById('toggle-side'); if (b) b.textContent = '◀'
+  } else {
+    // Make sure it's explicitly open (clears any stale collapsed state)
+    document.body.classList.remove('side-collapsed')
+    localStorage.removeItem('nexus_side-collapsed')
+    const b = document.getElementById('toggle-side'); if (b) b.textContent = '▶'
   }
+}
+
+// Expose sidebar reset for console/debug
+window.resetSidebars = () => {
+  localStorage.removeItem('nexus_side-collapsed')
+  localStorage.removeItem('nexus_nav-collapsed')
+  document.body.classList.remove('side-collapsed','nav-collapsed')
+  const tn = document.getElementById('toggle-nav'); if (tn) tn.textContent = '◀'
+  const ts = document.getElementById('toggle-side'); if (ts) ts.textContent = '▶'
+  showToast('✅ Sidebars restauradas')
 }
 
 // ── WORLD CLOCK ──────────────────────────────────────────────────────────────
@@ -6459,13 +6479,36 @@ window.renderProyectos = function renderProyectos() {
     return
   }
 
+  // Stats bar
+  const HEALTH_CFG2 = { on_track:{emoji:'🟢',label:'En curso',color:'#4ade80'}, at_risk:{emoji:'🟡',label:'En riesgo',color:'#fbbf24'}, off_track:{emoji:'🔴',label:'Atrasado',color:'#f87171'}, on_hold:{emoji:'🔵',label:'Pausado',color:'#60a5fa'}, done:{emoji:'🟣',label:'Terminado',color:'#a78bfa'} }
+  const byHealth = {}
+  proyectos.forEach(p => { const s = p.metadata?.health?.status||'sin_estado'; byHealth[s]=(byHealth[s]||0)+1 })
+
   root.innerHTML = `
-    <div style="padding:20px 24px 12px;">
+    <div style="padding:24px 28px 20px;">
+      <!-- Header -->
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-        <h1 style="margin:0;font-size:22px;font-weight:800;color:var(--text-primary);">🏗️ Proyectos</h1>
-        <span style="font-size:12px;color:var(--text-muted);">${proyectos.length} proyecto${proyectos.length!==1?'s':''}</span>
+        <div>
+          <h1 style="margin:0 0 4px;font-size:26px;font-weight:900;color:var(--text-primary);">🏗️ Proyectos</h1>
+          <span style="font-size:12px;color:var(--text-muted);">${proyectos.length} proyecto${proyectos.length!==1?'s':''} en total</span>
+        </div>
+        <button onclick="document.getElementById('ide-input')?.focus()" style="background:linear-gradient(135deg,rgba(0,246,255,0.12),rgba(167,139,250,0.08));border:1px solid rgba(0,246,255,0.25);border-radius:10px;color:#00f6ff;padding:8px 18px;cursor:pointer;font-size:12px;font-weight:800;font-family:inherit;">+ Nuevo Proyecto</button>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">
+
+      <!-- Status summary pills -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px;">
+        ${Object.entries(byHealth).map(([s,count]) => {
+          const cfg = HEALTH_CFG2[s] || {emoji:'⬜',label:s,color:'#94a3b8'}
+          return `<div style="display:flex;align-items:center;gap:6px;background:${cfg.color}12;border:1px solid ${cfg.color}30;border-radius:20px;padding:5px 14px;">
+            <span style="font-size:13px;">${cfg.emoji}</span>
+            <span style="font-size:11px;font-weight:700;color:${cfg.color};">${cfg.label}</span>
+            <span style="font-size:13px;font-weight:900;color:${cfg.color};font-family:monospace;">${count}</span>
+          </div>`
+        }).join('')}
+      </div>
+
+      <!-- Cards grid -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;">
         ${proyectos.map(p => renderProjectCard(p)).join('')}
       </div>
     </div>`
@@ -6483,7 +6526,6 @@ function renderProjectCard(p) {
   const linked = linkedIds.map(id => allNodes.find(n => n.id === id)).filter(Boolean)
   const tagStr = (m.tags||[]).filter(t=>t.startsWith('#')).map(t=>t.slice(1).toLowerCase())
   const cardSlug = m.project_slug || tagStr.find(t => t !== 'proyecto') || tagStr[0] || ''
-  // Find linked by linkedTo[] + by project_tag OR #hashtag match (soft links)
   const byTag = cardSlug ? allNodes.filter(n => {
     if (!(n.type==='cotizacion'||n.type==='expense'||n.type==='gasto')) return false
     const pt = (n.metadata?.project_tag||'').toLowerCase()
@@ -6492,28 +6534,21 @@ function renderProjectCard(p) {
   }) : []
   const allLinked = [...new Map([...linked,...byTag].map(n=>[n.id,n])).values()]
 
-  // Cotizaciones — Odoo extended states
   const cots = allLinked.filter(n => n.type === 'cotizacion')
   const ESTADOS_COMPROMETIDOS_CARD = ['aceptada','en_proceso','parcial','pagada']
   const aceptadas = cots.filter(n => ESTADOS_COMPROMETIDOS_CARD.includes(n.metadata?.status))
   const comprometido = aceptadas.reduce((s,n) => s + (+n.metadata?.amount||0), 0)
-
-  // Pagos (gastos vinculados + cotizaciones pagadas)
   const pagos = allLinked.filter(n => n.type === 'expense' || n.type === 'gasto')
   const cotsPagadas2 = cots.filter(n => n.metadata?.status === 'pagada')
   const pagado = pagos.reduce((s,n) => s + (+n.metadata?.amount||0), 0)
              + cotsPagadas2.reduce((s,n) => s + (+n.metadata?.amount||0), 0)
-
   const pendiente = Math.max(0, comprometido - pagado)
-  const sinComprometer = Math.max(0, budget - comprometido)
   const overBudget = comprometido > budget && budget > 0
-
-  const pct = budget > 0 ? Math.min(100, Math.round((comprometido/budget)*100)) : 0
-  const gaugeColor = overBudget ? '#f87171' : pct > 75 ? '#fb923c' : '#4ade80'
-
+  const budgetPct = budget > 0 ? Math.min(100, Math.round((comprometido/budget)*100)) : 0
+  const gaugeColor = overBudget ? '#f87171' : budgetPct > 75 ? '#fb923c' : '#4ade80'
   const taskCount = allLinked.filter(n => n.type==='tarea'||n.type==='task').length
+  const taskDone  = allLinked.filter(n => (n.type==='tarea'||n.type==='task') && n.metadata?.done).length
 
-  // ── Health badge (Odoo project.update.status) ────────────────
   const health = m.health || {}
   const HEALTH_CFG = {
     on_track: { emoji:'🟢', label:'En curso',  color:'#4ade80' },
@@ -6524,80 +6559,156 @@ function renderProjectCard(p) {
   }
   const hCfg = HEALTH_CFG[health.status] || null
   const STAGE_CFG = {
-    planning: { label:'Planificación', color:'#94a3b8' },
-    active:   { label:'En ejecución', color:'#4ade80' },
-    on_hold:  { label:'Pausado',       color:'#fbbf24' },
-    done:     { label:'Terminado',     color:'#a78bfa' },
+    planning: { emoji:'📐', label:'Planificación', color:'#94a3b8' },
+    active:   { emoji:'⚡', label:'En ejecución',  color:'#4ade80' },
+    on_hold:  { emoji:'⏸',  label:'Pausado',        color:'#fbbf24' },
+    done:     { emoji:'✅', label:'Terminado',      color:'#a78bfa' },
   }
-  const stageCfg = STAGE_CFG[m.stage] || null
-  // Milestones progress
+  const stageCfg = STAGE_CFG[m.stage] || STAGE_CFG.planning
   const mils = m.milestones || []
   const milDone = mils.filter(ms => ms.is_reached).length
   const milOverdue = mils.filter(ms => !ms.is_reached && ms.deadline && ms.deadline < new Date().toISOString().split('T')[0]).length
+  const milPct = mils.length > 0 ? Math.round((milDone/mils.length)*100) : 0
+  const members = m.members || []
+
+  // Cover — use cover_url if set, else auto-gradient from name hash
+  const coverUrl = m.cover_url || ''
+  const nameHash = (m.label||p.content||'P').charCodeAt(0) % 6
+  const coverGradients = [
+    'linear-gradient(135deg,#1e3a5f,#0f2027)',
+    'linear-gradient(135deg,#2d1b69,#11998e)',
+    'linear-gradient(135deg,#3c1053,#ad5389)',
+    'linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)',
+    'linear-gradient(135deg,#134e5e,#71b280)',
+    'linear-gradient(135deg,#2c3e50,#4ca1af)',
+  ]
+  const coverBg = coverUrl
+    ? `url('${coverUrl}') center/cover no-repeat`
+    : coverGradients[nameHash]
+
+  const projEmoji = m.emoji || (m.label||p.content||'').match(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)/u)?.[0] || '🏗️'
+  const projName = (m.label||p.content||'').replace(/^(\p{Emoji_Presentation}|\p{Emoji}\uFE0F)\s*/u,'')
+
+  // Deadline
+  const deadline = m.deadline || (mils.length ? mils.filter(ms=>!ms.is_reached).sort((a,b)=>a.deadline?.localeCompare(b.deadline||'')||0)[0]?.deadline : null)
+  const deadlineStr = deadline ? new Date(deadline).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) : null
+  const isOverdue = deadline && deadline < new Date().toISOString().split('T')[0]
+
+  const accentColor = hCfg?.color || stageCfg.color
 
   return `
-    <div onclick="openProjectDashboard('${p.id}')" style="background:var(--surface);border:1px solid ${hCfg ? hCfg.color+'44' : 'var(--border)'};border-radius:14px;padding:20px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;"
-         onmouseenter="this.style.borderColor='${hCfg ? hCfg.color+'88' : 'rgba(255,255,255,0.15)'}';this.style.transform='translateY(-2px)'"
-         onmouseleave="this.style.borderColor='${hCfg ? hCfg.color+'44' : 'var(--border)'}';this.style.transform='translateY(0)'">
-      ${hCfg ? `<div style="position:absolute;top:0;left:0;right:0;height:3px;background:${hCfg.color};opacity:0.7;"></div>` :
-               overBudget ? `<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#f87171,#fb923c);"></div>` : ''}
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:15px;font-weight:800;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.label||p.content)}</div>
-          ${m.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.desc)}</div>` : ''}
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
-          <span style="font-size:10px;font-weight:700;background:${rCfg.color}20;color:${rCfg.color};border-radius:6px;padding:2px 8px;white-space:nowrap;">${rCfg.label}</span>
-          ${hCfg ? `<span style="font-size:10px;font-weight:700;background:${hCfg.color}15;color:${hCfg.color};border-radius:6px;padding:2px 8px;white-space:nowrap;">${hCfg.emoji} ${hCfg.label}</span>` : ''}
-          ${stageCfg && !hCfg ? `<span style="font-size:10px;color:${stageCfg.color};opacity:0.8;">${stageCfg.label}</span>` : ''}
-        </div>
+    <div onclick="openProjectDashboard('${p.id}')"
+         style="background:var(--bg-panel);border:1px solid ${accentColor}30;border-radius:18px;cursor:pointer;transition:all 0.22s;position:relative;overflow:hidden;display:flex;flex-direction:column;"
+         onmouseenter="this.style.borderColor='${accentColor}70';this.style.transform='translateY(-3px)';this.style.boxShadow='0 12px 40px ${accentColor}20'"
+         onmouseleave="this.style.borderColor='${accentColor}30';this.style.transform='translateY(0)';this.style.boxShadow='none'">
+
+      <!-- ── COVER IMAGE / GRADIENT ── -->
+      <div style="height:100px;background:${coverBg};position:relative;flex-shrink:0;">
+        <!-- top accent bar -->
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${accentColor};"></div>
+        <!-- health pill top-right -->
+        ${hCfg ? `<div style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);border:1px solid ${hCfg.color}50;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;color:${hCfg.color};">${hCfg.emoji} ${hCfg.label}</div>` : ''}
+        <!-- role pill top-left -->
+        <div style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.55);backdrop-filter:blur(6px);border:1px solid ${rCfg.color}50;border-radius:20px;padding:3px 10px;font-size:10px;font-weight:700;color:${rCfg.color};">${rCfg.label}</div>
+        <!-- big emoji icon centered-bottom -->
+        <div style="position:absolute;bottom:-22px;left:20px;width:44px;height:44px;border-radius:12px;background:var(--bg-panel);border:2px solid ${accentColor}40;display:grid;place-items:center;font-size:22px;box-shadow:0 4px 16px rgba(0,0,0,0.4);">${projEmoji}</div>
       </div>
-      ${health.note ? `<div style="font-size:11px;color:var(--text-muted);background:rgba(255,255,255,0.03);border-left:2px solid ${hCfg?.color||'var(--border)'};padding:6px 10px;border-radius:0 6px 6px 0;margin-bottom:12px;font-style:italic;">${esc(health.note)}</div>` : ''}
-      ${budget > 0 ? `
-        <div style="margin-bottom:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
-            <span style="font-size:10px;font-weight:700;color:var(--text-muted);">PRESUPUESTO</span>
-            <span style="font-size:13px;font-weight:800;font-family:monospace;color:var(--text-primary);">$${budget.toLocaleString('es-MX')}</span>
+
+      <!-- ── BODY ── -->
+      <div style="padding:30px 18px 16px;">
+
+        <!-- Title + stage -->
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
+          <div style="font-size:16px;font-weight:800;color:var(--text-primary);line-height:1.2;flex:1;min-width:0;">${esc(projName)}</div>
+          <span style="font-size:10px;font-weight:700;color:${stageCfg.color};background:${stageCfg.color}15;border-radius:6px;padding:2px 8px;white-space:nowrap;flex-shrink:0;">${stageCfg.emoji} ${stageCfg.label}</span>
+        </div>
+
+        <!-- Description -->
+        ${m.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(m.desc)}</div>` : '<div style="margin-bottom:12px;"></div>'}
+
+        <!-- Health note / last update -->
+        ${health.note ? `<div style="font-size:11px;color:var(--text-muted);background:${accentColor}08;border-left:2px solid ${accentColor};padding:6px 10px;border-radius:0 8px 8px 0;margin-bottom:12px;font-style:italic;line-height:1.4;">"${esc(health.note)}"</div>` : ''}
+
+        <!-- ── PROPERTIES (Notion-style rows) ── -->
+        <div style="display:flex;flex-direction:column;gap:0;border:1px solid rgba(255,255,255,0.05);border-radius:10px;overflow:hidden;margin-bottom:14px;font-size:11px;">
+          <!-- Budget row -->
+          ${budget > 0 ? `
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">💰 Presupuesto</span>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div style="flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+                  <div style="height:100%;width:${budgetPct}%;background:${gaugeColor};border-radius:2px;"></div>
+                </div>
+                <span style="font-family:monospace;font-weight:700;color:${gaugeColor};white-space:nowrap;">${budgetPct}%</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:3px;">
+                <span style="color:var(--text-dim);">$${pagado.toLocaleString('es-MX',{maximumFractionDigits:0})} pagado</span>
+                <span style="color:var(--text-muted);">de $${budget.toLocaleString('es-MX',{maximumFractionDigits:0})}</span>
+              </div>
+            </div>
+          </div>` : ''}
+          <!-- Milestones row -->
+          ${mils.length > 0 ? `
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">🏁 Hitos</span>
+            <div style="flex:1;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div style="flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+                  <div style="height:100%;width:${milPct}%;background:${milOverdue?'#f87171':'#a78bfa'};border-radius:2px;"></div>
+                </div>
+                <span style="font-family:monospace;font-weight:700;color:${milOverdue?'#f87171':'#a78bfa'};white-space:nowrap;">${milDone}/${mils.length}</span>
+              </div>
+              ${milOverdue ? `<div style="color:#f87171;margin-top:2px;font-size:10px;">⚠️ ${milOverdue} vencido${milOverdue>1?'s':''}</div>` : ''}
+            </div>
+          </div>` : ''}
+          <!-- Tasks row -->
+          ${taskCount > 0 ? `
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">✅ Tareas</span>
+            <span style="color:var(--text-muted);">${taskDone} completadas de ${taskCount}</span>
+          </div>` : ''}
+          <!-- Cotizaciones row -->
+          ${cots.length > 0 ? `
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">📄 Cotizaciones</span>
+            <span style="color:var(--text-muted);">${aceptadas.length} aceptadas · ${cots.length} total${pendiente>0?' · <span style="color:#fb923c;">$'+pendiente.toLocaleString('es-MX',{maximumFractionDigits:0})+' pendiente</span>':''}</span>
+          </div>` : ''}
+          <!-- Deadline row -->
+          ${deadlineStr ? `
+          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">📅 Fecha límite</span>
+            <span style="color:${isOverdue?'#f87171':'var(--text-muted)'};font-weight:${isOverdue?'700':'400'};">${deadlineStr}${isOverdue?' ⚠️':''}</span>
+          </div>` : ''}
+          <!-- Tags row -->
+          ${tagStr.filter(t=>t!=='proyecto').length > 0 ? `
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 12px;">
+            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">🏷 Tags</span>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              ${tagStr.filter(t=>t!=='proyecto').map(t=>`<span style="background:${accentColor}15;color:${accentColor};border-radius:4px;padding:1px 7px;font-size:9px;font-weight:700;">#${t}</span>`).join('')}
+            </div>
+          </div>` : ''}
+        </div>
+
+        <!-- ── TEAM AVATARS ── -->
+        ${members.length > 0 ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div style="display:flex;align-items:center;">
+            ${members.slice(0,6).map(mb => {
+              const c = allNodes.find(n => n.id === mb.contact_id)
+              const name = c ? (c.metadata?.name||c.content) : '?'
+              const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
+              const rolColors = { financiador:'#f59e0b', administrador:'#60a5fa', ejecutor:'#fb923c', supervisor:'#a78bfa', colaborador:'#4ade80' }
+              const clr = rolColors[mb.role] || '#94a3b8'
+              return `<div style="width:28px;height:28px;border-radius:50%;background:${clr}25;color:${clr};border:2px solid var(--bg-panel);display:grid;place-items:center;font-size:10px;font-weight:800;margin-right:-8px;" title="${esc(name)} · ${mb.role||''}">${initials}</div>`
+            }).join('')}
+            ${members.length > 6 ? `<div style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.06);color:var(--text-muted);border:2px solid var(--bg-panel);display:grid;place-items:center;font-size:9px;font-weight:700;margin-right:-8px;">+${members.length-6}</div>` : ''}
           </div>
-          <div style="height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
-            <div style="height:100%;width:${pct}%;background:${gaugeColor};border-radius:3px;transition:width 0.5s;"></div>
-          </div>
-          <div style="font-size:10px;color:${gaugeColor};margin-top:4px;font-weight:600;">${pct}% comprometido${overBudget?' ⚠️ Excede presupuesto':''}</div>
-        </div>` : ''}
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">
-        <div style="background:rgba(74,222,128,0.06);border-radius:8px;padding:8px;text-align:center;">
-          <div style="font-size:11px;font-weight:800;font-family:monospace;color:#4ade80;">$${comprometido.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
-          <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">Comprometido</div>
-        </div>
-        <div style="background:rgba(96,165,250,0.06);border-radius:8px;padding:8px;text-align:center;">
-          <div style="font-size:11px;font-weight:800;font-family:monospace;color:#60a5fa;">$${pagado.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
-          <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">Pagado</div>
-        </div>
-        <div style="background:rgba(251,146,60,0.06);border-radius:8px;padding:8px;text-align:center;">
-          <div style="font-size:11px;font-weight:800;font-family:monospace;color:#fb923c;">$${pendiente.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
-          <div style="font-size:9px;color:var(--text-muted);margin-top:2px;">Pendiente</div>
-        </div>
-      </div>
-      <!-- Avatar stack del equipo -->
-      ${(() => {
-        const members = m.members || []
-        if (!members.length) return ''
-        const avatars = members.slice(0,5).map(mb => {
-          const c = allNodes.find(n => n.id === mb.contact_id)
-          const name = c ? (c.metadata?.name||c.content) : '?'
-          const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
-          const rolCfg2 = { financiador:'#f59e0b', administrador:'#60a5fa', ejecutor:'#fb923c', supervisor:'#a78bfa', colaborador:'#4ade80' }
-          const clr = rolCfg2[mb.role] || '#94a3b8'
-          return `<div style="width:26px;height:26px;border-radius:50%;background:${clr}20;color:${clr};border:2px solid var(--surface);display:grid;place-items:center;font-size:10px;font-weight:800;margin-right:-8px;" title="${esc(name)}">${initials}</div>`
-        }).join('')
-        const extra = members.length > 5 ? `<div style="width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,0.06);color:var(--text-muted);border:2px solid var(--surface);display:grid;place-items:center;font-size:9px;font-weight:700;margin-right:-8px;">+${members.length-5}</div>` : ''
-        return `<div style="display:flex;align-items:center;margin-bottom:10px;">${avatars}${extra}</div>`
-      })()}
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
-        ${cots.length ? `<span style="font-size:11px;color:var(--text-muted);">📄 ${cots.length} cot. (${aceptadas.length} ✓)</span>` : ''}
-        ${taskCount ? `<span style="font-size:11px;color:var(--text-muted);">✅ ${taskCount} tareas</span>` : ''}
-        ${mils.length ? `<span style="font-size:11px;color:${milOverdue?'#f87171':'var(--text-muted)'};">🏁 ${milDone}/${mils.length} hitos${milOverdue?` ⚠️${milOverdue}`:''}</span>` : ''}
-        ${health.progress != null ? `<span style="font-size:11px;color:var(--text-muted);">📊 ${health.progress}%</span>` : ''}
+          <span style="font-size:10px;color:var(--text-dim);">${members.length} miembro${members.length!==1?'s':''}</span>
+        </div>` : `
+        <div style="display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:10px;">
+          <span>Sin equipo asignado</span>
+        </div>`}
       </div>
     </div>`
 }
