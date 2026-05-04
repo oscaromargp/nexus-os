@@ -1450,6 +1450,16 @@ function renderFeed(nodes) {
 }
 
 window.deleteNode = async (id) => {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  // Proyectos require typed confirmation — prevent accidental cascade delete
+  if (node.type === 'proyecto') {
+    const projectName = (node.metadata?.label || node.content || '').trim()
+    const typed = window.prompt(`⚠️ Esto eliminará el proyecto "${projectName}" de forma permanente.\n\nEscribe el nombre exacto del proyecto para confirmar:`)
+    if (typed?.trim() !== projectName) { showToast('❌ Nombre incorrecto — operación cancelada.'); return }
+  } else {
+    if (!confirm('¿Eliminar este elemento?')) return
+  }
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
     allNodes = allNodes.filter(n => n.id !== id)
   } else {
@@ -1588,11 +1598,21 @@ document.getElementById('ne-save')?.addEventListener('click', async () => {
 })
 
 document.getElementById('ne-delete')?.addEventListener('click', async () => {
-  if (!confirm('¿Eliminar esta nota?')) return
+  const node = allNodes.find(n => n.id === editingNoteId)
+  if (!node) return
+  // Proyectos require typed confirmation to prevent accidental cascade delete
+  if (node.type === 'proyecto') {
+    const projectName = (node.metadata?.label || node.content || '').trim()
+    const typed = window.prompt(`⚠️ Esto eliminará el proyecto "${projectName}" de forma permanente.\n\nEscribe el nombre exacto del proyecto para confirmar:`)
+    if (typed?.trim() !== projectName) { showToast('❌ Nombre incorrecto — operación cancelada.'); return }
+  } else {
+    if (!confirm('¿Eliminar esta nota?')) return
+  }
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
     allNodes = allNodes.filter(n => n.id !== editingNoteId)
   } else {
     await supabase.from('nodes').delete().eq('id', editingNoteId)
+    allNodes = allNodes.filter(n => n.id !== editingNoteId)
   }
   closeNoteModal()
   renderAll()
@@ -2888,11 +2908,22 @@ function renderAgenda(nodes) {
     }
   }
 
-  const incomeAll = nodes.filter(n => n.type === 'income')
+  // Filter incomes and expenses by CURRENT MONTH and selected accounts
+  const curY = today.getFullYear(), curM = today.getMonth() // 0-indexed
+  const isCurrentMonth = (n) => {
+    const d = n.metadata?.date || n.created_at || ''
+    if (!d) return true // no date → always include
+    const dt = new Date(d)
+    return dt.getFullYear() === curY && dt.getMonth() === curM
+  }
+  const incomeAll = nodes.filter(n => n.type === 'income' && isCurrentMonth(n))
   const incomeNodes = agendaPlanAccounts.size === 0
     ? incomeAll
     : incomeAll.filter(n => !n.metadata?.account_id || agendaPlanAccounts.has(n.metadata.account_id))
-  const expenseNodes = nodes.filter(n => n.type === 'expense')
+  const expenseAll = nodes.filter(n => n.type === 'expense' && isCurrentMonth(n))
+  const expenseNodes = agendaPlanAccounts.size === 0
+    ? expenseAll
+    : expenseAll.filter(n => !n.metadata?.account_id || agendaPlanAccounts.has(n.metadata.account_id))
   const totalIn  = incomeNodes.reduce((s,n)  => s + (n.metadata?.amount||0), 0)
   const totalOut = expenseNodes.reduce((s,n) => s + (n.metadata?.amount||0), 0) + totalFixed
 
@@ -2909,8 +2940,8 @@ function renderAgenda(nodes) {
         <td style="text-align:right;padding:5px 4px;"></td>
       </tr>`)
     })
-    // Suscripciones como salidas fijas
-    subs.forEach(n => {
+    // Suscripciones como salidas fijas (filtradas por cuenta)
+    subsF.forEach(n => {
       rows.push(`<tr>
         <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)} <span style="font-size:9px;opacity:0.5;">(día ${n.metadata?.dayOfMonth||1})</span></td>
         <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
@@ -2918,8 +2949,8 @@ function renderAgenda(nodes) {
         <td style="text-align:right;padding:5px 4px;"></td>
       </tr>`)
     })
-    // Pagos fijos pendientes
-    bills.filter(b => !b.metadata?.paid).forEach(n => {
+    // Pagos fijos pendientes (filtrados por cuenta)
+    billsF.filter(b => !b.metadata?.paid).forEach(n => {
       rows.push(`<tr>
         <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)}</td>
         <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
@@ -2927,6 +2958,18 @@ function renderAgenda(nodes) {
         <td style="text-align:right;padding:5px 4px;"></td>
       </tr>`)
     })
+    // Gastos variables del mes (filtrados por mes y cuenta)
+    expenseNodes.slice(0, 5).forEach(n => {
+      rows.push(`<tr>
+        <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)} <span style="font-size:9px;opacity:0.4;">gasto</span></td>
+        <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
+        <td style="text-align:right;padding:5px 4px;color:#fbbf24;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
+        <td style="text-align:right;padding:5px 4px;"></td>
+      </tr>`)
+    })
+    if (expenseNodes.length > 5) {
+      rows.push(`<tr><td colspan="4" style="padding:3px 4px;font-size:10px;color:var(--text-muted);text-align:center;">… y ${expenseNodes.length - 5} gastos más este mes</td></tr>`)
+    }
     planBody.innerHTML = rows.join('') || '<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--text-muted);font-size:12px;">Agrega ingresos y compromisos para ver el plan</td></tr>'
   }
   const saldo = totalIn - totalOut
@@ -7981,8 +8024,18 @@ window.saveHealthModal = async function() {
 window.openMilestoneForm = function(projectId) {
   const name = prompt('Nombre del hito:')
   if (!name?.trim()) return
-  const deadline = prompt('Fecha límite (YYYY-MM-DD) — opcional:') || null
-  addMilestone(projectId, name.trim(), deadline?.trim() || null)
+  let deadline = prompt('Fecha límite — opcional\nEjemplo: 15/08/2026 o 2026-08-15') || null
+  if (deadline) {
+    deadline = deadline.trim()
+    // Normalize DD/MM/YYYY or DD-MM-YYYY → YYYY-MM-DD
+    const partsAlt = deadline.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+    if (partsAlt) deadline = `${partsAlt[3]}-${partsAlt[2].padStart(2,'0')}-${partsAlt[1].padStart(2,'0')}`
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
+      showToast('⚠️ Formato de fecha inválido. Usa DD/MM/YYYY o YYYY-MM-DD')
+      return
+    }
+  }
+  addMilestone(projectId, name.trim(), deadline || null)
 }
 
 async function addMilestone(projectId, name, deadline) {
