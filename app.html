@@ -9,6 +9,40 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>NEXUS COMMAND CENTER v4</title>
+  <!-- Critical: aside is rendered outside #nexus-layout by HTML parser due to
+       unbalanced divs inside <main>. Force fixed positioning so it works regardless. -->
+  <style>
+    aside#widgets-sidebar {
+      position: fixed !important;
+      top: 0 !important;
+      right: 0 !important;
+      width: var(--widget-width, 320px) !important;
+      height: 100% !important;
+      z-index: 100 !important;
+      overflow-y: auto !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    body.side-collapsed aside#widgets-sidebar {
+      transform: translateX(var(--widget-width, 320px)) !important;
+      pointer-events: none !important;
+    }
+    /* Compensate main content area for fixed aside width */
+    #nexus-layout {
+      padding-right: var(--widget-width, 320px);
+      box-sizing: border-box;
+    }
+    body.side-collapsed #nexus-layout {
+      padding-right: 0 !important;
+    }
+    /* Toggle button tracks aside */
+    #toggle-side {
+      right: var(--widget-width, 320px) !important;
+    }
+    body.side-collapsed #toggle-side {
+      right: 0px !important;
+    }
+  </style>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
@@ -136,24 +170,28 @@
 
     #nexus-layout {
       display: grid;
-      grid-template-columns: var(--sidebar-width) 1fr var(--widget-width);
+      grid-template-columns: var(--sidebar-width) 1fr;
       grid-template-rows: 1fr;
-      grid-template-areas: "nav main side";
+      grid-template-areas: "nav main";
       height: 100%;
       width: 100%;
-      transition: grid-template-columns 0.32s cubic-bezier(0.4,0,0.2,1);
+      transition: grid-template-columns 0.32s cubic-bezier(0.4,0,0.2,1),
+                  padding-right 0.32s cubic-bezier(0.4,0,0.2,1);
     }
 
     /* ── COLLAPSIBLE SIDEBARS ── */
-    nav#sidebar, aside#widgets-sidebar {
+    nav#sidebar {
       transition: padding 0.32s cubic-bezier(0.4,0,0.2,1);
       overflow: hidden;
       min-width: 0;
     }
-    body.nav-collapsed #nexus-layout  { grid-template-columns: 0px 1fr var(--widget-width); }
+    aside#widgets-sidebar {
+      transition: transform 0.32s cubic-bezier(0.4,0,0.2,1),
+                  padding 0.32s cubic-bezier(0.4,0,0.2,1);
+      overflow: hidden;
+    }
+    body.nav-collapsed #nexus-layout  { grid-template-columns: 0px 1fr; }
     body.nav-collapsed nav#sidebar    { padding: 0; }
-    body.side-collapsed #nexus-layout { grid-template-columns: var(--sidebar-width) 1fr 0px; }
-    body.side-collapsed aside#widgets-sidebar { padding: 0; }
     /* Spotlight adjusts with sidebars */
     body.nav-collapsed  #spotlight-container { left: 40px; }
     body.side-collapsed #spotlight-container { right: 40px; }
@@ -178,9 +216,8 @@
     }
     .panel-toggle:hover { background: rgba(0,246,255,0.12); color: #00f6ff; border-color: rgba(0,246,255,0.4); }
     #toggle-nav  { left: calc(var(--sidebar-width) - 1px); border-radius: 0 8px 8px 0; border-left: none; transition: left 0.32s cubic-bezier(0.4,0,0.2,1); }
-    #toggle-side { right: calc(var(--widget-width) - 1px); border-radius: 8px 0 0 8px; border-right: none; transition: right 0.32s cubic-bezier(0.4,0,0.2,1); }
+    #toggle-side { border-radius: 8px 0 0 8px; border-right: none; transition: right 0.32s cubic-bezier(0.4,0,0.2,1); }
     body.nav-collapsed  #toggle-nav  { left: 0px; }
-    body.side-collapsed #toggle-side { right: 0px; }
 
     /* ── SIDEBAR NAV ── */
     nav#sidebar {
@@ -675,15 +712,10 @@
 
     /* ── WIDGETS SIDEBAR (RIGHT) ── */
     aside#widgets-sidebar {
-      grid-area: side;
       background: var(--bg-widget);
       border-left: 1px solid var(--glass-border);
       padding: 32px 24px;
-      display: flex; 
-      flex-direction: column;
       gap: 24px;
-      z-index: 100;
-      overflow-y: auto;
     }
 
     .widget-box {

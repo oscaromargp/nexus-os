@@ -155,8 +155,10 @@ const TYPE_LABELS = {
 }
 
 // ─────────────────────────────────────────
-// Boot
+// Boot — Fix sidebar CSS immediately (module scripts run after DOM is parsed)
 // ─────────────────────────────────────────
+fixLayoutDOM()   // Run BEFORE async IIFE — DOM is ready at module parse time
+
 ;(async () => {
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
      currentUser = { id: 'admin-uuid-bypass', email: 'admin@nexus.os (Simulado)' }
@@ -183,6 +185,7 @@ const TYPE_LABELS = {
     await loadNodes()
     setupRealtimeSubscription()
   }
+  fixLayoutDOM()   // Ensure aside/toggles/spotlight are inside #nexus-layout
   initTickers()
   initWorldClock()
   restorePanels()
@@ -3465,6 +3468,68 @@ window.togglePanel = function(which) {
 }
 
 // Restore panel state — must run after DOM ready
+// ── FIX LAYOUT DOM ───────────────────────────────────────────────────────────
+// The HTML parser closes #nexus-layout before <aside> due to unbalanced divs
+// inside <main>. Fix: inject position:fixed CSS for the aside so it works
+// regardless of its DOM position, and compensate the main layout's right padding.
+function fixLayoutDOM() {
+  // Inject critical CSS override once
+  if (!document.getElementById('__nexus-sidebar-fix')) {
+    const s = document.createElement('style')
+    s.id = '__nexus-sidebar-fix'
+    s.textContent = `
+      aside#widgets-sidebar {
+        position: fixed !important;
+        top: 0 !important;
+        right: 0 !important;
+        width: var(--widget-width, 320px) !important;
+        height: 100% !important;
+        z-index: 100 !important;
+        overflow-y: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 24px !important;
+        padding: 32px 24px !important;
+        background: var(--bg-widget) !important;
+        border-left: 1px solid var(--glass-border) !important;
+      }
+      body.side-collapsed aside#widgets-sidebar {
+        transform: translateX(var(--widget-width, 320px)) !important;
+        pointer-events: none !important;
+        padding: 0 !important;
+      }
+      /* Compensate main for fixed aside */
+      #nexus-layout {
+        padding-right: var(--widget-width, 320px) !important;
+        box-sizing: border-box !important;
+        grid-template-columns: var(--sidebar-width, 260px) 1fr !important;
+        grid-template-areas: "nav main" !important;
+      }
+      body.nav-collapsed #nexus-layout {
+        grid-template-columns: 0px 1fr !important;
+      }
+      body.side-collapsed #nexus-layout {
+        padding-right: 0 !important;
+      }
+      /* Toggle button */
+      #toggle-side {
+        right: calc(var(--widget-width, 320px) - 1px) !important;
+      }
+      body.side-collapsed #toggle-side {
+        right: 0px !important;
+      }
+      /* Spotlight */
+      #spotlight-container {
+        right: calc(var(--widget-width, 320px) + 40px) !important;
+      }
+      body.side-collapsed #spotlight-container {
+        right: 40px !important;
+      }
+    `
+    document.head.appendChild(s)
+  }
+}
+
 function restorePanels() {
   if (localStorage.getItem('nexus_nav-collapsed') === '1') {
     document.body.classList.add('nav-collapsed')
