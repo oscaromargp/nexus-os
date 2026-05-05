@@ -6837,10 +6837,19 @@ function _computeProjData(projectId) {
 
   const tareas = allLinked.filter(n => n.type==='tarea'||n.type==='task')
 
+  // Auto-progreso por hitos completados
+  const mils = m.milestones || []
+  const milestonePct = mils.length > 0
+    ? Math.round(mils.filter(ms => ms.is_reached).length / mils.length * 100)
+    : null
+
+  // Disponible = presupuesto - comprometido (puede ser negativo = sobre-budget)
+  const disponible = budget > 0 ? budget - comprometido : null
+
   return { p, m, budget, rol, rCfg, tagStr, projSlug, allLinked,
            cots, aceptadas, pendientes, comprometido, pagos, pagado,
            pendientePago, sinComprometer, overBudget, pct, gaugeColor,
-           cotsByCat, provMap, tareas }
+           cotsByCat, provMap, tareas, milestonePct, disponible }
 }
 
 window.openProjectDashboard = (projectId) => {
@@ -6849,7 +6858,7 @@ window.openProjectDashboard = (projectId) => {
   const { p, m, budget, rCfg, tagStr, projSlug, allLinked,
           cots, aceptadas, pendientes, comprometido, pagos, pagado,
           pendientePago, sinComprometer, overBudget, pct, gaugeColor,
-          cotsByCat, provMap, tareas } = d
+          cotsByCat, provMap, tareas, milestonePct, disponible } = d
 
   const root = document.getElementById('proyectos-root')
   const _safe = (fn, fallback = '') => { try { return fn() } catch(e) { console.warn('[dash]', e); return fallback } }
@@ -6862,12 +6871,21 @@ window.openProjectDashboard = (projectId) => {
           <h1 style="margin:0;font-size:22px;font-weight:800;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.label||p.content)}</h1>
           ${m.desc ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${esc(m.desc)}</div>` : ''}
         </div>
-        <div style="display:flex;gap:8px;flex-shrink:0;">
+        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
           <span style="font-size:11px;font-weight:700;background:${rCfg.color}20;color:${rCfg.color};border-radius:6px;padding:4px 10px;">${rCfg.label}</span>
           <button onclick="openProyectoModal('${p.id}')" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;">✏️ Editar</button>
-          <button onclick="openCotizacionModal(null,'${projSlug}')" style="background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.35);color:#fb923c;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">+ Cotización</button>
-          <button onclick="openProveedorPicker('${projSlug}')" style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;font-weight:600;">🔧 Sin cotización</button>
         </div>
+      </div>
+
+      <!-- ── ACCIONES RÁPIDAS ── -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;">
+        <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.08em;align-self:center;margin-right:4px;">ACCIONES</span>
+        <button onclick="openMilestoneForm('${p.id}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🏁 Hito</button>
+        <button onclick="openCotizacionModal(null,'${projSlug}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📄 Cotización</button>
+        <button onclick="openProveedorPicker('${projSlug}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🔧 Proveedor</button>
+        <button onclick="openMemberModal('${p.id}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">👤 Persona</button>
+        <button onclick="openHealthModal('${p.id}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📊 Estado</button>
+        <button onclick="openAgendaModal('bill','${projSlug}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📅 Pago Fijo</button>
       </div>
 
       ${overBudget ? `<div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;"><span style="font-size:18px;">⚠️</span><div><div style="font-size:13px;font-weight:700;color:#f87171;">Presupuesto excedido</div><div style="font-size:12px;color:var(--text-muted);">Comprometido $${comprometido.toLocaleString('es-MX')} / Presupuesto $${budget.toLocaleString('es-MX')}</div></div></div>` : ''}
@@ -6878,56 +6896,69 @@ window.openProjectDashboard = (projectId) => {
         const HCFG = { on_track:{emoji:'🟢',label:'En curso',color:'#4ade80'}, at_risk:{emoji:'🟡',label:'En riesgo',color:'#fbbf24'}, off_track:{emoji:'🔴',label:'Atrasado',color:'#f87171'}, on_hold:{emoji:'🔵',label:'Pausado',color:'#60a5fa'}, done:{emoji:'🟣',label:'Terminado',color:'#a78bfa'} }
         const hc = HCFG[h.status] || null
         const STAGES = [{v:'planning',l:'📐 Planificación'},{v:'active',l:'🚀 En ejecución'},{v:'on_hold',l:'⏸️ Pausado'},{v:'done',l:'✅ Terminado'}]
+        const displayPct = h.progress != null ? h.progress : milestonePct
+        const pctSource  = h.progress != null ? 'manual' : (milestonePct != null ? 'hitos' : null)
+        const barColor   = hc?.color || (displayPct >= 75 ? '#4ade80' : displayPct >= 40 ? '#fbbf24' : '#00f6ff')
         return `
           <div style="background:var(--surface);border:1px solid ${hc?hc.color+'44':'var(--border)'};border-radius:12px;padding:16px;margin-bottom:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:${hc||h.note||h.progress!=null?'14px':'0'};">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">SALUD DEL PROYECTO</span>
-                ${hc?`<span style="font-size:12px;font-weight:700;background:${hc.color}18;color:${hc.color};border-radius:6px;padding:3px 10px;">${hc.emoji} ${hc.label}</span>`:''}
-                <select onchange="projSetStage('${p.id}',this.value)" onclick="event.stopPropagation()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:3px 8px;color:var(--text-secondary);font-size:11px;font-family:inherit;">
+                <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">SALUD</span>
+                ${hc?`<span style="font-size:12px;font-weight:700;background:${hc.color}18;color:${hc.color};border-radius:6px;padding:3px 10px;">${hc.emoji} ${hc.label}</span>`:'<span style="font-size:12px;color:var(--text-muted);">Sin estado registrado</span>'}
+                <select onchange="projSetStage('${p.id}',this.value)" onclick="event.stopPropagation()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:3px 8px;color:var(--text-secondary);font-size:11px;font-family:inherit;" title="Fase del proyecto">
                   ${STAGES.map(s=>`<option value="${s.v}" ${m.stage===s.v?'selected':''}>${s.l}</option>`).join('')}
                 </select>
               </div>
-              <button onclick="openHealthModal('${p.id}')" style="background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;">📊 Actualizar estado</button>
             </div>
-            ${h.progress!=null ? `
-              <div style="margin-bottom:${h.note?'10px':'0'};">
-                <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
-                  <span style="font-size:11px;color:var(--text-muted);">Avance general</span>
-                  <span style="font-size:11px;font-weight:700;color:${hc?.color||'var(--accent-cyan)'};">${h.progress}%</span>
+            ${displayPct != null ? `
+              <div style="margin-bottom:${h.note?'12px':'0'};">
+                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                  <span style="font-size:11px;color:var(--text-muted);">Avance ${pctSource==='hitos'?'<span style="color:#2dd4bf;font-size:10px;">(auto · por hitos)</span>':pctSource==='manual'?'<span style="color:var(--text-dim);font-size:10px;">(manual)</span>':''}</span>
+                  <span style="font-size:13px;font-weight:800;color:${barColor};">${displayPct}%</span>
                 </div>
-                <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
-                  <div style="height:100%;width:${h.progress}%;background:${hc?.color||'#00f6ff'};border-radius:3px;transition:width .6s;"></div>
+                <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+                  <div style="height:100%;width:${displayPct}%;background:${barColor};border-radius:4px;transition:width .6s;"></div>
                 </div>
-              </div>` : ''}
+                ${pctSource==='hitos'&&h.progress==null?`<div style="font-size:10px;color:var(--text-dim);margin-top:5px;">Calculado de ${mils.filter(ms=>ms.is_reached).length}/${mils.length} hitos completados — ajusta en "📊 Estado"</div>`:'' }
+              </div>` : `<div style="font-size:12px;color:var(--text-dim);">Sin progreso registrado — usa <strong style="color:#4ade80;">📊 Estado</strong> o agrega hitos.</div>`}
             ${h.note ? `<div style="font-size:12px;color:var(--text-muted);font-style:italic;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;border-left:3px solid ${hc?.color||'var(--border)'};">"${esc(h.note)}"</div>` : ''}
             ${h.updated_at ? `<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">Última actualización: ${h.updated_at}</div>` : ''}
           </div>`
       })}
 
-      <!-- ── HITOS (Odoo project.milestone) ── -->
+      <!-- ── HITOS / CHECKPOINTS ── -->
       ${_safe(() => {
-        const mils = m.milestones || []
+        const milsLocal = m.milestones || []
         const today = new Date().toISOString().split('T')[0]
+        const done = milsLocal.filter(ms => ms.is_reached).length
         return `
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${mils.length?'14px':'0'};">
-              <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">🏁 HITOS DEL PROYECTO</span>
-              <button onclick="openMilestoneForm('${p.id}')" style="font-size:11px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Hito</button>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">🏁 HITOS</span>
+                ${milsLocal.length ? `<span style="font-size:11px;color:#2dd4bf;font-weight:700;">${done}/${milsLocal.length} completados</span>` : ''}
+              </div>
+              <button onclick="openMilestoneForm('${p.id}')" style="font-size:11px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">+ Agregar</button>
             </div>
-            ${mils.length === 0 ? `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px;">Sin hitos definidos — agrega checkpoints clave del proyecto</div>` :
-              mils.map((ms,i) => {
+            ${milsLocal.length === 0 ? `<div style="font-size:12px;color:var(--text-dim);padding:8px;text-align:center;">Sin hitos — define checkpoints para calcular el avance automáticamente</div>` :
+              milsLocal.map((ms,i) => {
                 const overdue = !ms.is_reached && ms.deadline && ms.deadline < today
                 const clr = ms.is_reached ? '#4ade80' : overdue ? '#f87171' : '#2dd4bf'
-                return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-                  <button onclick="toggleMilestone('${p.id}',${i})" style="width:20px;height:20px;border-radius:50%;border:2px solid ${clr};background:${ms.is_reached?clr:'transparent'};cursor:pointer;display:grid;place-items:center;flex-shrink:0;font-size:11px;color:${ms.is_reached?'#000':'transparent'};">✓</button>
+                return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+                  <button onclick="toggleMilestone('${p.id}',${i})" title="${ms.is_reached?'Marcar pendiente':'Marcar completado'}" style="width:22px;height:22px;border-radius:50%;border:2px solid ${clr};background:${ms.is_reached?clr:'transparent'};cursor:pointer;display:grid;place-items:center;flex-shrink:0;font-size:12px;color:${ms.is_reached?'#000':'transparent'};transition:all .2s;">✓</button>
                   <div style="flex:1;min-width:0;">
-                    <div style="font-size:13px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.6;':''}">${esc(ms.name)}</div>
-                    ${ms.deadline ? `<div style="font-size:10px;color:${clr};">${overdue?'⚠️ Vencido: ':'📅 '}${ms.deadline}</div>` : ''}
+                    <div style="font-size:13px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.55;':''}">${esc(ms.name)}</div>
+                    ${ms.deadline ? `<div style="font-size:10px;color:${clr};margin-top:1px;">${overdue?'⚠️ Vencido':'📅 Límite'}: ${ms.deadline}</div>` : ''}
                   </div>
-                  <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Eliminar">✕</button>
+                  <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;" title="Eliminar hito">✕</button>
                 </div>`
               }).join('')}
+            ${milsLocal.length > 0 ? `
+              <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">
+                <div style="height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+                  <div style="height:100%;width:${Math.round(done/milsLocal.length*100)}%;background:#2dd4bf;border-radius:3px;transition:width .6s;"></div>
+                </div>
+              </div>` : ''}
           </div>`
       })}
 
@@ -6980,32 +7011,37 @@ window.openProjectDashboard = (projectId) => {
           </div>`
       })}
 
-      <!-- 5-metric panel -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:20px;">
-        ${[
-          {label:'Presupuesto',val:budget,color:'#a78bfa',icon:'💰',show:budget>0},
-          {label:'Comprometido',val:comprometido,color:'#4ade80',icon:'📋',show:true},
-          {label:'Pagado',val:pagado,color:'#60a5fa',icon:'✅',show:true},
-          {label:'Pend. de pago',val:pendientePago,color:'#fb923c',icon:'⏳',show:true},
-          {label:'Sin comprometer',val:sinComprometer,color:'#94a3b8',icon:'🔵',show:budget>0},
-        ].filter(x=>x.show).map(x=>`
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
-            <div style="font-size:18px;margin-bottom:6px;">${x.icon}</div>
-            <div style="font-size:14px;font-weight:800;font-family:monospace;color:${x.color};">$${x.val.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
-            <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">${x.label}</div>
-          </div>`).join('')}
-      </div>
-
-      ${budget > 0 ? `
+      <!-- ── PANEL FINANCIERO ── -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-          <span style="font-size:12px;font-weight:700;color:var(--text-muted);">USO DE PRESUPUESTO</span>
-          <span style="font-size:12px;font-weight:700;color:${gaugeColor};">${pct}%</span>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">💼 FINANZAS DEL PROYECTO</span>
+          ${budget === 0 ? `<button onclick="openProyectoModal('${p.id}')" style="font-size:11px;color:var(--text-muted);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;cursor:pointer;">+ Definir presupuesto</button>` : ''}
         </div>
-        <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
-          <div style="height:100%;width:${pct}%;background:${gaugeColor};border-radius:4px;transition:width 0.6s;"></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:${budget>0?'14px':'0'};">
+          ${[
+            {label:'Presupuesto',val:budget,color:'#a78bfa',icon:'💰',tip:'Monto total planificado para el proyecto',show:budget>0},
+            {label:'Comprometido',val:comprometido,color:'#4ade80',icon:'📋',tip:'Suma de cotizaciones aceptadas',show:true},
+            {label:'Pagado',val:pagado,color:'#60a5fa',icon:'✅',tip:'Total ya liquidado a proveedores',show:true},
+            {label:'Por pagar',val:pendientePago,color:pendientePago>0?'#fb923c':'#94a3b8',icon:'⏳',tip:'Comprometido menos pagado',show:true},
+            {label:'Disponible',val:disponible??0,color:disponible!=null?(disponible<0?'#f87171':'#94a3b8'):'#94a3b8',icon:disponible!=null&&disponible<0?'🚨':'🔵',tip:'Presupuesto menos comprometido',show:budget>0},
+          ].filter(x=>x.show).map(x=>`
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;text-align:center;" title="${x.tip}">
+              <div style="font-size:16px;margin-bottom:5px;">${x.icon}</div>
+              <div style="font-size:13px;font-weight:800;font-family:monospace;color:${x.color};">$${Math.abs(x.val).toLocaleString('es-MX',{maximumFractionDigits:0})}${x.label==='Disponible'&&x.val<0?' 🚨':''}</div>
+              <div style="font-size:10px;color:var(--text-muted);margin-top:3px;">${x.label}</div>
+            </div>`).join('')}
         </div>
-      </div>` : ''}
+        ${budget > 0 ? `
+          <div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+              <span style="font-size:11px;color:var(--text-muted);">Uso del presupuesto</span>
+              <span style="font-size:11px;font-weight:700;color:${gaugeColor};">${pct}% ${overBudget?'⚠️ EXCEDIDO':''}</span>
+            </div>
+            <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+              <div style="height:100%;width:${pct}%;background:${gaugeColor};border-radius:4px;transition:width 0.6s;"></div>
+            </div>
+          </div>` : ''}
+      </div>
 
       <!-- Proveedores contratados -->
       ${Object.keys(provMap).length ? `
@@ -7065,19 +7101,22 @@ window.openProjectDashboard = (projectId) => {
                 </div>`
               }).join('')}
             </div>` : ''}
-            ${pagosFijos.length === 0 ? `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Sin pagos fijos registrados para este proyecto</div>` :
-              pagosFijos.map(n => {
+            ${pagosFijos.length === 0 ? `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Sin pagos fijos registrados para este proyecto</div>` : (() => {
+              // Excluir los que ya se muestran en "Próximos X días" para evitar duplicados
+              const upcomingIds = new Set(upcoming.map(u => u.id))
+              const restantes = pagosFijos.filter(n => !upcomingIds.has(n.id))
+              return restantes.length === 0 ? '' : restantes.map(n => {
                 const amt = n.metadata?.amount||0
                 const day = n.metadata?.dayOfMonth
                 return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
                   ${day?`<span style="font-size:10px;color:var(--text-muted);background:rgba(255,255,255,0.06);border-radius:4px;padding:1px 6px;flex-shrink:0;">día ${day}</span>`:''}
                   <span style="flex:1;font-size:13px;color:var(--text-primary);">${esc(n.metadata?.label||n.content)}</span>
                   <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;">$${amt.toLocaleString('es-MX')}</span>
-                  <span style="font-size:9px;color:${n.metadata?.paid?'#4ade80':'#fb923c'};font-weight:700;">${n.metadata?.paid?'✓ Pagado':'Pendiente'}</span>
-                  <button onclick="deleteAgendaItem('${n.id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;">×</button>
+                  <button onclick="toggleBillPaid('${n.id}')" style="font-size:10px;background:${n.metadata?.paid?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.05)'};border:1px solid ${n.metadata?.paid?'rgba(74,222,128,0.3)':'rgba(255,255,255,0.1)'};color:${n.metadata?.paid?'#4ade80':'var(--text-muted)'};border-radius:5px;padding:2px 7px;cursor:pointer;">${n.metadata?.paid?'✓':'Pagar'}</button>
+                  <button onclick="deleteAgendaItem('${n.id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0 2px;" title="Eliminar">×</button>
                 </div>`
               }).join('')
-            }
+            })()}
             ${pagosFijos.length > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;">
               <span style="font-size:11px;color:var(--text-muted);">Total mensual estimado</span>
               <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;">$${pagosFijos.reduce((s,n)=>s+(+n.metadata?.amount||0),0).toLocaleString('es-MX')}</span>
@@ -7115,19 +7154,26 @@ window.openProjectDashboard = (projectId) => {
         ${pendientes.length ? `<div style="margin-top:12px;padding:10px;background:rgba(251,146,60,0.05);border-radius:8px;font-size:11px;color:var(--text-muted);">⏳ ${pendientes.length} cotización${pendientes.length!==1?'es':''} pendiente${pendientes.length!==1?'s':''} de resolver</div>` : ''}
       </div>
 
-      <!-- Materiales / Compras (pagos sin proveedor de servicio) -->
+      <!-- Materiales / Compras (pagos sin proveedor) -->
       ${_safe(() => {
-        const materiales = pagos.filter(g => !g.metadata?.service_id && !provMap[g.metadata?.contact_id])
+        // Deduplicar por ID antes de mostrar (previene duplicados por linkedTo + byTag)
+        const materiales = [...new Map(
+          pagos.filter(g => !g.metadata?.service_id && !provMap[g.metadata?.contact_id]).map(g=>[g.id,g])
+        ).values()]
         if (!materiales.length) return ''
         const totalMat = materiales.reduce((s,g)=>s+(+g.metadata?.amount||0),0)
         return `
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;margin-bottom:14px;">🧱 MATERIALES / COMPRAS <span style="font-size:12px;font-weight:800;font-family:monospace;color:#94a3b8;margin-left:8px;">$${totalMat.toLocaleString('es-MX')}</span></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+              <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">🧱 MATERIALES / COMPRAS</div>
+              <span style="font-size:12px;font-weight:800;font-family:monospace;color:#94a3b8;">$${totalMat.toLocaleString('es-MX')}</span>
+            </div>
             ${materiales.map(g=>`
               <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-                <span style="flex:1;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(g.metadata?.label||g.content)}</span>
+                <span style="flex:1;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(g.metadata?.label||g.content)}">${esc(g.metadata?.label||g.content)}</span>
                 <span style="font-size:12px;font-weight:800;font-family:monospace;color:#60a5fa;">$${(+g.metadata?.amount||0).toLocaleString('es-MX')}</span>
-                <span style="font-size:10px;color:var(--text-muted);">${(g.created_at||'').slice(0,10)}</span>
+                <span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">${(g.metadata?.date||g.created_at||'').slice(0,10)}</span>
+                <button onclick="deleteNode('${g.id}')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0;" title="Eliminar este pago">×</button>
               </div>`).join('')}
           </div>`
       })}
