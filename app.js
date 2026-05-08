@@ -565,20 +565,58 @@ function renderChecklist(items) {
   if (!container) return
   const done = items.filter(i => i.done).length
   const pct  = items.length ? Math.round(done / items.length * 100) : 0
+  const contacts = allNodes.filter(n => n.type === 'contact')
   container.innerHTML = (items.length ? `
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
-      <span style="font-size:11px; color:var(--text-muted); min-width:28px;">${pct}%</span>
-      <div style="flex:1; height:6px; background:rgba(255,255,255,0.1); border-radius:3px; overflow:hidden;">
-        <div style="height:100%; width:${pct}%; background:var(--accent-cyan); border-radius:3px; transition:width 0.3s;"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+      <span style="font-size:11px;color:var(--text-muted);min-width:28px;">${pct}%</span>
+      <div style="flex:1;height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:var(--accent-cyan);border-radius:3px;transition:width 0.3s;"></div>
       </div>
     </div>` : '') +
-  items.map((it, idx) => `
-    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; group">
-      <input type="checkbox" ${it.done ? 'checked' : ''} onchange="toggleCheckItem(${idx})" style="accent-color:var(--accent-cyan); width:16px; height:16px; cursor:pointer;" />
-      <span style="flex:1; font-size:14px; color:${it.done ? 'var(--text-muted)' : '#fff'}; ${it.done ? 'text-decoration:line-through' : ''}">${esc(it.text)}</span>
-      <span onclick="deleteCheckItem(${idx})" style="color:var(--text-muted); font-size:14px; cursor:pointer; padding:2px 6px; border-radius:4px; opacity:0.5;" onmouseover="this.style.opacity='1'; this.style.color='#f87171';" onmouseout="this.style.opacity='0.5'; this.style.color='var(--text-muted)';">✕</span>
-    </div>
-  `).join('')
+  items.map((it, idx) => {
+    const assignedName = it.assigned_name || ''
+    const dueDate = it.due_date || ''
+    const today = new Date().toISOString().split('T')[0]
+    const isOverdue = dueDate && dueDate < today && !it.done
+    return `
+    <div style="border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:8px 10px;margin-bottom:6px;background:rgba(255,255,255,0.02);">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <input type="checkbox" ${it.done ? 'checked' : ''} onchange="toggleCheckItem(${idx})"
+          style="accent-color:var(--accent-cyan);width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
+        <span style="flex:1;font-size:13px;color:${it.done?'var(--text-muted)':'#fff'};${it.done?'text-decoration:line-through':''}">${esc(it.text)}</span>
+        <span onclick="deleteCheckItem(${idx})" style="color:var(--text-muted);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:4px;opacity:0.5;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.5'">✕</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:6px;padding-left:26px;flex-wrap:wrap;">
+        <select onchange="updateCheckItemAssignee(${idx},this.value)"
+          style="font-size:11px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:2px 6px;color:var(--text-muted);cursor:pointer;">
+          <option value="">👤 Asignar persona</option>
+          ${contacts.map(c=>`<option value="${esc(c.metadata?.name||c.content)}" ${assignedName===(c.metadata?.name||c.content)?'selected':''}>${esc(c.metadata?.name||c.content)}</option>`).join('')}
+        </select>
+        <input type="date" value="${dueDate}" onchange="updateCheckItemDate(${idx},this.value)"
+          style="font-size:11px;background:rgba(255,255,255,0.05);border:1px solid ${isOverdue?'rgba(248,113,113,0.5)':'rgba(255,255,255,0.1)'};border-radius:6px;padding:2px 6px;color:${isOverdue?'#f87171':'var(--text-muted)'};cursor:pointer;" />
+        ${assignedName ? `<span style="font-size:11px;color:#a78bfa;font-weight:600;">👤 ${esc(assignedName)}</span>` : ''}
+        ${isOverdue ? `<span style="font-size:11px;color:#f87171;font-weight:600;">⚠ Vencida</span>` : ''}
+      </div>
+    </div>`
+  }).join('')
+}
+
+window.updateCheckItemAssignee = async (idx, name) => {
+  const node = allNodes.find(n => n.id === editingCardId)
+  if (node?.metadata?.checklist) {
+    node.metadata.checklist[idx].assigned_name = name
+    await updateNodeMetadata(editingCardId, node.metadata)
+    renderChecklist(node.metadata.checklist)
+  }
+}
+
+window.updateCheckItemDate = async (idx, date) => {
+  const node = allNodes.find(n => n.id === editingCardId)
+  if (node?.metadata?.checklist) {
+    node.metadata.checklist[idx].due_date = date
+    await updateNodeMetadata(editingCardId, node.metadata)
+    renderChecklist(node.metadata.checklist)
+  }
 }
 
 // Modal Interaction Handlers
@@ -1008,7 +1046,25 @@ function showToast(msg) {
   el.textContent = msg
   el.classList.remove('hidden')
   el.style.opacity = '1'
-  setTimeout(() => {
+  clearTimeout(el._timeout)
+  el._timeout = setTimeout(() => {
+    el.style.opacity = '0'
+    setTimeout(() => el.classList.add('hidden'), 500)
+  }, 3000)
+}
+
+function showMsg(text, type = 'info') {
+  const el = document.getElementById('node-msg')
+  if (!el) return
+  const colors = { success: '#4ade80', error: '#f87171', warning: '#fbbf24', info: 'var(--accent-cyan)' }
+  const t = text.startsWith('✓') ? 'success' : text.startsWith('⚠') ? 'warning' : text.startsWith('✕') ? 'error' : type
+  el.style.background = colors[t] || colors.info
+  el.style.color = (t === 'warning' || t === 'success') ? '#000' : '#fff'
+  el.textContent = text
+  el.classList.remove('hidden')
+  el.style.opacity = '1'
+  clearTimeout(el._timeout)
+  el._timeout = setTimeout(() => {
     el.style.opacity = '0'
     setTimeout(() => el.classList.add('hidden'), 500)
   }, 3000)
@@ -1965,40 +2021,82 @@ function renderFinance(nodes) {
     </div>`
   }
 
-  const rowsHtml = txs.length === 0
-    ? '<div style="text-align:center; color:var(--text-muted); padding:40px;">Sin transacciones. Escribe <b>+$1000 Salario</b> o <b>-$200 Renta</b></div>'
-    : txs.map(n => {
-        const isIncome = n.type === 'income'; const isLoan = n.type === 'loan'
-        const m = n.metadata || {}
-        const acc = accounts.find(a => a.id === m.account_id)
-        const fechaDisp = m.fecha || n.created_at?.split('T')[0] || ''
-        const moneda = m.moneda || 'MXN'
-        const refIcon = m.referencia ? '🧾' : ''
-        const contactBadge = m.contact_name
-          ? `<span style="background:rgba(0,246,255,0.1);color:#00f6ff;border-radius:6px;padding:1px 7px;font-size:10px;cursor:pointer;" onclick="event.stopPropagation();openContactByName('${esc(m.contact_name)}')">${isIncome?'De':'A'}: ${esc(m.contact_name)}</span>` : ''
-        const bancoBadge = m.banco ? `<span style="background:rgba(255,255,255,0.06);color:#94a3b8;border-radius:6px;padding:1px 7px;font-size:10px;">🏦 ${esc(m.banco)}</span>` : ''
-        const clabeBadge = m.clabe ? `<span style="background:rgba(255,255,255,0.04);color:#64748b;border-radius:6px;padding:1px 7px;font-size:10px;font-family:monospace;">${esc(m.clabe.slice(-6).padStart(m.clabe.length,'·'))}</span>` : ''
-        return `
-        <div onclick="openFinanceDetail('${n.id}')" style="display:flex; align-items:flex-start; gap:16px; padding:14px 8px; border-bottom:1px solid rgba(255,255,255,0.04); cursor:pointer; transition:background 0.15s; border-radius:8px;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
-          <div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;background:${isIncome?'rgba(74,222,128,0.12)':'rgba(248,113,113,0.12)'};display:grid;place-items:center;font-size:18px;margin-top:2px;">
-            ${isIncome ? '↑' : '↓'}
-          </div>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;color:#fff;font-weight:600;margin-bottom:4px;">${esc(m.label||n.content)} ${refIcon}</div>
-            <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;">
-              <span style="font-size:11px;color:var(--text-muted);">${fechaDisp}</span>
-              ${acc ? `<span style="background:${acc.metadata?.color||'#4ade80'}22;color:${acc.metadata?.color||'#4ade80'};border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;">${esc(acc.metadata?.label||acc.content)}</span>` : ''}
-              ${contactBadge}
-              ${bancoBadge}
-              ${clabeBadge}
-            </div>
-          </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:17px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${isIncome?'#4ade80':'#f87171'};">${isIncome?'+':'-'}$${(m.amount||0).toLocaleString()}</div>
-            <div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${moneda}</div>
-          </div>
-        </div>
-      `}).join('')
+  // ── TRANSACTIONS TABLE ──────────────────────────────────────────────────────
+  const sortedTxs = [...txs].sort((a, b) => {
+    const da = a.metadata?.date || a.metadata?.fecha || a.created_at || ''
+    const db = b.metadata?.date || b.metadata?.fecha || b.created_at || ''
+    return db.localeCompare(da)
+  })
+
+  // Running balance
+  const initBal = activeAccount !== 'all' ? (accounts.find(a=>a.id===activeAccount)?.metadata?.balance || 0) : 0
+  let running = initBal
+  const txsWithBalance = sortedTxs.slice().reverse().map(tx => {
+    const amt = tx.metadata?.amount || 0
+    if (tx.type === 'income') running += amt
+    else if (tx.type === 'expense') running -= amt
+    return { ...tx, _runningBalance: running }
+  }).reverse()
+
+  const txTableHtml = `
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;">📋 MOVIMIENTOS (${txsWithBalance.length})</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button onclick="window.printFinanceReport()" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🖨 Imprimir reporte</button>
+      <button onclick="openTransactionModal()" style="font-size:11px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:var(--accent-cyan);border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Movimiento</button>
+    </div>
+  </div>
+  <div style="overflow-x:auto;">
+    <table id="finance-tx-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead>
+        <tr style="background:rgba(255,255,255,0.04);">
+          <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Fecha</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Concepto</th>
+          <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Cuenta</th>
+          <th style="text-align:right;padding:8px 10px;color:#4ade80;font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Entrada</th>
+          <th style="text-align:right;padding:8px 10px;color:#f87171;font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Salida</th>
+          <th style="text-align:right;padding:8px 10px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Saldo</th>
+          <th style="text-align:center;padding:8px 10px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Comprobante</th>
+          <th style="text-align:center;padding:8px 10px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);"></th>
+        </tr>
+      </thead>
+      <tbody>
+      ${txsWithBalance.length === 0
+        ? `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-dim);">Sin movimientos. Registra un ingreso o gasto.</td></tr>`
+        : txsWithBalance.map(tx => {
+            const m = tx.metadata || {}
+            const isIncome = tx.type === 'income'
+            const isExpense = tx.type === 'expense'
+            const amt = m.amount || 0
+            const rawDate = m.date || m.fecha || tx.created_at || ''
+            const date = rawDate ? (() => { try { return new Date(rawDate.includes('T') ? rawDate : rawDate + 'T12:00:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'}) } catch(e){ return rawDate.slice(0,10) } })() : '—'
+            const concept = m.description || m.label || tx.content || '—'
+            const accountName = accounts.find(a=>a.id===m.account_id)?.metadata?.label || m.account_id || '—'
+            const bal = tx._runningBalance
+            const balClr = bal >= 0 ? '#4ade80' : '#f87171'
+            const comprobante = m.comprobante_url || m.receipt_url || ''
+            const tags = (m.tags||[]).join(' ')
+            return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.1s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+              <td style="padding:8px 10px;color:var(--text-muted);white-space:nowrap;">${date}</td>
+              <td style="padding:8px 10px;color:var(--text-primary);max-width:200px;">
+                <div style="font-weight:600;">${esc(concept)}</div>
+                ${tags ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${esc(tags)}</div>` : ''}
+              </td>
+              <td style="padding:8px 10px;color:var(--text-muted);font-size:11px;white-space:nowrap;">${esc(accountName)}</td>
+              <td style="padding:8px 10px;text-align:right;color:#4ade80;font-weight:700;font-family:'JetBrains Mono',monospace;">${isIncome ? '+$' + amt.toLocaleString('es-MX',{minimumFractionDigits:2}) : ''}</td>
+              <td style="padding:8px 10px;text-align:right;color:#f87171;font-weight:700;font-family:'JetBrains Mono',monospace;">${isExpense ? '-$' + amt.toLocaleString('es-MX',{minimumFractionDigits:2}) : ''}</td>
+              <td style="padding:8px 10px;text-align:right;color:${balClr};font-weight:700;font-family:'JetBrains Mono',monospace;">${activeAccount !== 'all' ? (bal>=0?'+':'')+' $'+bal.toLocaleString('es-MX',{minimumFractionDigits:2}) : ''}</td>
+              <td style="padding:8px 10px;text-align:center;">
+                ${comprobante ? `<a href="${esc(comprobante)}" target="_blank" style="color:var(--accent-cyan);font-size:12px;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'" title="Ver comprobante">🔗 Ver</a>` : '<span style="color:var(--text-dim);font-size:11px;">—</span>'}
+              </td>
+              <td style="padding:8px 10px;text-align:center;">
+                <button onclick="openFinanceDetail('${tx.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Editar" onmouseover="this.style.color='var(--accent-cyan)'" onmouseout="this.style.color='var(--text-dim)'">✏️</button>
+              </td>
+            </tr>`
+          }).join('')}
+      </tbody>
+    </table>
+  </div>`
 
   // Charts toggle button in actions
   const chartsBtn = `<button class="fin-action-btn" id="fin-charts-toggle" onclick="toggleFinanceCharts()" style="background:${finChartsVisible?'rgba(0,246,255,0.15)':'rgba(255,255,255,0.05)'};color:${finChartsVisible?'var(--accent-cyan)':'var(--text-muted)'};">📊 Gráficos</button>`
@@ -2031,7 +2129,7 @@ function renderFinance(nodes) {
   `
 
   root.innerHTML = accountTabsHtml + statsHtml + actionsHtmlFull + chartsHtml +
-    `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:24px;">${rowsHtml}</div>`
+    `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:24px;">${txTableHtml}</div>`
 
   // Animate KPI numbers
   animateStatEl('fin-kpi-income',  income)
@@ -2048,6 +2146,42 @@ function renderFinance(nodes) {
 window.setActiveAccount = (id) => {
   activeAccount = id
   renderAll()
+}
+
+window.openTransactionModal = () => {
+  const inp = document.getElementById('nexus-input')
+  if (inp) { inp.focus(); inp.placeholder = '+$1000 Salario   ó   -$200 Renta' }
+}
+
+window.printFinanceReport = () => {
+  const table = document.getElementById('finance-tx-table')
+  if (!table) { showMsg('⚠ Sin datos para imprimir'); return }
+  const accLabel = activeAccount === 'all' ? 'Todas las cuentas' :
+    (allNodes.find(n=>n.id===activeAccount)?.metadata?.label || activeAccount)
+  const date = new Date().toLocaleDateString('es-MX', {year:'numeric',month:'long',day:'numeric'})
+  const win = window.open('', '_blank', 'width=900,height=700')
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>Reporte Financiero — ${accLabel}</title>
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 13px; color: #111; padding: 32px; }
+      h1 { font-size: 20px; margin-bottom: 4px; }
+      .meta { color: #666; font-size: 12px; margin-bottom: 24px; }
+      table { width: 100%; border-collapse: collapse; }
+      th { background: #f0f0f0; padding: 8px 10px; text-align: left; font-weight: 700; border-bottom: 2px solid #ccc; }
+      td { padding: 7px 10px; border-bottom: 1px solid #eee; }
+      .income { color: #16a34a; font-weight: 700; }
+      .expense { color: #dc2626; font-weight: 700; }
+      .balance { font-weight: 700; }
+      @media print { body { padding: 16px; } button { display: none; } }
+    </style>
+  </head><body>
+    <h1>📊 Reporte Financiero</h1>
+    <div class="meta">Cuenta: <strong>${accLabel}</strong> — Generado: ${date} — Nexus OS</div>
+    ${table.outerHTML}
+    <div style="margin-top:24px;font-size:11px;color:#999;">Generado con Nexus OS · nexus-os-chi.vercel.app</div>
+    <script>window.onload=()=>window.print()<\\/script>
+  </body></html>`)
+  win.document.close()
 }
 
 window.exportFinanceCSV = () => {
@@ -3633,6 +3767,7 @@ window.switchView = function(viewName) {
   if (viewFn) { try { viewFn(nodes) } catch(e) { console.warn('[switchView]', e) } }
   // Vistas especiales no en el mapa
   if (viewName === 'tags') { window.renderTagsView?.(); window.renderHabitosSection?.() }
+  if (viewName === 'settings') { try { renderConfigSpecCatalog() } catch(e) {} }
   // Crónica legacy → redirige a Tiempo tab Pasado
   if (viewName === 'cronica') { switchView('calendar'); switchTiempoTab('pasado'); return }
 }
@@ -4225,11 +4360,41 @@ document.getElementById('btn-import-csv')?.addEventListener('click', async () =>
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return
-  if (!document.getElementById('card-modal')?.classList.contains('hidden')) closeCardModal()
-  if (!document.getElementById('note-edit-modal')?.classList.contains('hidden')) closeNoteModal()
-  if (!document.getElementById('account-modal')?.classList.contains('hidden')) closeAccountModal()
-  if (!document.getElementById('transfer-modal')?.classList.contains('hidden')) closeTransferModal()
-  if (!document.getElementById('finance-detail-modal')?.classList.contains('hidden')) closeFinanceDetail()
+  const modalIds = [
+    'card-modal','contact-modal','proj-task-modal','proveedor-picker-modal',
+    'milestone-modal','payment-modal','agenda-modal','account-modal',
+    'cotizacion-modal','member-modal','health-modal','node-detail-modal',
+    'transform-modal','search-overlay','tag-modal',
+    'note-edit-modal','transfer-modal','finance-detail-modal'
+  ]
+  const closeFns = {
+    'card-modal': 'closeCardModal',
+    'contact-modal': 'closeContactModal',
+    'proj-task-modal': 'closeProjTaskModal',
+    'proveedor-picker-modal': 'closeProveedorPicker',
+    'milestone-modal': 'closeMilestoneModal',
+    'search-overlay': 'closeSearch',
+    'account-modal': 'closeAccountModal',
+    'cotizacion-modal': 'closeCotizacionModal',
+    'note-edit-modal': 'closeNoteModal',
+    'transfer-modal': 'closeTransferModal',
+    'finance-detail-modal': 'closeFinanceDetail',
+    'agenda-modal': 'closeAgendaModal',
+  }
+  for (const id of modalIds) {
+    const el = document.getElementById(id)
+    if (!el) continue
+    const isVisible = !el.classList.contains('hidden') || el.style.display === 'flex' || el.style.display === 'block'
+    if (isVisible) {
+      const fn = closeFns[id]
+      if (fn && window[fn]) { window[fn](); return }
+      else { el.classList.add('hidden'); return }
+    }
+  }
+  // Also close any modal-overlay that's visible
+  document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(el => {
+    el.classList.add('hidden')
+  })
 })
 
 
@@ -4840,6 +5005,7 @@ window.openContactModal = (id = null) => {
   const rawSpecs = m.specialties || (m.specialty ? [m.specialty] : [])
   _cmSpecialties = [...rawSpecs]
   renderCmSpecialties()
+  renderSpecCatalog()
 
   // Accounts — support old format migration
   if (m.contact_accounts?.length) {
@@ -4915,6 +5081,91 @@ function renderCmSpecialties() {
       <button onclick="removeCmSpecialty('${esc(s)}')" style="background:none;border:none;color:#fb923c;cursor:pointer;font-size:14px;padding:0 0 0 2px;line-height:1;">×</button>
     </span>`
   ).join('')
+}
+
+// ── Specialties Catalog ───────────────────────────────────────────────────────
+const DEFAULT_SPECIALTIES = [
+  'Albañilería','Arquitectura','Cancelería','Carpintería','Carpintería metálica',
+  'Diseño gráfico','Electricidad','Herrería','Impermeabilización',
+  'Ingeniería civil','Instalación de aire acondicionado','Instalación de pisos',
+  'Jardinería','Limpieza','Perforación','Pintura','Plomería',
+  'Soldadura','Topografía','Yesería'
+]
+
+function getSpecialtiesCatalog() {
+  try {
+    const s = localStorage.getItem('nexus_specialties_catalog')
+    if (s) return JSON.parse(s)
+  } catch {}
+  localStorage.setItem('nexus_specialties_catalog', JSON.stringify(DEFAULT_SPECIALTIES))
+  return [...DEFAULT_SPECIALTIES]
+}
+
+function saveSpecialtiesCatalog(arr) {
+  localStorage.setItem('nexus_specialties_catalog', JSON.stringify(arr))
+}
+
+function renderSpecCatalog(searchTerm = '') {
+  const catalog = getSpecialtiesCatalog()
+  const filtered = searchTerm ? catalog.filter(s => s.toLowerCase().includes(searchTerm.toLowerCase())) : catalog
+  const el = document.getElementById('cm-spec-catalog')
+  if (!el) return
+  el.innerHTML = filtered.map(s => {
+    const isSelected = _cmSpecialties.includes(s)
+    return `<span onclick="toggleCatalogSpec('${s.replace(/'/g,"\\'")}')"
+      style="cursor:pointer;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;
+             background:${isSelected ? 'rgba(0,246,255,0.2)' : 'rgba(255,255,255,0.05)'};
+             border:1px solid ${isSelected ? 'var(--accent-cyan)' : 'rgba(255,255,255,0.1)'};
+             color:${isSelected ? 'var(--accent-cyan)' : 'var(--text-muted)'};
+             transition:all 0.15s;">${esc(s)}</span>`
+  }).join('')
+}
+
+window.toggleCatalogSpec = (s) => {
+  if (_cmSpecialties.includes(s)) {
+    _cmSpecialties = _cmSpecialties.filter(x => x !== s)
+  } else {
+    _cmSpecialties.push(s)
+  }
+  renderSpecCatalog(document.getElementById('cm-spec-search')?.value || '')
+  renderCmSpecialties()
+}
+
+window.filterSpecCatalog = (q) => renderSpecCatalog(q)
+
+function renderConfigSpecCatalog() {
+  const el = document.getElementById('spec-catalog-list')
+  if (!el) return
+  const catalog = getSpecialtiesCatalog()
+  el.innerHTML = catalog.length === 0
+    ? '<span style="font-size:12px;color:var(--text-dim);">Vacío. Agrega especialidades.</span>'
+    : catalog.map(s => `
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;
+              background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);font-size:12px;color:var(--text-muted);">
+          ${esc(s)}
+          <span onclick="removeCatalogSpecialty('${s.replace(/'/g,"\\'")}' )" style="cursor:pointer;color:#f87171;font-size:14px;line-height:1;" title="Eliminar">×</span>
+        </span>`).join('')
+}
+
+window.addCatalogSpecialty = () => {
+  const inp = document.getElementById('spec-new-input')
+  const val = inp?.value.trim()
+  if (!val) return
+  const catalog = getSpecialtiesCatalog()
+  if (!catalog.includes(val)) {
+    catalog.push(val)
+    catalog.sort()
+    saveSpecialtiesCatalog(catalog)
+    showMsg('✓ Especialidad agregada')
+  }
+  inp.value = ''
+  renderConfigSpecCatalog()
+}
+
+window.removeCatalogSpecialty = (s) => {
+  const catalog = getSpecialtiesCatalog().filter(x => x !== s)
+  saveSpecialtiesCatalog(catalog)
+  renderConfigSpecCatalog()
 }
 
 // ── Accounts ─────────────────────────────────────────────────────────────────
@@ -6586,26 +6837,44 @@ window.openProveedorPicker = (projectTag = '') => {
 window.closeProveedorPicker = () => document.getElementById('proveedor-picker-modal').classList.add('hidden')
 
 window.filterProveedorPicker = (q = '') => {
-  const provs = allNodes.filter(n => n.type === 'contact' && n.metadata?.cType === 'proveedor')
-  const filtered = q ? provs.filter(p => (p.metadata?.name||p.content).toLowerCase().includes(q.toLowerCase())) : provs
+  // Support both old (cType) and new (roles array) contact models
+  const provs = allNodes.filter(n => {
+    if (n.type !== 'contact') return false
+    const m = n.metadata || {}
+    return m.cType === 'proveedor' || (Array.isArray(m.roles) && m.roles.includes('proveedor'))
+  })
+  const lq = q.toLowerCase().trim()
+  const filtered = !lq ? provs : provs.filter(p => {
+    const name = (p.metadata?.name || p.content || '').toLowerCase()
+    const spec = (p.metadata?.specialties || [p.metadata?.specialty] || []).join(' ').toLowerCase()
+    const city = (p.metadata?.city || '').toLowerCase()
+    return name.includes(lq) || spec.includes(lq) || city.includes(lq) ||
+      [...lq].every(ch => name.includes(ch))
+  })
   const list = document.getElementById('prov-picker-list')
   const projTag = document.getElementById('prov-picker-project-tag').value
   if (!filtered.length) {
-    list.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Sin resultados</div>`
+    list.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px;">Sin resultados para "${esc(q)}"</div>`
     return
   }
   list.innerHTML = filtered.map(p => {
-    const name = esc(p.metadata?.name || p.content)
-    const spec = esc(p.metadata?.specialty || '')
-    const clr  = p.metadata?.color || '#fb923c'
+    const m = p.metadata || {}
+    const name = esc(m.name || p.content)
+    const specs = Array.isArray(m.specialties) ? m.specialties.join(', ') : (m.specialty || '')
+    const clr = m.color || '#fb923c'
+    const initials = name.slice(0,2).toUpperCase()
+    const roles = (m.roles||[]).join(', ') || m.cType || ''
     return `<div onclick="closeProveedorPicker();openPaymentModal('${p.id}',null,'${projTag}')"
-               style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;background:rgba(255,255,255,0.04);cursor:pointer;transition:background 0.15s;"
+               style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;
+                      background:rgba(255,255,255,0.04);cursor:pointer;transition:background 0.15s;margin-bottom:4px;"
                onmouseenter="this.style.background='rgba(255,255,255,0.08)'"
                onmouseleave="this.style.background='rgba(255,255,255,0.04)'">
-      <div style="width:34px;height:34px;border-radius:50%;background:${clr}20;color:${clr};display:grid;place-items:center;font-size:14px;font-weight:800;flex-shrink:0;">${name.charAt(0)}</div>
+      <div style="width:36px;height:36px;border-radius:50%;background:${clr}25;color:${clr};
+                  display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0;">${initials}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${name}</div>
-        ${spec ? `<div style="font-size:11px;color:var(--text-muted);">${spec}</div>` : ''}
+        ${specs ? `<div style="font-size:11px;color:${clr};font-weight:600;">${esc(specs)}</div>` : ''}
+        ${roles ? `<div style="font-size:10px;color:var(--text-dim);">${esc(roles)}</div>` : ''}
       </div>
       <span style="font-size:12px;color:var(--text-muted);">→</span>
     </div>`
@@ -7080,6 +7349,7 @@ window.openProjectDashboard = (projectId) => {
     { id:'finanzas', label:'💼 Finanzas' },
     { id:'kanban',   label:'✅ Kanban'   },
     { id:'notas',    label:'🧠 Notas'    },
+    { id:'wiki',     label:'📖 Wiki'     },
   ]
 
   root.innerHTML = `
@@ -7153,6 +7423,7 @@ function _renderProjTab(tab, d) {
   if (tab === 'finanzas') return _renderProjFinanzas(d)
   if (tab === 'kanban')   return _renderProjKanban(d)
   if (tab === 'notas')    return _renderProjNotas(d)
+  if (tab === 'wiki')     return _renderProjWiki(d)
   return ''
 }
 
@@ -7591,9 +7862,12 @@ function _renderProjKanban(d) {
   ]
   const columns = [...defaultCols, ...customCols.map(c=>({id:c.id||c.label?.toLowerCase().replace(/\s/g,'_'), label:c.label, color:c.color||'#60a5fa'}))]
 
-  return `<div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+  return `<div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
     <span style="font-size:12px;font-weight:800;color:var(--text-muted);">KANBAN DEL PROYECTO — ${esc(m.label||p.content)}</span>
-    <button onclick="_projAddKanbanTask('${projSlug}','${p.id}')" style="font-size:12px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Tarea</button>
+    <div style="display:flex;gap:8px;">
+      <button onclick="addProjKanbanColumn('${p.id}')" style="font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Columna</button>
+      <button onclick="_projAddKanbanTask('${projSlug}','${p.id}')" style="font-size:12px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Tarea</button>
+    </div>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
     ${columns.map(col => {
@@ -7606,7 +7880,11 @@ function _renderProjKanban(d) {
           <span style="font-size:12px;font-weight:700;color:${col.color};">${col.label}</span>
           <span style="font-size:10px;background:${col.color}15;color:${col.color};border-radius:10px;padding:1px 7px;">${tasks.length}</span>
         </div>
-        ${tasks.length === 0 ? `<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px 0;">Vacío</div>` :
+        ${tasks.length === 0 ? `<div style="text-align:center;padding:20px 12px;color:var(--text-dim);">
+          <div style="font-size:24px;margin-bottom:8px;opacity:0.3;">📋</div>
+          <div style="font-size:11px;">Arrastra aquí o</div>
+          <div style="font-size:11px;">clic en + Agregar</div>
+        </div>` :
           tasks.map(t => {
             const PCLR = {alta:'#f87171',media:'#fbbf24',baja:'#4ade80'}
             const pClr = PCLR[t.metadata?.priority] || ''
@@ -7618,7 +7896,7 @@ function _renderProjKanban(d) {
             const hasAttach = t.metadata?.attachments?.length > 0
             return `<div draggable="true" ondragstart="projKanbanDragStart(event,'${t.id}')" style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;margin-bottom:8px;cursor:pointer;position:relative;" title="Clic = mover estado · Editar = ✏️ · Arrastrar = mover columna">
               ${lbl ? `<div style="height:5px;background:${lbl};"></div>` : ''}
-              ${hasCover ? `<img src="${t.metadata.cover_url}" style="width:100%;height:60px;object-fit:cover;" />` : ''}
+              ${hasCover ? `<img src="${t.metadata.cover_url}" style="width:100%;height:120px;object-fit:cover;object-position:center;" />` : ''}
               <div style="padding:10px;">
                 <button onclick="event.stopPropagation();openProjTaskModal('${projSlug}','${p.id}','${t.id}')" style="position:absolute;top:${lbl?'12':'6'}px;right:6px;background:none;border:none;cursor:pointer;font-size:12px;opacity:0.4;" title="Editar tarea">✏️</button>
                 <div onclick="_projMoveTask('${t.id}','${col.id}','${p.id}')">
@@ -7640,6 +7918,19 @@ function _renderProjKanban(d) {
       </div>`
     }).join('')}
   </div>`
+}
+
+window.addProjKanbanColumn = async (projId) => {
+  const name = prompt('Nombre de la nueva columna:')
+  if (!name?.trim()) return
+  const proj = allNodes.find(n => n.id === projId)
+  if (!proj) return
+  const cols = proj.metadata?.kanban_columns || []
+  if (cols.length >= 3) { showMsg('⚠ Máximo 6 columnas totales (3 por defecto + 3 personalizadas)'); return }
+  cols.push({ id: name.trim().toLowerCase().replace(/\s+/g,'_') + '_' + Date.now(), label: name.trim(), color: '#a78bfa' })
+  proj.metadata.kanban_columns = cols
+  await supabase.from('nodes').update({ metadata: proj.metadata }).eq('id', proj.id)
+  renderProyectos()
 }
 
 // ── Kanban drag & drop ────────────────────────────────────────────────────────
@@ -7710,6 +8001,234 @@ function _renderProjNotas(d) {
       </div>`
     }).join('')}
   </div>`}`
+}
+
+// ── TAB: WIKI ────────────────────────────────────────────────────────────────
+let _wikiMode = 'edit'
+
+function _renderProjWiki(d) {
+  const { p, m } = d
+  const wiki = m.wiki || {}
+  const content = wiki.content || ''
+  const attachments = wiki.attachments || []
+  const sections = wiki.sections || []
+
+  const attachHtml = attachments.map((a, i) => {
+    const icon = a.type === 'image' ? '🖼' : a.type === 'pdf' ? '📄' : a.type === 'drive' ? '📁' : '🔗'
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;margin-bottom:6px;">
+      <span style="font-size:18px;">${icon}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(a.name)}</div>
+        <a href="${esc(a.url)}" target="_blank" style="font-size:11px;color:var(--accent-cyan);text-decoration:none;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${esc(a.url.length > 60 ? a.url.slice(0,60)+'…' : a.url)}</a>
+      </div>
+      <button onclick="removeWikiAttachment('${p.id}',${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;flex-shrink:0;opacity:0.6;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6" title="Eliminar">✕</button>
+    </div>`
+  }).join('')
+
+  const sectionListHtml = sections.length === 0
+    ? `<div style="font-size:12px;color:var(--text-dim);">Agrega encabezados (#, ##) en el editor para crear secciones automáticas.</div>`
+    : sections.map(s => `<div onclick="scrollToWikiSection('${s.replace(/'/g,"\\'")}' )" style="font-size:12px;color:var(--text-muted);padding:4px 8px;border-radius:6px;cursor:pointer;margin-bottom:2px;${s.startsWith('###')?'padding-left:24px':s.startsWith('##')?'padding-left:16px':''}" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">${s.replace(/^#+\s*/,'')}</div>`).join('')
+
+  return `
+  <div style="display:grid;grid-template-columns:220px 1fr;gap:20px;min-height:500px;">
+    <!-- SIDEBAR -->
+    <div style="border-right:1px solid rgba(255,255,255,0.06);padding-right:16px;">
+      <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;">📑 SECCIONES</div>
+      <div id="wiki-sections-list">${sectionListHtml}</div>
+      <div style="margin-top:24px;border-top:1px solid rgba(255,255,255,0.06);padding-top:16px;">
+        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:10px;">📎 ADJUNTOS (${attachments.length})</div>
+        <div id="wiki-attach-list">${attachHtml}</div>
+        <!-- Add link -->
+        <div style="margin-top:8px;">
+          <input type="text" id="wiki-link-name" placeholder="Nombre del enlace" class="modal-input" style="font-size:12px;margin-bottom:6px;" />
+          <input type="text" id="wiki-link-url" placeholder="URL (Google Drive, web...)" class="modal-input" style="font-size:12px;margin-bottom:6px;" />
+          <button onclick="addWikiLink('${p.id}')" class="btn-primary" style="width:100%;padding:6px;font-size:12px;">+ Agregar enlace</button>
+        </div>
+        <!-- Add file -->
+        <label style="display:block;margin-top:8px;cursor:pointer;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.1);border-radius:8px;padding:8px;text-align:center;font-size:12px;color:var(--text-dim);">
+          📁 Subir imagen/PDF
+          <input type="file" accept="image/*,.pdf" style="display:none;" onchange="addWikiFile('${p.id}',this)" />
+        </label>
+      </div>
+    </div>
+    <!-- EDITOR / PREVIEW -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;gap:8px;">
+          <button onclick="setWikiMode('edit')" id="wiki-btn-edit"
+            style="font-size:12px;padding:6px 14px;border-radius:7px;cursor:pointer;font-weight:600;background:rgba(0,246,255,0.15);border:1px solid var(--accent-cyan);color:var(--accent-cyan);">✏️ Editar</button>
+          <button onclick="setWikiMode('preview')" id="wiki-btn-preview"
+            style="font-size:12px;padding:6px 14px;border-radius:7px;cursor:pointer;font-weight:600;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);">👁 Vista previa</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:11px;color:var(--text-dim);">Soporta Markdown</span>
+          <button onclick="saveWiki('${p.id}')" style="font-size:12px;background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:7px;padding:6px 16px;cursor:pointer;font-weight:700;">💾 Guardar</button>
+        </div>
+      </div>
+      <div id="wiki-editor-area">
+        <textarea id="wiki-content-input"
+          placeholder="# Nombre del Proyecto
+
+## Descripción
+Escribe aquí la descripción completa del proyecto...
+
+## Objetivos
+- Objetivo 1
+- Objetivo 2
+
+## Recursos
+[Google Drive](https://drive.google.com/...) — Carpeta del proyecto"
+          style="width:100%;min-height:450px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;resize:vertical;outline:none;box-sizing:border-box;"
+          oninput="updateWikiSections()">${esc(content)}</textarea>
+      </div>
+      <div id="wiki-preview-area" style="display:none;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:16px 20px;min-height:450px;line-height:1.7;"></div>
+    </div>
+  </div>`
+}
+
+function _wikiMdToHtml(text) {
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/^# (.+)$/gm,'<h1 style="font-size:20px;font-weight:800;color:var(--accent-cyan);margin:16px 0 8px;" id="ws-$1">$1</h1>')
+    .replace(/^## (.+)$/gm,'<h2 style="font-size:16px;font-weight:700;color:#a78bfa;margin:14px 0 6px;" id="ws-$1">$1</h2>')
+    .replace(/^### (.+)$/gm,'<h3 style="font-size:14px;font-weight:700;color:#60a5fa;margin:12px 0 4px;" id="ws-$1">$1</h3>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em style="color:#fbbf24;">$1</em>')
+    .replace(/`([^`]+)`/g,'<code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:4px;font-family:monospace;font-size:12px;">$1</code>')
+    .replace(/^- (.+)$/gm,'<li style="margin:3px 0;padding-left:4px;">$1</li>')
+    .replace(/(<li[^>]*>[\s\S]*?<\/li>(\n)?)+/g,s=>`<ul style="list-style:disc;padding-left:20px;margin:8px 0;">${s}</ul>`)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" style="color:var(--accent-cyan);text-decoration:underline;">$1</a>')
+    .replace(/\n\n/g,'<br/><br/>')
+}
+
+window.setWikiMode = (mode) => {
+  _wikiMode = mode
+  const editor = document.getElementById('wiki-editor-area')
+  const preview = document.getElementById('wiki-preview-area')
+  const btnEdit = document.getElementById('wiki-btn-edit')
+  const btnPrev = document.getElementById('wiki-btn-preview')
+  if (mode === 'preview') {
+    const text = document.getElementById('wiki-content-input')?.value || ''
+    const lines = text.split('\n').filter(l => /^#{1,3}\s/.test(l))
+    const secEl = document.getElementById('wiki-sections-list')
+    if (secEl) {
+      secEl.innerHTML = lines.length === 0
+        ? '<div style="font-size:12px;color:var(--text-dim);">Sin secciones todavía.</div>'
+        : lines.map(l => `<div onclick="scrollToWikiSection('${l.replace(/'/g,"\\'")}' )" style="font-size:12px;color:var(--text-muted);padding:4px 8px;border-radius:6px;cursor:pointer;margin-bottom:2px;${l.startsWith('###')?'padding-left:24px':l.startsWith('##')?'padding-left:16px':''}" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background=''">${l.replace(/^#+\s*/,'')}</div>`).join('')
+    }
+    if (preview) {
+      preview.innerHTML = _wikiMdToHtml(text) || '<p style="color:var(--text-dim);">Sin contenido. Escribe en el editor.</p>'
+    }
+    if (editor) editor.style.display = 'none'
+    if (preview) preview.style.display = 'block'
+    if (btnEdit) { btnEdit.style.background='rgba(255,255,255,0.05)'; btnEdit.style.borderColor='rgba(255,255,255,0.1)'; btnEdit.style.color='var(--text-muted)' }
+    if (btnPrev) { btnPrev.style.background='rgba(0,246,255,0.15)'; btnPrev.style.borderColor='var(--accent-cyan)'; btnPrev.style.color='var(--accent-cyan)' }
+  } else {
+    if (editor) editor.style.display = 'block'
+    if (preview) preview.style.display = 'none'
+    if (btnEdit) { btnEdit.style.background='rgba(0,246,255,0.15)'; btnEdit.style.borderColor='var(--accent-cyan)'; btnEdit.style.color='var(--accent-cyan)' }
+    if (btnPrev) { btnPrev.style.background='rgba(255,255,255,0.05)'; btnPrev.style.borderColor='rgba(255,255,255,0.1)'; btnPrev.style.color='var(--text-muted)' }
+  }
+}
+
+window.updateWikiSections = () => {
+  const text = document.getElementById('wiki-content-input')?.value || ''
+  const lines = text.split('\n').filter(l => /^#{1,3}\s/.test(l))
+  const el = document.getElementById('wiki-sections-list')
+  if (!el) return
+  el.innerHTML = lines.length === 0
+    ? '<div style="font-size:12px;color:var(--text-dim);">Agrega encabezados (#, ##) para crear secciones.</div>'
+    : lines.map(l => `<div style="font-size:12px;color:var(--text-muted);padding:4px 8px;border-radius:6px;margin-bottom:2px;${l.startsWith('###')?'padding-left:24px':l.startsWith('##')?'padding-left:16px':''}">${l.replace(/^#+\s*/,'')}</div>`).join('')
+}
+
+window.saveWiki = async (projId) => {
+  const proj = allNodes.find(n => n.id === projId)
+  if (!proj) return
+  const content = document.getElementById('wiki-content-input')?.value || ''
+  const wiki = proj.metadata?.wiki || {}
+  wiki.content = content
+  wiki.updated_at = new Date().toISOString()
+  // Extract sections for sidebar
+  wiki.sections = content.split('\n').filter(l => /^#{1,3}\s/.test(l))
+  proj.metadata.wiki = wiki
+  await supabase.from('nodes').update({ metadata: proj.metadata }).eq('id', proj.id)
+  showMsg('✓ Wiki guardada')
+}
+
+window.addWikiLink = async (projId) => {
+  const nameEl = document.getElementById('wiki-link-name')
+  const urlEl  = document.getElementById('wiki-link-url')
+  const name = nameEl?.value.trim()
+  const url  = urlEl?.value.trim()
+  if (!name || !url) { showMsg('⚠ Nombre y URL requeridos'); return }
+  const proj = allNodes.find(n => n.id === projId)
+  if (!proj) return
+  proj.metadata.wiki = proj.metadata.wiki || {}
+  proj.metadata.wiki.attachments = proj.metadata.wiki.attachments || []
+  const type = (url.includes('drive.google.com') || url.includes('docs.google')) ? 'drive' : 'link'
+  proj.metadata.wiki.attachments.push({ name, url, type })
+  await supabase.from('nodes').update({ metadata: proj.metadata }).eq('id', proj.id)
+  if (nameEl) nameEl.value = ''
+  if (urlEl)  urlEl.value  = ''
+  showMsg('✓ Enlace agregado')
+  switchProjTab('wiki')
+}
+
+window.addWikiFile = async (projId, input) => {
+  const file = input?.files?.[0]
+  if (!file) return
+  const proj = allNodes.find(n => n.id === projId)
+  if (!proj) return
+  proj.metadata.wiki = proj.metadata.wiki || {}
+  proj.metadata.wiki.attachments = proj.metadata.wiki.attachments || []
+  let dataUrl
+  if (file.type.startsWith('image/')) {
+    dataUrl = await new Promise(res => {
+      const r = new FileReader()
+      const canvas = document.createElement('canvas')
+      const img = new Image()
+      r.onload = e => {
+        img.onload = () => {
+          const MAX = 800
+          let w = img.width, h = img.height
+          if (w > MAX) { h = Math.round(h * MAX / w); w = MAX }
+          canvas.width = w; canvas.height = h
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+          res(canvas.toDataURL('image/jpeg', 0.75))
+        }
+        img.src = e.target.result
+      }
+      r.readAsDataURL(file)
+    })
+    proj.metadata.wiki.attachments.push({ name: file.name, url: dataUrl, type: 'image' })
+  } else {
+    dataUrl = await new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(file) })
+    proj.metadata.wiki.attachments.push({ name: file.name, url: dataUrl, type: 'pdf' })
+  }
+  await supabase.from('nodes').update({ metadata: proj.metadata }).eq('id', proj.id)
+  showMsg('✓ Archivo adjunto')
+  switchProjTab('wiki')
+}
+
+window.removeWikiAttachment = async (projId, idx) => {
+  const proj = allNodes.find(n => n.id === projId)
+  if (!proj?.metadata?.wiki?.attachments) return
+  proj.metadata.wiki.attachments.splice(idx, 1)
+  await supabase.from('nodes').update({ metadata: proj.metadata }).eq('id', proj.id)
+  switchProjTab('wiki')
+}
+
+window.scrollToWikiSection = (heading) => {
+  const preview = document.getElementById('wiki-preview-area')
+  if (!preview || preview.style.display === 'none') {
+    setWikiMode('preview')
+    setTimeout(() => scrollToWikiSection(heading), 100)
+    return
+  }
+  const cleanHeading = heading.replace(/^#+\s*/,'')
+  const id = 'ws-' + cleanHeading
+  const el = document.getElementById(id)
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 // ── Notas nativas de proyecto ──────────────────────────────────────────────────
