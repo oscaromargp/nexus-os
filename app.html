@@ -1607,8 +1607,9 @@
     </div>
 
     <div id="view-settings" class="view-section">
-      <div class="view-header"><h1 class="view-title">Preferencias del Sistema</h1></div>
+      <div class="view-header"><h1 class="view-title">⚙️ Configuración</h1></div>
       <div class="settings-card">
+         <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:20px;">👤 Perfil &amp; Localización</h2>
          <div class="settings-group">
            <label class="settings-label">Identidad Nexus</label>
            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
@@ -1658,6 +1659,7 @@
            </div>
          </div>
 
+         <h2 style="font-size:15px;font-weight:800;color:#a78bfa;margin-top:24px;margin-bottom:16px;padding-top:20px;border-top:1px solid hsla(0,0%,100%,0.05);">🎨 Apariencia</h2>
          <div class="settings-group">
            <label class="settings-label">Apariencia</label>
            <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; background:rgba(255,255,255,0.03); border-radius:12px; border:1px solid var(--glass-border);">
@@ -1718,7 +1720,8 @@
            </div>
          </div>
 
-         <div class="settings-group" style="padding-top: 20px; border-top: 1px solid hsla(0,0%,100%,0.05);">
+         <h2 style="font-size:15px;font-weight:800;color:#f87171;margin-top:24px;margin-bottom:16px;padding-top:20px;border-top:1px solid hsla(0,0%,100%,0.05);">🔐 Seguridad</h2>
+         <div class="settings-group" style="padding-top: 0; border-top: none;">
            <label class="settings-label">Seguridad de Cuenta</label>
            <div style="display:grid; grid-template-columns:1fr auto; gap:12px; align-items:end;">
              <div>
@@ -1732,7 +1735,8 @@
            </button>
          </div>
 
-         <div class="settings-group" style="padding-top: 20px; border-top: 1px solid hsla(0,0%,100%,0.05);">
+         <h2 style="font-size:15px;font-weight:800;color:#fbbf24;margin-top:24px;margin-bottom:16px;padding-top:20px;border-top:1px solid hsla(0,0%,100%,0.05);">💛 Apoyar el proyecto</h2>
+         <div class="settings-group" style="padding-top: 0; border-top: none;">
            <label class="settings-label">Apoyar este Proyecto</label>
            <div style="background:rgba(0,170,228,0.08); border:1px solid rgba(0,170,228,0.2); border-radius:14px; padding:20px;">
              <div style="font-size:13px; color:#7dd3fc; margin-bottom:12px;">Si Nexus OS te está siendo útil, considera hacer una donación en XRP:</div>
@@ -1787,20 +1791,108 @@
         <div id="fb-status" style="display:none; margin-top:14px; font-size:13px; padding:12px; border-radius:8px;"></div>
       </div>
 
+      <!-- DATOS & RESPALDO -->
+      <div class="settings-card" style="margin-top:24px;">
+        <h2 style="font-size:15px;font-weight:800;color:#4ade80;margin-bottom:20px;">💾 Datos &amp; Respaldo</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Descarga o restaura todos tus datos. Usa esto como copia de seguridad.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button onclick="exportBackup()" style="flex:1;min-width:140px;padding:12px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">⬇️ Exportar JSON</button>
+          <button onclick="document.getElementById('restore-file-input-cfg').click()" style="flex:1;min-width:140px;padding:12px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:10px;font-size:13px;cursor:pointer;">📂 Restaurar JSON</button>
+          <input type="file" id="restore-file-input-cfg" accept=".json" style="display:none" onchange="importBackup(this)" />
+        </div>
+      </div>
+
+      <!-- IMPORTAR DATOS (PLANTILLAS) -->
+      <div class="settings-card" style="margin-top:24px;">
+        <h2 style="font-size:15px;font-weight:800;color:#60a5fa;margin-bottom:8px;">📥 Importar Datos</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">Descarga la plantilla, llénala con tus datos, y súbela. El sistema valida el formato antes de importar.</p>
+
+        <!-- Transacciones -->
+        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="font-size:20px;">💸</span>
+            <div><div style="font-size:13px;font-weight:700;color:#fff;">Transacciones Bancarias</div>
+            <div style="font-size:11px;color:var(--text-muted);">Ingresos y gastos desde tu banco o tarjeta</div></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Columnas requeridas: <code style="color:#60a5fa;">fecha, descripcion, monto, tipo (ingreso/gasto), cuenta, categoria</code></div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="downloadTemplate('transactions')" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;font-size:12px;cursor:pointer;">⬇️ Plantilla CSV</button>
+            <label style="flex:1;padding:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;">
+              ⬆️ Subir CSV<input type="file" accept=".csv" style="display:none" onchange="importTemplate('transactions',this)" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Contactos -->
+        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="font-size:20px;">👥</span>
+            <div><div style="font-size:13px;font-weight:700;color:#fff;">Contactos &amp; Proveedores</div>
+            <div style="font-size:11px;color:var(--text-muted);">Clientes, proveedores, colaboradores</div></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Columnas requeridas: <code style="color:#60a5fa;">nombre, tipo (cliente/proveedor/colaborador), telefono, email, especialidad, notas</code></div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="downloadTemplate('contacts')" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;font-size:12px;cursor:pointer;">⬇️ Plantilla CSV</button>
+            <label style="flex:1;padding:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;">
+              ⬆️ Subir CSV<input type="file" accept=".csv" style="display:none" onchange="importTemplate('contacts',this)" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Proyectos -->
+        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="font-size:20px;">🏗️</span>
+            <div><div style="font-size:13px;font-weight:700;color:#fff;">Proyectos</div>
+            <div style="font-size:11px;color:var(--text-muted);">Importa proyectos en lote con su configuración básica</div></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Columnas requeridas: <code style="color:#60a5fa;">nombre, categoria (inmueble/digital/personal), presupuesto, fase, descripcion, etiqueta</code></div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="downloadTemplate('projects')" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;font-size:12px;cursor:pointer;">⬇️ Plantilla CSV</button>
+            <label style="flex:1;padding:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;">
+              ⬆️ Subir CSV<input type="file" accept=".csv" style="display:none" onchange="importTemplate('projects',this)" />
+            </label>
+          </div>
+        </div>
+
+        <div id="import-preview-area" style="display:none;margin-top:16px;"></div>
+      </div>
+
     </div>
 
     <!-- AYUDA -->
     <div id="view-ayuda" class="view-section">
       <div class="view-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-        <h1 class="view-title">Guía de Uso</h1>
+        <h1 class="view-title">📚 Guía de Uso — Nexus OS</h1>
         <button onclick="switchView('settings')" style="background:linear-gradient(135deg,#00f0ff,#1af3ff); color:#000; border:none; border-radius:10px; padding:9px 18px; font-weight:800; font-size:13px; cursor:pointer;">💬 Enviar Feedback</button>
       </div>
-      <div style="max-width:820px; display:flex; flex-direction:column; gap:20px;">
+      <div style="display:flex;flex-direction:column;gap:12px;max-width:800px;">
+
+        <!-- INICIO RÁPIDO -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">🚀 Inicio Rápido</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Nexus OS es un sistema operativo personal. Todo vive en <b style="color:#fff;">nodos</b> — tareas, notas, transacciones, proyectos, contactos.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">1. Escribe en la <b style="color:#fff;">barra inferior</b> y presiona Enter — crea un nodo al instante.</div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">2. Navega con el <b style="color:#fff;">menú lateral</b> entre vistas: Feed, Kanban, Finanzas, Notas, Proyectos.</div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">3. Usa <b style="color:#fff;">Proyectos</b> para gestionar trabajo con Kanban, hitos, cotizaciones y equipo.</div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">4. Vincula todo con <b style="color:#fff;">#etiquetas</b> — cada nodo puede tener múltiples tags.</div>
+            </div>
+          </div>
+        </div>
 
         <!-- PARSER -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">⌨️ Parser Semántico — La Barra de Comandos</h2>
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Escribe en la barra inferior y presiona <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; font-size:11px;">Enter</kbd>. El sistema detecta el tipo de nodo automáticamente y muestra una vista previa mientras escribes.</p>
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">⌨️ Parser Semántico — La barra de comandos</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+          <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Escribe en la barra inferior y presiona <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; font-size:11px;">Enter</kbd>. El sistema detecta el tipo de nodo automáticamente.</p>
           <div style="display:flex; flex-direction:column; gap:10px;">
             <div style="background:rgba(167,139,250,0.06); border:1px solid rgba(167,139,250,0.2); border-radius:10px; padding:14px;">
               <code style="color:#a78bfa; font-family:'JetBrains Mono',monospace;">#tarea Revisar informe Q2</code>
@@ -1827,233 +1919,133 @@
               <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Texto con fecha o emoji 📅 → evento en el Calendario.</p>
             </div>
           </div>
+          </div><!-- /ayuda-body -->
+        </div>
+
+        <!-- PROYECTOS -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:#2dd4bf;margin:0;">🏗️ Proyectos — Gestión completa</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
+              <li>Crea un proyecto en <b style="color:#fff;">Proyectos</b> → <b style="color:#2dd4bf;">+ Nuevo Proyecto</b></li>
+              <li>Configura presupuesto, categoría, etiqueta principal y miembros del equipo</li>
+              <li>Usa la pestaña <b style="color:#fff;">Kanban</b> para gestionar tareas con columnas personalizables</li>
+              <li>Las tareas Kanban ahora soportan checklist, adjuntos, imagen de portada y etiquetas de color</li>
+              <li>Agrega <b style="color:#fff;">Hitos</b> para calcular avance automático — cada hito completado suma al %</li>
+              <li>Las <b style="color:#fff;">Cotizaciones</b> vinculadas al proyecto aparecen en la pestaña Finanzas</li>
+              <li>Registra <b style="color:#fff;">abonos/pagos</b> directamente en cada cotización desde el modal</li>
+              <li>El <b style="color:#2dd4bf;">Dashboard Financiero</b> muestra KPIs, donut de distribución y desglose por categoría/proveedor</li>
+              <li>Escribe <code style="color:#2dd4bf;">#casatulum</code> (la etiqueta del proyecto) en cualquier transacción para vincularla automáticamente</li>
+            </ul>
+          </div>
         </div>
 
         <!-- CONTACTOS -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">👥 Contactos & Cuentas</h2>
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">Centraliza personas, bancos y carteras cripto. Vincula movimientos financieros a un contacto para ver su historial completo.</p>
-          <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:16px;">
-            <div style="background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px; padding:12px; text-align:center;">
-              <div style="font-size:24px; margin-bottom:6px;">👤</div>
-              <div style="font-size:12px; font-weight:700; color:#fff;">Persona</div>
-              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Nombre, teléfono, email, empresa</div>
-            </div>
-            <div style="background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px; padding:12px; text-align:center;">
-              <div style="font-size:24px; margin-bottom:6px;">🏦</div>
-              <div style="font-size:12px; font-weight:700; color:#fff;">Banco</div>
-              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Nombre, CLABE, titular</div>
-            </div>
-            <div style="background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px; padding:12px; text-align:center;">
-              <div style="font-size:24px; margin-bottom:6px;">₿</div>
-              <div style="font-size:12px; font-weight:700; color:#fff;">Cripto</div>
-              <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">Red, wallet address, alias</div>
-            </div>
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">👥 Contactos &amp; Proveedores</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
-          <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
-            <li>Ve a <b style="color:#fff;">Contactos</b> en el menú lateral y pulsa <b style="color:#00f0ff;">+ Nuevo Contacto</b></li>
-            <li>O escribe <code style="color:#fdba74;">#persona Nombre</code> en la barra de comandos</li>
-            <li>Haz clic en una tarjeta para ver el perfil completo, historial de transacciones y notas</li>
-            <li>Filtra por tipo: Todos / Personas / Bancos / Cripto</li>
-            <li>Los contactos vinculados aparecen como chips clickeables en Bio-Finanzas</li>
-          </ul>
-        </div>
-
-        <!-- PANEL SITUACIONAL -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">🌍 Panel Situacional — Barra Lateral Derecha</h2>
-          <div style="display:flex; flex-direction:column; gap:12px;">
-            <div style="display:flex; gap:14px; align-items:flex-start; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-              <span style="font-size:22px; flex-shrink:0;">🕐</span>
-              <div>
-                <div style="font-size:13px; font-weight:700; color:#fff; margin-bottom:4px;">Relojes Mundiales</div>
-                <div style="font-size:12px; color:var(--text-muted);">Muestra la hora en tiempo real de <b style="color:#fff;">CDMX</b> (America/Mexico_City), <b style="color:#fff;">Tulum/Cancún</b> (America/Cancun) y tu <b style="color:#a78bfa;">hora local</b>. Se actualiza cada segundo.</div>
-              </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
+              <li>Ve a <b style="color:#fff;">Contactos</b> en el menú lateral y pulsa <b style="color:#00f0ff;">+ Nuevo Contacto</b></li>
+              <li>Tipos: <b style="color:#fff;">cliente · proveedor · colaborador</b></li>
+              <li>Haz clic en una tarjeta para ver perfil completo, historial y notas</li>
+              <li>Vincula un contacto a tus movimientos financieros con <code style="color:#fdba74;">@nombre</code></li>
+              <li>Los proveedores vinculados a proyectos aparecen en el dashboard financiero del proyecto</li>
+            </ul>
             </div>
-            <div style="display:flex; gap:14px; align-items:flex-start; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-              <span style="font-size:22px; flex-shrink:0;">⏱</span>
-              <div>
-                <div style="font-size:13px; font-weight:700; color:#fff; margin-bottom:4px;">Cronómetro</div>
-                <div style="font-size:12px; color:var(--text-muted);">Presiona <b style="color:#fff;">▶ Iniciar</b> para arrancar. Puedes pausar y continuar cuantas veces quieras. <b style="color:#fff;">↺ Reset</b> lo reinicia a cero. Precisión de centésimas de segundo.</div>
-              </div>
-            </div>
-            <div style="display:flex; gap:14px; align-items:flex-start; padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-              <span style="font-size:22px; flex-shrink:0;">⏳</span>
-              <div>
-                <div style="font-size:13px; font-weight:700; color:#fff; margin-bottom:4px;">Cuenta Regresiva</div>
-                <div style="font-size:12px; color:var(--text-muted);">Escribe los minutos y segundos en los campos, pulsa <b style="color:#fff;">▶ Iniciar</b>. Al llegar a cero suena una <b style="color:#f87171;">alarma de 3 tonos</b> y el display parpadea en rojo. Pitidos de aviso en los últimos 5 segundos.</div>
-              </div>
-            </div>
-          </div>
-          <div style="margin-top:14px; padding:12px; background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px;">
-            <div style="font-size:12px; color:var(--text-muted);">💡 <b style="color:#fff;">Tip:</b> Las pequeñas pestañas <b style="color:#00f0ff;">◀ ▶</b> en los bordes de la pantalla colapsan o expanden cada panel lateral para tener más espacio de trabajo. El estado se guarda automáticamente.</div>
           </div>
         </div>
 
         <!-- BIO-FINANZAS -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">💹 Bio-Finanzas</h2>
-          <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
-            <li>Crea cuentas con el botón <b style="color:#fff;">+ Cuenta</b> (BBVA, Efectivo, Inversión, etc.)</li>
-            <li>Usa <code style="color:#4ade80;">@nombre_cuenta</code> al registrar movimientos para asignarlos</li>
-            <li>Al hacer clic en cualquier movimiento, puedes editar detalles, agregar comentarios e imágenes</li>
-            <li>Filtra por cuenta con los tabs en la parte superior</li>
-            <li>Exporta a CSV con el botón <b style="color:#fff;">⬇ CSV</b></li>
-            <li>Haz transferencias entre cuentas con el botón <b style="color:#fff;">⇄ Transferir</b></li>
-          </ul>
-        </div>
-
-        <!-- ADJUNTOS -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">📎 Adjuntos e Imágenes</h2>
-          <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
-            <li>Abre cualquier tarea, nota o movimiento financiero</li>
-            <li><b style="color:#fff;">Ctrl+V</b> con una captura en el portapapeles la adjunta automáticamente</li>
-            <li>O usa el botón <b style="color:#fff;">📎 Adjuntar archivo</b> (imágenes y PDF)</li>
-            <li>Máximo 3 archivos por nodo · Haz clic en la miniatura para ver en pantalla completa</li>
-          </ul>
-        </div>
-
-        <!-- MURO TÁCTICO -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">📌 Muro Táctico</h2>
-          <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
-            <li>Arrastra tarjetas entre columnas: <b style="color:#fff;">Pendiente → En Curso → Finalizado</b></li>
-            <li>Haz clic en una tarjeta para abrir el modal de detalle completo</li>
-            <li>En el modal: checklist, miembros, etiquetas, fecha de vencimiento e imágenes</li>
-            <li>Las tareas finalizadas hoy aparecen en "Done". Las de días anteriores se archivan solas</li>
-            <li>Crea tareas rápido desde la barra: <code style="color:#a78bfa;">#tarea Texto de la tarea</code></li>
-          </ul>
-        </div>
-
-        <!-- CRÓNICA -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">📖 Crónica — Histórico Diario</h2>
-          <ul style="color:var(--text-muted); font-size:13px; line-height:2; padding-left:20px;">
-            <li>Elige cualquier fecha para ver todo lo que registraste ese día</li>
-            <li>Vista en 3 columnas: tareas, notas y movimientos financieros</li>
-            <li>Haz clic en cualquier elemento para abrirlo y editarlo</li>
-            <li>El balance neto del día se calcula automáticamente</li>
-          </ul>
-        </div>
-
-        <!-- ATAJOS -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">⌨️ Atajos de Teclado</h2>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-            <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
-              <span style="color:var(--text-muted); font-size:13px;">Guardar nodo</span>
-              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Enter</kbd>
-            </div>
-            <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
-              <span style="color:var(--text-muted); font-size:13px;">Cerrar modal</span>
-              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Esc</kbd>
-            </div>
-            <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
-              <span style="color:var(--text-muted); font-size:13px;">Adjuntar captura</span>
-              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Ctrl+V</kbd>
-            </div>
-            <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
-              <span style="color:var(--text-muted); font-size:13px;">Nueva línea en nota</span>
-              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Shift+Enter</kbd>
-            </div>
-            <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
-              <span style="color:var(--text-muted); font-size:13px;">Colapsar nav</span>
-              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Pestaña ◀</kbd>
-            </div>
-            <div style="display:flex; justify-content:space-between; padding:10px; background:rgba(255,255,255,0.03); border-radius:8px;">
-              <span style="color:var(--text-muted); font-size:13px;">Colapsar panel</span>
-              <kbd style="background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:4px; font-size:11px; color:#fff;">Pestaña ▶</kbd>
-            </div>
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:#4ade80;margin:0;">💰 Bio-Finanzas</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
+              <li>Crea cuentas con el botón <b style="color:#fff;">+ Cuenta</b> (BBVA, Efectivo, etc.)</li>
+              <li>Usa <code style="color:#4ade80;">+$1500 Honorarios @bbva</code> para ingresos, <code style="color:#f87171;">-$350 Renta @efectivo</code> para gastos</li>
+              <li>Haz transferencias entre cuentas con <b style="color:#fff;">⇄ Transferir</b></li>
+              <li>Exporta historial a CSV con <b style="color:#fff;">⬇ CSV</b></li>
+              <li>El <b style="color:#fff;">Semáforo de cuentas</b> te avisa si alguna está en rojo</li>
+            </ul>
           </div>
         </div>
 
-        <!-- AGENDA FINANCIERA -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:#60a5fa; margin-bottom:16px;">💳 Agenda Financiera</h2>
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">Controla tarjetas de crédito, suscripciones y pagos fijos mensuales en un solo tablero de liquidez.</p>
-          <div style="display:flex; flex-direction:column; gap:12px;">
-            <div style="padding:12px; background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.2); border-radius:10px;">
-              <div style="font-size:13px; font-weight:700; color:#60a5fa; margin-bottom:6px;">💳 Tarjetas</div>
-              <ul style="color:var(--text-muted); font-size:12px; line-height:1.9; padding-left:18px; margin:0;">
-                <li>Banco, tipo (crédito/débito/digital), titular, número completo</li>
-                <li>CLABE interbancaria, número de cuenta, sucursal</li>
-                <li>Día de corte y pago con alerta de días restantes</li>
-              </ul>
-            </div>
-            <div style="padding:12px; background:rgba(167,139,250,0.06); border:1px solid rgba(167,139,250,0.2); border-radius:10px;">
-              <div style="font-size:13px; font-weight:700; color:#a78bfa; margin-bottom:6px;">🔄 Suscripciones</div>
-              <ul style="color:var(--text-muted); font-size:12px; line-height:1.9; padding-left:18px; margin:0;">
-                <li>Categorías predefinidas: Streaming, SaaS, Hosting, Telefonía, Seguros, etc.</li>
-                <li>Día del mes de cargo · Monto · Moneda</li>
-              </ul>
-            </div>
-            <div style="padding:12px; background:rgba(251,146,60,0.06); border:1px solid rgba(251,146,60,0.2); border-radius:10px;">
-              <div style="font-size:13px; font-weight:700; color:#fb923c; margin-bottom:6px;">📋 Pagos Fijos</div>
-              <ul style="color:var(--text-muted); font-size:12px; line-height:1.9; padding-left:18px; margin:0;">
-                <li>Vincula un <b style="color:#fff;">contacto beneficiario</b> — renta, nómina, proveedor</li>
-                <li>Selecciona el <b style="color:#fff;">método de pago</b>: transferencia, tarjeta, efectivo, cripto, cargo domiciliado</li>
-                <li>Los datos bancarios del contacto aparecen automáticamente al seleccionarlo</li>
-                <li>Marca pagos como ✓ realizados para limpiar el tablero</li>
-              </ul>
-            </div>
-            <div style="padding:12px; background:rgba(74,222,128,0.06); border:1px solid rgba(74,222,128,0.2); border-radius:10px;">
-              <div style="font-size:13px; font-weight:700; color:#4ade80; margin-bottom:6px;">📆 Plan del Mes</div>
-              <ul style="color:var(--text-muted); font-size:12px; line-height:1.9; padding-left:18px; margin:0;">
-                <li>Selecciona qué cuentas incluir con los checkboxes de cuenta</li>
-                <li><b style="color:#4ade80;">Disponible real</b> = entradas seleccionadas − compromisos del mes</li>
-                <li>Alerta visual de vencimientos en los próximos 7 días</li>
-              </ul>
-            </div>
+        <!-- BÓVEDA NEURAL -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:#60a5fa;margin:0;">🧠 Bóveda Neural</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
+              <li>Guarda notas tipo Google Keep con colores, tags y formato rico (negrita, listas, links)</li>
+              <li>Haz doble clic en una nota para editarla con el editor enriquecido</li>
+              <li>Los proyectos <b style="color:#fff;">NO</b> aparecen aquí — solo notas y personas</li>
+              <li>Las notas vinculadas a un proyecto viven exclusivamente en la pestaña Notas del proyecto</li>
+              <li>Fija notas importantes con 📌</li>
+              <li>Cambia color de la tarjeta desde el modal de edición</li>
+            </ul>
           </div>
         </div>
 
-        <!-- CONTACTOS CSV -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">👥 Contactos — Import / Export CSV</h2>
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">Importa y exporta tu agenda de contactos en formato CSV estándar. Lo que exportas es exactamente lo que puedes volver a importar.</p>
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            <div style="padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-              <div style="font-size:12px; font-weight:700; color:#fff; margin-bottom:6px;">📄 Plantilla CSV</div>
-              <div style="font-size:12px; color:var(--text-muted);">Descarga la plantilla oficial con el botón <b style="color:#fff;">📄 Plantilla</b> en la sección Contactos. Llénala con tus datos y súbela con <b style="color:#60a5fa;">⬆ Importar</b>.</div>
-            </div>
-            <div style="padding:12px; background:rgba(255,255,255,0.03); border-radius:10px;">
-              <div style="font-size:12px; font-weight:700; color:#fff; margin-bottom:4px;">Columnas del CSV</div>
-              <code style="font-size:11px; color:#a78bfa; display:block; overflow-x:auto; white-space:nowrap;">nombre, tipo, empresa, telefono, email, banco, clabe, cuenta, red_cripto, wallet, color, notas</code>
-            </div>
-            <div style="padding:12px; background:rgba(74,222,128,0.06); border:1px solid rgba(74,222,128,0.2); border-radius:10px;">
-              <div style="font-size:12px; color:var(--text-muted);">💡 <b style="color:#fff;">Flujo recomendado:</b> exporta tus contactos existentes → edítalos o agrégalos en Excel/Sheets → vuelve a importar. El sistema detecta el formato automáticamente.</div>
-            </div>
+        <!-- TIEMPO & CRÓNICA -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:#a78bfa;margin:0;">📅 Tiempo &amp; Crónica</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
+              <li>El <b style="color:#fff;">Calendario</b> muestra todos tus eventos — crea con <code style="color:#a78bfa;">📅 Reunión jueves 3pm</code></li>
+              <li>La <b style="color:#fff;">Crónica</b> es tu diario histórico — selecciona cualquier fecha para ver todo lo que registraste</li>
+              <li>Arrastra eventos en el calendario para cambiar de día</li>
+              <li>La <b style="color:#fff;">Agenda financiera</b> muestra suscripciones, pagos fijos y próximos vencimientos en el panel lateral</li>
+            </ul>
           </div>
         </div>
 
-        <!-- SIDEBAR TIPO DE CAMBIO -->
-        <div class="settings-card">
-          <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">💱 Tipo de Cambio en Vivo</h2>
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:14px;">El panel lateral derecho muestra una mini tabla de tipo de cambio vs MXN, actualizándose automáticamente cada 60 segundos.</p>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-            <div style="padding:10px; background:rgba(255,255,255,0.03); border-radius:8px; text-align:center;">
-              <div style="font-size:18px;">🇺🇸</div><div style="font-size:11px; color:#fff; font-weight:700;">USD/MXN</div>
-            </div>
-            <div style="padding:10px; background:rgba(255,255,255,0.03); border-radius:8px; text-align:center;">
-              <div style="font-size:18px;">₿</div><div style="font-size:11px; color:#fff; font-weight:700;">BTC/MXN</div>
-            </div>
-            <div style="padding:10px; background:rgba(255,255,255,0.03); border-radius:8px; text-align:center;">
-              <div style="font-size:18px;">Ξ</div><div style="font-size:11px; color:#fff; font-weight:700;">ETH/MXN</div>
-            </div>
-            <div style="padding:10px; background:rgba(255,255,255,0.03); border-radius:8px; text-align:center;">
-              <div style="font-size:18px;">✕</div><div style="font-size:11px; color:#fff; font-weight:700;">XRP/MXN</div>
-            </div>
+        <!-- IMPORTAR & EXPORTAR -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:#fb923c;margin:0;">📥 Importar &amp; Exportar datos</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
-          <div style="margin-top:10px; font-size:12px; color:var(--text-muted);">APIs usadas: <code style="color:#a78bfa;">open.er-api.com</code> (fiat) y <code style="color:#a78bfa;">@fawazahmed0/currency-api</code> (cripto). Ambas gratuitas, sin API key.</div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
+              <li>Ve a <b style="color:#fff;">Configuración → Datos &amp; Respaldo</b> para exportar todos tus datos como JSON</li>
+              <li>Importa transacciones bancarias, contactos y proyectos en lote desde CSV</li>
+              <li>Descarga la plantilla CSV correspondiente, llénala y súbela — el sistema valida antes de importar</li>
+              <li>Para contactos también puedes usar el botón <b style="color:#fff;">📄 Plantilla / ⬆ Importar</b> en la sección Contactos</li>
+            </ul>
+          </div>
         </div>
 
-        <!-- FEEDBACK BANNER -->
-        <div style="background:linear-gradient(135deg,rgba(0,246,255,0.08),rgba(167,139,250,0.08)); border:1px solid rgba(0,246,255,0.2); border-radius:16px; padding:24px; text-align:center;">
-          <div style="font-size:28px; margin-bottom:10px;">💬</div>
-          <div style="font-size:15px; font-weight:800; color:#fff; margin-bottom:8px;">¿Encontraste algo raro? ¿Tienes una idea?</div>
-          <div style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">Tu retroalimentación hace que Nexus OS mejore. Reporta errores, sugiere funciones o simplemente dinos qué te gusta.</div>
-          <button onclick="switchView('settings'); setTimeout(()=>document.getElementById('feedback-section')?.scrollIntoView({behavior:'smooth'}),200)" style="background:linear-gradient(135deg,#00f0ff,#1af3ff); color:#000; border:none; border-radius:10px; padding:12px 28px; font-weight:800; font-size:14px; cursor:pointer; font-family:inherit;">Enviar Feedback →</button>
+        <!-- ATAJOS DE TECLADO -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">⌨️ Atajos de teclado</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Guardar nodo</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Enter</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Cerrar modal</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Esc</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Adjuntar captura</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Ctrl+V</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Nueva línea</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Shift+Enter</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Negrita (editor)</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Ctrl+B</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Cursiva (editor)</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Ctrl+I</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Colapsar nav</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">◀ Pestaña</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Colapsar panel</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">▶ Pestaña</kbd></div>
+            </div>
+          </div>
         </div>
 
       </div>
@@ -2656,6 +2648,41 @@
         <label class="modal-label">Condiciones / Notas</label>
         <textarea id="cot-notes" class="modal-input" rows="2" placeholder="Vigencia, garantía, forma de pago..."></textarea>
       </div>
+      <!-- Sección de abonos — solo visible cuando hay abonos o status=aceptada/parcial/en_proceso -->
+      <div id="cot-abonos-section" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label class="modal-label" style="margin:0;">💸 Historial de pagos</label>
+          <button onclick="addCotAbono()" type="button" style="font-size:11px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Registrar pago</button>
+        </div>
+        <div id="cot-abonos-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;max-height:200px;overflow-y:auto;"></div>
+        <div id="cot-abonos-summary" style="font-size:11px;display:flex;gap:16px;color:var(--text-muted);"></div>
+      </div>
+      <!-- Form inline para agregar abono (oculto por defecto) -->
+      <div id="cot-new-abono-form" style="display:none;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:12px;margin-top:8px;">
+        <div style="font-size:11px;font-weight:700;color:#4ade80;margin-bottom:10px;">Nuevo pago</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div><label class="modal-label" style="font-size:10px;">Monto *</label><input type="number" id="ca-amount" class="modal-input" style="font-size:13px;" placeholder="0.00" /></div>
+          <div><label class="modal-label" style="font-size:10px;">Fecha *</label><input type="date" id="ca-date" class="modal-input" style="font-size:13px;" /></div>
+        </div>
+        <div style="margin-bottom:8px;"><label class="modal-label" style="font-size:10px;">Método</label>
+          <select id="ca-method" class="modal-input" style="font-size:13px;">
+            <option value="transferencia">🏦 Transferencia</option>
+            <option value="efectivo">💵 Efectivo</option>
+            <option value="tarjeta">💳 Tarjeta</option>
+            <option value="cheque">📄 Cheque</option>
+          </select>
+        </div>
+        <div style="margin-bottom:8px;"><label class="modal-label" style="font-size:10px;">Comprobante (URL)</label>
+          <input type="url" id="ca-receipt" class="modal-input" style="font-size:13px;" placeholder="https://drive.google.com/... o link de foto" />
+        </div>
+        <div style="margin-bottom:10px;"><label class="modal-label" style="font-size:10px;">Nota</label>
+          <input type="text" id="ca-notes" class="modal-input" style="font-size:13px;" placeholder="Primer anticipo, saldo pendiente..." />
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="cancelCotAbono()" type="button" class="btn-ghost" style="font-size:12px;flex:1;padding:8px;">Cancelar</button>
+          <button onclick="saveCotAbono()" type="button" class="btn-primary" style="font-size:12px;flex:2;padding:8px;">Guardar pago</button>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn-ghost" onclick="closeCotizacionModal()">Cancelar</button>
         <button class="btn-danger" id="cot-delete" style="display:none;" onclick="deleteCotizacion()">Eliminar</button>
@@ -2958,7 +2985,7 @@
 
 <!-- MODAL: HITO DE PROYECTO -->
 <div id="milestone-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeMilestoneModal()">
-  <div class="modal-box" style="max-width:400px;">
+  <div class="modal-box" style="max-width:480px;">
     <div class="modal-header">
       <h3 class="modal-title">🏁 Hito</h3>
       <button class="modal-close" onclick="closeMilestoneModal()">✕</button>
@@ -2970,8 +2997,25 @@
       <input type="text" id="ms-name" class="modal-input" placeholder="Ej: Cimentación terminada" />
     </div>
     <div class="modal-field">
-      <label class="modal-label">Fecha límite (opcional)</label>
-      <input type="date" id="ms-deadline" class="modal-input" />
+      <label class="modal-label">Descripción</label>
+      <textarea id="ms-desc" class="modal-input" rows="2" placeholder="Detalles del hito..."></textarea>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Responsable</label>
+      <input type="text" id="ms-responsible-search" class="modal-input" placeholder="Buscar contacto..." oninput="filterMsResponsible(this.value)" autocomplete="off" />
+      <input type="hidden" id="ms-responsible-id" />
+      <div id="ms-responsible-name" style="font-size:11px;color:#4ade80;margin-top:4px;display:none;"></div>
+      <div id="ms-responsible-results" style="display:none;background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:8px;max-height:140px;overflow-y:auto;margin-top:4px;z-index:10;position:relative;"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Fecha límite</label>
+        <input type="date" id="ms-deadline" class="modal-input" />
+      </div>
+      <div class="modal-field" id="ms-reached-date-field" style="margin-bottom:0;display:none;">
+        <label class="modal-label">Fecha de conclusión</label>
+        <input type="date" id="ms-reached-date" class="modal-input" />
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closeMilestoneModal()">Cancelar</button>
@@ -2980,9 +3024,14 @@
   </div>
 </div>
 
-<!-- MODAL: TAREA KANBAN DE PROYECTO -->
+<!-- MODAL: TAREA KANBAN DE PROYECTO (Trello-like) -->
 <div id="proj-task-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeProjTaskModal()">
-  <div class="modal-box" style="max-width:420px;">
+  <div class="modal-box" style="max-width:600px;max-height:90vh;overflow-y:auto;">
+    <!-- Cover image -->
+    <div id="pt-cover-area" style="display:none;position:relative;height:120px;border-radius:12px 12px 0 0;overflow:hidden;background:#1a1a2e;margin:-24px -24px 16px -24px;">
+      <img id="pt-cover-img" style="width:100%;height:100%;object-fit:cover;" />
+      <button onclick="clearPtCover()" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✕ Quitar</button>
+    </div>
     <div class="modal-header">
       <h3 class="modal-title" id="proj-task-modal-title">✅ Nueva Tarea</h3>
       <button class="modal-close" onclick="closeProjTaskModal()">✕</button>
@@ -2991,11 +3040,19 @@
     <input type="hidden" id="pt-proj-id" />
     <input type="hidden" id="pt-task-id" />
     <input type="hidden" id="pt-col-id" value="todo" />
+    <input type="hidden" id="pt-cover-val" />
+    <!-- Nombre -->
     <div class="modal-field">
       <label class="modal-label">Tarea *</label>
       <input type="text" id="pt-name" class="modal-input" placeholder="Ej: Revisar planos de instalación eléctrica" />
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+    <!-- Descripción -->
+    <div class="modal-field">
+      <label class="modal-label">Descripción</label>
+      <textarea id="pt-notes" class="modal-input" rows="3" placeholder="Detalles, contexto, instrucciones..."></textarea>
+    </div>
+    <!-- Estado / Prioridad / Fecha -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
       <div class="modal-field" style="margin-bottom:0;">
         <label class="modal-label">Estado</label>
         <select id="pt-status" class="modal-input">
@@ -3013,14 +3070,50 @@
           <option value="baja">🟢 Baja</option>
         </select>
       </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Fecha límite</label>
+        <input type="date" id="pt-deadline" class="modal-input" />
+      </div>
     </div>
+    <!-- Etiquetas de color -->
     <div class="modal-field">
-      <label class="modal-label">Fecha límite (opcional)</label>
-      <input type="date" id="pt-deadline" class="modal-input" />
+      <label class="modal-label">Etiqueta de color</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="pt-label-picker">
+        <span onclick="setPtLabel('')" data-lbl="" style="width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,0.08);cursor:pointer;border:2px solid transparent;display:grid;place-items:center;font-size:12px;">✕</span>
+        <span onclick="setPtLabel('rojo')" data-lbl="rojo" style="width:28px;height:28px;border-radius:6px;background:#f87171;cursor:pointer;border:2px solid transparent;"></span>
+        <span onclick="setPtLabel('naranja')" data-lbl="naranja" style="width:28px;height:28px;border-radius:6px;background:#fb923c;cursor:pointer;border:2px solid transparent;"></span>
+        <span onclick="setPtLabel('amarillo')" data-lbl="amarillo" style="width:28px;height:28px;border-radius:6px;background:#fbbf24;cursor:pointer;border:2px solid transparent;"></span>
+        <span onclick="setPtLabel('verde')" data-lbl="verde" style="width:28px;height:28px;border-radius:6px;background:#4ade80;cursor:pointer;border:2px solid transparent;"></span>
+        <span onclick="setPtLabel('cyan')" data-lbl="cyan" style="width:28px;height:28px;border-radius:6px;background:#2dd4bf;cursor:pointer;border:2px solid transparent;"></span>
+        <span onclick="setPtLabel('azul')" data-lbl="azul" style="width:28px;height:28px;border-radius:6px;background:#60a5fa;cursor:pointer;border:2px solid transparent;"></span>
+        <span onclick="setPtLabel('morado')" data-lbl="morado" style="width:28px;height:28px;border-radius:6px;background:#a78bfa;cursor:pointer;border:2px solid transparent;"></span>
+      </div>
+      <input type="hidden" id="pt-label" />
     </div>
+    <!-- Cover image URL -->
     <div class="modal-field">
-      <label class="modal-label">Notas (opcional)</label>
-      <textarea id="pt-notes" class="modal-input" rows="2" placeholder="Descripción o comentarios..."></textarea>
+      <label class="modal-label">Imagen de portada (URL)</label>
+      <input type="url" id="pt-cover-url" class="modal-input" placeholder="https://..." oninput="previewPtCover(this.value)" />
+    </div>
+    <!-- Checklist -->
+    <div class="modal-field">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <label class="modal-label" style="margin:0;">☑️ Checklist</label>
+        <button onclick="addPtCheckItem()" type="button" style="font-size:11px;background:rgba(255,255,255,0.06);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:6px;padding:3px 10px;cursor:pointer;">+ Ítem</button>
+      </div>
+      <div id="pt-checklist-items" style="display:flex;flex-direction:column;gap:6px;"></div>
+      <div id="pt-checklist-progress" style="margin-top:8px;display:none;">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:3px;"><span id="pt-ck-label">0/0</span></div>
+        <div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;"><div id="pt-ck-bar" style="height:100%;width:0%;background:#4ade80;border-radius:2px;transition:width .3s;"></div></div>
+      </div>
+    </div>
+    <!-- Adjuntos -->
+    <div class="modal-field">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <label class="modal-label" style="margin:0;">📎 Adjuntos (URLs)</label>
+        <button onclick="addPtAttachment()" type="button" style="font-size:11px;background:rgba(255,255,255,0.06);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
+      </div>
+      <div id="pt-attachments-list" style="display:flex;flex-direction:column;gap:6px;"></div>
     </div>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closeProjTaskModal()">Cancelar</button>
@@ -3046,6 +3139,7 @@
     </div>
     <div class="modal-field" style="flex:1;display:flex;flex-direction:column;min-height:0;">
       <label class="modal-label">Contenido</label>
+      <div id="pn-toolbar"></div>
       <textarea id="pn-body" class="modal-input" style="flex:1;resize:none;min-height:0;" placeholder="Escribe aquí..."></textarea>
     </div>
     <div class="modal-actions" style="flex-shrink:0;">
@@ -3066,6 +3160,7 @@
     </div>
     <div class="modal-field">
       <label class="modal-label">Contenido</label>
+      <div id="ne-toolbar"></div>
       <textarea id="ne-body" class="modal-input" rows="5" placeholder="Escribe aquí..."></textarea>
     </div>
     <div class="modal-field">

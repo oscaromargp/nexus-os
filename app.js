@@ -1488,8 +1488,7 @@ function renderNotes(nodes) {
   if (!root) return
   const notes = nodes
     .filter(n => {
-      if (n.type !== 'note' && n.type !== 'persona' && n.type !== 'proyecto') return false
-      // Exclude notes that belong to a specific project (they live in the project tab)
+      if (n.type !== 'note' && n.type !== 'persona') return false
       if (n.type === 'note' && n.metadata?.project_tag) return false
       return true
     })
@@ -1544,6 +1543,94 @@ window.setNoteColor = async (id, color) => {
   renderAll()
 }
 
+// ── Rich text editor builder ─────────────────────────────────────────────────
+const _richEditors = {}
+
+function buildRichEditor(textareaId, toolbarContainerId) {
+  const textarea = document.getElementById(textareaId)
+  if (!textarea || _richEditors[textareaId]) return
+  // Create toolbar
+  const toolbar = document.getElementById(toolbarContainerId)
+  if (!toolbar) return
+  const TOOLS = [
+    { cmd:'bold',        icon:'<b>B</b>',    title:'Negrita (Ctrl+B)' },
+    { cmd:'italic',      icon:'<i>I</i>',    title:'Cursiva (Ctrl+I)' },
+    { cmd:'underline',   icon:'<u>U</u>',    title:'Subrayado (Ctrl+U)' },
+    { cmd:'strikeThrough',icon:'<s>S</s>',   title:'Tachado' },
+    { sep: true },
+    { cmd:'insertUnorderedList', icon:'≡',   title:'Lista con viñetas' },
+    { cmd:'insertOrderedList',   icon:'⊟',   title:'Lista numerada' },
+    { sep: true },
+    { cmd:'foreColor',   icon:'A',   title:'Color de texto', type:'color' },
+    { cmd:'hiliteColor', icon:'✱',   title:'Resaltar', type:'color', color:'#fbbf24' },
+    { sep: true },
+    { cmd:'createLink',  icon:'🔗',  title:'Hipervínculo', type:'prompt', prompt:'URL del enlace:' },
+    { cmd:'insertImage', icon:'📷',  title:'Imagen (URL)', type:'prompt', prompt:'URL de la imagen:' },
+  ]
+  toolbar.style.cssText = 'display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:6px 8px;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:8px 8px 0 0;border-bottom:none;'
+  TOOLS.forEach(t => {
+    if (t.sep) {
+      const sep = document.createElement('div')
+      sep.style.cssText = 'width:1px;height:18px;background:rgba(255,255,255,0.1);margin:0 2px;'
+      toolbar.appendChild(sep)
+      return
+    }
+    if (t.type === 'color') {
+      const wrap = document.createElement('div')
+      wrap.style.cssText = 'position:relative;display:inline-flex;align-items:center;'
+      const lbl = document.createElement('label')
+      lbl.title = t.title
+      lbl.style.cssText = 'width:26px;height:26px;border-radius:5px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);cursor:pointer;display:grid;place-items:center;font-size:12px;font-family:inherit;'
+      lbl.innerHTML = t.icon
+      const inp = document.createElement('input')
+      inp.type = 'color'
+      inp.value = t.color || '#ffffff'
+      inp.style.cssText = 'position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;'
+      inp.addEventListener('input', () => { editor.focus(); document.execCommand(t.cmd, false, inp.value) })
+      lbl.appendChild(inp)
+      wrap.appendChild(lbl)
+      toolbar.appendChild(wrap)
+    } else {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.title = t.title
+      btn.innerHTML = t.icon
+      btn.style.cssText = 'width:26px;height:26px;border-radius:5px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);cursor:pointer;font-size:12px;font-family:inherit;display:grid;place-items:center;'
+      btn.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        editor.focus()
+        if (t.type === 'prompt') {
+          const val = prompt(t.prompt)
+          if (val) document.execCommand(t.cmd, false, val)
+        } else {
+          document.execCommand(t.cmd, false, null)
+        }
+      })
+      toolbar.appendChild(btn)
+    }
+  })
+  // Create contenteditable editor
+  const editor = document.createElement('div')
+  editor.contentEditable = 'true'
+  editor.style.cssText = textarea.style.cssText || ''
+  editor.style.cssText += ';min-height:120px;outline:none;padding:10px 12px;background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:0 0 8px 8px;color:var(--text-primary);font-size:14px;line-height:1.6;overflow-y:auto;'
+  editor.innerHTML = textarea.value || ''
+  // Sync editor → textarea on every input
+  editor.addEventListener('input', () => { textarea.value = editor.innerHTML })
+  editor.addEventListener('blur', () => { textarea.value = editor.innerHTML })
+  // Insert editor after textarea, hide textarea
+  textarea.style.display = 'none'
+  textarea.parentNode.insertBefore(toolbar, textarea)
+  textarea.parentNode.insertBefore(editor, textarea.nextSibling)
+  _richEditors[textareaId] = editor
+}
+
+function syncRichEditor(textareaId) {
+  const editor = _richEditors[textareaId]
+  const textarea = document.getElementById(textareaId)
+  if (editor && textarea) editor.innerHTML = textarea.value || ''
+}
+
 window.openNoteEdit = (id) => {
   const node = allNodes.find(n => n.id === id)
   if (!node) return
@@ -1557,6 +1644,9 @@ window.openNoteEdit = (id) => {
   renderAttachments(node.metadata.images || [], 'note')
   const noteOverlay = document.getElementById('note-edit-modal')
   noteOverlay.classList.remove('hidden')
+  // Initialize rich editor (idempotent)
+  buildRichEditor('ne-body', 'ne-toolbar')
+  syncRichEditor('ne-body')
   // Open fullscreen by default for comfortable editing
   const modalBox = noteOverlay.querySelector('.modal-box')
   if (modalBox && !modalBox.classList.contains('fullscreen')) {
@@ -7103,6 +7193,7 @@ function _renderProjResumen(d) {
             ${STAGES.map(s=>`<option value="${s.v}" ${m.stage===s.v?'selected':''}>${s.l}</option>`).join('')}
           </select>
         </div>
+        <button onclick="openHealthModal('${p.id}')" style="font-size:11px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">✏️ Editar</button>
       </div>
       ${displayPct != null ? `
         <div>
@@ -7136,7 +7227,11 @@ function _renderProjResumen(d) {
             <button onclick="toggleMilestone('${p.id}',${i})" style="width:22px;height:22px;border-radius:50%;border:2px solid ${clr};background:${ms.is_reached?clr:'transparent'};cursor:pointer;display:grid;place-items:center;font-size:12px;color:${ms.is_reached?'#000':'transparent'};flex-shrink:0;">✓</button>
             <div style="flex:1;min-width:0;">
               <div style="font-size:13px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.55;':''}">${esc(ms.name)}</div>
-              ${ms.deadline ? `<div style="font-size:10px;color:${clr};margin-top:1px;">${overdue?'⚠️ Vencido':'📅 Límite'}: ${ms.deadline}</div>` : ''}
+              ${ms.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(ms.desc)}</div>` : ''}
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px;">
+                ${ms.deadline ? `<div style="font-size:10px;color:${clr};">${overdue?'⚠️ Vencido':'📅 Límite'}: ${ms.deadline}</div>` : ''}
+                ${ms.responsible_name ? `<div style="font-size:10px;color:var(--text-muted);">👤 ${esc(ms.responsible_name)}</div>` : ''}
+              </div>
             </div>
             <button onclick="openMilestoneModal('${p.id}',${i})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:2px 4px;" title="Editar">✏️</button>
             <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px;" title="Eliminar">✕</button>
@@ -7193,66 +7288,120 @@ function _renderProjFinanzas(d) {
           cotsByCat, provMap, milestonePct, disponible } = d
   const _s = (fn) => { try { return fn() } catch(e) { return '' } }
 
-  // ── Mini-calendario de pagos ──────────────────────────────
-  const calHTML = _s(() => {
-    const today = new Date()
-    const year  = today.getFullYear()
-    const month = today.getMonth()
-    const todayD = today.getDate()
-    const daysInMonth = new Date(year, month+1, 0).getDate()
-    const firstDay    = new Date(year, month, 1).getDay()
-    const monthName   = today.toLocaleDateString('es-MX', {month:'long', year:'numeric'})
-    const linkedIds2  = new Set(m.linkedTo || [])
-    const pagosFijos  = allNodes.filter(n => {
-      if (n.type !== 'bill' && n.type !== 'subscription') return false
-      if (linkedIds2.has(n.id)) return true
-      return tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase() === t)
-    })
-    const dayMap = {}
-    pagosFijos.forEach(n => {
-      const day = n.metadata?.dayOfMonth; if (!day) return
-      if (!dayMap[day]) dayMap[day] = []
-      dayMap[day].push(n)
-    })
-    // Also show cotizaciones and abonos by their specific date
-    const datedNodes = allNodes.filter(n => {
-      if (!n.metadata?.date) return false
-      if (n.type !== 'expense' && n.type !== 'cotizacion' && !n.metadata?.es_abono) return false
-      if (linkedIds2.has(n.id)) return true
-      return tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase() === t)
-    })
-    datedNodes.forEach(n => {
-      const parts = (n.metadata.date||'').split('-')
-      if (parts.length < 3) return
-      const nodeYear = parseInt(parts[0]), nodeMonth = parseInt(parts[1])-1, nodeDay = parseInt(parts[2])
-      if (nodeYear !== year || nodeMonth !== month) return
-      if (!dayMap[nodeDay]) dayMap[nodeDay] = []
-      dayMap[nodeDay].push({ ...n, _dated: true })
-    })
-    const DAYS = ['D','L','M','M','J','V','S']
-    let cells = ''
-    for (let i=0; i<firstDay; i++) cells += `<div></div>`
-    for (let d=1; d<=daysInMonth; d++) {
-      const isToday = d === todayD
-      const payments = dayMap[d] || []
-      const hasPaid   = payments.some(n => n.metadata?.paid)
-      const hasUnpaid = payments.some(n => !n.metadata?.paid)
-      const dotColor  = hasPaid && !hasUnpaid ? '#4ade80' : hasUnpaid ? '#f87171' : null
-      cells += `<div title="${payments.map(n=>esc(n.metadata?.label||n.content)).join(', ')}"
-        style="aspect-ratio:1;display:grid;place-items:center;border-radius:6px;font-size:11px;font-weight:${isToday?'800':'400'};color:${isToday?'#000':'var(--text-secondary)'};background:${isToday?'#00f6ff':dotColor?dotColor+'18':'transparent'};border:${dotColor?`1px solid ${dotColor}50`:isToday?'none':'none'};cursor:${payments.length?'pointer':'default'};position:relative;">
-        ${d}${dotColor?`<div style="position:absolute;bottom:1px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:${dotColor};"></div>`:''}
+  // ── Dashboard financiero ──────────────────────────────────
+  const dashHTML = _s(() => {
+    const linkedIds = new Set(m.linkedTo || [])
+    // KPIs row
+    const kpiData = [
+      { label:'Presupuesto', val:budget, color:'#a78bfa', icon:'💰' },
+      { label:'Comprometido', val:comprometido, color:'#fb923c', icon:'📋' },
+      { label:'Pagado', val:pagado, color:'#4ade80', icon:'✅' },
+      { label:'Por pagar', val:pendientePago, color:'#f87171', icon:'⏳' },
+      { label:'Disponible', val:disponible >= 0 ? disponible : 0, color:'#2dd4bf', icon:'🏦' },
+    ]
+    const kpisHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:16px;">
+      ${kpiData.map(k => `<div style="background:${k.color}10;border:1px solid ${k.color}30;border-radius:10px;padding:10px;text-align:center;">
+        <div style="font-size:18px;margin-bottom:4px;">${k.icon}</div>
+        <div style="font-size:11px;color:var(--text-muted);font-weight:600;">${k.label}</div>
+        <div style="font-size:14px;font-weight:800;color:${k.color};font-family:'JetBrains Mono',monospace;">$${(k.val||0).toLocaleString('es-MX')}</div>
+      </div>`).join('')}
+    </div>`
+    // Progress bars
+    const pct2 = budget > 0 ? Math.min(Math.round(comprometido/budget*100),100) : 0
+    const paidPct = budget > 0 ? Math.min(Math.round(pagado/budget*100),100) : (comprometido > 0 ? Math.min(Math.round(pagado/comprometido*100),100) : 0)
+    const barsHTML = `<div style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;"><span>Comprometido vs Presupuesto</span><span>${pct2}%</span></div>
+      <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;margin-bottom:10px;"><div style="height:100%;width:${pct2}%;background:#fb923c;border-radius:3px;transition:width .6s;"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;"><span>Pagado vs Comprometido</span><span>${paidPct}%</span></div>
+      <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${paidPct}%;background:#4ade80;border-radius:3px;transition:width .6s;"></div></div>
+    </div>`
+    // Donut SVG
+    let donutHTML = ''
+    if (comprometido > 0 || pagado > 0) {
+      const total2 = Math.max(budget || comprometido, comprometido)
+      const segments = [
+        { val: pagado, color: '#4ade80', label: 'Pagado' },
+        { val: Math.max(0,pendientePago), color: '#f87171', label: 'Pendiente' },
+        { val: Math.max(0,disponible||0), color: '#2dd4bf', label: 'Disponible' },
+      ].filter(s => s.val > 0)
+      const sum = segments.reduce((a,s) => a + s.val, 0) || 1
+      let ang = -90; const R=42, cx=60, cy=60
+      const paths = segments.map(s => {
+        const pct3 = s.val/sum, sweep = pct3*360
+        const r = Math.PI/180, x1=cx+R*Math.cos(ang*r), y1=cy+R*Math.sin(ang*r)
+        const endA = ang+sweep, x2=cx+R*Math.cos(endA*r), y2=cy+R*Math.sin(endA*r)
+        const large = sweep>180?1:0
+        const dp = `M${cx},${cy} L${x1},${y1} A${R},${R},0,${large},1,${x2},${y2} Z`
+        ang = endA
+        return `<path d="${dp}" fill="${s.color}" opacity="0.85"/>`
+      }).join('')
+      donutHTML = `<div style="display:flex;align-items:center;gap:20px;margin-bottom:16px;">
+        <svg viewBox="0 0 120 120" style="width:100px;height:100px;flex-shrink:0;">
+          <circle cx="60" cy="60" r="42" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+          <circle cx="60" cy="60" r="26" fill="var(--bg-panel)"/>
+          ${paths}
+        </svg>
+        <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+          ${segments.map(s => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+            <div style="width:10px;height:10px;border-radius:2px;background:${s.color};flex-shrink:0;"></div>
+            <span style="color:var(--text-muted);flex:1;">${s.label}</span>
+            <span style="font-weight:700;color:${s.color};font-family:'JetBrains Mono',monospace;">$${s.val.toLocaleString('es-MX')}</span>
+          </div>`).join('')}
+        </div>
       </div>`
     }
+    // Category breakdown from cotizaciones
+    const catMap = {}
+    d.cots.forEach(c => {
+      const cat = c.metadata?.category || 'Sin categoría'
+      if (!catMap[cat]) catMap[cat] = { comprometido:0, pagado:0 }
+      const amt = c.metadata?.amount || 0
+      catMap[cat].comprometido += amt
+      const abonos = c.metadata?.abonos || []
+      catMap[cat].pagado += abonos.reduce((s,a) => s+(+a.amount||0), 0)
+    })
+    const catEntries = Object.entries(catMap).sort((a,b) => b[1].comprometido - a[1].comprometido)
+    const catHTML = catEntries.length ? `<div style="margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:8px;">📊 DESGLOSE POR CATEGORÍA</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${catEntries.map(([cat,v]) => {
+          const pct4 = v.comprometido > 0 ? Math.round(v.pagado/v.comprometido*100) : 0
+          return `<div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
+              <span style="color:var(--text-primary);font-weight:600;">${esc(cat)}</span>
+              <span style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;">$${v.comprometido.toLocaleString('es-MX')}</span>
+            </div>
+            <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+              <div style="height:100%;width:${pct4}%;background:#4ade80;border-radius:2px;"></div>
+            </div>
+          </div>`
+        }).join('')}
+      </div>
+    </div>` : ''
+    // Provider breakdown
+    const provEntries = Object.entries(d.provMap).sort((a,b) => {
+      const aTotal = a[1].cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+      const bTotal = b[1].cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+      return bTotal - aTotal
+    }).slice(0,6)
+    const provHTML = provEntries.length ? `<div style="margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:8px;">🔧 DESGLOSE POR PROVEEDOR</div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        ${provEntries.map(([pid,pv]) => {
+          const prov = allNodes.find(n=>n.id===pid)
+          const name = prov ? (prov.metadata?.name||prov.content) : 'Desconocido'
+          const total3 = pv.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+          return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <div style="width:28px;height:28px;border-radius:50%;background:rgba(251,146,60,0.15);color:#fb923c;display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;">${esc(name.charAt(0))}</div>
+            <span style="flex:1;font-size:12px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span>
+            <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#fb923c;flex-shrink:0;">$${(total3||0).toLocaleString('es-MX')}</span>
+          </div>`
+        }).join('')}
+      </div>
+    </div>` : ''
     return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:12px;text-transform:capitalize;">📅 CALENDARIO DE PAGOS — ${monthName}</div>
-      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:6px;">
-        ${DAYS.map(d=>`<div style="text-align:center;font-size:9px;font-weight:700;color:var(--text-dim);padding:2px 0;">${d}</div>`).join('')}
-        ${cells}
-      </div>
-      <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text-muted);">
-        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:4px;"></span>Pagado</span>
-        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f87171;margin-right:4px;"></span>Pendiente</span>
-      </div>
+      <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:14px;">💹 DASHBOARD FINANCIERO</div>
+      ${kpisHTML}${barsHTML}${donutHTML}${catHTML}${provHTML}
     </div>`
   })
 
@@ -7420,7 +7569,7 @@ function _renderProjFinanzas(d) {
     </div>`
   })
 
-  return calHTML + finPanel + provsHTML + pagosFijosHTML + cotsHTML + matHTML
+  return dashHTML + finPanel + provsHTML + pagosFijosHTML + cotsHTML + matHTML
 }
 
 // ── TAB: KANBAN INTERNO ──────────────────────────────────────────────────────
@@ -7465,13 +7614,28 @@ function _renderProjKanban(d) {
             const PCLR = {alta:'#f87171',media:'#fbbf24',baja:'#4ade80'}
             const pClr = PCLR[t.metadata?.priority] || ''
             const today2 = new Date().toISOString().split('T')[0]
-            return `<div style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;position:relative;" title="Clic = mover estado · Editar = ✏️">
-              <button onclick="event.stopPropagation();openProjTaskModal('${projSlug}','${p.id}','${t.id}')" style="position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;font-size:12px;opacity:0.4;" title="Editar tarea">✏️</button>
-              <div onclick="_projMoveTask('${t.id}','${col.id}','${p.id}')">
-                <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:4px;padding-right:20px;">${esc(t.metadata?.label||t.content)}</div>
-                ${t.metadata?.priority ? `<span style="font-size:10px;background:${pClr}20;color:${pClr};border-radius:4px;padding:1px 6px;font-weight:700;">⚑ ${t.metadata.priority}</span>` : ''}
-                ${t.metadata?.deadline ? `<div style="font-size:10px;color:${t.metadata.deadline<today2?'#f87171':'var(--text-dim)'};margin-top:4px;">📅 ${t.metadata.deadline}</div>` : ''}
-                ${t.metadata?.notes ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.metadata.notes)}</div>` : ''}
+            const lbl = t.metadata?.label_color ? LABEL_COLORS[t.metadata.label_color] : null
+            const ck  = t.metadata?.checklist || []
+            const ckDone = ck.filter(c=>c.done).length
+            const hasCover = t.metadata?.cover_url
+            const hasAttach = t.metadata?.attachments?.length > 0
+            return `<div style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;margin-bottom:8px;cursor:pointer;position:relative;" title="Clic = mover estado · Editar = ✏️">
+              ${lbl ? `<div style="height:5px;background:${lbl};"></div>` : ''}
+              ${hasCover ? `<img src="${t.metadata.cover_url}" style="width:100%;height:60px;object-fit:cover;" />` : ''}
+              <div style="padding:10px;">
+                <button onclick="event.stopPropagation();openProjTaskModal('${projSlug}','${p.id}','${t.id}')" style="position:absolute;top:${lbl?'12':'6'}px;right:6px;background:none;border:none;cursor:pointer;font-size:12px;opacity:0.4;" title="Editar tarea">✏️</button>
+                <div onclick="_projMoveTask('${t.id}','${col.id}','${p.id}')">
+                  <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:4px;padding-right:20px;">${esc(t.metadata?.label||t.content)}</div>
+                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;">
+                    ${t.metadata?.priority ? `<span style="font-size:10px;background:${pClr}20;color:${pClr};border-radius:4px;padding:1px 6px;font-weight:700;">⚑ ${t.metadata.priority}</span>` : ''}
+                    ${t.metadata?.deadline ? `<span style="font-size:10px;color:${t.metadata.deadline<today2?'#f87171':'var(--text-dim)'};">📅 ${t.metadata.deadline}</span>` : ''}
+                    ${hasAttach ? `<span style="font-size:10px;color:var(--text-muted);">📎 ${t.metadata.attachments.length}</span>` : ''}
+                  </div>
+                  ${ck.length > 0 ? `<div style="margin-top:6px;">
+                    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:2px;"><span>☑️ ${ckDone}/${ck.length}</span></div>
+                    <div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${ck.length?Math.round(ckDone/ck.length*100):0}%;background:#4ade80;border-radius:2px;"></div></div>
+                  </div>` : ''}
+                </div>
               </div>
             </div>`
           }).join('')}
@@ -7529,7 +7693,10 @@ window.openProjNoteModal = (projSlug, projId, noteId = null) => {
   const delBtn = document.getElementById('pn-delete-btn')
   if (delBtn) delBtn.style.display = note ? 'block' : 'none'
   document.getElementById('proj-note-modal').classList.remove('hidden')
-  setTimeout(() => document.getElementById('pn-body')?.focus(), 100)
+  // Initialize rich editor (idempotent)
+  buildRichEditor('pn-body', 'pn-toolbar')
+  syncRichEditor('pn-body')
+  setTimeout(() => (_richEditors['pn-body'] || document.getElementById('pn-body'))?.focus(), 100)
 }
 
 window.closeProjNoteModal = () => document.getElementById('proj-note-modal').classList.add('hidden')
@@ -7598,6 +7765,22 @@ window.openProjTaskModal = (projSlug, projId, taskId = null, colId = 'todo') => 
   document.getElementById('pt-priority').value = m.priority || ''
   document.getElementById('pt-deadline').value = m.deadline || ''
   document.getElementById('pt-notes').value    = m.notes || ''
+  // Label
+  setPtLabel(m.label_color || '')
+  // Cover
+  const coverUrl = m.cover_url || ''
+  document.getElementById('pt-cover-url').value = coverUrl
+  const hidden = document.getElementById('pt-cover-val')
+  if (hidden) hidden.value = coverUrl
+  if (coverUrl) { document.getElementById('pt-cover-img').src=coverUrl; document.getElementById('pt-cover-area').style.display='block' }
+  else document.getElementById('pt-cover-area').style.display='none'
+  // Checklist
+  document.getElementById('pt-checklist-items').innerHTML = ''
+  document.getElementById('pt-checklist-progress').style.display = 'none'
+  if (m.checklist?.length) renderPtChecklist(m.checklist)
+  // Attachments
+  document.getElementById('pt-attachments-list').innerHTML = ''
+  if (m.attachments?.length) renderPtAttachments(m.attachments)
   const delBtn = document.getElementById('pt-delete-btn')
   if (delBtn) delBtn.style.display = task ? 'block' : 'none'
   document.getElementById('proj-task-modal').classList.remove('hidden')
@@ -7606,18 +7789,114 @@ window.openProjTaskModal = (projSlug, projId, taskId = null, colId = 'todo') => 
 
 window.closeProjTaskModal = () => document.getElementById('proj-task-modal').classList.add('hidden')
 
+const LABEL_COLORS = { rojo:'#f87171', naranja:'#fb923c', amarillo:'#fbbf24', verde:'#4ade80', cyan:'#2dd4bf', azul:'#60a5fa', morado:'#a78bfa' }
+
+window.setPtLabel = (lbl) => {
+  document.getElementById('pt-label').value = lbl
+  document.querySelectorAll('#pt-label-picker [data-lbl]').forEach(el => {
+    el.style.border = el.dataset.lbl === lbl ? '2px solid #fff' : '2px solid transparent'
+  })
+}
+
+window.previewPtCover = (url) => {
+  const area = document.getElementById('pt-cover-area')
+  const img  = document.getElementById('pt-cover-img')
+  const hidden = document.getElementById('pt-cover-val')
+  if (url && url.trim()) {
+    img.src = url.trim(); area.style.display='block'; if (hidden) hidden.value = url.trim()
+  } else {
+    area.style.display='none'; if (hidden) hidden.value=''
+  }
+}
+
+window.clearPtCover = () => {
+  document.getElementById('pt-cover-area').style.display='none'
+  document.getElementById('pt-cover-img').src=''
+  document.getElementById('pt-cover-url').value=''
+  const hidden = document.getElementById('pt-cover-val')
+  if (hidden) hidden.value=''
+}
+
+window.addPtCheckItem = (text='', done=false) => {
+  const container = document.getElementById('pt-checklist-items')
+  const div = document.createElement('div')
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;'
+  div.innerHTML = `
+    <input type="checkbox" ${done?'checked':''} onchange="updatePtCheckProgress()" style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" />
+    <input type="text" value="${esc(text)}" class="modal-input" placeholder="Describir tarea..." style="flex:1;padding:5px 8px;" oninput="updatePtCheckProgress()" />
+    <button onclick="this.parentElement.remove();updatePtCheckProgress()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;flex-shrink:0;">×</button>`
+  container.appendChild(div)
+  updatePtCheckProgress()
+  div.querySelector('input[type=text]').focus()
+}
+
+window.renderPtChecklist = (items) => {
+  document.getElementById('pt-checklist-items').innerHTML = ''
+  items.forEach(it => addPtCheckItem(it.text||it, it.done||false))
+}
+
+window.updatePtCheckProgress = () => {
+  const items = document.querySelectorAll('#pt-checklist-items > div')
+  const total = items.length
+  const done  = Array.from(items).filter(d => d.querySelector('input[type=checkbox]')?.checked).length
+  const prog  = document.getElementById('pt-checklist-progress')
+  if (total === 0) { prog.style.display='none'; return }
+  prog.style.display='block'
+  document.getElementById('pt-ck-label').textContent = `${done}/${total}`
+  document.getElementById('pt-ck-bar').style.width = `${Math.round(done/total*100)}%`
+}
+
+window.addPtAttachment = (url='', name='') => {
+  const container = document.getElementById('pt-attachments-list')
+  const div = document.createElement('div')
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;'
+  div.innerHTML = `
+    <input type="url" value="${esc(url)}" class="modal-input" placeholder="https://..." style="flex:1;padding:5px 8px;font-size:12px;" />
+    <input type="text" value="${esc(name)}" class="modal-input" placeholder="Nombre" style="width:120px;padding:5px 8px;font-size:12px;" />
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;flex-shrink:0;">×</button>`
+  container.appendChild(div)
+  div.querySelector('input[type=url]').focus()
+}
+
+window.renderPtAttachments = (attachments) => {
+  document.getElementById('pt-attachments-list').innerHTML = ''
+  attachments.forEach(a => addPtAttachment(a.url||a, a.name||''))
+}
+
+window.getPtChecklist = () => {
+  return Array.from(document.querySelectorAll('#pt-checklist-items > div')).map(d => ({
+    text: d.querySelector('input[type=text]')?.value || '',
+    done: d.querySelector('input[type=checkbox]')?.checked || false,
+  })).filter(it => it.text.trim())
+}
+
+window.getPtAttachments = () => {
+  return Array.from(document.querySelectorAll('#pt-attachments-list > div')).map(d => ({
+    url:  d.querySelectorAll('input')[0]?.value || '',
+    name: d.querySelectorAll('input')[1]?.value || '',
+  })).filter(a => a.url.trim())
+}
+
 window.saveProjTask = async () => {
   const projSlug = document.getElementById('pt-proj-slug').value
   const projId   = document.getElementById('pt-proj-id').value
   const taskId   = document.getElementById('pt-task-id').value || null
   const name     = document.getElementById('pt-name').value.trim()
   if (!name) { showToast('⚠️ El nombre es obligatorio'); return }
+  const checklist   = getPtChecklist()
+  const attachments = getPtAttachments()
+  const coverUrl    = document.getElementById('pt-cover-val')?.value || document.getElementById('pt-cover-url')?.value || ''
+  const labelColor  = document.getElementById('pt-label')?.value || ''
   const meta = {
-    label:    name,
-    status:   document.getElementById('pt-status').value || 'todo',
-    priority: document.getElementById('pt-priority').value || undefined,
-    deadline: document.getElementById('pt-deadline').value || undefined,
-    notes:    document.getElementById('pt-notes').value.trim() || undefined,
+    label:       name,
+    status:      document.getElementById('pt-status').value || 'todo',
+    priority:    document.getElementById('pt-priority').value || undefined,
+    deadline:    document.getElementById('pt-deadline').value || undefined,
+    notes:       document.getElementById('pt-notes').value.trim() || undefined,
+    label_color: labelColor || undefined,
+    cover_url:   coverUrl || undefined,
+    checklist:   checklist.length ? checklist : undefined,
+    attachments: attachments.length ? attachments : undefined,
     project_tag: projSlug,
     tags: ['#'+projSlug, '#tarea'],
   }
@@ -7671,6 +7950,91 @@ window._projMoveTask = async (taskId, currentColId, projId) => {
 
 // ═══════════════════════════════════════════════════════════
 // REPORTE DE PROYECTO — Impresión aislada
+// ═══════════════════════════════════════════════════════════
+// IMPORT TEMPLATES (CSV)
+// ═══════════════════════════════════════════════════════════
+
+window.downloadTemplate = (type) => {
+  const TEMPLATES = {
+    transactions: 'fecha,descripcion,monto,tipo,cuenta,categoria\n2026-05-01,Pago renta,5000,gasto,efectivo,Renta\n2026-05-05,Honorarios cliente,15000,ingreso,bbva,Servicios',
+    contacts: 'nombre,tipo,telefono,email,especialidad,notas\nJuan Electricista,proveedor,6681234567,juan@email.com,Electricidad,Confiable',
+    projects: 'nombre,categoria,presupuesto,fase,descripcion,etiqueta\nCasa Tulum,inmueble,500000,planning,Remodelacion completa,casatulum',
+  }
+  const NAMES = { transactions:'plantilla_transacciones.csv', contacts:'plantilla_contactos.csv', projects:'plantilla_proyectos.csv' }
+  const blob = new Blob([TEMPLATES[type]], {type:'text/csv;charset=utf-8;'})
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=NAMES[type]; a.click()
+}
+
+window.importTemplate = async (type, input) => {
+  const file = input.files?.[0]; if (!file) return
+  const text = await file.text()
+  const lines = text.trim().split('\n').filter(l=>l.trim())
+  if (lines.length < 2) { showToast('⚠️ El archivo está vacío o no tiene datos'); return }
+  const headers = lines[0].split(',').map(h=>h.trim().toLowerCase())
+  const rows = lines.slice(1).map(l => {
+    const vals = l.split(',')
+    return headers.reduce((o,h,i) => { o[h]=(vals[i]||'').trim(); return o }, {})
+  })
+  const REQUIRED = {
+    transactions: ['fecha','descripcion','monto','tipo'],
+    contacts: ['nombre','tipo'],
+    projects: ['nombre'],
+  }
+  const missing = (REQUIRED[type]||[]).filter(r => !headers.includes(r))
+  if (missing.length) { showToast(`⚠️ Faltan columnas: ${missing.join(', ')}`); input.value=''; return }
+  const area = document.getElementById('import-preview-area')
+  if (area) {
+    area.style.display='block'
+    const safeRows = JSON.stringify(rows)
+    area.innerHTML = `<div style="background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:10px;padding:14px;">
+      <div style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:10px;">Vista previa — ${rows.length} registros encontrados</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Primeros 3 registros:</div>
+      ${rows.slice(0,3).map(r=>`<div style="font-size:11px;background:rgba(0,0,0,0.2);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-family:'JetBrains Mono',monospace;">${esc(JSON.stringify(r))}</div>`).join('')}
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button onclick="document.getElementById('import-preview-area').style.display='none'" class="btn-ghost" style="font-size:12px;padding:8px 14px;">Cancelar</button>
+        <button id="confirm-import-btn" class="btn-primary" style="font-size:12px;padding:8px 14px;">✅ Confirmar importación</button>
+      </div>
+    </div>`
+    document.getElementById('confirm-import-btn').addEventListener('click', () => confirmImport(type, rows))
+  }
+  input.value=''
+}
+
+window.confirmImport = async (type, rows) => {
+  const toInsert = rows.map(r => {
+    if (type==='transactions') return {
+      type: r.tipo==='ingreso'?'income':'expense',
+      content: r.descripcion || r.monto,
+      metadata: { label:r.descripcion, amount:parseFloat(r.monto)||0, account:r.cuenta, category:r.categoria, date:r.fecha, tags:['#importado'] }
+    }
+    if (type==='contacts') return {
+      type: 'contact',
+      content: r.nombre,
+      metadata: { name:r.nombre, cType:r.tipo==='proveedor'?'proveedor':r.tipo, phone:r.telefono, email:r.email, specialty:r.especialidad, notes:r.notas }
+    }
+    if (type==='projects') return {
+      type: 'proyecto',
+      content: r.nombre,
+      metadata: { label:r.nombre, category:r.categoria, budget:parseFloat(r.presupuesto)||0, stage:'planning', description:r.descripcion, tags:[r.etiqueta?'#'+r.etiqueta:'#proyecto'] }
+    }
+    return null
+  }).filter(Boolean)
+  let imported=0
+  for (const node of toInsert) {
+    if (localStorage.getItem('nexus_admin_bypass')==='true') {
+      const tmp={id:Math.random().toString(36).substr(2,9),...node,owner_id:'demo',created_at:new Date().toISOString()}
+      allNodes.unshift(tmp); imported++
+    } else if (currentUser) {
+      const {data} = await supabase.from('nodes').insert({owner_id:currentUser.id,...node}).select()
+      if (data?.[0]) { allNodes.unshift(data[0]); imported++ }
+    }
+  }
+  const area = document.getElementById('import-preview-area')
+  if (area) area.style.display='none'
+  renderAll()
+  showToast(`✅ ${imported} registros importados correctamente`)
+}
+
 // ═══════════════════════════════════════════════════════════
 // BACKUP / EXPORT / RESTORE
 // ═══════════════════════════════════════════════════════════
@@ -7888,6 +8252,70 @@ window.printProjectReport = (projectId) => {
 // ═══════════════════════════════════════════════════════════
 
 let currentCotizacionId = null
+let _cotAbonosDraft = []
+
+window.addCotAbono = () => {
+  document.getElementById('cot-new-abono-form').style.display = 'block'
+  document.getElementById('ca-date').value = new Date().toISOString().split('T')[0]
+}
+
+window.cancelCotAbono = () => {
+  document.getElementById('cot-new-abono-form').style.display = 'none'
+  document.getElementById('ca-amount').value = ''
+  document.getElementById('ca-receipt').value = ''
+  document.getElementById('ca-notes').value = ''
+}
+
+window.saveCotAbono = () => {
+  const amount = parseFloat(document.getElementById('ca-amount').value)
+  const date   = document.getElementById('ca-date').value
+  if (!amount || !date) { showToast('⚠️ Monto y fecha son obligatorios'); return }
+  _cotAbonosDraft.push({
+    id: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
+    date, amount,
+    method: document.getElementById('ca-method').value,
+    receipt_url: document.getElementById('ca-receipt').value.trim() || null,
+    notes: document.getElementById('ca-notes').value.trim() || null,
+  })
+  const total = parseFloat(document.getElementById('cot-amount').value) || 0
+  renderCotAbonos(_cotAbonosDraft, total)
+  cancelCotAbono()
+}
+
+window.deleteCotAbono = (idx) => {
+  _cotAbonosDraft.splice(idx, 1)
+  const total = parseFloat(document.getElementById('cot-amount').value) || 0
+  renderCotAbonos(_cotAbonosDraft, total)
+}
+
+window.renderCotAbonos = (abonos, total) => {
+  const listEl    = document.getElementById('cot-abonos-list')
+  const summaryEl = document.getElementById('cot-abonos-summary')
+  const section   = document.getElementById('cot-abonos-section')
+  if (!listEl) return
+  const METHOD_ICON = {transferencia:'🏦',efectivo:'💵',tarjeta:'💳',cheque:'📄'}
+  const pagado = abonos.reduce((s,a) => s+(+a.amount||0), 0)
+  const saldo  = Math.max(0, total - pagado)
+  const pct    = total > 0 ? Math.min(100, Math.round(pagado/total*100)) : (pagado > 0 ? 100 : 0)
+  listEl.innerHTML = abonos.length === 0
+    ? `<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:8px;">Sin pagos registrados</div>`
+    : abonos.map((a,i) => `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;">
+        <span style="flex-shrink:0;">${METHOD_ICON[a.method]||'💸'}</span>
+        <span style="color:var(--text-muted);flex-shrink:0;width:80px;">${a.date||''}</span>
+        <span style="flex:1;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.notes||a.method||'Pago')}</span>
+        ${a.receipt_url ? `<a href="${a.receipt_url}" target="_blank" style="color:#60a5fa;font-size:11px;flex-shrink:0;">🔗</a>` : ''}
+        <span style="font-weight:700;color:#4ade80;font-family:'JetBrains Mono',monospace;flex-shrink:0;">$${(+a.amount).toLocaleString('es-MX')}</span>
+        <button onclick="deleteCotAbono(${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;flex-shrink:0;" title="Eliminar">×</button>
+      </div>`).join('')
+  summaryEl.innerHTML = `
+    <span>Total: <b style="color:var(--text-primary);">$${total.toLocaleString('es-MX')}</b></span>
+    <span>Pagado: <b style="color:#4ade80;">$${pagado.toLocaleString('es-MX')}</b></span>
+    <span>Saldo: <b style="color:#f87171;">$${saldo.toLocaleString('es-MX')}</b></span>
+    <div style="flex:1;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;align-self:center;">
+      <div style="height:100%;width:${pct}%;background:#4ade80;border-radius:2px;"></div>
+    </div>
+    <span style="color:#4ade80;font-weight:700;">${pct}%</span>`
+}
 
 window.openCotizacionModal = (id = null, prefillProjectTag = '') => {
   const c = id ? allNodes.find(n => n.id === id) : null
@@ -7914,6 +8342,22 @@ window.openCotizacionModal = (id = null, prefillProjectTag = '') => {
   sel.innerHTML = `<option value="">Sin proveedor</option>` +
     provs.map(p => `<option value="${p.id}" ${m.provider_id===p.id?'selected':''}>${esc(p.metadata?.name||p.content)}</option>`).join('')
   document.getElementById('cot-delete').style.display = c ? 'inline-flex' : 'none'
+  // Abonos
+  _cotAbonosDraft = [...(m.abonos||[])]
+  const abonoStatuses = ['aceptada','parcial','en_proceso','pagada']
+  const showAbonos = abonoStatuses.includes(m.status||'pendiente') || _cotAbonosDraft.length > 0
+  document.getElementById('cot-abonos-section').style.display = showAbonos ? 'block' : 'none'
+  document.getElementById('cot-new-abono-form').style.display = 'none'
+  renderCotAbonos(_cotAbonosDraft, parseFloat(m.amount)||0)
+  // Update abono section visibility when status changes
+  const statusEl = document.getElementById('cot-status')
+  if (statusEl) {
+    statusEl.onchange = function() {
+      const show = abonoStatuses.includes(this.value) || _cotAbonosDraft.length > 0
+      document.getElementById('cot-abonos-section').style.display = show ? 'block' : 'none'
+      renderCotAbonos(_cotAbonosDraft, parseFloat(document.getElementById('cot-amount').value)||0)
+    }
+  }
   document.getElementById('cotizacion-modal').classList.remove('hidden')
 }
 
@@ -7952,6 +8396,7 @@ window.saveCotizacion = async () => {
     provider_id: document.getElementById('cot-provider').value || undefined,
     project_tag: projTag || undefined,
     notes:       document.getElementById('cot-notes').value.trim() || undefined,
+    abonos:      _cotAbonosDraft.length ? _cotAbonosDraft : undefined,
     tags,
   }
   let savedId = currentCotizacionId
@@ -9023,30 +9468,68 @@ window.openMilestoneModal = function(projectId, idx = -1) {
   const mils = node?.metadata?.milestones || []
   const ms   = idx >= 0 ? mils[idx] : null
   document.getElementById('ms-name').value     = ms?.name || ''
+  document.getElementById('ms-desc').value     = ms?.desc || ''
+  document.getElementById('ms-responsible-search').value = ms?.responsible_name || ''
+  document.getElementById('ms-responsible-id').value     = ms?.responsible_id || ''
+  const nameDiv = document.getElementById('ms-responsible-name')
+  if (ms?.responsible_name) { nameDiv.textContent = '👤 ' + ms.responsible_name; nameDiv.style.display='block' }
+  else { nameDiv.textContent = ''; nameDiv.style.display='none' }
   document.getElementById('ms-deadline').value = ms?.deadline || ''
+  document.getElementById('ms-reached-date').value = ms?.reached_date || ''
+  const rdField = document.getElementById('ms-reached-date-field')
+  if (rdField) rdField.style.display = ms?.is_reached ? 'block' : 'none'
+  document.getElementById('ms-responsible-results').style.display = 'none'
   document.getElementById('milestone-modal').classList.remove('hidden')
   setTimeout(() => document.getElementById('ms-name')?.focus(), 100)
+}
+
+window.filterMsResponsible = (q) => {
+  const results = document.getElementById('ms-responsible-results')
+  if (!q.trim()) { results.style.display='none'; return }
+  const matches = allNodes.filter(n => n.type==='contact' && (
+    (n.metadata?.name||n.content||'').toLowerCase().includes(q.toLowerCase())
+  )).slice(0,8)
+  if (!matches.length) { results.style.display='none'; return }
+  results.innerHTML = matches.map(n => {
+    const name = esc(n.metadata?.name||n.content)
+    return `<div style="padding:8px 12px;font-size:12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);"
+      onmousedown="selectMsResponsible('${n.id}','${name}')">${name}</div>`
+  }).join('')
+  results.style.display = 'block'
+}
+
+window.selectMsResponsible = (id, name) => {
+  document.getElementById('ms-responsible-id').value = id
+  document.getElementById('ms-responsible-search').value = name
+  const nameDiv = document.getElementById('ms-responsible-name')
+  nameDiv.textContent = '👤 ' + name; nameDiv.style.display='block'
+  document.getElementById('ms-responsible-results').style.display='none'
 }
 
 window.closeMilestoneModal = () => document.getElementById('milestone-modal').classList.add('hidden')
 
 window.saveMilestoneModal = async () => {
-  const projectId = document.getElementById('ms-project-id').value
-  const idx       = parseInt(document.getElementById('ms-index').value)
-  const name      = document.getElementById('ms-name').value.trim()
-  const deadline  = document.getElementById('ms-deadline').value || null
+  const projectId      = document.getElementById('ms-project-id').value
+  const idx            = parseInt(document.getElementById('ms-index').value)
+  const name           = document.getElementById('ms-name').value.trim()
+  const desc           = document.getElementById('ms-desc').value.trim() || null
+  const responsible_id = document.getElementById('ms-responsible-id').value || null
+  const responsible_name = document.getElementById('ms-responsible-search').value.trim() || null
+  const deadline       = document.getElementById('ms-deadline').value || null
+  const reached_date   = document.getElementById('ms-reached-date').value || null
   if (!name) { showToast('⚠️ El nombre es obligatorio'); return }
   const node = allNodes.find(n => n.id === projectId)
   if (!node) return
   const mils = [...(node.metadata?.milestones || [])]
   if (idx >= 0 && mils[idx]) {
     // Edit existing
-    mils[idx] = { ...mils[idx], name, deadline }
+    mils[idx] = { ...mils[idx], name, desc, responsible_id, responsible_name, deadline, reached_date }
   } else {
     // New
     mils.push({
       id: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
-      name, deadline, is_reached: false, reached_date: null,
+      name, desc, responsible_id, responsible_name, deadline, reached_date,
+      is_reached: false,
       created_at: new Date().toISOString(),
     })
   }
