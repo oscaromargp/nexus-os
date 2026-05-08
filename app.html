@@ -2066,6 +2066,16 @@
       </div>
       <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:20px; align-items:start;">
 
+        <!-- BACKUP / EXPORT -->
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:#4ade80;margin-bottom:8px;">💾 Respaldo de Datos</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">Descarga todos tus datos como archivo JSON. Úsalo como copia de seguridad o para migrar a otro dispositivo.</p>
+          <button onclick="exportBackup()" style="width:100%;padding:12px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;">⬇️ Descargar Respaldo JSON</button>
+          <button onclick="document.getElementById('restore-file-input').click()" style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:10px;font-size:13px;cursor:pointer;">📂 Restaurar desde JSON</button>
+          <input type="file" id="restore-file-input" accept=".json" style="display:none" onchange="importBackup(this)" />
+          <p style="font-size:11px;color:var(--text-dim);margin-top:10px;">⚠️ Restaurar sobreescribe todos los datos locales actuales.</p>
+        </div>
+
         <!-- CRONÓMETRO -->
         <div class="settings-card">
           <h2 style="font-size:15px; font-weight:800; color:var(--accent-cyan); margin-bottom:16px;">⏱ Cronómetro</h2>
@@ -2443,7 +2453,11 @@
         <input type="text" id="pay-quality-note" class="modal-input" placeholder="Excelente trabajo, muy puntual..." />
       </div>
       <div style="display:flex;gap:6px;margin-bottom:14px;" id="pay-stars">
-        ${[1,2,3,4,5].map(i=>`<span onclick="setPayRating(${i})" data-star="${i}" style="font-size:22px;cursor:pointer;opacity:0.3;transition:opacity 0.1s;">⭐</span>`).join('')}
+        <span onclick="setPayRating(1)" data-star="1" style="font-size:22px;cursor:pointer;opacity:0.3;transition:opacity 0.1s;">⭐</span>
+        <span onclick="setPayRating(2)" data-star="2" style="font-size:22px;cursor:pointer;opacity:0.3;transition:opacity 0.1s;">⭐</span>
+        <span onclick="setPayRating(3)" data-star="3" style="font-size:22px;cursor:pointer;opacity:0.3;transition:opacity 0.1s;">⭐</span>
+        <span onclick="setPayRating(4)" data-star="4" style="font-size:22px;cursor:pointer;opacity:0.3;transition:opacity 0.1s;">⭐</span>
+        <span onclick="setPayRating(5)" data-star="5" style="font-size:22px;cursor:pointer;opacity:0.3;transition:opacity 0.1s;">⭐</span>
       </div>
 
       <div class="modal-actions">
@@ -2605,11 +2619,37 @@
         </div>
         <div class="modal-field" style="margin-bottom:0;">
           <label class="modal-label">Categoría</label>
-          <div id="cot-category-display" onclick="openCategoryPicker()" class="modal-input" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;min-height:38px;">
-            <span id="cot-category-text" style="color:var(--text-muted);font-size:13px;">Seleccionar...</span>
-            <span style="font-size:10px;color:var(--text-muted);">▼</span>
-          </div>
-          <input type="hidden" id="cot-category" />
+          <select id="cot-category" class="modal-input">
+            <option value="">Sin categoría</option>
+            <optgroup label="🏗️ Construcción">
+              <option>Excavación / Terracería</option><option>Cimentación / Estructura</option>
+              <option>Albañilería / Muros</option><option>Techos / Impermeabilización</option>
+              <option>Carpintería</option><option>Herrería / Acero</option>
+            </optgroup>
+            <optgroup label="🎨 Acabados">
+              <option>Pintura</option><option>Piso / Azulejo</option>
+              <option>Plafones / Yeso</option><option>Ventanas / Vidrio</option>
+            </optgroup>
+            <optgroup label="⚡ Instalaciones">
+              <option>Eléctrica</option><option>Plomería / Hidráulica</option>
+              <option>A/C / Climatización</option><option>Gas</option>
+              <option>Automatización / Domótica</option>
+            </optgroup>
+            <optgroup label="🛋️ Equipamiento">
+              <option>Mobiliario</option><option>Cocina / Muebles</option>
+              <option>Electrodomésticos</option><option>Decoración</option>
+            </optgroup>
+            <optgroup label="💼 Servicios">
+              <option>Diseño / Arquitectura</option><option>Legal / Notaría</option>
+              <option>Contabilidad</option><option>Marketing / Publicidad</option>
+              <option>Consultoría</option><option>Administración</option>
+            </optgroup>
+            <optgroup label="📦 Otros">
+              <option>Transporte / Logística</option><option>Limpieza</option>
+              <option>Seguridad</option><option>Materiales generales</option>
+              <option>Software / Licencias</option><option>Otro</option>
+            </optgroup>
+          </select>
         </div>
       </div>
       <div class="modal-field">
@@ -2915,6 +2955,106 @@
 </div>
 
 <div id="node-msg" class="hidden" style="position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:var(--accent-cyan); color:#000; padding:8px 20px; border-radius:100px; font-weight:800; font-size:12px; z-index:2000;"></div>
+
+<!-- MODAL: HITO DE PROYECTO -->
+<div id="milestone-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeMilestoneModal()">
+  <div class="modal-box" style="max-width:400px;">
+    <div class="modal-header">
+      <h3 class="modal-title">🏁 Hito</h3>
+      <button class="modal-close" onclick="closeMilestoneModal()">✕</button>
+    </div>
+    <input type="hidden" id="ms-project-id" />
+    <input type="hidden" id="ms-index" value="-1" />
+    <div class="modal-field">
+      <label class="modal-label">Nombre del hito *</label>
+      <input type="text" id="ms-name" class="modal-input" placeholder="Ej: Cimentación terminada" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Fecha límite (opcional)</label>
+      <input type="date" id="ms-deadline" class="modal-input" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeMilestoneModal()">Cancelar</button>
+      <button class="btn-primary" onclick="saveMilestoneModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: TAREA KANBAN DE PROYECTO -->
+<div id="proj-task-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeProjTaskModal()">
+  <div class="modal-box" style="max-width:420px;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="proj-task-modal-title">✅ Nueva Tarea</h3>
+      <button class="modal-close" onclick="closeProjTaskModal()">✕</button>
+    </div>
+    <input type="hidden" id="pt-proj-slug" />
+    <input type="hidden" id="pt-proj-id" />
+    <input type="hidden" id="pt-task-id" />
+    <input type="hidden" id="pt-col-id" value="todo" />
+    <div class="modal-field">
+      <label class="modal-label">Tarea *</label>
+      <input type="text" id="pt-name" class="modal-input" placeholder="Ej: Revisar planos de instalación eléctrica" />
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Estado</label>
+        <select id="pt-status" class="modal-input">
+          <option value="todo">📋 Pendiente</option>
+          <option value="in_progress">⚡ En progreso</option>
+          <option value="done">✅ Listo</option>
+        </select>
+      </div>
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">Prioridad</label>
+        <select id="pt-priority" class="modal-input">
+          <option value="">Sin prioridad</option>
+          <option value="alta">🔴 Alta</option>
+          <option value="media">🟡 Media</option>
+          <option value="baja">🟢 Baja</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Fecha límite (opcional)</label>
+      <input type="date" id="pt-deadline" class="modal-input" />
+    </div>
+    <div class="modal-field">
+      <label class="modal-label">Notas (opcional)</label>
+      <textarea id="pt-notes" class="modal-input" rows="2" placeholder="Descripción o comentarios..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeProjTaskModal()">Cancelar</button>
+      <button id="pt-delete-btn" class="btn-danger" style="display:none;" onclick="deleteProjTask()">Eliminar</button>
+      <button class="btn-primary" onclick="saveProjTask()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: NOTA DE PROYECTO -->
+<div id="proj-note-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeProjNoteModal()">
+  <div class="modal-box" style="width:100vw;max-width:none;height:100vh;max-height:none;border-radius:0;display:flex;flex-direction:column;">
+    <div class="modal-header" style="flex-shrink:0;">
+      <h3 class="modal-title">🧠 Nota del Proyecto</h3>
+      <button class="modal-close" onclick="closeProjNoteModal()">✕</button>
+    </div>
+    <input type="hidden" id="pn-node-id" />
+    <input type="hidden" id="pn-proj-slug" />
+    <input type="hidden" id="pn-proj-id" />
+    <div class="modal-field" style="flex-shrink:0;">
+      <label class="modal-label">Título</label>
+      <input type="text" id="pn-title" class="modal-input" placeholder="Título de la nota" />
+    </div>
+    <div class="modal-field" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+      <label class="modal-label">Contenido</label>
+      <textarea id="pn-body" class="modal-input" style="flex:1;resize:none;min-height:0;" placeholder="Escribe aquí..."></textarea>
+    </div>
+    <div class="modal-actions" style="flex-shrink:0;">
+      <button class="btn-ghost" onclick="closeProjNoteModal()">Cancelar</button>
+      <button id="pn-delete-btn" class="btn-danger" style="display:none;" onclick="deleteProjNote()">Eliminar</button>
+      <button class="btn-primary" onclick="saveProjNote()">Guardar</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL: EDITAR NOTA -->
 <div id="note-edit-modal" class="modal-overlay hidden">

@@ -1487,7 +1487,12 @@ function renderNotes(nodes) {
   const root = document.getElementById('notes-root')
   if (!root) return
   const notes = nodes
-    .filter(n => n.type === 'note' || n.type === 'persona' || n.type === 'proyecto')
+    .filter(n => {
+      if (n.type !== 'note' && n.type !== 'persona' && n.type !== 'proyecto') return false
+      // Exclude notes that belong to a specific project (they live in the project tab)
+      if (n.type === 'note' && n.metadata?.project_tag) return false
+      return true
+    })
     .sort((a, b) => (b.metadata?.pinned ? 1 : 0) - (a.metadata?.pinned ? 1 : 0))
 
   root.innerHTML = notes.map(n => {
@@ -1550,7 +1555,15 @@ window.openNoteEdit = (id) => {
   const tagsEl = document.getElementById('ne-tags')
   if (tagsEl) tagsEl.value = (m.tags || []).join(' ')
   renderAttachments(node.metadata.images || [], 'note')
-  document.getElementById('note-edit-modal').classList.remove('hidden')
+  const noteOverlay = document.getElementById('note-edit-modal')
+  noteOverlay.classList.remove('hidden')
+  // Open fullscreen by default for comfortable editing
+  const modalBox = noteOverlay.querySelector('.modal-box')
+  if (modalBox && !modalBox.classList.contains('fullscreen')) {
+    modalBox.classList.add('fullscreen')
+    const btn = document.getElementById('note-toggle-size')
+    if (btn) btn.textContent = '🗗'
+  }
 }
 
 window.closeNoteModal = () => {
@@ -7125,6 +7138,7 @@ function _renderProjResumen(d) {
               <div style="font-size:13px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.55;':''}">${esc(ms.name)}</div>
               ${ms.deadline ? `<div style="font-size:10px;color:${clr};margin-top:1px;">${overdue?'⚠️ Vencido':'📅 Límite'}: ${ms.deadline}</div>` : ''}
             </div>
+            <button onclick="openMilestoneModal('${p.id}',${i})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:2px 4px;" title="Editar">✏️</button>
             <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px;" title="Eliminar">✕</button>
           </div>`
         }).join('')}
@@ -7188,12 +7202,32 @@ function _renderProjFinanzas(d) {
     const daysInMonth = new Date(year, month+1, 0).getDate()
     const firstDay    = new Date(year, month, 1).getDay()
     const monthName   = today.toLocaleDateString('es-MX', {month:'long', year:'numeric'})
-    const pagosFijos  = allNodes.filter(n => (n.type==='bill'||n.type==='subscription') && tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t))
+    const linkedIds2  = new Set(m.linkedTo || [])
+    const pagosFijos  = allNodes.filter(n => {
+      if (n.type !== 'bill' && n.type !== 'subscription') return false
+      if (linkedIds2.has(n.id)) return true
+      return tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase() === t)
+    })
     const dayMap = {}
     pagosFijos.forEach(n => {
       const day = n.metadata?.dayOfMonth; if (!day) return
       if (!dayMap[day]) dayMap[day] = []
       dayMap[day].push(n)
+    })
+    // Also show cotizaciones and abonos by their specific date
+    const datedNodes = allNodes.filter(n => {
+      if (!n.metadata?.date) return false
+      if (n.type !== 'expense' && n.type !== 'cotizacion' && !n.metadata?.es_abono) return false
+      if (linkedIds2.has(n.id)) return true
+      return tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase() === t)
+    })
+    datedNodes.forEach(n => {
+      const parts = (n.metadata.date||'').split('-')
+      if (parts.length < 3) return
+      const nodeYear = parseInt(parts[0]), nodeMonth = parseInt(parts[1])-1, nodeDay = parseInt(parts[2])
+      if (nodeYear !== year || nodeMonth !== month) return
+      if (!dayMap[nodeDay]) dayMap[nodeDay] = []
+      dayMap[nodeDay].push({ ...n, _dated: true })
     })
     const DAYS = ['D','L','M','M','J','V','S']
     let cells = ''
@@ -7427,12 +7461,20 @@ function _renderProjKanban(d) {
           <span style="font-size:10px;background:${col.color}15;color:${col.color};border-radius:10px;padding:1px 7px;">${tasks.length}</span>
         </div>
         ${tasks.length === 0 ? `<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px 0;">Vacío</div>` :
-          tasks.map(t => `<div ondblclick="openNodeEditModal && openNodeEditModal('${t.id}')" style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;" title="Doble clic para editar"
-            onclick="_projMoveTask('${t.id}','${col.id}','${p.id}')">
-            <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:4px;">${esc(t.metadata?.label||t.content)}</div>
-            ${t.metadata?.priority ? `<span style="font-size:10px;color:var(--text-muted);">⚑ ${t.metadata.priority}</span>` : ''}
-            ${t.metadata?.deadline ? `<div style="font-size:10px;color:${t.metadata.deadline<new Date().toISOString().split('T')[0]?'#f87171':'var(--text-dim)'};margin-top:2px;">📅 ${t.metadata.deadline}</div>` : ''}
-          </div>`).join('')}
+          tasks.map(t => {
+            const PCLR = {alta:'#f87171',media:'#fbbf24',baja:'#4ade80'}
+            const pClr = PCLR[t.metadata?.priority] || ''
+            const today2 = new Date().toISOString().split('T')[0]
+            return `<div style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;position:relative;" title="Clic = mover estado · Editar = ✏️">
+              <button onclick="event.stopPropagation();openProjTaskModal('${projSlug}','${p.id}','${t.id}')" style="position:absolute;top:6px;right:6px;background:none;border:none;cursor:pointer;font-size:12px;opacity:0.4;" title="Editar tarea">✏️</button>
+              <div onclick="_projMoveTask('${t.id}','${col.id}','${p.id}')">
+                <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:4px;padding-right:20px;">${esc(t.metadata?.label||t.content)}</div>
+                ${t.metadata?.priority ? `<span style="font-size:10px;background:${pClr}20;color:${pClr};border-radius:4px;padding:1px 6px;font-weight:700;">⚑ ${t.metadata.priority}</span>` : ''}
+                ${t.metadata?.deadline ? `<div style="font-size:10px;color:${t.metadata.deadline<today2?'#f87171':'var(--text-dim)'};margin-top:4px;">📅 ${t.metadata.deadline}</div>` : ''}
+                ${t.metadata?.notes ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.metadata.notes)}</div>` : ''}
+              </div>
+            </div>`
+          }).join('')}
         <button onclick="_projAddKanbanTask('${projSlug}','${p.id}','${col.id}')" style="width:100%;margin-top:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.1);color:var(--text-dim);border-radius:7px;padding:6px;cursor:pointer;font-size:12px;">+ Agregar</button>
       </div>`
     }).join('')}
@@ -7452,44 +7494,166 @@ function _renderProjNotas(d) {
   })
   return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
     <span style="font-size:12px;font-weight:800;color:var(--text-muted);">NOTAS DEL PROYECTO (${notes.length})</span>
-    <button onclick="switchView('notas');setTimeout(()=>document.getElementById('nexus-input')?.focus(),200)" style="font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Nueva nota</button>
+    <button onclick="openProjNoteModal('${projSlug}','${p.id}',null)" style="font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Nueva nota</button>
   </div>
   ${notes.length === 0 ? `<div style="text-align:center;padding:40px;color:var(--text-dim);">
     <div style="font-size:32px;margin-bottom:12px;">🧠</div>
     <div style="font-size:14px;">Sin notas para este proyecto</div>
-    <div style="font-size:12px;margin-top:6px;">Escribe notas en la Bóveda Neural usando el tag <strong style="color:#2dd4bf;">#${projSlug}</strong></div>
+    <div style="font-size:12px;margin-top:6px;color:var(--text-dim);">Las notas que crees aquí quedan exclusivamente dentro del proyecto.</div>
   </div>` :
   `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
     ${notes.map(n => {
       const imgs = n.metadata?.images || []
       const src = imgs.length ? (typeof imgs[0]==='string'?imgs[0]:imgs[0].url||'') : ''
-      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all .2s;"
+      const title = n.metadata?.label || n.content?.split('\n')[0]?.slice(0,60) || 'Sin título'
+      return `<div onclick="openProjNoteModal('${projSlug}','${p.id}','${n.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all .2s;"
         onmouseenter="this.style.borderColor='rgba(167,139,250,0.4)'"
         onmouseleave="this.style.borderColor='var(--border)'">
         ${src?`<img src="${src}" style="width:100%;height:80px;object-fit:cover;border-radius:8px;margin-bottom:10px;" />`:''}
-        <div style="font-size:13px;color:var(--text-primary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">${esc(n.content||n.metadata?.label||'')}</div>
+        <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:6px;">${esc(title)}</div>
+        <div style="font-size:11px;color:var(--text-muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${esc(n.content||'')}</div>
         <div style="font-size:10px;color:var(--text-dim);margin-top:8px;">${(n.created_at||'').slice(0,10)}</div>
       </div>`
     }).join('')}
   </div>`}`
 }
 
-// ── Helpers for project kanban ────────────────────────────────────────────────
-window._projAddKanbanTask = (projSlug, projId, colId) => {
-  const name = window.prompt('Nueva tarea para el proyecto:')
-  if (!name?.trim()) return
-  const meta = { label:name.trim(), status: colId||'todo', project_tag: projSlug, tags:['#'+projSlug,'#tarea'] }
-  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
-    const tmp = { id:Math.random().toString(36).substr(2,9), type:'kanban', content:name.trim(), metadata:meta, created_at:new Date().toISOString() }
-    allNodes.unshift(tmp)
-    autoLinkToProject(tmp.id, projSlug)
-    openProjectDashboard(projId)
-  } else {
-    supabase.from('nodes').insert({ owner_id:currentUser?.id, type:'kanban', content:name.trim(), metadata:meta }).select().then(({data}) => {
-      if (data?.[0]) { allNodes.unshift(data[0]); autoLinkToProject(data[0].id, projSlug) }
-      openProjectDashboard(projId)
-    })
+// ── Notas nativas de proyecto ──────────────────────────────────────────────────
+window.openProjNoteModal = (projSlug, projId, noteId = null) => {
+  document.getElementById('pn-proj-slug').value = projSlug
+  document.getElementById('pn-proj-id').value   = projId
+  document.getElementById('pn-node-id').value   = noteId || ''
+  const note = noteId ? allNodes.find(n => n.id === noteId) : null
+  document.getElementById('pn-title').value = note ? (note.metadata?.label || note.content?.split('\n')[0] || '') : ''
+  document.getElementById('pn-body').value  = note ? note.content : ''
+  const delBtn = document.getElementById('pn-delete-btn')
+  if (delBtn) delBtn.style.display = note ? 'block' : 'none'
+  document.getElementById('proj-note-modal').classList.remove('hidden')
+  setTimeout(() => document.getElementById('pn-body')?.focus(), 100)
+}
+
+window.closeProjNoteModal = () => document.getElementById('proj-note-modal').classList.add('hidden')
+
+window.saveProjNote = async () => {
+  const projSlug = document.getElementById('pn-proj-slug').value
+  const projId   = document.getElementById('pn-proj-id').value
+  const noteId   = document.getElementById('pn-node-id').value || null
+  const title    = document.getElementById('pn-title').value.trim()
+  const body     = document.getElementById('pn-body').value
+  if (!body.trim() && !title) { showToast('⚠️ Escribe algo antes de guardar'); return }
+  const meta = {
+    label: title || body.split('\n')[0].slice(0,60),
+    project_tag: projSlug,
+    tags: ['#'+projSlug],
   }
+  if (noteId) {
+    const note = allNodes.find(n => n.id === noteId)
+    if (note) { note.content = body; note.metadata = { ...note.metadata, ...meta } }
+    if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+      await supabase.from('nodes').update({ content:body, metadata:note?.metadata }).eq('id', noteId)
+  } else {
+    if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+      const tmp = { id:Math.random().toString(36).substr(2,9), type:'note', content:body, metadata:meta, created_at:new Date().toISOString() }
+      allNodes.unshift(tmp)
+      await autoLinkToProject(tmp.id, projSlug)
+    } else {
+      const { data } = await supabase.from('nodes').insert({ owner_id:currentUser?.id, type:'note', content:body, metadata:meta }).select()
+      if (data?.[0]) { allNodes.unshift(data[0]); await autoLinkToProject(data[0].id, projSlug) }
+    }
+  }
+  closeProjNoteModal()
+  showToast(noteId ? '✏️ Nota actualizada' : '🧠 Nota guardada en el proyecto')
+  openProjectDashboard(projId)
+}
+
+window.deleteProjNote = async () => {
+  const noteId = document.getElementById('pn-node-id').value
+  const projId = document.getElementById('pn-proj-id').value
+  if (!noteId) return
+  if (!confirm('¿Eliminar esta nota?')) return
+  allNodes = allNodes.filter(n => n.id !== noteId)
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+    await supabase.from('nodes').delete().eq('id', noteId)
+  closeProjNoteModal()
+  showToast('🗑️ Nota eliminada')
+  openProjectDashboard(projId)
+}
+
+// ── Helpers for project kanban ────────────────────────────────────────────────
+// Open kanban task modal (create or edit)
+window._projAddKanbanTask = (projSlug, projId, colId = 'todo') => {
+  openProjTaskModal(projSlug, projId, null, colId)
+}
+
+window.openProjTaskModal = (projSlug, projId, taskId = null, colId = 'todo') => {
+  document.getElementById('pt-proj-slug').value = projSlug
+  document.getElementById('pt-proj-id').value   = projId
+  document.getElementById('pt-task-id').value   = taskId || ''
+  document.getElementById('pt-col-id').value    = colId
+  const task = taskId ? allNodes.find(n => n.id === taskId) : null
+  const m    = task?.metadata || {}
+  document.getElementById('proj-task-modal-title').textContent = task ? '✅ Editar Tarea' : '✅ Nueva Tarea'
+  document.getElementById('pt-name').value     = task ? (m.label || task.content) : ''
+  document.getElementById('pt-status').value   = m.status || colId || 'todo'
+  document.getElementById('pt-priority').value = m.priority || ''
+  document.getElementById('pt-deadline').value = m.deadline || ''
+  document.getElementById('pt-notes').value    = m.notes || ''
+  const delBtn = document.getElementById('pt-delete-btn')
+  if (delBtn) delBtn.style.display = task ? 'block' : 'none'
+  document.getElementById('proj-task-modal').classList.remove('hidden')
+  setTimeout(() => document.getElementById('pt-name')?.focus(), 100)
+}
+
+window.closeProjTaskModal = () => document.getElementById('proj-task-modal').classList.add('hidden')
+
+window.saveProjTask = async () => {
+  const projSlug = document.getElementById('pt-proj-slug').value
+  const projId   = document.getElementById('pt-proj-id').value
+  const taskId   = document.getElementById('pt-task-id').value || null
+  const name     = document.getElementById('pt-name').value.trim()
+  if (!name) { showToast('⚠️ El nombre es obligatorio'); return }
+  const meta = {
+    label:    name,
+    status:   document.getElementById('pt-status').value || 'todo',
+    priority: document.getElementById('pt-priority').value || undefined,
+    deadline: document.getElementById('pt-deadline').value || undefined,
+    notes:    document.getElementById('pt-notes').value.trim() || undefined,
+    project_tag: projSlug,
+    tags: ['#'+projSlug, '#tarea'],
+  }
+  if (taskId) {
+    // Update existing
+    const task = allNodes.find(n => n.id === taskId)
+    if (task) { task.content = name; task.metadata = { ...task.metadata, ...meta } }
+    if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+      await supabase.from('nodes').update({ content:name, metadata:{ ...task?.metadata } }).eq('id', taskId)
+  } else {
+    // Create new
+    if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+      const tmp = { id: Math.random().toString(36).substr(2,9), type:'kanban', content:name, metadata:meta, created_at:new Date().toISOString() }
+      allNodes.unshift(tmp)
+      autoLinkToProject(tmp.id, projSlug)
+    } else {
+      const { data } = await supabase.from('nodes').insert({ owner_id:currentUser?.id, type:'kanban', content:name, metadata:meta }).select()
+      if (data?.[0]) { allNodes.unshift(data[0]); await autoLinkToProject(data[0].id, projSlug) }
+    }
+  }
+  closeProjTaskModal()
+  showToast(taskId ? '✏️ Tarea actualizada' : '✅ Tarea creada')
+  openProjectDashboard(projId)
+}
+
+window.deleteProjTask = async () => {
+  const taskId = document.getElementById('pt-task-id').value
+  const projId = document.getElementById('pt-proj-id').value
+  if (!taskId) return
+  if (!confirm('¿Eliminar esta tarea?')) return
+  allNodes = allNodes.filter(n => n.id !== taskId)
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+    await supabase.from('nodes').delete().eq('id', taskId)
+  closeProjTaskModal()
+  showToast('🗑️ Tarea eliminada')
+  openProjectDashboard(projId)
 }
 
 window._projMoveTask = async (taskId, currentColId, projId) => {
@@ -7507,6 +7671,41 @@ window._projMoveTask = async (taskId, currentColId, projId) => {
 
 // ═══════════════════════════════════════════════════════════
 // REPORTE DE PROYECTO — Impresión aislada
+// ═══════════════════════════════════════════════════════════
+// BACKUP / EXPORT / RESTORE
+// ═══════════════════════════════════════════════════════════
+window.exportBackup = () => {
+  const payload = {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    user: currentUser?.email || 'demo',
+    nodes: allNodes,
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href     = url
+  a.download = `nexus-backup-${new Date().toISOString().slice(0,10)}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  showToast(`✅ Respaldo descargado (${allNodes.length} nodos)`)
+}
+
+window.importBackup = async (input) => {
+  const file = input.files?.[0]
+  if (!file) return
+  const text = await file.text()
+  let payload
+  try { payload = JSON.parse(text) } catch { showToast('⚠️ Archivo JSON inválido'); return }
+  const nodes = payload.nodes || payload
+  if (!Array.isArray(nodes)) { showToast('⚠️ Formato de respaldo no reconocido'); return }
+  if (!confirm(`¿Restaurar ${nodes.length} nodos desde "${file.name}"? Esto reemplazará los datos actuales en memoria.`)) { input.value = ''; return }
+  allNodes = nodes
+  renderAll()
+  input.value = ''
+  showToast(`✅ Restaurados ${nodes.length} nodos desde respaldo`)
+}
+
 // ═══════════════════════════════════════════════════════════
 window.printProjectReport = (projectId) => {
   const d = _computeProjData(projectId)
@@ -7702,11 +7901,12 @@ window.openCotizacionModal = (id = null, prefillProjectTag = '') => {
   document.getElementById('cot-notes').value         = m.notes || ''
   const catVal = m.category || ''
   const catEl = document.getElementById('cot-category')
-  if (catEl) catEl.value = catVal
-  const catText = document.getElementById('cot-category-text')
-  if (catText) {
-    catText.textContent = catVal || 'Seleccionar...'
-    catText.style.color = catVal ? 'var(--text-primary)' : 'var(--text-muted)'
+  if (catEl) {
+    // For native select: try exact match first, then partial
+    const opts = Array.from(catEl.options)
+    const exact = opts.find(o => o.value === catVal)
+    if (exact) catEl.value = catVal
+    else catEl.value = ''
   }
   // Populate provider dropdown
   const provs = allNodes.filter(n => n.type === 'contact' && n.metadata?.cType === 'proveedor')
@@ -8810,21 +9010,54 @@ window.saveHealthModal = async function() {
 
 // ── Milestones (Odoo project.milestone) ─────────────────────
 
+// Alias: el botón Hito en action bar llama a openMilestoneForm → abre el modal
 window.openMilestoneForm = function(projectId) {
-  const name = prompt('Nombre del hito:')
-  if (!name?.trim()) return
-  let deadline = prompt('Fecha límite — opcional\nEjemplo: 15/08/2026 o 2026-08-15') || null
-  if (deadline) {
-    deadline = deadline.trim()
-    // Normalize DD/MM/YYYY or DD-MM-YYYY → YYYY-MM-DD
-    const partsAlt = deadline.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
-    if (partsAlt) deadline = `${partsAlt[3]}-${partsAlt[2].padStart(2,'0')}-${partsAlt[1].padStart(2,'0')}`
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(deadline)) {
-      showToast('⚠️ Formato de fecha inválido. Usa DD/MM/YYYY o YYYY-MM-DD')
-      return
-    }
+  openMilestoneModal(projectId, -1)
+}
+
+// Modal de hito — crea o edita
+window.openMilestoneModal = function(projectId, idx = -1) {
+  document.getElementById('ms-project-id').value = projectId
+  document.getElementById('ms-index').value = idx
+  const node = allNodes.find(n => n.id === projectId)
+  const mils = node?.metadata?.milestones || []
+  const ms   = idx >= 0 ? mils[idx] : null
+  document.getElementById('ms-name').value     = ms?.name || ''
+  document.getElementById('ms-deadline').value = ms?.deadline || ''
+  document.getElementById('milestone-modal').classList.remove('hidden')
+  setTimeout(() => document.getElementById('ms-name')?.focus(), 100)
+}
+
+window.closeMilestoneModal = () => document.getElementById('milestone-modal').classList.add('hidden')
+
+window.saveMilestoneModal = async () => {
+  const projectId = document.getElementById('ms-project-id').value
+  const idx       = parseInt(document.getElementById('ms-index').value)
+  const name      = document.getElementById('ms-name').value.trim()
+  const deadline  = document.getElementById('ms-deadline').value || null
+  if (!name) { showToast('⚠️ El nombre es obligatorio'); return }
+  const node = allNodes.find(n => n.id === projectId)
+  if (!node) return
+  const mils = [...(node.metadata?.milestones || [])]
+  if (idx >= 0 && mils[idx]) {
+    // Edit existing
+    mils[idx] = { ...mils[idx], name, deadline }
+  } else {
+    // New
+    mils.push({
+      id: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
+      name, deadline, is_reached: false, reached_date: null,
+      created_at: new Date().toISOString(),
+    })
   }
-  addMilestone(projectId, name.trim(), deadline || null)
+  node.metadata = { ...(node.metadata || {}), milestones: mils }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    const { error } = await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', projectId)
+    if (error) { showToast('⚠️ Error al guardar hito'); return }
+  }
+  closeMilestoneModal()
+  showToast(idx >= 0 ? `✏️ Hito actualizado` : `🏁 Hito "${name}" creado`)
+  renderAll(); openProjectDashboard(projectId)
 }
 
 async function addMilestone(projectId, name, deadline) {
