@@ -6634,6 +6634,11 @@ window.removeMember = async (projectId, contactId) => {
 window.renderProyectos = function renderProyectos() {
   const root = document.getElementById('proyectos-root')
   if (!root) return
+  // Si hay un dashboard de proyecto abierto, mantenerlo (no regresar a la lista)
+  if (_projDashId) {
+    openProjectDashboard(_projDashId)
+    return
+  }
   const proyectos = allNodes.filter(n => n.type === 'proyecto').sort((a,b) => new Date(b.created_at)-new Date(a.created_at))
 
   if (!proyectos.length) {
@@ -6986,11 +6991,11 @@ window.openProjectDashboard = (projectId) => {
     <div style="position:relative;height:180px;background:${coverBg};flex-shrink:0;overflow:hidden;">
       <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,rgba(0,0,0,0.65) 100%);"></div>
       <!-- Back button -->
-      <button onclick="renderProyectos()" style="position:absolute;top:14px;left:16px;z-index:2;background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600;">← Proyectos</button>
+      <button onclick="_projDashId=null;_projDashTab='resumen';renderProyectos()" style="position:absolute;top:14px;left:16px;z-index:2;background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600;">← Proyectos</button>
       <!-- Top-right actions -->
       <div style="position:absolute;top:14px;right:16px;z-index:2;display:flex;gap:8px;">
         <button onclick="openProyectoModal('${p.id}')" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">✏️ Editar</button>
-        <button onclick="window.print?.()" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📄 Reporte</button>
+        <button onclick="printProjectReport('${p.id}')" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📄 Reporte</button>
       </div>
       <!-- Big emoji icon -->
       <div style="position:absolute;bottom:-24px;left:24px;width:52px;height:52px;border-radius:14px;background:var(--bg-panel);border:2px solid ${accentColor}60;display:grid;place-items:center;font-size:28px;box-shadow:0 4px 20px rgba(0,0,0,0.5);z-index:2;">${projEmoji}</div>
@@ -7501,6 +7506,185 @@ window._projMoveTask = async (taskId, currentColId, projId) => {
 
 
 // ═══════════════════════════════════════════════════════════
+// REPORTE DE PROYECTO — Impresión aislada
+// ═══════════════════════════════════════════════════════════
+window.printProjectReport = (projectId) => {
+  const d = _computeProjData(projectId)
+  if (!d) return
+  const { p, m, budget, projSlug, tagStr, cots, aceptadas, comprometido, pagos, pagado,
+          pendientePago, provMap, milestonePct } = d
+  const projName  = m.label || p.content || 'Proyecto'
+  const coverUrl  = m.cover_url || ''
+  const projEmoji = m.emoji || '🏗️'
+  const today     = new Date().toLocaleDateString('es-MX',{dateStyle:'long'})
+  const STAGE_CFG = { planning:'Planificación', active:'En ejecución', on_hold:'Pausado', done:'Terminado' }
+  const stage     = STAGE_CFG[m.stage] || ''
+  const health    = m.health || {}
+  const HCFG      = { on_track:'🟢 En curso', at_risk:'🟡 En riesgo', off_track:'🔴 Atrasado', on_hold:'🔵 Pausado', done:'🟣 Terminado' }
+  const healthStr = HCFG[health.status] || '—'
+  const mils      = m.milestones || []
+  const milsDone  = mils.filter(ms => ms.is_reached).length
+  const members   = m.members || []
+  const pct       = budget > 0 ? Math.min(100, Math.round(comprometido/budget*100)) : 0
+
+  // Pagos fijos del proyecto
+  const pagosFijos = allNodes.filter(n =>
+    (n.type==='bill'||n.type==='subscription') &&
+    tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)
+  ).sort((a,b) => (a.metadata?.dayOfMonth||99)-(b.metadata?.dayOfMonth||99))
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Reporte — ${projName}</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; color:#1a1a2e; background:#fff; font-size:13px; }
+    .cover { height:180px; background:${coverUrl?`url('${coverUrl}') center/cover no-repeat`:'linear-gradient(135deg,#1e3a5f,#0f2027)'}; display:flex; align-items:flex-end; padding:20px; position:relative; }
+    .cover-overlay { position:absolute; inset:0; background:linear-gradient(to bottom,rgba(0,0,0,0.1),rgba(0,0,0,0.6)); }
+    .cover-content { position:relative; z-index:1; color:#fff; }
+    .cover-emoji { font-size:36px; margin-bottom:8px; display:block; }
+    .cover-title { font-size:26px; font-weight:800; }
+    .cover-sub { font-size:13px; opacity:.8; margin-top:4px; }
+    h2 { font-size:14px; font-weight:700; color:#334155; text-transform:uppercase; letter-spacing:.06em; margin:20px 0 10px; border-bottom:1px solid #e2e8f0; padding-bottom:6px; }
+    .section { margin:0 24px 16px; }
+    .kpi-row { display:flex; gap:12px; flex-wrap:wrap; }
+    .kpi { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; flex:1; min-width:100px; text-align:center; }
+    .kpi-val { font-size:18px; font-weight:800; color:#1e40af; font-family:monospace; }
+    .kpi-lbl { font-size:10px; color:#64748b; margin-top:3px; text-transform:uppercase; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    th { background:#f1f5f9; color:#475569; font-weight:700; text-transform:uppercase; font-size:10px; padding:6px 10px; text-align:left; }
+    td { padding:7px 10px; border-bottom:1px solid #f1f5f9; color:#334155; }
+    .bar-wrap { height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden; }
+    .bar-fill { height:100%; background:#3b82f6; border-radius:4px; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:700; }
+    .badge-ok { background:#dcfce7; color:#15803d; }
+    .badge-warn { background:#fef9c3; color:#a16207; }
+    .badge-err { background:#fee2e2; color:#dc2626; }
+    .footer { text-align:center; font-size:10px; color:#94a3b8; padding:16px; border-top:1px solid #e2e8f0; margin-top:24px; }
+    @media print { body { -webkit-print-color-adjust:exact; print-color-adjust:exact; } }
+  </style>
+</head>
+<body>
+  <!-- Cover -->
+  <div class="cover">
+    <div class="cover-overlay"></div>
+    <div class="cover-content">
+      <span class="cover-emoji">${projEmoji}</span>
+      <div class="cover-title">${projName}</div>
+      <div class="cover-sub">${stage}${health.status?' · '+healthStr:''} &nbsp;·&nbsp; Reporte generado: ${today}</div>
+    </div>
+  </div>
+
+  <!-- Descripción -->
+  ${m.desc ? `<div class="section"><h2>Descripción</h2><p style="color:#475569;line-height:1.6;">${m.desc}</p></div>` : ''}
+
+  <!-- KPIs financieros -->
+  <div class="section">
+    <h2>Resumen Financiero</h2>
+    <div class="kpi-row">
+      ${budget > 0 ? `<div class="kpi"><div class="kpi-val">$${budget.toLocaleString('es-MX',{maximumFractionDigits:0})}</div><div class="kpi-lbl">Presupuesto</div></div>` : ''}
+      <div class="kpi"><div class="kpi-val">$${comprometido.toLocaleString('es-MX',{maximumFractionDigits:0})}</div><div class="kpi-lbl">Comprometido</div></div>
+      <div class="kpi"><div class="kpi-val">$${pagado.toLocaleString('es-MX',{maximumFractionDigits:0})}</div><div class="kpi-lbl">Pagado</div></div>
+      <div class="kpi"><div class="kpi-val">$${pendientePago.toLocaleString('es-MX',{maximumFractionDigits:0})}</div><div class="kpi-lbl">Por pagar</div></div>
+    </div>
+    ${budget > 0 ? `<div style="margin-top:12px;"><div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px;color:#64748b;"><span>Uso del presupuesto</span><span>${pct}%</span></div><div class="bar-wrap"><div class="bar-fill" style="width:${pct}%;background:${pct>100?'#ef4444':pct>75?'#f97316':'#3b82f6'};"></div></div></div>` : ''}
+  </div>
+
+  <!-- Proveedores y abonos -->
+  ${Object.keys(provMap).length ? `
+  <div class="section">
+    <h2>Proveedores — Historial de Pagos</h2>
+    <table>
+      <tr><th>Proveedor</th><th>Acordado</th><th>Pagado</th><th>Saldo</th><th>Estado</th></tr>
+      ${Object.entries(provMap).map(([pid, pd]) => {
+        const prov = allNodes.find(n => n.id === pid)
+        const name = prov?.metadata?.name || prov?.content || '—'
+        const acord = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+        const abonos = allNodes.filter(n => n.type==='expense' && n.metadata?.contact_id===pid && tagStr.some(t=>(n.metadata?.project_tag||'').toLowerCase()===t))
+        const pagdProv = abonos.reduce((s,a)=>s+(+a.metadata?.amount||0),0)
+        const saldo = Math.max(0, acord - pagdProv)
+        return `<tr>
+          <td>${esc(name)}</td>
+          <td>$${acord.toLocaleString('es-MX')}</td>
+          <td>$${pagdProv.toLocaleString('es-MX')}</td>
+          <td>$${saldo.toLocaleString('es-MX')}</td>
+          <td><span class="pill ${saldo===0?'badge-ok':pagdProv>0?'badge-warn':'badge-err'}">${saldo===0?'Liquidado':pagdProv>0?'Parcial':'Pendiente'}</span></td>
+        </tr>
+        ${abonos.length ? `<tr><td colspan="5" style="padding:0;background:#f8fafc;">
+          <table style="margin:0;background:#f8fafc;">
+            ${abonos.map(a=>`<tr style="background:#f8fafc;">
+              <td style="padding:4px 20px;color:#64748b;">${(a.metadata?.date||a.created_at||'').slice(0,10)}</td>
+              <td style="padding:4px 10px;color:#64748b;">${a.metadata?.method||'—'}</td>
+              <td style="padding:4px 10px;color:#64748b;">${esc(a.metadata?.notes||a.metadata?.label||'Abono')}</td>
+              <td style="padding:4px 10px;font-weight:700;font-family:monospace;">$${(+a.metadata?.amount||0).toLocaleString('es-MX')}</td>
+            </tr>`).join('')}
+          </table>
+        </td></tr>` : ''}`
+      }).join('')}
+    </table>
+  </div>` : ''}
+
+  <!-- Pagos fijos -->
+  ${pagosFijos.length ? `
+  <div class="section">
+    <h2>Pagos Fijos / Recurrentes</h2>
+    <table>
+      <tr><th>Servicio</th><th>Día</th><th>Monto mensual</th><th>Estado</th></tr>
+      ${pagosFijos.map(n => `<tr>
+        <td>${esc(n.metadata?.label||n.content)}</td>
+        <td>${n.metadata?.dayOfMonth ? 'Día '+n.metadata.dayOfMonth : '—'}</td>
+        <td>$${(+n.metadata?.amount||0).toLocaleString('es-MX')}</td>
+        <td><span class="pill ${n.metadata?.paid?'badge-ok':'badge-warn'}">${n.metadata?.paid?'✓ Pagado':'Pendiente'}</span></td>
+      </tr>`).join('')}
+      <tr style="font-weight:700;background:#f1f5f9;"><td colspan="2">Total mensual</td><td>$${pagosFijos.reduce((s,n)=>s+(+n.metadata?.amount||0),0).toLocaleString('es-MX')}</td><td></td></tr>
+    </table>
+  </div>` : ''}
+
+  <!-- Hitos -->
+  ${mils.length ? `
+  <div class="section">
+    <h2>Hitos — ${milsDone}/${mils.length} completados</h2>
+    <table>
+      <tr><th>Hito</th><th>Fecha límite</th><th>Estado</th></tr>
+      ${mils.map(ms => `<tr>
+        <td ${ms.is_reached?'style="text-decoration:line-through;color:#94a3b8;"':''}>${esc(ms.name)}</td>
+        <td>${ms.deadline||'—'}</td>
+        <td><span class="pill ${ms.is_reached?'badge-ok':ms.deadline&&ms.deadline<new Date().toISOString().split('T')[0]?'badge-err':'badge-warn'}">${ms.is_reached?'✅ Listo':ms.deadline&&ms.deadline<new Date().toISOString().split('T')[0]?'⚠️ Vencido':'Pendiente'}</span></td>
+      </tr>`).join('')}
+    </table>
+  </div>` : ''}
+
+  <!-- Equipo -->
+  ${members.length ? `
+  <div class="section">
+    <h2>Equipo</h2>
+    <table>
+      <tr><th>Persona</th><th>Rol</th><th>Notas</th></tr>
+      ${members.map(mb => {
+        const c = allNodes.find(n => n.id === mb.contact_id)
+        const name = c ? (c.metadata?.name||c.content) : 'Sin nombre'
+        return `<tr><td>${esc(name)}</td><td>${mb.role||'colaborador'}</td><td style="color:#64748b;">${mb.notes||'—'}</td></tr>`
+      }).join('')}
+    </table>
+  </div>` : ''}
+
+  <!-- Notas del health -->
+  ${health.note ? `<div class="section"><h2>Nota de Estado</h2><p style="color:#475569;font-style:italic;border-left:3px solid #3b82f6;padding-left:12px;">"${esc(health.note)}"</p></div>` : ''}
+
+  <div class="footer">Nexus OS — ${projName} — ${today}</div>
+</body>
+</html>`
+
+  const win = window.open('', '_blank', 'width=900,height=700')
+  if (!win) { showToast('⚠️ Permite ventanas emergentes para ver el reporte'); return }
+  win.document.write(html)
+  win.document.close()
+  win.onload = () => setTimeout(() => win.print(), 400)
+}
+
+// ═══════════════════════════════════════════════════════════
 // COTIZACIONES — Phase 2
 // ═══════════════════════════════════════════════════════════
 
@@ -7669,17 +7853,57 @@ window.openProyectoModal = (id) => {
 }
 
 window.previewProjectCover = (url) => {
-  const preview = document.getElementById('proy-cover-preview')
-  const img     = document.getElementById('proy-cover-img')
-  if (!preview || !img) return
-  if (url && url.startsWith('http')) {
+  const img         = document.getElementById('proy-cover-img')
+  const placeholder = document.getElementById('proy-cover-placeholder')
+  if (!img) return
+  if (url) {
     img.src = url
-    img.onerror = () => { preview.style.display = 'none' }
-    img.onload  = () => { preview.style.display = '' }
-    preview.style.display = ''
+    img.style.display = ''
+    img.onerror = () => { img.style.display = 'none'; if (placeholder) placeholder.style.display = '' }
+    img.onload  = () => { if (placeholder) placeholder.style.display = 'none' }
+    if (placeholder) placeholder.style.display = 'none'
   } else {
-    preview.style.display = 'none'
+    img.style.display = 'none'
+    img.src = ''
+    if (placeholder) placeholder.style.display = ''
   }
+}
+
+window.clearProjectCover = () => {
+  document.getElementById('proy-cover').value = ''
+  previewProjectCover('')
+}
+
+window.handleCoverFileSelect = (input) => {
+  const file = input.files?.[0]
+  if (!file) return
+  _loadCoverFile(file)
+}
+
+window.handleCoverDrop = (event) => {
+  const file = event.dataTransfer.files?.[0]
+  if (file && file.type.startsWith('image/')) _loadCoverFile(file)
+}
+
+function _loadCoverFile(file) {
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    // Compress via canvas (max 1200px wide, 80% quality)
+    const img = new Image()
+    img.onload = () => {
+      const maxW = 1200
+      const ratio = Math.min(1, maxW / img.width)
+      const canvas = document.createElement('canvas')
+      canvas.width  = Math.round(img.width * ratio)
+      canvas.height = Math.round(img.height * ratio)
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+      document.getElementById('proy-cover').value = dataUrl
+      previewProjectCover(dataUrl)
+    }
+    img.src = e.target.result
+  }
+  reader.readAsDataURL(file)
 }
 
 window.closeProyectoModal = () => document.getElementById('proyecto-modal').classList.add('hidden')
