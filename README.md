@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="assets/banner.png" alt="Nexus Os" width="100%"/>
+</p>
+
+<p align="center">
   <img src="https://via.placeholder.com/1200x360/02040a/00F6FF?text=⬡+NEXUS+OS+—+Dashboard+Personal+con+Parser+Semántico" alt="Nexus OS" width="100%"/>
 </p>
 
@@ -335,4 +339,14 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para m�
     <img src="https://img.shields.io/badge/WhatsApp-Contactar-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="WhatsApp"/>
   </a>
 </p>
+
+
+
+## 📸 Capturas de pantalla
+
+<p align="center">
+  <img src="assets/screenshot-1.png" alt="Captura del proyecto" width="700" style="border-radius:8px;"/>
+</p>
+
+> ¿No puedes ver la imagen? [Ver en el navegador](assets/)
 
