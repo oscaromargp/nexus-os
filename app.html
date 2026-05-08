@@ -1189,27 +1189,24 @@
 
     <!-- CONTACTOS -->
     <div id="view-contacts" class="view-section">
-      <div class="view-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-        <h1 class="view-title">Contactos & Cuentas</h1>
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <input id="contact-search" type="text" placeholder="🔍 Buscar..." class="input-field" style="width:200px; padding:8px 14px; font-size:13px;" oninput="renderContacts()" />
-          <button onclick="downloadContactTemplate()" title="Descargar plantilla CSV" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:9px;padding:7px 13px;color:var(--text-muted);cursor:pointer;font-size:12px;font-weight:600;">📄 Plantilla</button>
-          <button onclick="exportContactsCSV()" title="Exportar contactos CSV" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);border-radius:9px;padding:7px 13px;color:#4ade80;cursor:pointer;font-size:12px;font-weight:600;">⬇ Exportar</button>
-          <label title="Importar contactos CSV" style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);border-radius:9px;padding:7px 13px;color:#60a5fa;cursor:pointer;font-size:12px;font-weight:600;">
-            ⬆ Importar<input id="contact-csv-input" type="file" accept=".csv" style="display:none;" onchange="importContactsCSV(this)" />
-          </label>
-          <button onclick="openContactModal()" class="btn-add-contact">+ Nuevo Contacto</button>
+      <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <h1 class="view-title">👥 Contactos</h1>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <input id="contact-search" type="text" placeholder="🔍 Buscar nombre, especialidad, ciudad..." class="input-field" style="width:260px;padding:8px 14px;font-size:13px;" oninput="renderContacts()" />
+          <button onclick="openContactModal()" style="background:linear-gradient(135deg,#00f0ff,#06b6d4);color:#000;border:none;border-radius:10px;padding:9px 20px;font-size:13px;font-weight:800;cursor:pointer;">+ Nuevo</button>
         </div>
       </div>
-      <!-- Filter pills -->
-      <div style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap;">
-        <button class="contact-filter-btn active" data-ctype="all"        onclick="setContactFilter('all',this)">Todos</button>
-        <button class="contact-filter-btn"         data-ctype="persona"   onclick="setContactFilter('persona',this)">👤 Personas</button>
-        <button class="contact-filter-btn"         data-ctype="proveedor" onclick="setContactFilter('proveedor',this)">🔧 Proveedores</button>
-        <button class="contact-filter-btn"         data-ctype="bank"      onclick="setContactFilter('bank',this)">🏦 Bancos</button>
-        <button class="contact-filter-btn"         data-ctype="crypto"    onclick="setContactFilter('crypto',this)">₿ Cripto</button>
+
+      <!-- Filtros por rol -->
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+        <button class="contact-filter-btn active" data-ctype="all"         onclick="setContactFilter('all',this)">Todos</button>
+        <button class="contact-filter-btn"         data-ctype="persona"    onclick="setContactFilter('persona',this)">👤 Personas</button>
+        <button class="contact-filter-btn"         data-ctype="proveedor"  onclick="setContactFilter('proveedor',this)">🔧 Proveedores</button>
+        <button class="contact-filter-btn"         data-ctype="cliente"    onclick="setContactFilter('cliente',this)">💼 Clientes</button>
+        <button class="contact-filter-btn"         data-ctype="colaborador" onclick="setContactFilter('colaborador',this)">🤝 Colaboradores</button>
       </div>
-      <div id="contacts-root" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px;"></div>
+
+      <div id="contacts-root" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;"></div>
     </div>
 
     <!-- ════ PROYECTOS ════ -->
@@ -1570,7 +1567,12 @@
         <div id="tag-cloud" style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; min-height:60px;"></div>
       </div>
 
-      <!-- Top 10 + Tendencias + Durmientes -->
+      <!-- Trends -->
+      <div class="settings-card" style="margin-bottom:20px;">
+        <div id="tag-trends"></div>
+      </div>
+
+      <!-- Top 10 + Durmientes -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-bottom:20px;">
 
         <div class="settings-card">
@@ -2032,6 +2034,24 @@
           </div>
         </div>
 
+        <!-- INTELIGENCIA DE TAGS -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">🏷️ Inteligencia de Tags — Para qué sirve</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Los <b style="color:#fff;">tags (#etiquetas)</b> son el sistema nervioso de Nexus OS. Conectan tareas, gastos, notas y proyectos sin duplicar información.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">✅ <b style="color:#fff;">Vincular a un proyecto</b> — escribe <code style="color:#00f0ff;">#casatulum</code> en cualquier nodo y aparecerá en el dashboard de ese proyecto.</div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">💰 <b style="color:#fff;">Seguimiento de gastos</b> — <code style="color:#4ade80;">-$500 cemento @efectivo #casatulum</code> suma automáticamente al proyecto.</div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🔁 <b style="color:#fff;">Hábitos</b> — crea un nodo con <code style="color:#a78bfa;">#hábito #ejercicio</code> y aparece en el tracker de hábitos.</div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📊 <b style="color:#fff;">Inteligencia de Tags</b> muestra: top tags, co-ocurrencias (tags que siempre van juntos), tags durmientes y tendencias semana a semana.</div>
+              <div style="padding:10px 14px;background:rgba(248,113,113,0.05);border:1px solid rgba(248,113,113,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">⚡ <b style="color:#fff;">Tip pro</b> — usa el mismo tag para todo lo de un proyecto: <code style="color:#f87171;">#tulum</code> en tareas, gastos, notas y eventos. La vista de Tags los agrupa todos.</div>
+            </div>
+          </div>
+        </div>
+
         <!-- ATAJOS DE TECLADO -->
         <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -2061,16 +2081,6 @@
         <h1 class="view-title">🧮 Herramientas</h1>
       </div>
       <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:20px; align-items:start;">
-
-        <!-- BACKUP / EXPORT -->
-        <div class="settings-card">
-          <h2 style="font-size:15px;font-weight:800;color:#4ade80;margin-bottom:8px;">💾 Respaldo de Datos</h2>
-          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;line-height:1.6;">Descarga todos tus datos como archivo JSON. Úsalo como copia de seguridad o para migrar a otro dispositivo.</p>
-          <button onclick="exportBackup()" style="width:100%;padding:12px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;">⬇️ Descargar Respaldo JSON</button>
-          <button onclick="document.getElementById('restore-file-input').click()" style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:10px;font-size:13px;cursor:pointer;">📂 Restaurar desde JSON</button>
-          <input type="file" id="restore-file-input" accept=".json" style="display:none" onchange="importBackup(this)" />
-          <p style="font-size:11px;color:var(--text-dim);margin-top:10px;">⚠️ Restaurar sobreescribe todos los datos locales actuales.</p>
-        </div>
 
         <!-- CRONÓMETRO -->
         <div class="settings-card">
@@ -2225,41 +2235,6 @@
           <div id="inv-result" style="min-height:20px;line-height:1.8;"></div>
         </div>
 
-        <!-- IMPORTAR CSV BANCARIO — span full width inside the grid -->
-        <div class="settings-card" style="grid-column: 1 / -1;">
-          <h2 style="font-size:15px; font-weight:800; color:var(--accent-cyan); margin-bottom:6px;">🏦 Importar CSV Bancario</h2>
-          <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px;">Sube el CSV de tu banco (BBVA, Banamex, HSBC, Nu…). Nexus detecta las columnas automáticamente y convierte cada fila en un nodo de ingreso o gasto.</p>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;">
-            <div>
-              <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">CUENTA DESTINO @</label>
-              <input id="bank-csv-account" type="text" class="input-field" placeholder="efectivo, bbva, nu..." style="font-family:'JetBrains Mono',monospace;" />
-            </div>
-            <div>
-              <label style="font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">ETIQUETA #TAG (opcional)</label>
-              <input id="bank-csv-tag" type="text" class="input-field" placeholder="#enero2025, #casatulum…" style="font-family:'JetBrains Mono',monospace;" />
-            </div>
-          </div>
-          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            <label style="background:rgba(0,246,255,0.1); border:1px solid rgba(0,246,255,0.3); color:var(--accent-cyan); border-radius:10px; padding:9px 18px; cursor:pointer; font-size:13px; font-weight:700;">
-              📂 Seleccionar CSV
-              <input id="bank-csv-input" type="file" accept=".csv,.txt" style="display:none;" onchange="previewBankCSV(this)" />
-            </label>
-            <button id="bank-csv-import-btn" onclick="importBankCSV()" style="display:none; background:rgba(74,222,128,0.12); border:1px solid rgba(74,222,128,0.35); color:#4ade80; border-radius:10px; padding:9px 18px; cursor:pointer; font-size:13px; font-weight:700;">✅ Importar</button>
-            <button onclick="document.getElementById('bank-csv-input').value=''; document.getElementById('bank-csv-preview').innerHTML=''; document.getElementById('bank-csv-import-btn').style.display='none';" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:var(--text-muted); border-radius:10px; padding:9px 14px; cursor:pointer; font-size:12px;">✕ Limpiar</button>
-          </div>
-          <div id="bank-csv-preview" style="margin-top:14px;"></div>
-          <div id="bank-csv-result" style="display:none; margin-top:10px; border-radius:8px; padding:10px 14px; font-size:12px;"></div>
-          <details style="margin-top:14px;">
-            <summary style="font-size:11px; color:var(--text-dim); cursor:pointer;">¿Qué formatos son compatibles?</summary>
-            <div style="margin-top:8px; font-size:11px; color:var(--text-muted); line-height:1.8;">
-              Columnas detectadas automáticamente:<br>
-              <code style="color:#fb923c;">Fecha / Descripción / Retiro / Depósito</code> (BBVA, Banamex)<br>
-              <code style="color:#fb923c;">Fecha / Concepto / Cargo / Abono</code> (HSBC, Santander)<br>
-              <code style="color:#fb923c;">Date / Description / Amount</code> (Nu, internacionales)<br>
-              Valores negativos en <code>Amount</code> → Gasto · Positivos → Ingreso
-            </div>
-          </details>
-        </div>
 
       </div>
     </div>
@@ -2523,57 +2498,6 @@
       </div>
       <div id="prov-picker-list" style="max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-top:4px;"></div>
       <input type="hidden" id="prov-picker-project-tag" />
-    </div>
-  </div>
-
-  <!-- MODAL: SERVICIO DEL PROVEEDOR ──────────────────────── -->
-  <div id="service-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeServiceModal()">
-    <div class="modal-box" style="max-width:380px;">
-      <div class="modal-header">
-        <h3 class="modal-title">Añadir Servicio</h3>
-        <button class="modal-close" onclick="closeServiceModal()">✕</button>
-      </div>
-      <div class="modal-field"><label class="modal-label">Nombre del servicio *</label>
-        <input type="text" id="svc-name" class="modal-input" placeholder="Ej: Bartender, Limpieza, Electricidad..." /></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Precio $</label>
-          <input type="number" id="svc-price" class="modal-input" placeholder="0" min="0" step="0.01" /></div>
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Por unidad</label>
-          <input type="text" id="svc-unit" class="modal-input" placeholder="evento, visita, hora..." value="servicio" /></div>
-      </div>
-      <div class="modal-field"><label class="modal-label">Notas (opcional)</label>
-        <input type="text" id="svc-notes" class="modal-input" placeholder="Condiciones, horario, equipo incluido..." /></div>
-      <div class="modal-actions">
-        <button class="btn-ghost" onclick="closeServiceModal()">Cancelar</button>
-        <button class="btn-primary" onclick="saveService()">Guardar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: CUENTA DE COBRO DEL CONTACTO ─────────────────── -->
-  <div id="contact-account-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeContactAccountModal()">
-    <div class="modal-box" style="max-width:380px;">
-      <div class="modal-header">
-        <h3 class="modal-title">Añadir Cuenta de Cobro</h3>
-        <button class="modal-close" onclick="closeContactAccountModal()">✕</button>
-      </div>
-      <div class="modal-field"><label class="modal-label">Banco / Billetera *</label>
-        <input type="text" id="cacc-name" class="modal-input" placeholder="BBVA, Azteca, Mercado Pago, Spin Oxxo..." /></div>
-      <div class="modal-field"><label class="modal-label">Tipo</label>
-        <select id="cacc-type" class="modal-input" onchange="caccTypeChange()">
-          <option value="bank">🏦 Banco (CLABE)</option>
-          <option value="digital">📱 Billetera digital (handle)</option>
-          <option value="crypto">🪙 Cripto (wallet)</option>
-        </select>
-      </div>
-      <div id="cacc-clabe-row" class="modal-field"><label class="modal-label">CLABE (18 dígitos)</label>
-        <input type="text" id="cacc-clabe" class="modal-input" placeholder="012345678901234567" style="font-family:monospace;" maxlength="18" /></div>
-      <div id="cacc-handle-row" class="modal-field" style="display:none;"><label class="modal-label">Handle / Dirección</label>
-        <input type="text" id="cacc-handle" class="modal-input" placeholder="@usuario, rXXXX (XRP), 0x... (ETH)" style="font-family:monospace;" /></div>
-      <div class="modal-actions">
-        <button class="btn-ghost" onclick="closeContactAccountModal()">Cancelar</button>
-        <button class="btn-primary" onclick="saveContactAccount()">Guardar</button>
-      </div>
     </div>
   </div>
 
@@ -3456,135 +3380,107 @@
   </div>
 </div>
 
-<!-- CONTACT CREATE/EDIT MODAL -->
-<div id="contact-modal" class="modal-overlay hidden">
-  <div class="modal-box" style="max-width:500px;">
-    <div class="modal-title" id="contact-modal-title">Nuevo Contacto</div>
-    <!-- Type selector -->
-    <div style="display:flex; gap:8px; margin-bottom:20px;">
-      <button class="contact-filter-btn active" data-ct="persona"   onclick="selectContactType('persona',this)">👤 Persona</button>
-      <button class="contact-filter-btn" data-ct="proveedor" onclick="selectContactType('proveedor',this)">🔧 Proveedor</button>
-      <button class="contact-filter-btn" data-ct="bank"      onclick="selectContactType('bank',this)">🏦 Banco</button>
-      <button class="contact-filter-btn" data-ct="crypto"    onclick="selectContactType('crypto',this)">₿ Cripto</button>
-    </div>
-    <!-- Common fields -->
-    <div class="modal-field">
-      <label class="modal-label">Nombre / Apodo *</label>
-      <input type="text" id="cm-name" class="modal-input" placeholder="Ej: Nacho, BBVA, Bitcoin Wallet" />
-    </div>
-    <div class="modal-field">
-      <label class="modal-label">Color de avatar</label>
-      <input type="color" id="cm-color" value="#00f0ff" style="width:48px; height:32px; border:none; border-radius:8px; cursor:pointer; background:none;" />
-    </div>
-    <!-- Persona fields -->
-    <div id="cm-persona-fields">
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Teléfono</label><input type="tel" id="cm-phone" class="modal-input" placeholder="+52 000 000 0000" /></div>
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">RFC</label><input type="text" id="cm-rfc" class="modal-input" placeholder="XXXX000000XXX" style="font-family:monospace; text-transform:uppercase;" /></div>
-      </div>
-      <div class="modal-field"><label class="modal-label">Email</label><input type="email" id="cm-email" class="modal-input" placeholder="correo@ejemplo.com" /></div>
-      <div class="modal-field"><label class="modal-label">Empresa / Rol</label><input type="text" id="cm-company" class="modal-input" placeholder="Ej: CEO en Startup XYZ" /></div>
-    </div>
-    <!-- Bank fields -->
-    <div id="cm-bank-fields" style="display:none;">
-      <div class="modal-field"><label class="modal-label">Institución</label><input type="text" id="cm-bank-name" class="modal-input" placeholder="BBVA, Santander, HSBC, Banamex..." /></div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">CLABE (18 dígitos)</label><input type="text" id="cm-clabe" class="modal-input" placeholder="012345678901234567" style="font-family:monospace;" maxlength="18" /></div>
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Número de cuenta</label><input type="text" id="cm-account-no" class="modal-input" placeholder="10-11 dígitos" style="font-family:monospace;" /></div>
-      </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Titular</label><input type="text" id="cm-holder" class="modal-input" placeholder="Nombre del titular" /></div>
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">RFC del titular</label><input type="text" id="cm-bank-rfc" class="modal-input" placeholder="XXXX000000XXX" style="font-family:monospace; text-transform:uppercase;" /></div>
-      </div>
-    </div>
-    <!-- Proveedor fields -->
-    <div id="cm-proveedor-fields" style="display:none;">
-      <div class="modal-field"><label class="modal-label">Especialidad / Servicio *</label><input type="text" id="cm-prov-specialty" class="modal-input" placeholder="Ej: Electricista, Paneles solares, Plomero, Diseño web..." /></div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Zona / Ciudad</label><input type="text" id="cm-prov-zone" class="modal-input" placeholder="La Paz, Tulum, CDMX..." /></div>
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Precio / Tarifa</label><input type="text" id="cm-prov-price" class="modal-input" placeholder="Ej: $800/día, $500/hr" /></div>
-      </div>
-      <div class="modal-field">
-        <label class="modal-label">Teléfono</label>
-        <input type="tel" id="cm-prov-phone" class="modal-input" placeholder="+52 000 000 0000" />
-      </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-        <div class="modal-field" style="margin-bottom:0;">
-          <label class="modal-label">Estado</label>
-          <select id="cm-prov-status" class="modal-input">
-            <option value="activo">✅ Activo</option>
-            <option value="recomendado">⭐ Recomendado</option>
-            <option value="pausado">⏸ Pausado</option>
-            <option value="no_recomendado">❌ No recomendado</option>
-          </select>
-        </div>
-        <div class="modal-field" style="margin-bottom:0;">
-          <label class="modal-label">Rating ⭐</label>
-          <select id="cm-prov-rating" class="modal-input">
-            <option value="5">⭐⭐⭐⭐⭐</option>
-            <option value="4">⭐⭐⭐⭐</option>
-            <option value="3" selected>⭐⭐⭐</option>
-            <option value="2">⭐⭐</option>
-            <option value="1">⭐</option>
-          </select>
-        </div>
-      </div>
-      <!-- Proveedor extra fields (Phase 1) -->
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px;">
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">RFC / Fiscal</label><input type="text" id="cm-prov-rfc" class="modal-input" placeholder="XAXX010101000" style="font-family:monospace; text-transform:uppercase;" /></div>
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Día de pago</label><input type="number" id="cm-prov-pay-day" class="modal-input" placeholder="Ej: 15" min="1" max="31" /></div>
-      </div>
-      <div class="modal-field"><label class="modal-label">Dirección</label><input type="text" id="cm-prov-address" class="modal-input" placeholder="Calle, No., Col., Ciudad..." /></div>
-      <div style="border-top:1px solid rgba(255,255,255,0.07); padding-top:12px; margin-top:2px;">
-        <label class="modal-label" style="display:block; margin-bottom:8px; font-size:10px;">💳 DATOS BANCARIOS (para pago)</label>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-          <div class="modal-field" style="margin-bottom:0;"><label class="modal-label" style="font-size:9px;">Banco</label><input type="text" id="cm-prov-bank" class="modal-input" placeholder="BBVA, Santander..." /></div>
-          <div class="modal-field" style="margin-bottom:0;"><label class="modal-label" style="font-size:9px;">CLABE (18 dígitos)</label><input type="text" id="cm-prov-clabe" class="modal-input" placeholder="012345678901234567" style="font-family:monospace;" maxlength="18" /></div>
-        </div>
-      </div>
-      <div style="display:flex; align-items:center; gap:10px; margin-top:12px; padding:10px 12px; background:rgba(167,139,250,0.05); border:1px solid rgba(167,139,250,0.15); border-radius:10px;">
-        <input type="checkbox" id="cm-prov-crypto" style="width:16px;height:16px;cursor:pointer;accent-color:#a78bfa;" onchange="document.getElementById('cm-prov-crypto-net').style.display=this.checked?'flex':'none'" />
-        <label for="cm-prov-crypto" class="modal-label" style="cursor:pointer; margin:0; color:var(--text-primary);">🪙 Acepta cripto</label>
-        <input type="text" id="cm-prov-crypto-net" class="modal-input" placeholder="XRP, BTC, ETH, USDT..." style="display:none; flex:1; margin:0; padding:6px 10px; font-size:12px;" />
-      </div>
-    </div>
-    <!-- Crypto fields -->
-    <div id="cm-crypto-fields" style="display:none;">
-      <div class="modal-field"><label class="modal-label">Red / Moneda</label><input type="text" id="cm-network" class="modal-input" placeholder="Bitcoin, Ethereum, XRP, SOL, USDT..." /></div>
-      <div class="modal-field"><label class="modal-label">Dirección / Wallet</label><input type="text" id="cm-wallet" class="modal-input" placeholder="0x... / r..." style="font-family:monospace; font-size:12px;" /></div>
-      <div class="modal-field"><label class="modal-label">Memo / Etiqueta de destino (opcional)</label><input type="text" id="cm-memo" class="modal-input" placeholder="Tag, memo o nota de destino" /></div>
-    </div>
-    <!-- Notes -->
-    <div class="modal-field">
-      <label class="modal-label">Notas</label>
-      <textarea id="cm-notes" class="modal-input" rows="2" placeholder="Información adicional..."></textarea>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-ghost" onclick="closeContactModal()">Cancelar</button>
-      <button class="btn-danger" id="cm-delete" style="display:none;" onclick="deleteContact()">Eliminar</button>
-      <button class="btn-primary" onclick="saveContact()">Guardar</button>
-    </div>
-  </div>
-</div>
-
-<!-- CONTACT SHEET (slide-in panel) -->
-<div id="contact-sheet" class="csheet-overlay hidden" onclick="closeContactSheet(event)">
-  <div class="csheet-panel" onclick="event.stopPropagation()">
-    <div class="csheet-header">
-      <div id="csh-avatar" class="contact-avatar" style="font-size:22px;"></div>
+<!-- ═══ MODAL: CONTACTO UNIFICADO ═══════════════════════════════════════════ -->
+<div id="contact-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeContactModal()">
+  <div class="modal-box" style="max-width:600px;width:95%;max-height:92vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px;">
+      <div id="cm-avatar-preview" onclick="document.getElementById('cm-color').click()" style="width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;cursor:pointer;border:2px solid rgba(255,255,255,0.2);flex-shrink:0;background:rgba(0,246,255,0.15);color:#00f0ff;">?</div>
       <div style="flex:1;">
-        <div id="csh-name" style="font-size:20px; font-weight:800; color:#fff; font-family:'Plus Jakarta Sans',sans-serif;"></div>
-        <div id="csh-type-badge" style="font-size:11px; margin-top:3px;"></div>
+        <div class="modal-title" id="contact-modal-title" style="margin-bottom:4px;">Nuevo Contacto</div>
+        <div style="font-size:11px;color:var(--text-muted);">Haz clic en el avatar para cambiar el color</div>
       </div>
-      <button onclick="openContactModal(currentContactId)" style="background:rgba(255,255,255,0.07); border:1px solid var(--glass-border); border-radius:8px; padding:6px 12px; color:var(--text-muted); cursor:pointer; font-size:12px;">✏️ Editar</button>
-      <button onclick="closeContactSheet()" style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:20px; padding:4px 8px;">✕</button>
+      <input type="color" id="cm-color" value="#00f0ff" style="display:none;" onchange="updateAvatarPreview()"/>
+      <button onclick="closeContactModal()" style="background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:4px;">✕</button>
     </div>
-    <div class="csheet-tabs">
-      <button class="csheet-tab active" onclick="switchCSheetTab('perfil',this)">Perfil</button>
-      <button class="csheet-tab" onclick="switchCSheetTab('historial',this)">Historial</button>
-      <button class="csheet-tab" onclick="switchCSheetTab('finanzas',this)">Finanzas</button>
+
+    <!-- Nombre -->
+    <div style="margin-bottom:16px;">
+      <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">NOMBRE COMPLETO *</label>
+      <input type="text" id="cm-name" class="modal-input" placeholder="Ej: Juan Pérez García" oninput="updateAvatarPreview()" />
     </div>
-    <div class="csheet-body" id="csh-body"></div>
+
+    <!-- Roles (multi-check) -->
+    <div style="margin-bottom:16px;">
+      <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:8px;">ROLES (selecciona todos los que apliquen)</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="cm-roles-container">
+        <label style="display:flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid rgba(255,255,255,0.12);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-muted);" id="cm-role-persona-label">
+          <input type="checkbox" id="cm-role-persona" value="persona" onchange="updateRoleLabel('persona')" style="accent-color:#00f0ff;width:15px;height:15px;"> 👤 Persona
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid rgba(255,255,255,0.12);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-muted);" id="cm-role-proveedor-label">
+          <input type="checkbox" id="cm-role-proveedor" value="proveedor" onchange="updateRoleLabel('proveedor')" style="accent-color:#f97316;width:15px;height:15px;"> 🔧 Proveedor
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid rgba(255,255,255,0.12);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-muted);" id="cm-role-cliente-label">
+          <input type="checkbox" id="cm-role-cliente" value="cliente" onchange="updateRoleLabel('cliente')" style="accent-color:#4ade80;width:15px;height:15px;"> 💼 Cliente
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid rgba(255,255,255,0.12);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-muted);" id="cm-role-colaborador-label">
+          <input type="checkbox" id="cm-role-colaborador" value="colaborador" onchange="updateRoleLabel('colaborador')" style="accent-color:#a78bfa;width:15px;height:15px;"> 🤝 Colaborador
+        </label>
+      </div>
+    </div>
+
+    <!-- Info básica -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">TELÉFONO</label>
+        <input type="tel" id="cm-phone" class="modal-input" placeholder="612-555-1234" />
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">EMAIL</label>
+        <input type="email" id="cm-email" class="modal-input" placeholder="correo@ejemplo.com" />
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">CIUDAD / ZONA</label>
+        <input type="text" id="cm-city" class="modal-input" placeholder="Tulum, Q.Roo" />
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">RFC</label>
+        <input type="text" id="cm-rfc" class="modal-input" placeholder="XXXXX000000XXX" style="text-transform:uppercase;" />
+      </div>
+    </div>
+
+    <!-- Calificación -->
+    <div style="margin-bottom:16px;">
+      <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:8px;">CALIFICACIÓN</label>
+      <div style="display:flex;gap:4px;" id="cm-rating-stars">
+        <span onclick="setCmRating(1)" data-star="1" style="font-size:22px;cursor:pointer;opacity:0.4;">⭐</span>
+        <span onclick="setCmRating(2)" data-star="2" style="font-size:22px;cursor:pointer;opacity:0.4;">⭐</span>
+        <span onclick="setCmRating(3)" data-star="3" style="font-size:22px;cursor:pointer;opacity:0.4;">⭐</span>
+        <span onclick="setCmRating(4)" data-star="4" style="font-size:22px;cursor:pointer;opacity:0.4;">⭐</span>
+        <span onclick="setCmRating(5)" data-star="5" style="font-size:22px;cursor:pointer;opacity:0.4;">⭐</span>
+      </div>
+    </div>
+
+    <!-- Especialidades -->
+    <div style="margin-bottom:16px;">
+      <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:8px;">ESPECIALIDADES</label>
+      <div id="cm-specialties-chips" style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;padding:6px;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:10px;margin-bottom:8px;"></div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="cm-specialty-input" class="modal-input" placeholder="Ej: carpintería, electricidad, plomería..." style="flex:1;" onkeydown="if(event.key==='Enter'||event.key===','){event.preventDefault();addCmSpecialty()}" />
+        <button onclick="addCmSpecialty()" style="background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:700;">+ Añadir</button>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">Presiona Enter o coma para agregar. Ejemplo: carpintería, plomería, electricidad</div>
+    </div>
+
+    <!-- Cuentas de cobro -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <label style="font-size:11px;font-weight:700;color:var(--text-muted);">CUENTAS DE COBRO</label>
+        <button onclick="addCmAccount()" style="background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-weight:600;">+ Cuenta</button>
+      </div>
+      <div id="cm-accounts-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+
+    <!-- Notas -->
+    <div style="margin-bottom:24px;">
+      <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">NOTAS</label>
+      <textarea id="cm-notes" class="modal-input" rows="3" placeholder="Notas adicionales sobre este contacto..." style="resize:vertical;"></textarea>
+    </div>
+
+    <!-- Acciones -->
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button onclick="saveContact()" style="flex:1;padding:13px;background:linear-gradient(135deg,#00f0ff,#06b6d4);color:#000;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;">💾 Guardar</button>
+      <button id="cm-delete" onclick="deleteContact()" style="display:none;padding:13px 18px;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;border-radius:12px;font-size:13px;cursor:pointer;">🗑</button>
+    </div>
   </div>
 </div>
 

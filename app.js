@@ -51,6 +51,35 @@ const NOTE_COLORS = {
   'pink':   'background:#3a1a2e; border-color:#831843;',
 }
 
+// Category icon map — used in project financial dashboard
+const CATEGORY_ICONS = {
+  'carpintería': '🪚', 'carpinteria': '🪚',
+  'albañilería': '🧱', 'albanileria': '🧱', 'albañileria': '🧱',
+  'electricidad': '⚡', 'eléctrica': '⚡', 'electrica': '⚡', 'instalación eléctrica': '⚡',
+  'plomería': '🔧', 'plomeria': '🔧',
+  'herrería': '⛏️', 'herreria': '⛏️',
+  'pintura': '🎨',
+  'impermeabilización': '💧', 'impermeabilizacion': '💧',
+  'cancelería': '🪟', 'canceleria': '🪟',
+  'jardinería': '🌿', 'jardineria': '🌿',
+  'limpieza': '🧹',
+  'diseño': '✏️', 'diseno': '✏️',
+  'materiales': '📦',
+  'transporte': '🚚',
+  'servicios': '⚙️',
+  'mano de obra': '👷',
+  'acabados': '✨',
+  'construcción': '🏗️', 'construccion': '🏗️',
+  'seguridad': '🔒',
+  'otros': '📋',
+}
+
+function getCategoryIcon(cat) {
+  if (!cat) return '📋'
+  const k = cat.toLowerCase().trim()
+  return CATEGORY_ICONS[k] || '📋'
+}
+
 // Feed color config — must be before boot IIFE
 const TYPE_CONFIG = {
   kanban:     { label: '#TAREA',      color: '#a78bfa', border: 'rgba(139,92,246,0.4)',  bg: 'rgba(139,92,246,0.06)' },
@@ -4606,246 +4635,11 @@ window.setContactFilter = (type, btn) => {
   renderContacts()
 }
 
-function renderContacts() {
-  const root = document.getElementById('contacts-root')
-  if (!root) return
-  const search = document.getElementById('contact-search')?.value?.toLowerCase() || ''
-  let contacts = getContacts()
-  if (activeContactFilter !== 'all') contacts = contacts.filter(c => c.metadata?.cType === activeContactFilter)
-  if (search) contacts = contacts.filter(c =>
-    (c.metadata?.name || c.content).toLowerCase().includes(search) ||
-    (c.metadata?.phone || '').includes(search) ||
-    (c.metadata?.email || '').toLowerCase().includes(search) ||
-    (c.metadata?.company || '').toLowerCase().includes(search)
-  )
-
-  if (contacts.length === 0) {
-    root.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:60px 20px;">
-      <div style="font-size:40px;margin-bottom:12px;">👥</div>
-      <div style="font-size:14px;">Sin contactos aún.<br>Crea uno con el botón <b>+ Nuevo</b> o usa <code>#persona Nombre</code> en la barra.</div>
-    </div>`
-    return
-  }
-
-  root.innerHTML = contacts.map(c => {
-    const m = c.metadata || {}
-    const name  = m.name || c.content
-    const cType = m.cType || 'persona'
-    const color = m.color || (cType==='proveedor' ? '#f97316' : '#00f0ff')
-    const inits = cType === 'persona' ? contactInitials(name) : contactTypeIcon(cType)
-    const txCount = allNodes.filter(n =>
-      (n.type === 'income' || n.type === 'expense') && n.metadata?.contact_id === c.id
-    ).length
-    const totalPaid = allNodes
-      .filter(n => n.type === 'expense' && n.metadata?.contact_id === c.id)
-      .reduce((s,n) => s + (n.metadata?.amount||0), 0)
-
-    const provExtra = cType === 'proveedor' ? `
-      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:4px;">
-        ${m.specialty ? `<span style="font-size:11px; color:#f97316; background:rgba(249,115,22,0.1); padding:1px 7px; border-radius:4px;">${esc(m.specialty)}</span>` : ''}
-        ${m.zone ? `<span style="font-size:11px; color:var(--text-dim);">📍${esc(m.zone)}</span>` : ''}
-        ${m.rating ? `<span style="font-size:11px;">${'⭐'.repeat(m.rating)}</span>` : ''}
-        ${m.prov_status ? `<span style="font-size:10px; color:var(--text-dim);">${PROV_STATUS_LABEL[m.prov_status]||''}</span>` : ''}
-      </div>` : ''
-
-    return `<div class="contact-card" onclick="openContactSheet('${c.id}')">
-      <div style="display:flex; gap:12px; align-items:flex-start;">
-        <div class="contact-avatar" style="background:${color}20; color:${color}; border:1.5px solid ${color}40; font-size:${cType==='persona'?'16':'20'}px;">${inits}</div>
-        <div style="flex:1; min-width:0;">
-          <div style="font-size:14px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(name)}</div>
-          <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">${esc(m.company || m.bank_name || m.network || m.specialty || '')}</div>
-          ${m.phone ? `<div style="font-size:11px; color:var(--text-muted); margin-top:1px;">📞 ${esc(m.phone)}</div>` : ''}
-          ${provExtra}
-        </div>
-      </div>
-      ${txCount > 0 ? `<div style="margin-top:10px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.05); display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
-        <span>${txCount} transacción${txCount!==1?'es':''}</span>
-        ${totalPaid > 0 ? `<span style="color:#f87171;">-$${totalPaid.toLocaleString()}</span>` : ''}
-      </div>` : ''}
-    </div>`
-  }).join('')
-}
-
-// ── Contact Sheet (slide-in) ──────────────
-// ── Servicios y Cuentas de cobro — renderizado en ficha ──────────────────────
-
-function renderProvServices(c) {
-  const services = c.metadata?.services || []
-  const btnStyle = 'background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-weight:600;'
-  const delStyle = 'background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px;'
-  return `
-  <div style="margin-top:16px;border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:0.08em;">💼 SERVICIOS</span>
-      <button onclick="openServiceModal('${c.id}')" style="${btnStyle}">+ Añadir servicio</button>
-    </div>
-    ${services.length ? services.map(s => `
-      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${esc(s.name)}</div>
-          <div style="font-size:11px;color:var(--text-muted);">$${(+s.price||0).toLocaleString('es-MX')} / ${esc(s.unit||'servicio')}</div>
-        </div>
-        <button onclick="openPaymentModal('${c.id}','${s.id}')" style="background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;font-weight:700;">💸 Pagar</button>
-        <button onclick="deleteProvService('${c.id}','${s.id}')" style="${delStyle}" title="Eliminar servicio">✕</button>
-      </div>`).join('')
-    : `<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">Sin servicios. Añade uno para agilizar registros de pago.</div>`}
-  </div>`
-}
-
-function renderContactAccounts(c) {
-  const accounts = c.metadata?.contact_accounts || []
-  const btnStyle = 'background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:6px;padding:3px 9px;font-size:11px;cursor:pointer;font-weight:600;'
-  const delStyle = 'background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px;'
-  return `
-  <div style="margin-top:16px;border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:0.08em;">🏦 CUENTAS DE COBRO</span>
-      <button onclick="openContactAccountModal('${c.id}')" style="${btnStyle}">+ Añadir cuenta</button>
-    </div>
-    ${accounts.length ? accounts.map(a => `
-      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:600;color:var(--text-primary);">${esc(a.name)}</div>
-          ${a.clabe ? `<code style="font-size:11px;font-family:monospace;color:var(--text-muted);">${esc(a.clabe)}</code>` : ''}
-          ${a.handle ? `<span style="font-size:11px;color:var(--text-muted);">${esc(a.handle)}</span>` : ''}
-          ${a.type && a.type!=='bank' ? `<span style="font-size:10px;background:rgba(167,139,250,0.1);color:#a78bfa;border-radius:4px;padding:1px 5px;margin-left:4px;">${a.type}</span>` : ''}
-        </div>
-        ${a.clabe ? `<button onclick="navigator.clipboard.writeText('${esc(a.clabe)}').then(()=>showToast('CLABE copiada'))" style="background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.2);color:#00f6ff;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">📋</button>` : ''}
-        <button onclick="deleteContactAccount('${c.id}','${a.id}')" style="${delStyle}" title="Eliminar cuenta">✕</button>
-      </div>`).join('')
-    : `<div style="color:var(--text-dim);font-size:12px;padding:8px 0;">Sin cuentas. Añade la(s) cuenta(s) donde te cobra este proveedor.</div>`}
-  </div>`
-}
-
-// ── CRUD servicios ────────────────────────────────────────────────────────────
-let editingServiceContactId = null
-
-window.openServiceModal = (contactId) => {
-  editingServiceContactId = contactId
-  document.getElementById('svc-name').value  = ''
-  document.getElementById('svc-price').value = ''
-  document.getElementById('svc-unit').value  = 'servicio'
-  document.getElementById('svc-notes').value = ''
-  document.getElementById('service-modal').classList.remove('hidden')
-}
-
-window.closeServiceModal = () => document.getElementById('service-modal').classList.add('hidden')
-
-window.saveService = async () => {
-  const name = document.getElementById('svc-name').value.trim()
-  if (!name) { showToast('El nombre del servicio es obligatorio'); return }
-  const node = allNodes.find(n => n.id === editingServiceContactId)
-  if (!node) return
-  const service = {
-    id:    'svc_' + Date.now(),
-    name,
-    price: parseFloat(document.getElementById('svc-price').value) || 0,
-    unit:  document.getElementById('svc-unit').value.trim() || 'servicio',
-    notes: document.getElementById('svc-notes').value.trim() || undefined,
-  }
-  node.metadata.services = [...(node.metadata.services || []), service]
-  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
-    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', node.id)
-  closeServiceModal()
-  renderAll()
-  setTimeout(() => openContactSheet(editingServiceContactId), 150)
-  showToast(`Servicio "${name}" añadido`)
-}
-
-window.deleteProvService = async (contactId, serviceId) => {
-  const node = allNodes.find(n => n.id === contactId)
-  if (!node) return
-  node.metadata.services = (node.metadata.services || []).filter(s => s.id !== serviceId)
-  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
-    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', node.id)
-  renderAll()
-  setTimeout(() => openContactSheet(contactId), 150)
-}
-
-// ── CRUD cuentas de cobro ─────────────────────────────────────────────────────
-let editingAccountContactId = null
-
-window.openContactAccountModal = (contactId) => {
-  editingAccountContactId = contactId
-  document.getElementById('cacc-name').value   = ''
-  document.getElementById('cacc-type').value   = 'bank'
-  document.getElementById('cacc-clabe').value  = ''
-  document.getElementById('cacc-handle').value = ''
-  document.getElementById('cacc-clabe-row').style.display  = ''
-  document.getElementById('cacc-handle-row').style.display = 'none'
-  document.getElementById('contact-account-modal').classList.remove('hidden')
-}
-
-window.closeContactAccountModal = () => document.getElementById('contact-account-modal').classList.add('hidden')
-
-window.caccTypeChange = () => {
-  const t = document.getElementById('cacc-type').value
-  document.getElementById('cacc-clabe-row').style.display  = t === 'bank' ? '' : 'none'
-  document.getElementById('cacc-handle-row').style.display = t !== 'bank' ? '' : 'none'
-}
-
-window.saveContactAccount = async () => {
-  const name = document.getElementById('cacc-name').value.trim()
-  if (!name) { showToast('El nombre del banco/billetera es obligatorio'); return }
-  const node = allNodes.find(n => n.id === editingAccountContactId)
-  if (!node) return
-  const t = document.getElementById('cacc-type').value
-  const account = {
-    id:     'cacc_' + Date.now(),
-    name,
-    type:   t,
-    clabe:  t === 'bank'  ? document.getElementById('cacc-clabe').value.trim()  || undefined : undefined,
-    handle: t !== 'bank'  ? document.getElementById('cacc-handle').value.trim() || undefined : undefined,
-  }
-  node.metadata.contact_accounts = [...(node.metadata.contact_accounts || []), account]
-  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
-    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', node.id)
-  closeContactAccountModal()
-  renderAll()
-  setTimeout(() => openContactSheet(editingAccountContactId), 150)
-  showToast(`Cuenta "${name}" añadida`)
-}
-
-window.deleteContactAccount = async (contactId, accountId) => {
-  const node = allNodes.find(n => n.id === contactId)
-  if (!node) return
-  node.metadata.contact_accounts = (node.metadata.contact_accounts || []).filter(a => a.id !== accountId)
-  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
-    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', node.id)
-  renderAll()
-  setTimeout(() => openContactSheet(contactId), 150)
-}
-
-window.openContactSheet = (id) => {
-  const c = allNodes.find(n => n.id === id)
-  if (!c) return
-  currentContactId = id
-  const m = c.metadata || {}
-  const name  = m.name || c.content
-  const cType = m.cType || 'persona'
-  const color = m.color || '#00f0ff'
-  const inits = cType === 'persona' ? contactInitials(name) : contactTypeIcon(cType)
-
-  const avatarEl = document.getElementById('csh-avatar')
-  if (avatarEl) {
-    avatarEl.textContent = inits
-    avatarEl.style.cssText = `width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-size:${cType==='persona'?'18':'24'}px;font-weight:800;background:${color}20;color:${color};border:2px solid ${color}50;`
-  }
-  document.getElementById('csh-name').textContent = name
-  document.getElementById('csh-type-badge').innerHTML = `<span style="background:${color}18;color:${color};border-radius:20px;padding:2px 10px;font-size:11px;font-weight:700;">${contactTypeIcon(cType)} ${cType.toUpperCase()}</span>`
-
-  currentCSheetTab = 'perfil'
-  document.querySelectorAll('.csheet-tab').forEach((t,i) => t.classList.toggle('active', i===0))
-  renderCSheetTab('perfil', c)
-
-  const sheet = document.getElementById('contact-sheet')
-  if (sheet) sheet.classList.remove('hidden')
-}
-
+// ── Contact Sheet compatibility stubs (kept for backward compat with openPaymentModal etc) ──
+window.openContactSheet = (id) => window.openContactModal(id)
 window.closeContactSheet = (e) => {
   if (e && e.target !== document.getElementById('contact-sheet')) return
-  document.getElementById('contact-sheet')?.classList.add('hidden')
-  currentContactId = null
+  // contact-sheet no longer exists, do nothing
 }
 
 window.switchCSheetTab = (tab, btn) => {
@@ -4998,57 +4792,71 @@ window.handleContactHistoryClick = (id, type) => {
   if (type === 'income' || type === 'expense') { openFinanceDetail(id); return }
 }
 
-// ── Contact Modal (create / edit) ─────────
-let editingContactType = 'persona'
+// ════════════════════════════════════════════════════════════════════════════
+// CONTACTOS — Perfil Unificado
+// ════════════════════════════════════════════════════════════════════════════
+let _cmRating = 0
+let _cmSpecialties = []
+let _cmAccounts = []  // [{id, label, type, bank, clabe, wallet, network, specialty, notes}]
+let _currentContactId = null
+
+function uid() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16)
+  })
+}
 
 window.openContactModal = (id = null) => {
-  editingContactType = 'persona'
+  _currentContactId = id
+  _cmRating = 0
+  _cmSpecialties = []
+  _cmAccounts = []
+
   const c = id ? allNodes.find(n => n.id === id) : null
   const m = c?.metadata || {}
-  editingContactType = m.cType || 'persona'
 
   document.getElementById('contact-modal-title').textContent = c ? 'Editar Contacto' : 'Nuevo Contacto'
-  document.getElementById('cm-name').value    = m.name || c?.content || ''
-  document.getElementById('cm-color').value  = m.color || '#00f0ff'
-  document.getElementById('cm-phone').value  = m.phone || ''
-  document.getElementById('cm-email').value  = m.email || ''
-  document.getElementById('cm-company').value = m.company || ''
-  if (document.getElementById('cm-rfc')) document.getElementById('cm-rfc').value = m.rfc || ''
-  document.getElementById('cm-bank-name').value = m.bank_name || ''
-  document.getElementById('cm-clabe').value  = m.clabe || ''
-  if (document.getElementById('cm-account-no')) document.getElementById('cm-account-no').value = m.account_no || ''
-  document.getElementById('cm-holder').value = m.holder || ''
-  if (document.getElementById('cm-bank-rfc')) document.getElementById('cm-bank-rfc').value = m.rfc || ''
-  document.getElementById('cm-network').value = m.network || ''
-  document.getElementById('cm-wallet').value = m.wallet || ''
-  if (document.getElementById('cm-memo')) document.getElementById('cm-memo').value = m.memo || ''
-  // Proveedor fields
-  if (document.getElementById('cm-prov-specialty')) document.getElementById('cm-prov-specialty').value = m.specialty || ''
-  if (document.getElementById('cm-prov-zone'))      document.getElementById('cm-prov-zone').value      = m.zone || ''
-  if (document.getElementById('cm-prov-price'))     document.getElementById('cm-prov-price').value     = m.price || ''
-  if (document.getElementById('cm-prov-phone'))     document.getElementById('cm-prov-phone').value     = m.phone || ''
-  if (document.getElementById('cm-prov-status'))    document.getElementById('cm-prov-status').value    = m.prov_status || 'activo'
-  if (document.getElementById('cm-prov-rating'))    document.getElementById('cm-prov-rating').value    = String(m.rating || 3)
-  // Phase 1 — Proveedor extra fields
-  if (document.getElementById('cm-prov-rfc'))     document.getElementById('cm-prov-rfc').value     = m.rfc || ''
-  if (document.getElementById('cm-prov-pay-day')) document.getElementById('cm-prov-pay-day').value = m.pay_day || ''
-  if (document.getElementById('cm-prov-address')) document.getElementById('cm-prov-address').value = m.address || ''
-  if (document.getElementById('cm-prov-bank'))    document.getElementById('cm-prov-bank').value    = m.bank_name || ''
-  if (document.getElementById('cm-prov-clabe'))   document.getElementById('cm-prov-clabe').value   = m.clabe || ''
-  if (document.getElementById('cm-prov-crypto'))  {
-    const cb = document.getElementById('cm-prov-crypto')
-    cb.checked = !!m.accepts_crypto
-    const netEl = document.getElementById('cm-prov-crypto-net')
-    if (netEl) { netEl.style.display = m.accepts_crypto ? 'flex' : 'none'; netEl.value = m.crypto_nets || '' }
+  document.getElementById('cm-name').value  = m.name || c?.content || ''
+  document.getElementById('cm-phone').value = m.phone || ''
+  document.getElementById('cm-email').value = m.email || ''
+  document.getElementById('cm-city').value  = m.city || m.zone || ''
+  document.getElementById('cm-rfc').value   = (m.rfc || '').toUpperCase()
+  document.getElementById('cm-notes').value = m.notes || ''
+  document.getElementById('cm-color').value = m.color || '#00f0ff'
+
+  // Roles
+  const roles = m.roles || (m.cType ? [m.cType] : ['persona'])
+  ;['persona','proveedor','cliente','colaborador'].forEach(r => {
+    const el = document.getElementById(`cm-role-${r}`)
+    if (el) el.checked = roles.includes(r)
+    updateRoleLabel(r)
+  })
+
+  // Rating
+  _cmRating = m.rating || 0
+  setCmRating(_cmRating)
+
+  // Specialties
+  const rawSpecs = m.specialties || (m.specialty ? [m.specialty] : [])
+  _cmSpecialties = [...rawSpecs]
+  renderCmSpecialties()
+
+  // Accounts — support old format migration
+  if (m.contact_accounts?.length) {
+    _cmAccounts = m.contact_accounts.map(a => ({...a, id: a.id || uid()}))
+  } else if (m.cType === 'bank') {
+    _cmAccounts = [{id: uid(), label: m.bank_name||'Cuenta bancaria', type:'bank', bank:m.bank_name||'', clabe:m.clabe||'', wallet:'', network:'', specialty:'', notes:''}]
+  } else if (m.cType === 'crypto') {
+    _cmAccounts = [{id: uid(), label: m.network||'Cripto', type:'crypto', bank:'', clabe:'', wallet:m.wallet||'', network:m.network||'', specialty:'', notes:''}]
+  } else if (m.clabe || m.bank_name) {
+    _cmAccounts = [{id: uid(), label: m.bank_name||'Cuenta', type:'bank', bank:m.bank_name||'', clabe:m.clabe||'', wallet:'', network:'', specialty:'', notes:''}]
+  } else {
+    _cmAccounts = []
   }
-  document.getElementById('cm-notes').value  = m.notes || ''
+  renderCmAccounts()
+
   document.getElementById('cm-delete').style.display = c ? 'inline-flex' : 'none'
-
-  // Set type buttons
-  document.querySelectorAll('[data-ct]').forEach(btn => btn.classList.toggle('active', btn.dataset.ct === editingContactType))
-  showContactTypeFields(editingContactType)
-
-  currentContactId = id
+  updateAvatarPreview()
   document.getElementById('contact-modal').classList.remove('hidden')
 }
 
@@ -5056,94 +4864,257 @@ window.closeContactModal = () => {
   document.getElementById('contact-modal').classList.add('hidden')
 }
 
-window.selectContactType = (type, btn) => {
-  editingContactType = type
-  document.querySelectorAll('[data-ct]').forEach(b => b.classList.remove('active'))
-  btn?.classList.add('active')
-  showContactTypeFields(type)
+window.updateAvatarPreview = function() {
+  const name = document.getElementById('cm-name')?.value || ''
+  const color = document.getElementById('cm-color')?.value || '#00f0ff'
+  const el = document.getElementById('cm-avatar-preview')
+  if (!el) return
+  const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase() || '?'
+  el.textContent = initials
+  el.style.background = color + '22'
+  el.style.color = color
+  el.style.borderColor = color + '66'
 }
 
-function showContactTypeFields(type) {
-  document.getElementById('cm-persona-fields').style.display    = type === 'persona'   ? '' : 'none'
-  document.getElementById('cm-proveedor-fields').style.display  = type === 'proveedor' ? '' : 'none'
-  document.getElementById('cm-bank-fields').style.display       = type === 'bank'      ? '' : 'none'
-  document.getElementById('cm-crypto-fields').style.display     = type === 'crypto'    ? '' : 'none'
+window.updateRoleLabel = function(role) {
+  const el = document.getElementById(`cm-role-${role}-label`)
+  const cb = document.getElementById(`cm-role-${role}`)
+  if (!el || !cb) return
+  el.style.borderColor = cb.checked ? (role==='persona'?'#00f0ff':role==='proveedor'?'#f97316':role==='cliente'?'#4ade80':'#a78bfa') : 'rgba(255,255,255,0.12)'
+  el.style.background  = cb.checked ? (role==='persona'?'rgba(0,246,255,0.08)':role==='proveedor'?'rgba(249,115,22,0.08)':role==='cliente'?'rgba(74,222,128,0.08)':'rgba(167,139,250,0.08)') : 'transparent'
+  el.style.color = cb.checked ? '#fff' : 'var(--text-muted)'
 }
 
+window.setCmRating = function(n) {
+  _cmRating = n
+  document.querySelectorAll('#cm-rating-stars [data-star]').forEach(s => {
+    s.style.opacity = parseInt(s.dataset.star) <= n ? '1' : '0.3'
+  })
+}
+
+// ── Specialties ──────────────────────────────────────────────────────────────
+window.addCmSpecialty = function() {
+  const inp = document.getElementById('cm-specialty-input')
+  const raw = inp?.value?.split(',').map(s=>s.trim()).filter(Boolean) || []
+  raw.forEach(s => { if (!_cmSpecialties.includes(s)) _cmSpecialties.push(s) })
+  if (inp) inp.value = ''
+  renderCmSpecialties()
+}
+
+window.removeCmSpecialty = function(s) {
+  _cmSpecialties = _cmSpecialties.filter(x => x !== s)
+  renderCmSpecialties()
+}
+
+function renderCmSpecialties() {
+  const el = document.getElementById('cm-specialties-chips')
+  if (!el) return
+  el.innerHTML = _cmSpecialties.map(s =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;background:rgba(249,115,22,0.12);border:1px solid rgba(249,115,22,0.3);color:#fb923c;border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;">
+      ${esc(s)}
+      <button onclick="removeCmSpecialty('${esc(s)}')" style="background:none;border:none;color:#fb923c;cursor:pointer;font-size:14px;padding:0 0 0 2px;line-height:1;">×</button>
+    </span>`
+  ).join('')
+}
+
+// ── Accounts ─────────────────────────────────────────────────────────────────
+window.addCmAccount = function() {
+  _cmAccounts.push({ id: uid(), label: '', type: 'bank', bank: '', clabe: '', wallet: '', network: '', specialty: '', notes: '' })
+  renderCmAccounts()
+}
+
+window.removeCmAccount = function(id) {
+  _cmAccounts = _cmAccounts.filter(a => a.id !== id)
+  renderCmAccounts()
+}
+
+window.updateCmAccount = function(id, field, value) {
+  const acc = _cmAccounts.find(a => a.id === id)
+  if (acc) acc[field] = value
+}
+
+function renderCmAccounts() {
+  const el = document.getElementById('cm-accounts-list')
+  if (!el) return
+  if (!_cmAccounts.length) {
+    el.innerHTML = `<div style="font-size:12px;color:var(--text-dim);padding:8px;text-align:center;">Sin cuentas. Pulsa "+ Cuenta" para agregar.</div>`
+    return
+  }
+  el.innerHTML = _cmAccounts.map(a => `
+    <div style="background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="text" value="${esc(a.label)}" placeholder="Etiqueta (Ej: BBVA Carpintería)" class="modal-input" style="flex:1;" onchange="updateCmAccount('${a.id}','label',this.value)"/>
+        <select class="modal-input" style="width:110px;" onchange="updateCmAccount('${a.id}','type',this.value);cmToggleAccountFields('${a.id}',this.value)">
+          <option value="bank" ${a.type==='bank'?'selected':''}>🏦 Banco</option>
+          <option value="crypto" ${a.type==='crypto'?'selected':''}>₿ Cripto</option>
+          <option value="cash" ${a.type==='cash'?'selected':''}>💵 Efectivo</option>
+        </select>
+        <button onclick="removeCmAccount('${a.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:4px;">✕</button>
+      </div>
+      <div id="cm-acc-bank-${a.id}" style="${a.type!=='bank'?'display:none;':''}display:flex;gap:8px;">
+        <input type="text" value="${esc(a.bank)}" placeholder="Banco (BBVA, Nu…)" class="modal-input" style="flex:1;" onchange="updateCmAccount('${a.id}','bank',this.value)"/>
+        <input type="text" value="${esc(a.clabe)}" placeholder="CLABE / No. cuenta" class="modal-input" style="flex:1;font-family:'JetBrains Mono',monospace;" onchange="updateCmAccount('${a.id}','clabe',this.value)"/>
+      </div>
+      <div id="cm-acc-crypto-${a.id}" style="${a.type!=='crypto'?'display:none;':''}display:flex;gap:8px;">
+        <input type="text" value="${esc(a.network)}" placeholder="Red (XRP, ETH, TRX…)" class="modal-input" style="flex:1;" onchange="updateCmAccount('${a.id}','network',this.value)"/>
+        <input type="text" value="${esc(a.wallet)}" placeholder="Dirección / wallet" class="modal-input" style="flex:1;font-family:'JetBrains Mono',monospace;" onchange="updateCmAccount('${a.id}','wallet',this.value)"/>
+      </div>
+      <input type="text" value="${esc(a.specialty)}" placeholder="Para especialidad (opcional: carpintería, plomería…)" class="modal-input" onchange="updateCmAccount('${a.id}','specialty',this.value)"/>
+    </div>`).join('')
+}
+
+window.cmToggleAccountFields = function(id, type) {
+  const bankEl   = document.getElementById(`cm-acc-bank-${id}`)
+  const cryptoEl = document.getElementById(`cm-acc-crypto-${id}`)
+  if (bankEl)   bankEl.style.display   = type === 'bank'   ? 'flex' : 'none'
+  if (cryptoEl) cryptoEl.style.display = type === 'crypto' ? 'flex' : 'none'
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
 window.saveContact = async () => {
-  const name = document.getElementById('cm-name').value.trim()
-  if (!name) return
-  const cType = editingContactType
+  const name = document.getElementById('cm-name')?.value.trim()
+  if (!name) { showToast('⚠️ El nombre es obligatorio'); return }
+
+  const roles = ['persona','proveedor','cliente','colaborador'].filter(r => document.getElementById(`cm-role-${r}`)?.checked)
+  if (!roles.length) roles.push('persona')
+
+  // Ensure clabe is clean
+  _cmAccounts.forEach(a => {
+    a.clabe = (a.clabe || '').replace(/\s/g, '')
+  })
+
   const meta = {
-    name, cType,
-    color:    document.getElementById('cm-color').value,
-    notes:    document.getElementById('cm-notes').value.trim(),
-    ...(cType==='persona' ? {
-      phone:   document.getElementById('cm-phone').value.trim(),
-      email:   document.getElementById('cm-email').value.trim(),
-      company: document.getElementById('cm-company').value.trim(),
-      rfc:     document.getElementById('cm-rfc')?.value.trim() || undefined,
-    } : cType==='proveedor' ? {
-      specialty:      document.getElementById('cm-prov-specialty')?.value.trim() || '',
-      zone:           document.getElementById('cm-prov-zone')?.value.trim() || '',
-      price:          document.getElementById('cm-prov-price')?.value.trim() || '',
-      phone:          document.getElementById('cm-prov-phone')?.value.trim() || '',
-      prov_status:    document.getElementById('cm-prov-status')?.value || 'activo',
-      rating:         parseInt(document.getElementById('cm-prov-rating')?.value || '3'),
-      rfc:            document.getElementById('cm-prov-rfc')?.value.trim().toUpperCase() || undefined,
-      pay_day:        document.getElementById('cm-prov-pay-day')?.value ? parseInt(document.getElementById('cm-prov-pay-day').value) : undefined,
-      address:        document.getElementById('cm-prov-address')?.value.trim() || undefined,
-      bank_name:      document.getElementById('cm-prov-bank')?.value.trim() || undefined,
-      clabe:          document.getElementById('cm-prov-clabe')?.value.trim() || undefined,
-      accepts_crypto: document.getElementById('cm-prov-crypto')?.checked || false,
-      crypto_nets:    document.getElementById('cm-prov-crypto-net')?.value.trim() || undefined,
-    } : cType==='bank' ? {
-      bank_name:  document.getElementById('cm-bank-name').value.trim(),
-      clabe:      document.getElementById('cm-clabe').value.trim(),
-      account_no: document.getElementById('cm-account-no')?.value.trim() || undefined,
-      holder:     document.getElementById('cm-holder').value.trim(),
-      rfc:        document.getElementById('cm-bank-rfc')?.value.trim() || undefined,
-    } : {
-      network: document.getElementById('cm-network').value.trim(),
-      wallet:  document.getElementById('cm-wallet').value.trim(),
-      memo:    document.getElementById('cm-memo')?.value.trim() || undefined,
-    })
+    name,
+    roles,
+    cType: roles[0], // backwards compat
+    color:      document.getElementById('cm-color')?.value || '#00f0ff',
+    phone:      document.getElementById('cm-phone')?.value.trim() || undefined,
+    email:      document.getElementById('cm-email')?.value.trim() || undefined,
+    city:       document.getElementById('cm-city')?.value.trim() || undefined,
+    rfc:        document.getElementById('cm-rfc')?.value.trim().toUpperCase() || undefined,
+    rating:     _cmRating || undefined,
+    specialties: _cmSpecialties.length ? _cmSpecialties : undefined,
+    specialty:  _cmSpecialties[0] || undefined, // backwards compat
+    contact_accounts: _cmAccounts.length ? _cmAccounts : undefined,
+    notes:      document.getElementById('cm-notes')?.value.trim() || undefined,
+  }
+  // Remove undefined keys
+  Object.keys(meta).forEach(k => meta[k] === undefined && delete meta[k])
+
+  if (_currentContactId && allNodes.find(n => n.id === _currentContactId)) {
+    const node = allNodes.find(n => n.id === _currentContactId)
+    node.content = name
+    node.metadata = meta
+    if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+      await supabase.from('nodes').update({ content: name, metadata: meta }).eq('id', _currentContactId)
+    }
+    showToast('✅ Contacto actualizado')
+  } else {
+    const newNode = {
+      id: uid(),
+      content: name,
+      type: 'persona',
+      metadata: meta,
+      created_at: new Date().toISOString()
+    }
+    allNodes.unshift(newNode)
+    if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+      await supabase.from('nodes').insert([{ content: name, type: 'persona', metadata: meta }])
+    }
+    showToast('✅ Contacto creado')
   }
 
-  if (currentContactId && allNodes.find(n=>n.id===currentContactId)) {
-    const node = allNodes.find(n=>n.id===currentContactId)
-    node.content = name; node.metadata = meta
-    if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
-      await supabase.from('nodes').update({ content:name, metadata:meta }).eq('id', currentContactId)
-    }
-  } else {
-    if (localStorage.getItem('nexus_admin_bypass') === 'true') {
-      allNodes.unshift({ id: Math.random().toString(36).substr(2,9), type:'contact', content:name, metadata:meta, created_at:new Date().toISOString() })
-    } else {
-      const { data } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'contact', content:name, metadata:meta }).select()
-      if (data?.[0]) allNodes.unshift(data[0])
-    }
-  }
-  const isNewProveedor = cType === 'proveedor' && !currentContactId
   closeContactModal()
-  renderAll()
-  showToast(`Contacto "${name}" guardado`)
-  // Prompt contextual para nuevos proveedores
-  if (isNewProveedor) {
-    const saved = allNodes.find(n => n.type === 'contact' && n.metadata?.name === name && n.metadata?.cType === 'proveedor')
-    if (saved) setTimeout(() => showEnrichPrompt(saved.id, name), 400)
-  }
+  renderContacts()
 }
 
 window.deleteContact = async () => {
-  if (!currentContactId || !confirm('¿Eliminar este contacto?')) return
-  allNodes = allNodes.filter(n=>n.id!==currentContactId)
+  if (!_currentContactId) return
+  if (!confirm('¿Eliminar este contacto?')) return
+  allNodes = allNodes.filter(n => n.id !== _currentContactId)
   if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
-    await supabase.from('nodes').delete().eq('id', currentContactId)
+    await supabase.from('nodes').delete().eq('id', _currentContactId)
   }
   closeContactModal()
-  document.getElementById('contact-sheet')?.classList.add('hidden')
-  renderAll()
+  renderContacts()
+  showToast('🗑 Contacto eliminado')
+}
+
+// ── Render contacts grid ──────────────────────────────────────────────────────
+function renderContacts() {
+  const root = document.getElementById('contacts-root')
+  if (!root) return
+  const search = (document.getElementById('contact-search')?.value || '').toLowerCase()
+  let contacts = allNodes.filter(n => n.type === 'persona' || n.type === 'contact')
+  if (activeContactFilter !== 'all') {
+    contacts = contacts.filter(c => {
+      const roles = c.metadata?.roles || (c.metadata?.cType ? [c.metadata.cType] : ['persona'])
+      return roles.includes(activeContactFilter)
+    })
+  }
+  if (search) {
+    contacts = contacts.filter(c => {
+      const m = c.metadata || {}
+      return (m.name || c.content).toLowerCase().includes(search)
+        || (m.phone || '').includes(search)
+        || (m.city || m.zone || '').toLowerCase().includes(search)
+        || (m.specialties || []).some(s => s.toLowerCase().includes(search))
+        || (m.specialty || '').toLowerCase().includes(search)
+    })
+  }
+
+  if (!contacts.length) {
+    root.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:60px 20px;">
+      <div style="font-size:40px;margin-bottom:12px;">👥</div>
+      <div style="font-size:14px;">Sin contactos. Crea uno con <b>+ Nuevo</b> o usa <code>#persona Nombre</code> en la barra.</div>
+    </div>`
+    return
+  }
+
+  root.innerHTML = contacts.map(c => {
+    const m = c.metadata || {}
+    const name    = m.name || c.content
+    const color   = m.color || '#00f0ff'
+    const roles   = m.roles || (m.cType ? [m.cType] : ['persona'])
+    const specs   = m.specialties || (m.specialty ? [m.specialty] : [])
+    const accounts = m.contact_accounts || []
+    const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase()
+
+    const roleColors = { persona:'#00f0ff', proveedor:'#f97316', cliente:'#4ade80', colaborador:'#a78bfa' }
+    const roleIcons  = { persona:'👤', proveedor:'🔧', cliente:'💼', colaborador:'🤝' }
+    const roleBadges = roles.map(r =>
+      `<span style="font-size:10px;padding:2px 7px;background:${roleColors[r]||'#888'}1a;border:1px solid ${roleColors[r]||'#888'}44;color:${roleColors[r]||'#888'};border-radius:4px;font-weight:700;">${roleIcons[r]||''} ${r}</span>`
+    ).join('')
+
+    const specChips = specs.slice(0,4).map(s =>
+      `<span style="font-size:10px;padding:2px 8px;background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);color:#fb923c;border-radius:4px;">${esc(s)}</span>`
+    ).join('') + (specs.length > 4 ? `<span style="font-size:10px;color:var(--text-dim);">+${specs.length-4}</span>` : '')
+
+    const txCount = allNodes.filter(n =>
+      (n.type==='income'||n.type==='expense') && n.metadata?.contact_id===c.id
+    ).length
+    const totalPaid = allNodes.filter(n => n.type==='expense' && n.metadata?.contact_id===c.id)
+      .reduce((s,n) => s+(n.metadata?.amount||0), 0)
+
+    return `<div class="contact-card" onclick="openContactModal('${c.id}')" style="cursor:pointer;">
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <div style="width:46px;height:46px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;background:${color}18;color:${color};border:1.5px solid ${color}44;">${initials||'?'}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${roleBadges}</div>
+          ${m.phone ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">📞 ${esc(m.phone)}</div>` : ''}
+          ${m.city  ? `<div style="font-size:11px;color:var(--text-muted);">📍 ${esc(m.city)}</div>` : ''}
+          ${specs.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">${specChips}</div>` : ''}
+          ${m.rating ? `<div style="font-size:12px;margin-top:4px;">${'⭐'.repeat(m.rating)}</div>` : ''}
+          ${accounts.length ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px;">🏦 ${accounts.length} cuenta${accounts.length>1?'s':''} de cobro</div>` : ''}
+        </div>
+      </div>
+      ${txCount > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);">
+        <span>${txCount} tx</span>
+        ${totalPaid>0?`<span style="color:#f87171;">-$${totalPaid.toLocaleString()}</span>`:''}
+      </div>` : ''}
+    </div>`
+  }).join('')
 }
 
 // ── FEEDBACK ─────────────────────────────────────────────────────────────────
@@ -5784,30 +5755,46 @@ window.renderTagsView = function() {
     }
   }
 
-  // Top 10 con tendencia mensual
+  // Top 10 con bar charts visuales
   const top10El = document.getElementById('tag-top10')
   if (top10El) {
-    const now = new Date()
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10)
-    const prevMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1).toISOString().slice(0,10)
+    const maxCount = sorted[0]?.[1] || 1
     const top = sorted.slice(0, 10)
-    top10El.innerHTML = top.length ? top.map(([tag, count], idx) => {
-      const nodes = tagNodeMap[tag] || []
-      const cThis = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= thisMonthStart }).length
-      const cPrev = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= prevMonthStart && d < thisMonthStart }).length
-      const trend = cThis > cPrev ? '↑' : cThis < cPrev ? '↓' : '→'
-      const tColor = trend==='↑'?'#4ade80':trend==='↓'?'#f87171':'#94a3b8'
-      const bar = Math.round((count/maxFreq)*100)
-      return `<div onclick="openTagFolder('${esc(tag)}')" style="display:flex;align-items:center;gap:10px;padding:6px 4px;cursor:pointer;border-radius:8px;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background=''">
-        <span style="font-size:11px;color:var(--text-dim);width:16px;text-align:right;flex-shrink:0;">${idx+1}</span>
-        <span style="font-size:13px;color:#a855f7;flex:1;font-weight:600;">#${tag}</span>
-        <div style="width:60px;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;flex-shrink:0;">
-          <div style="width:${bar}%;height:100%;background:#a855f7;border-radius:3px;"></div>
+    top10El.innerHTML = top.length ? top.map(([tag, count]) => {
+      const pct = Math.round((count / maxCount) * 100)
+      return `<div onclick="openTagFolder('${esc(tag)}')" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+        <span style="font-size:12px;color:#fff;width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;">#${esc(tag)}</span>
+        <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:8px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#00f0ff,#a78bfa);border-radius:4px;"></div>
         </div>
-        <span style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;flex-shrink:0;">${count}</span>
-        <span style="font-size:13px;color:${tColor};flex-shrink:0;" title="Este mes:${cThis} / Anterior:${cPrev}">${trend}</span>
+        <span style="font-size:11px;color:var(--text-muted);width:28px;text-align:right;flex-shrink:0;">${count}</span>
       </div>`
     }).join('') : '<span style="color:var(--text-muted);font-size:13px;">Sin etiquetas aún.</span>'
+  }
+
+  // Trends — tags en alza esta semana vs semana pasada
+  const trendsEl = document.getElementById('tag-trends')
+  if (trendsEl) {
+    const now2 = new Date()
+    const weekAgo = new Date(now2); weekAgo.setDate(weekAgo.getDate()-7)
+    const twoWeeksAgo = new Date(now2); twoWeeksAgo.setDate(twoWeeksAgo.getDate()-14)
+    const weekAgoStr = weekAgo.toISOString().slice(0,10)
+    const twoWeeksAgoStr = twoWeeksAgo.toISOString().slice(0,10)
+    const todayStr = now2.toISOString().slice(0,10)
+    const rising = Object.entries(tagNodeMap).map(([tag, nodes]) => {
+      const thisWeek = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= weekAgoStr && d <= todayStr }).length
+      const prevWeek = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= twoWeeksAgoStr && d < weekAgoStr }).length
+      return { tag, thisWeek, prevWeek, delta: thisWeek - prevWeek }
+    }).filter(x => x.delta > 0 && x.thisWeek > 0).sort((a,b) => b.delta - a.delta).slice(0, 5)
+    trendsEl.innerHTML = rising.length ? `
+      <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">📈 Tags en Alza (esta semana)</div>
+      ${rising.map(r => `
+        <div onclick="openTagFolder('${esc(r.tag)}')" style="display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+          <span style="font-size:13px;color:#4ade80;font-weight:600;">#${esc(r.tag)}</span>
+          <span style="flex:1;font-size:11px;color:var(--text-dim);">${r.thisWeek} usos esta semana</span>
+          <span style="font-size:12px;color:#4ade80;font-weight:700;">+${r.delta} ↑</span>
+        </div>`).join('')}` :
+      `<div style="font-size:12px;color:var(--text-muted);">No hay tendencias detectadas esta semana.</div>`
   }
 
   // Durmientes (sin uso >30 días)
@@ -6733,6 +6720,12 @@ window.removeMember = async (projectId, contactId) => {
 // PROYECTOS — Vista Dedicada (Sprint 4B)
 // ═══════════════════════════════════════════════════════════
 
+window.backToProjects = function() {
+  _projDashId = null
+  _projDashTab = 'resumen'
+  renderProyectos()
+}
+
 // Exposed to window so onclick="renderProyectos()" in dashboard back button works
 window.renderProyectos = function renderProyectos() {
   const root = document.getElementById('proyectos-root')
@@ -7094,7 +7087,7 @@ window.openProjectDashboard = (projectId) => {
     <div style="position:relative;height:180px;background:${coverBg};flex-shrink:0;overflow:hidden;">
       <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,rgba(0,0,0,0.65) 100%);"></div>
       <!-- Back button -->
-      <button onclick="_projDashId=null;_projDashTab='resumen';renderProyectos()" style="position:absolute;top:14px;left:16px;z-index:2;background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600;">← Proyectos</button>
+      <button onclick="backToProjects()" style="position:absolute;top:14px;left:16px;z-index:2;background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600;">← Proyectos</button>
       <!-- Top-right actions -->
       <div style="position:absolute;top:14px;right:16px;z-index:2;display:flex;gap:8px;">
         <button onclick="openProyectoModal('${p.id}')" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">✏️ Editar</button>
@@ -7361,19 +7354,23 @@ function _renderProjFinanzas(d) {
       catMap[cat].pagado += abonos.reduce((s,a) => s+(+a.amount||0), 0)
     })
     const catEntries = Object.entries(catMap).sort((a,b) => b[1].comprometido - a[1].comprometido)
+    const maxCatAmount = catEntries.reduce((max, [,v]) => Math.max(max, v.comprometido), 1)
     const catHTML = catEntries.length ? `<div style="margin-bottom:16px;">
       <div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:8px;">📊 DESGLOSE POR CATEGORÍA</div>
       <div style="display:flex;flex-direction:column;gap:6px;">
         ${catEntries.map(([cat,v]) => {
           const pct4 = v.comprometido > 0 ? Math.round(v.pagado/v.comprometido*100) : 0
+          const barPct = Math.round((v.comprometido / maxCatAmount) * 100)
+          const icon = getCategoryIcon(cat)
           return `<div>
             <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
-              <span style="color:var(--text-primary);font-weight:600;">${esc(cat)}</span>
+              <span style="color:var(--text-primary);font-weight:600;">${icon} ${esc(cat)}</span>
               <span style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;">$${v.comprometido.toLocaleString('es-MX')}</span>
             </div>
             <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
               <div style="height:100%;width:${pct4}%;background:#4ade80;border-radius:2px;"></div>
             </div>
+            <div style="width:${barPct}%;height:4px;background:linear-gradient(90deg,#f97316,#fbbf24);border-radius:2px;margin-top:3px;"></div>
           </div>`
         }).join('')}
       </div>
@@ -7604,7 +7601,7 @@ function _renderProjKanban(d) {
         const s = n.metadata?.status || 'todo'
         return s === col.id
       })
-      return `<div style="background:var(--surface);border:1px solid ${col.color}30;border-radius:12px;padding:12px;">
+      return `<div ondragover="event.preventDefault()" ondrop="projKanbanDrop(event,'${col.id}')" style="background:var(--surface);border:1px solid ${col.color}30;border-radius:12px;padding:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <span style="font-size:12px;font-weight:700;color:${col.color};">${col.label}</span>
           <span style="font-size:10px;background:${col.color}15;color:${col.color};border-radius:10px;padding:1px 7px;">${tasks.length}</span>
@@ -7619,7 +7616,7 @@ function _renderProjKanban(d) {
             const ckDone = ck.filter(c=>c.done).length
             const hasCover = t.metadata?.cover_url
             const hasAttach = t.metadata?.attachments?.length > 0
-            return `<div style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;margin-bottom:8px;cursor:pointer;position:relative;" title="Clic = mover estado · Editar = ✏️">
+            return `<div draggable="true" ondragstart="projKanbanDragStart(event,'${t.id}')" style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;margin-bottom:8px;cursor:pointer;position:relative;" title="Clic = mover estado · Editar = ✏️ · Arrastrar = mover columna">
               ${lbl ? `<div style="height:5px;background:${lbl};"></div>` : ''}
               ${hasCover ? `<img src="${t.metadata.cover_url}" style="width:100%;height:60px;object-fit:cover;" />` : ''}
               <div style="padding:10px;">
@@ -7643,6 +7640,39 @@ function _renderProjKanban(d) {
       </div>`
     }).join('')}
   </div>`
+}
+
+// ── Kanban drag & drop ────────────────────────────────────────────────────────
+let _projKanbanDragId = null
+
+window.projKanbanDragStart = function(e, taskId) {
+  _projKanbanDragId = taskId
+  e.dataTransfer.effectAllowed = 'move'
+}
+
+window.projKanbanDrop = async function(e, newStatus) {
+  e.preventDefault()
+  if (!_projKanbanDragId || !_projDashId) return
+  const proj = allNodes.find(n => n.id === _projDashId)
+  if (!proj) return
+  // Support both embedded kanban_tasks and linked task nodes
+  const tasks = proj.metadata?.kanban_tasks || []
+  const task = tasks.find(t => t.id === _projKanbanDragId)
+  if (task) {
+    task.status = newStatus
+    proj.metadata.kanban_tasks = tasks
+    await supabase.from('nodes').update({ metadata: proj.metadata }).eq('id', proj.id)
+  } else {
+    // Try as a standalone kanban/tarea node
+    const taskNode = allNodes.find(n => n.id === _projKanbanDragId)
+    if (taskNode) {
+      taskNode.metadata = taskNode.metadata || {}
+      taskNode.metadata.status = newStatus
+      await supabase.from('nodes').update({ metadata: taskNode.metadata }).eq('id', taskNode.id)
+    }
+  }
+  _projKanbanDragId = null
+  renderProyectos()
 }
 
 // ── TAB: NOTAS ───────────────────────────────────────────────────────────────
