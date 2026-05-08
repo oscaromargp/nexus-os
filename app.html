@@ -2626,41 +2626,136 @@
 
   <!-- MODAL: PROYECTO ─────────────────────────────────────── -->
   <div id="proyecto-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeProyectoModal()">
-    <div class="modal-box" style="max-width:420px;">
+    <div class="modal-box" style="max-width:480px;">
       <div class="modal-header">
-        <h3 class="modal-title">Editar Proyecto</h3>
+        <h3 class="modal-title">Configurar Proyecto</h3>
         <button class="modal-close" onclick="closeProyectoModal()">✕</button>
       </div>
-      <div class="modal-field">
-        <label class="modal-label">Nombre del proyecto</label>
-        <input type="text" id="proy-label" class="modal-input" placeholder="Ej: Casa Tulum" />
-      </div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-        <div class="modal-field" style="margin-bottom:0;"><label class="modal-label">Presupuesto total ($)</label><input type="number" id="proy-budget" class="modal-input" placeholder="0" step="1000" min="0" /></div>
-        <div class="modal-field" style="margin-bottom:0;">
-          <label class="modal-label">Mi rol</label>
-          <select id="proy-rol" class="modal-input">
-            <option value="dueño">👑 Dueño</option>
-            <option value="ejecutor">⚙️ Ejecutor</option>
-            <option value="colaborador">🤝 Colaborador</option>
-          </select>
+
+      <!-- Identidad visual -->
+      <div style="display:grid;grid-template-columns:72px 1fr;gap:12px;margin-bottom:16px;align-items:start;">
+        <div>
+          <label class="modal-label">Icono</label>
+          <input type="text" id="proy-emoji" class="modal-input" placeholder="🏠" maxlength="4"
+            style="text-align:center;font-size:28px;padding:6px;height:54px;cursor:pointer;"
+            onclick="this.select()" />
+          <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;">
+            ${['🏠','🌊','🏗️','💻','🌿','🏖️','🔧','📱','🏢','⚡','🌴','🏡'].map(e=>`<span onclick="document.getElementById('proy-emoji').value='${e}'" style="cursor:pointer;font-size:16px;padding:2px 3px;border-radius:4px;hover:background:rgba(255,255,255,0.1)">${e}</span>`).join('')}
+          </div>
+        </div>
+        <div>
+          <label class="modal-label">Nombre del proyecto</label>
+          <input type="text" id="proy-label" class="modal-input" placeholder="Ej: Casa Tulum" />
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+            <div>
+              <label class="modal-label" style="font-size:10px;">Categoría</label>
+              <select id="proy-category" class="modal-input" style="font-size:12px;">
+                <option value="inmueble">🏠 Inmueble</option>
+                <option value="digital">💻 Producto Digital</option>
+                <option value="personal">🌿 Personal</option>
+                <option value="negocio">🏢 Negocio</option>
+                <option value="otro">📦 Otro</option>
+              </select>
+            </div>
+            <div>
+              <label class="modal-label" style="font-size:10px;">Fase</label>
+              <select id="proy-stage" class="modal-input" style="font-size:12px;">
+                <option value="planning">📐 Planificación</option>
+                <option value="active">🚀 En ejecución</option>
+                <option value="on_hold">⏸️ Pausado</option>
+                <option value="done">✅ Terminado</option>
+              </select>
+            </div>
+          </div>
         </div>
       </div>
+
+      <!-- Cover URL -->
+      <div class="modal-field">
+        <label class="modal-label">🖼️ Imagen de portada (URL)</label>
+        <div style="display:flex;gap:8px;">
+          <input type="url" id="proy-cover" class="modal-input" placeholder="https://... (pega un enlace de imagen)" style="flex:1;" oninput="previewProjectCover(this.value)" />
+          <button onclick="document.getElementById('proy-cover').value='';previewProjectCover('')" style="background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;flex-shrink:0;">✕</button>
+        </div>
+        <div id="proy-cover-preview" style="margin-top:8px;height:60px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);overflow:hidden;display:none;">
+          <img id="proy-cover-img" style="width:100%;height:100%;object-fit:cover;" />
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Presupuesto total ($)</label>
+          <input type="number" id="proy-budget" class="modal-input" placeholder="0" step="1000" min="0" />
+        </div>
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Fecha estimada de cierre</label>
+          <input type="date" id="proy-deadline" class="modal-input" />
+        </div>
+      </div>
+
+      <div class="modal-field">
+        <label class="modal-label">Mi rol</label>
+        <select id="proy-rol" class="modal-input">
+          <option value="dueño">👑 Dueño / Administrador</option>
+          <option value="ejecutor">⚙️ Ejecutor</option>
+          <option value="colaborador">🤝 Colaborador</option>
+        </select>
+      </div>
+
       <div class="modal-field">
         <label class="modal-label">Descripción / Contexto</label>
-        <textarea id="proy-desc" class="modal-input" rows="2" placeholder="Objetivos, fechas clave, notas..."></textarea>
+        <textarea id="proy-desc" class="modal-input" rows="2" placeholder="¿Qué es este proyecto? Objetivos, contexto, notas importantes..."></textarea>
       </div>
+
       <div style="background:rgba(0,246,255,0.05); border:1px solid rgba(0,246,255,0.15); border-radius:10px; padding:10px 14px; margin-bottom:16px;">
-        <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.06em;">🏷️ Etiqueta del proyecto (úsala en el parser)</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.06em;">🏷️ Etiqueta del proyecto</div>
         <div id="proy-slug-display" style="font-size:14px; font-weight:600; color:#2dd4bf; font-family:monospace;">(se generará al guardar)</div>
         <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">
-          Gastos: <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px;">-$5000 pintura @efectivo #villamarina</code><br>
-          Cotizaciones: <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px;">#cotizacion $18000 impermeabilización @villamarina</code>
+          Gastos: <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px;">-$5000 pintura @efectivo #tulum</code>
         </div>
       </div>
       <div class="modal-actions">
         <button class="btn-ghost" onclick="closeProyectoModal()">Cancelar</button>
         <button class="btn-primary" onclick="saveProyecto()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ABONO A PROVEEDOR ───────────────────── -->
+  <div id="abono-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeAbonoModal()">
+    <div class="modal-box" style="max-width:400px;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="abono-modal-title">Registrar Abono</h3>
+        <button class="modal-close" onclick="closeAbonoModal()">✕</button>
+      </div>
+      <div id="abono-proveedor-info" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#fb923c;font-weight:600;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Monto ($)</label>
+          <input type="number" id="abono-amount" class="modal-input" placeholder="0" min="0" step="100" />
+        </div>
+        <div class="modal-field" style="margin-bottom:0;">
+          <label class="modal-label">Fecha</label>
+          <input type="date" id="abono-date" class="modal-input" />
+        </div>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Método de pago</label>
+        <select id="abono-method" class="modal-input">
+          <option value="transferencia">🏦 Transferencia</option>
+          <option value="efectivo">💵 Efectivo</option>
+          <option value="cheque">📋 Cheque</option>
+          <option value="tarjeta">💳 Tarjeta</option>
+          <option value="crypto">₿ Cripto</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label class="modal-label">Notas (opcional)</label>
+        <input type="text" id="abono-notes" class="modal-input" placeholder="Ej: Segunda parcialidad, pedido vía WhatsApp..." />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-ghost" onclick="closeAbonoModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveAbono()">💸 Registrar abono</button>
       </div>
     </div>
   </div>

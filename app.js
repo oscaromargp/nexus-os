@@ -3289,8 +3289,60 @@ window.saveAgendaItem = async () => {
   }
   closeAgendaModal()
   window._agendaPrefillProject = ''
-  await insertDirectNode(agendaItemType, name, meta)
+  if (editingAgendaId) {
+    // Edit mode — update existing node
+    const node = allNodes.find(n => n.id === editingAgendaId)
+    if (node) {
+      node.content  = name
+      node.metadata = { ...node.metadata, ...meta }
+      if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+        await supabase.from('nodes').update({ content: name, metadata: node.metadata }).eq('id', editingAgendaId)
+      renderAll()
+      showToast('✅ Actualizado')
+    }
+    editingAgendaId = null
+  } else {
+    await insertDirectNode(agendaItemType, name, meta)
+  }
 }
+window.editAgendaItem = (nodeId) => {
+  const node = allNodes.find(n => n.id === nodeId)
+  if (!node) return
+  const m = node.metadata || {}
+  agendaItemType  = node.type
+  editingAgendaId = nodeId
+  agendaColor     = m.color || (node.type === 'card' ? '#60a5fa' : node.type === 'subscription' ? '#a78bfa' : '#fb923c')
+  const titles = { card:'Editar Tarjeta', subscription:'Editar Suscripción', bill:'Editar Pago Fijo' }
+  document.getElementById('agenda-modal-title').textContent = titles[node.type] || 'Editar'
+  document.getElementById('ag-name').value = m.label || node.content || ''
+  document.getElementById('ag-fields-card').style.display      = node.type === 'card' ? '' : 'none'
+  document.getElementById('ag-fields-recurring').style.display = node.type !== 'card' ? '' : 'none'
+  document.getElementById('ag-category-wrap').style.display    = node.type === 'subscription' ? '' : 'none'
+  document.getElementById('ag-bill-fields').style.display      = node.type === 'bill' ? '' : 'none'
+  if (node.type !== 'card') {
+    document.getElementById('ag-amount').value = m.amount || ''
+    document.getElementById('ag-day').value    = m.dayOfMonth || ''
+    if (document.getElementById('ag-currency')) document.getElementById('ag-currency').value = m.currency || 'MXN'
+    if (node.type === 'subscription' && document.getElementById('ag-category')) document.getElementById('ag-category').value = m.category || ''
+    if (node.type === 'bill') {
+      if (document.getElementById('ag-bill-method')) document.getElementById('ag-bill-method').value = m.method || 'transferencia'
+      // Populate & set contact
+      const sel = document.getElementById('ag-bill-contact')
+      if (sel) {
+        const contacts = getContacts()
+        sel.innerHTML = '<option value="">— Sin contacto —</option>' + contacts.map(c => {
+          const name = c.metadata?.name || c.content
+          return `<option value="${c.id}" ${m.contactId===c.id?'selected':''}>${esc(name)}</option>`
+        }).join('')
+      }
+    }
+  }
+  document.querySelectorAll('#agenda-modal .ev-color-swatch').forEach(s => s.classList.remove('active'))
+  document.querySelector(`#agenda-modal .ev-color-swatch[data-color="${agendaColor}"]`)?.classList.add('active')
+  document.getElementById('agenda-modal').classList.remove('hidden')
+  setTimeout(() => document.getElementById('ag-name')?.focus(), 60)
+}
+
 window.deleteAgendaItem = async (nodeId) => {
   if (!confirm('¿Eliminar este ítem?')) return
   allNodes = allNodes.filter(n => n.id !== nodeId)
@@ -3304,6 +3356,56 @@ window.toggleBillPaid = async (nodeId) => {
   renderAll()
   if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
     await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', nodeId)
+}
+
+// ═══════════════════════════════════════════════════════════
+// ABONOS — Pagos parciales a proveedores
+// ═══════════════════════════════════════════════════════════
+let _abonoProviderId   = null
+let _abonoProjectSlug  = null
+let _abonoRefreshId    = null   // project id to refresh after save
+
+window.openAbonoModal = (provId, provName, projSlug, projectId) => {
+  _abonoProviderId  = provId
+  _abonoProjectSlug = projSlug
+  _abonoRefreshId   = projectId
+  const infoEl = document.getElementById('abono-proveedor-info')
+  if (infoEl) infoEl.textContent = `💸 Abono a: ${provName}`
+  document.getElementById('abono-amount').value = ''
+  document.getElementById('abono-date').value   = new Date().toISOString().split('T')[0]
+  document.getElementById('abono-method').value = 'transferencia'
+  document.getElementById('abono-notes').value  = ''
+  document.getElementById('abono-modal').classList.remove('hidden')
+  setTimeout(() => document.getElementById('abono-amount')?.focus(), 60)
+}
+window.closeAbonoModal = () => document.getElementById('abono-modal')?.classList.add('hidden')
+
+window.saveAbono = async () => {
+  const amount = parseFloat(document.getElementById('abono-amount').value)
+  if (!amount || amount <= 0) { showToast('⚠️ Ingresa un monto válido'); return }
+  const date   = document.getElementById('abono-date').value || new Date().toISOString().split('T')[0]
+  const method = document.getElementById('abono-method').value
+  const notes  = document.getElementById('abono-notes').value.trim()
+  const label  = notes || `Abono ${method}`
+  const meta = {
+    label, amount, date,
+    method,
+    contact_id:  _abonoProviderId,
+    project_tag: _abonoProjectSlug,
+    es_abono:    true,
+    notes:       notes || undefined,
+  }
+  closeAbonoModal()
+  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+    const tmp = { id: Math.random().toString(36).substr(2,9), type:'expense', content:label, metadata:meta, created_at: new Date().toISOString() }
+    allNodes.unshift(tmp)
+  } else {
+    const { data } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'expense', content:label, metadata:meta }).select()
+    if (data?.[0]) allNodes.unshift(data[0])
+  }
+  await autoLinkToProject(allNodes[0]?.id, _abonoProjectSlug)
+  showToast(`✅ Abono de $${amount.toLocaleString('es-MX')} registrado`)
+  if (_abonoRefreshId) openProjectDashboard(_abonoRefreshId)
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -6853,343 +6955,550 @@ function _computeProjData(projectId) {
 }
 
 window.openProjectDashboard = (projectId) => {
+  _projDashId  = projectId
+  if (_projDashTab !== 'resumen' && _projDashId !== projectId) _projDashTab = 'resumen'
   const d = _computeProjData(projectId)
   if (!d) return
-  const { p, m, budget, rCfg, tagStr, projSlug, allLinked,
-          cots, aceptadas, pendientes, comprometido, pagos, pagado,
-          pendientePago, sinComprometer, overBudget, pct, gaugeColor,
-          cotsByCat, provMap, tareas, milestonePct, disponible } = d
+  const { p, m, budget, rCfg, tagStr, projSlug } = d
 
   const root = document.getElementById('proyectos-root')
-  const _safe = (fn, fallback = '') => { try { return fn() } catch(e) { console.warn('[dash]', e); return fallback } }
+  const coverUrl   = m.cover_url || ''
+  const nameHash   = (m.label||p.content||'P').charCodeAt(0) % 6
+  const gradients  = ['linear-gradient(135deg,#1e3a5f,#0f2027)','linear-gradient(135deg,#2d1b69,#11998e)','linear-gradient(135deg,#3c1053,#ad5389)','linear-gradient(135deg,#1a1a2e,#0f3460)','linear-gradient(135deg,#134e5e,#71b280)','linear-gradient(135deg,#2c3e50,#4ca1af)']
+  const coverBg    = coverUrl ? `url('${coverUrl}') center/cover no-repeat` : gradients[nameHash]
+  const projEmoji  = m.emoji || '🏗️'
+  const projName   = m.label || p.content || 'Proyecto'
+  const STAGE_CFG  = { planning:{emoji:'📐',label:'Planificación',color:'#94a3b8'}, active:{emoji:'⚡',label:'En ejecución',color:'#4ade80'}, on_hold:{emoji:'⏸',label:'Pausado',color:'#fbbf24'}, done:{emoji:'✅',label:'Terminado',color:'#a78bfa'} }
+  const HEALTH_CFG = { on_track:{emoji:'🟢',label:'En curso',color:'#4ade80'}, at_risk:{emoji:'🟡',label:'En riesgo',color:'#fbbf24'}, off_track:{emoji:'🔴',label:'Atrasado',color:'#f87171'}, on_hold:{emoji:'🔵',label:'Pausado',color:'#60a5fa'}, done:{emoji:'🟣',label:'Terminado',color:'#a78bfa'} }
+  const stageCfg   = STAGE_CFG[m.stage] || STAGE_CFG.planning
+  const healthCfg  = HEALTH_CFG[(m.health||{}).status] || null
+  const accentColor= healthCfg?.color || stageCfg.color
+
+  const TABS = [
+    { id:'resumen',  label:'📋 Resumen'  },
+    { id:'finanzas', label:'💼 Finanzas' },
+    { id:'kanban',   label:'✅ Kanban'   },
+    { id:'notas',    label:'🧠 Notas'    },
+  ]
+
   root.innerHTML = `
-    <div style="padding:20px 24px;">
-      <!-- Back + header -->
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;flex-wrap:wrap;">
-        <button onclick="renderProyectos()" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:7px 14px;cursor:pointer;font-size:13px;flex-shrink:0;">← Proyectos</button>
-        <div style="flex:1;min-width:0;">
-          <h1 style="margin:0;font-size:22px;font-weight:800;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.label||p.content)}</h1>
-          ${m.desc ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${esc(m.desc)}</div>` : ''}
-        </div>
-        <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
-          <span style="font-size:11px;font-weight:700;background:${rCfg.color}20;color:${rCfg.color};border-radius:6px;padding:4px 10px;">${rCfg.label}</span>
-          <button onclick="openProyectoModal('${p.id}')" style="background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text-muted);border-radius:8px;padding:7px 12px;cursor:pointer;font-size:13px;">✏️ Editar</button>
+    <!-- ── COVER HEADER ── -->
+    <div style="position:relative;height:180px;background:${coverBg};flex-shrink:0;overflow:hidden;">
+      <div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.2) 0%,rgba(0,0,0,0.65) 100%);"></div>
+      <!-- Back button -->
+      <button onclick="renderProyectos()" style="position:absolute;top:14px;left:16px;z-index:2;background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.18);color:#fff;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600;">← Proyectos</button>
+      <!-- Top-right actions -->
+      <div style="position:absolute;top:14px;right:16px;z-index:2;display:flex;gap:8px;">
+        <button onclick="openProyectoModal('${p.id}')" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">✏️ Editar</button>
+        <button onclick="window.print?.()" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📄 Reporte</button>
+      </div>
+      <!-- Big emoji icon -->
+      <div style="position:absolute;bottom:-24px;left:24px;width:52px;height:52px;border-radius:14px;background:var(--bg-panel);border:2px solid ${accentColor}60;display:grid;place-items:center;font-size:28px;box-shadow:0 4px 20px rgba(0,0,0,0.5);z-index:2;">${projEmoji}</div>
+      <!-- Project name overlaid bottom -->
+      <div style="position:absolute;bottom:12px;left:90px;right:16px;z-index:2;">
+        <h1 style="margin:0;font-size:20px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 2px 8px rgba(0,0,0,0.6);">${esc(projName)}</h1>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:700;background:${stageCfg.color}22;color:${stageCfg.color};border:1px solid ${stageCfg.color}44;border-radius:6px;padding:2px 8px;">${stageCfg.emoji} ${stageCfg.label}</span>
+          ${healthCfg ? `<span style="font-size:11px;font-weight:700;background:${healthCfg.color}22;color:${healthCfg.color};border:1px solid ${healthCfg.color}44;border-radius:6px;padding:2px 8px;">${healthCfg.emoji} ${healthCfg.label}</span>` : ''}
+          ${rCfg ? `<span style="font-size:11px;font-weight:700;background:${rCfg.color}22;color:${rCfg.color};border:1px solid ${rCfg.color}44;border-radius:6px;padding:2px 8px;">${rCfg.label}</span>` : ''}
         </div>
       </div>
+    </div>
 
-      <!-- ── ACCIONES RÁPIDAS ── -->
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;">
-        <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.08em;align-self:center;margin-right:4px;">ACCIONES</span>
-        <button onclick="openMilestoneForm('${p.id}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🏁 Hito</button>
-        <button onclick="openCotizacionModal(null,'${projSlug}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📄 Cotización</button>
-        <button onclick="openProveedorPicker('${projSlug}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🔧 Proveedor</button>
-        <button onclick="openMemberModal('${p.id}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">👤 Persona</button>
-        <button onclick="openHealthModal('${p.id}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📊 Estado</button>
-        <button onclick="openAgendaModal('bill','${projSlug}')" style="display:flex;align-items:center;gap:5px;font-size:12px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📅 Pago Fijo</button>
-      </div>
+    <!-- ── ACCIONES RÁPIDAS ── -->
+    <div style="padding:12px 20px 0;margin-top:32px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:12px;">
+      <button onclick="openMilestoneForm('${p.id}')" style="font-size:12px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🏁 Hito</button>
+      <button onclick="openCotizacionModal(null,'${projSlug}')" style="font-size:12px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📄 Cotización</button>
+      <button onclick="openProveedorPicker('${projSlug}')" style="font-size:12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🔧 Proveedor</button>
+      <button onclick="openMemberModal('${p.id}')" style="font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">👤 Persona</button>
+      <button onclick="openHealthModal('${p.id}')" style="font-size:12px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📊 Estado</button>
+      <button onclick="openAgendaModal('bill','${projSlug}')" style="font-size:12px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📅 Pago Fijo</button>
+    </div>
 
-      ${overBudget ? `<div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;"><span style="font-size:18px;">⚠️</span><div><div style="font-size:13px;font-weight:700;color:#f87171;">Presupuesto excedido</div><div style="font-size:12px;color:var(--text-muted);">Comprometido $${comprometido.toLocaleString('es-MX')} / Presupuesto $${budget.toLocaleString('es-MX')}</div></div></div>` : ''}
+    <!-- ── TABS ── -->
+    <div id="proj-tabs" style="display:flex;gap:2px;padding:0 16px;background:var(--bg-panel);border-bottom:1px solid rgba(255,255,255,0.06);">
+      ${TABS.map(t => `
+        <button id="proj-tab-${t.id}" onclick="switchProjTab('${t.id}')"
+          style="padding:12px 16px;background:none;border:none;border-bottom:2px solid ${_projDashTab===t.id?accentColor:'transparent'};color:${_projDashTab===t.id?accentColor:'var(--text-muted)'};cursor:pointer;font-size:13px;font-weight:${_projDashTab===t.id?'700':'500'};font-family:inherit;white-space:nowrap;transition:all .15s;">
+          ${t.label}
+        </button>`).join('')}
+    </div>
 
-      <!-- ── SALUD DEL PROYECTO (Odoo project.update) ── -->
-      ${_safe(() => {
-        const h = m.health || {}
-        const HCFG = { on_track:{emoji:'🟢',label:'En curso',color:'#4ade80'}, at_risk:{emoji:'🟡',label:'En riesgo',color:'#fbbf24'}, off_track:{emoji:'🔴',label:'Atrasado',color:'#f87171'}, on_hold:{emoji:'🔵',label:'Pausado',color:'#60a5fa'}, done:{emoji:'🟣',label:'Terminado',color:'#a78bfa'} }
-        const hc = HCFG[h.status] || null
-        const STAGES = [{v:'planning',l:'📐 Planificación'},{v:'active',l:'🚀 En ejecución'},{v:'on_hold',l:'⏸️ Pausado'},{v:'done',l:'✅ Terminado'}]
-        const displayPct = h.progress != null ? h.progress : milestonePct
-        const pctSource  = h.progress != null ? 'manual' : (milestonePct != null ? 'hitos' : null)
-        const barColor   = hc?.color || (displayPct >= 75 ? '#4ade80' : displayPct >= 40 ? '#fbbf24' : '#00f6ff')
-        return `
-          <div style="background:var(--surface);border:1px solid ${hc?hc.color+'44':'var(--border)'};border-radius:12px;padding:16px;margin-bottom:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">SALUD</span>
-                ${hc?`<span style="font-size:12px;font-weight:700;background:${hc.color}18;color:${hc.color};border-radius:6px;padding:3px 10px;">${hc.emoji} ${hc.label}</span>`:'<span style="font-size:12px;color:var(--text-muted);">Sin estado registrado</span>'}
-                <select onchange="projSetStage('${p.id}',this.value)" onclick="event.stopPropagation()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:3px 8px;color:var(--text-secondary);font-size:11px;font-family:inherit;" title="Fase del proyecto">
-                  ${STAGES.map(s=>`<option value="${s.v}" ${m.stage===s.v?'selected':''}>${s.l}</option>`).join('')}
-                </select>
-              </div>
-            </div>
-            ${displayPct != null ? `
-              <div style="margin-bottom:${h.note?'12px':'0'};">
-                <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-                  <span style="font-size:11px;color:var(--text-muted);">Avance ${pctSource==='hitos'?'<span style="color:#2dd4bf;font-size:10px;">(auto · por hitos)</span>':pctSource==='manual'?'<span style="color:var(--text-dim);font-size:10px;">(manual)</span>':''}</span>
-                  <span style="font-size:13px;font-weight:800;color:${barColor};">${displayPct}%</span>
-                </div>
-                <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
-                  <div style="height:100%;width:${displayPct}%;background:${barColor};border-radius:4px;transition:width .6s;"></div>
-                </div>
-                ${pctSource==='hitos'&&h.progress==null?`<div style="font-size:10px;color:var(--text-dim);margin-top:5px;">Calculado de ${mils.filter(ms=>ms.is_reached).length}/${mils.length} hitos completados — ajusta en "📊 Estado"</div>`:'' }
-              </div>` : `<div style="font-size:12px;color:var(--text-dim);">Sin progreso registrado — usa <strong style="color:#4ade80;">📊 Estado</strong> o agrega hitos.</div>`}
-            ${h.note ? `<div style="font-size:12px;color:var(--text-muted);font-style:italic;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;border-left:3px solid ${hc?.color||'var(--border)'};">"${esc(h.note)}"</div>` : ''}
-            ${h.updated_at ? `<div style="font-size:10px;color:var(--text-dim);margin-top:8px;">Última actualización: ${h.updated_at}</div>` : ''}
-          </div>`
-      })}
-
-      <!-- ── HITOS / CHECKPOINTS ── -->
-      ${_safe(() => {
-        const milsLocal = m.milestones || []
-        const today = new Date().toISOString().split('T')[0]
-        const done = milsLocal.filter(ms => ms.is_reached).length
-        return `
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">🏁 HITOS</span>
-                ${milsLocal.length ? `<span style="font-size:11px;color:#2dd4bf;font-weight:700;">${done}/${milsLocal.length} completados</span>` : ''}
-              </div>
-              <button onclick="openMilestoneForm('${p.id}')" style="font-size:11px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">+ Agregar</button>
-            </div>
-            ${milsLocal.length === 0 ? `<div style="font-size:12px;color:var(--text-dim);padding:8px;text-align:center;">Sin hitos — define checkpoints para calcular el avance automáticamente</div>` :
-              milsLocal.map((ms,i) => {
-                const overdue = !ms.is_reached && ms.deadline && ms.deadline < today
-                const clr = ms.is_reached ? '#4ade80' : overdue ? '#f87171' : '#2dd4bf'
-                return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-                  <button onclick="toggleMilestone('${p.id}',${i})" title="${ms.is_reached?'Marcar pendiente':'Marcar completado'}" style="width:22px;height:22px;border-radius:50%;border:2px solid ${clr};background:${ms.is_reached?clr:'transparent'};cursor:pointer;display:grid;place-items:center;flex-shrink:0;font-size:12px;color:${ms.is_reached?'#000':'transparent'};transition:all .2s;">✓</button>
-                  <div style="flex:1;min-width:0;">
-                    <div style="font-size:13px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.55;':''}">${esc(ms.name)}</div>
-                    ${ms.deadline ? `<div style="font-size:10px;color:${clr};margin-top:1px;">${overdue?'⚠️ Vencido':'📅 Límite'}: ${ms.deadline}</div>` : ''}
-                  </div>
-                  <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;" title="Eliminar hito">✕</button>
-                </div>`
-              }).join('')}
-            ${milsLocal.length > 0 ? `
-              <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">
-                <div style="height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
-                  <div style="height:100%;width:${Math.round(done/milsLocal.length*100)}%;background:#2dd4bf;border-radius:3px;transition:width .6s;"></div>
-                </div>
-              </div>` : ''}
-          </div>`
-      })}
-
-      <!-- Equipo del proyecto -->
-      ${_safe(() => {
-        const members = m.members || []
-        if (!members.length) return `
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:20px;display:flex;align-items:center;gap:14px;">
-            <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">👥 EQUIPO</div>
-            <button onclick="openMemberModal('${p.id}')" style="font-size:12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:4px 12px;cursor:pointer;">+ Añadir persona</button>
-          </div>`
-        const roleOrder = ['financiador','administrador','supervisor','ejecutor','colaborador']
-        const grouped = {}
-        members.forEach(mb => {
-          const k = mb.role || 'colaborador'
-          if (!grouped[k]) grouped[k] = []
-          grouped[k].push(mb)
-        })
-        const roleCfg = { financiador:{label:'💰 Financiador',color:'#f59e0b'}, administrador:{label:'🗂️ Admin',color:'#60a5fa'}, ejecutor:{label:'🔧 Ejecutor',color:'#fb923c'}, supervisor:{label:'👁️ Supervisor',color:'#a78bfa'}, colaborador:{label:'🤝 Colaborador',color:'#4ade80'} }
-        return `
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-              <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">👥 EQUIPO (${members.length})</div>
-              <button onclick="openMemberModal('${p.id}')" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
-            </div>
-            ${roleOrder.filter(r=>grouped[r]).map(role => {
-              const cfg = roleCfg[role] || {label:role,color:'#94a3b8'}
-              return `
-                <div style="margin-bottom:12px;">
-                  <div style="font-size:10px;font-weight:700;color:${cfg.color};margin-bottom:8px;">${cfg.label}</div>
-                  <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                    ${grouped[role].map(mb => {
-                      const c = allNodes.find(n => n.id === mb.contact_id)
-                      const name = c ? (c.metadata?.name||c.content) : 'Sin nombre'
-                      const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
-                      const isProv = c?.metadata?.cType === 'proveedor'
-                      return `<div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:7px 12px;position:relative;" title="${esc(mb.notes||'')}">
-                        <div style="width:28px;height:28px;border-radius:50%;background:${cfg.color}20;color:${cfg.color};display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;">${initials}</div>
-                        <div>
-                          <div style="font-size:12px;font-weight:600;color:var(--text-primary);">${esc(name)}</div>
-                          ${mb.notes?`<div style="font-size:10px;color:var(--text-muted);">${esc(mb.notes)}</div>`:''}
-                        </div>
-                        ${isProv?`<button onclick="openPaymentModal('${mb.contact_id}',null,'${projSlug}')" style="font-size:10px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:5px;padding:2px 7px;cursor:pointer;flex-shrink:0;">💸</button>`:''}
-                        <button onclick="removeMember('${p.id}','${mb.contact_id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:0 2px;flex-shrink:0;" title="Quitar">×</button>
-                      </div>`
-                    }).join('')}
-                  </div>
-                </div>`
-            }).join('')}
-          </div>`
-      })}
-
-      <!-- ── PANEL FINANCIERO ── -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">💼 FINANZAS DEL PROYECTO</span>
-          ${budget === 0 ? `<button onclick="openProyectoModal('${p.id}')" style="font-size:11px;color:var(--text-muted);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:3px 10px;cursor:pointer;">+ Definir presupuesto</button>` : ''}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:${budget>0?'14px':'0'};">
-          ${[
-            {label:'Presupuesto',val:budget,color:'#a78bfa',icon:'💰',tip:'Monto total planificado para el proyecto',show:budget>0},
-            {label:'Comprometido',val:comprometido,color:'#4ade80',icon:'📋',tip:'Suma de cotizaciones aceptadas',show:true},
-            {label:'Pagado',val:pagado,color:'#60a5fa',icon:'✅',tip:'Total ya liquidado a proveedores',show:true},
-            {label:'Por pagar',val:pendientePago,color:pendientePago>0?'#fb923c':'#94a3b8',icon:'⏳',tip:'Comprometido menos pagado',show:true},
-            {label:'Disponible',val:disponible??0,color:disponible!=null?(disponible<0?'#f87171':'#94a3b8'):'#94a3b8',icon:disponible!=null&&disponible<0?'🚨':'🔵',tip:'Presupuesto menos comprometido',show:budget>0},
-          ].filter(x=>x.show).map(x=>`
-            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;text-align:center;" title="${x.tip}">
-              <div style="font-size:16px;margin-bottom:5px;">${x.icon}</div>
-              <div style="font-size:13px;font-weight:800;font-family:monospace;color:${x.color};">$${Math.abs(x.val).toLocaleString('es-MX',{maximumFractionDigits:0})}${x.label==='Disponible'&&x.val<0?' 🚨':''}</div>
-              <div style="font-size:10px;color:var(--text-muted);margin-top:3px;">${x.label}</div>
-            </div>`).join('')}
-        </div>
-        ${budget > 0 ? `
-          <div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
-              <span style="font-size:11px;color:var(--text-muted);">Uso del presupuesto</span>
-              <span style="font-size:11px;font-weight:700;color:${gaugeColor};">${pct}% ${overBudget?'⚠️ EXCEDIDO':''}</span>
-            </div>
-            <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
-              <div style="height:100%;width:${pct}%;background:${gaugeColor};border-radius:4px;transition:width 0.6s;"></div>
-            </div>
-          </div>` : ''}
-      </div>
-
-      <!-- Proveedores contratados -->
-      ${Object.keys(provMap).length ? `
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-        <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;margin-bottom:14px;">⚙️ PROVEEDORES CONTRATADOS</div>
-        ${Object.entries(provMap).map(([pid, pd]) => {
-          const prov = allNodes.find(n => n.id === pid)
-          const provName = prov?.metadata?.name || prov?.content || 'Proveedor'
-          const acordado = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
-          const pagadoProv = pd.pagos.reduce((s,g)=>s+(+g.metadata?.amount||0),0)
-          const pendProv = Math.max(0, acordado - pagadoProv)
-          const excedente = pagadoProv > acordado
-          return `
-            <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-              <div style="width:32px;height:32px;border-radius:50%;background:rgba(251,146,60,0.12);color:#fb923c;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0;">${esc(provName.charAt(0).toUpperCase())}</div>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:13px;font-weight:700;color:var(--text-primary);">${esc(provName)}</div>
-                <div style="font-size:11px;color:var(--text-muted);">Acordado: <span style="color:#4ade80;font-family:monospace;">$${acordado.toLocaleString('es-MX')}</span> · Pagado: <span style="color:#60a5fa;font-family:monospace;">$${pagadoProv.toLocaleString('es-MX')}</span>${pendProv>0?` · Pendiente: <span style="color:#fb923c;font-family:monospace;">$${pendProv.toLocaleString('es-MX')}</span>`:''}${excedente?` <span style="color:#f87171;font-weight:700;">⚠️ Excedente</span>`:''}</div>
-              </div>
-              ${prov ? `<button onclick="openPaymentModal('${pid}',null,'${projSlug}')" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:11px;flex-shrink:0;">💸 Pagar</button>` : ''}
-            </div>`
-        }).join('')}
-      </div>` : ''}
-
-      <!-- Pagos Fijos del proyecto -->
-      ${_safe(() => {
-        const CATS_PAGO = ['Agua','Luz / Electricidad','Gas','Internet','Teléfono','Jardinero','Alberca / Piscina','Seguridad','Mantenimiento','Renta','Otro servicio fijo']
-        const pagosFijos = allNodes.filter(n =>
-          (n.type==='bill'||n.type==='subscription') &&
-          tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)
-        )
-        const today = new Date()
-        const upcomingDays = 15
-        const upcoming = pagosFijos.filter(n => {
-          const day = n.metadata?.dayOfMonth
-          if (!day) return false
-          const next = new Date(today.getFullYear(), today.getMonth(), day)
-          if (next < today) next.setMonth(next.getMonth()+1)
-          return (next-today)/(1000*60*60*24) <= upcomingDays
-        }).sort((a,b)=>(a.metadata?.dayOfMonth||31)-(b.metadata?.dayOfMonth||31))
-
-        return `
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-              <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">📅 PAGOS FIJOS DEL PROYECTO</div>
-              <button onclick="openAgendaModal('bill','${projSlug}')" style="font-size:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
-            </div>
-            ${upcoming.length ? `<div style="margin-bottom:10px;padding:10px;background:rgba(167,139,250,0.05);border-radius:8px;">
-              <div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:8px;">⏰ PRÓXIMOS ${upcomingDays} DÍAS</div>
-              ${upcoming.map(n=>{
-                const day=n.metadata?.dayOfMonth; const amt=n.metadata?.amount||0
-                return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;">
-                  <span style="font-size:11px;background:rgba(167,139,250,0.15);color:#a78bfa;border-radius:4px;padding:1px 6px;font-weight:700;flex-shrink:0;">día ${day}</span>
-                  <span style="flex:1;font-size:12px;color:var(--text-primary);">${esc(n.metadata?.label||n.content)}</span>
-                  <span style="font-size:12px;font-weight:700;font-family:monospace;color:#fb923c;">$${amt.toLocaleString('es-MX')}</span>
-                  <button onclick="toggleBillPaid('${n.id}')" style="font-size:10px;background:${n.metadata?.paid?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.05)'};border:1px solid ${n.metadata?.paid?'rgba(74,222,128,0.3)':'rgba(255,255,255,0.1)'};color:${n.metadata?.paid?'#4ade80':'var(--text-muted)'};border-radius:5px;padding:2px 7px;cursor:pointer;">${n.metadata?.paid?'✓ Pagado':'Marcar'}</button>
-                </div>`
-              }).join('')}
-            </div>` : ''}
-            ${pagosFijos.length === 0 ? `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Sin pagos fijos registrados para este proyecto</div>` : (() => {
-              // Excluir los que ya se muestran en "Próximos X días" para evitar duplicados
-              const upcomingIds = new Set(upcoming.map(u => u.id))
-              const restantes = pagosFijos.filter(n => !upcomingIds.has(n.id))
-              return restantes.length === 0 ? '' : restantes.map(n => {
-                const amt = n.metadata?.amount||0
-                const day = n.metadata?.dayOfMonth
-                return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-                  ${day?`<span style="font-size:10px;color:var(--text-muted);background:rgba(255,255,255,0.06);border-radius:4px;padding:1px 6px;flex-shrink:0;">día ${day}</span>`:''}
-                  <span style="flex:1;font-size:13px;color:var(--text-primary);">${esc(n.metadata?.label||n.content)}</span>
-                  <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;">$${amt.toLocaleString('es-MX')}</span>
-                  <button onclick="toggleBillPaid('${n.id}')" style="font-size:10px;background:${n.metadata?.paid?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.05)'};border:1px solid ${n.metadata?.paid?'rgba(74,222,128,0.3)':'rgba(255,255,255,0.1)'};color:${n.metadata?.paid?'#4ade80':'var(--text-muted)'};border-radius:5px;padding:2px 7px;cursor:pointer;">${n.metadata?.paid?'✓':'Pagar'}</button>
-                  <button onclick="deleteAgendaItem('${n.id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0 2px;" title="Eliminar">×</button>
-                </div>`
-              }).join('')
-            })()}
-            ${pagosFijos.length > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;">
-              <span style="font-size:11px;color:var(--text-muted);">Total mensual estimado</span>
-              <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;">$${pagosFijos.reduce((s,n)=>s+(+n.metadata?.amount||0),0).toLocaleString('es-MX')}</span>
-            </div>` : ''}
-          </div>`
-      })}
-
-      <!-- Cotizaciones por categoría -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-          <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">📄 COTIZACIONES</div>
-          <button onclick="openCotizacionModal(null,'${projSlug}')" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Nueva</button>
-        </div>
-        ${cots.length === 0 ? `<div style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Sin cotizaciones aún</div>` :
-          Object.entries(cotsByCat).map(([cat,cs]) => `
-            <div style="margin-bottom:14px;">
-              <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:8px;">
-                <span style="background:rgba(255,255,255,0.06);border-radius:4px;padding:2px 8px;">${esc(cat)}</span>
-                <span>$${cs.reduce((s,c)=>s+(+c.metadata?.amount||0),0).toLocaleString('es-MX')}</span>
-              </div>
-              ${cs.map(c => {
-                const stCfg = COT_STATUS[c.metadata?.status] || COT_STATUS.pendiente
-                const prov = c.metadata?.provider_id ? allNodes.find(n=>n.id===c.metadata.provider_id) : null
-                return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);" onclick="openCotizacionModal('${c.id}')" >
-                  <span style="flex:1;font-size:13px;color:var(--text-primary);cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.metadata?.label||c.content)}</span>
-                  ${prov ? `<span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">${esc(prov.metadata?.name||prov.content)}</span>` : ''}
-                  <span style="font-size:12px;font-weight:800;font-family:monospace;color:#fb923c;flex-shrink:0;">$${(+c.metadata?.amount||0).toLocaleString('es-MX')}</span>
-                  <span style="font-size:9px;padding:2px 7px;border-radius:4px;background:${stCfg.color}22;color:${stCfg.color};font-weight:700;flex-shrink:0;">${stCfg.label}</span>
-                  ${c.metadata?.status !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${c.id}','aceptada')" style="color:#4ade80;cursor:pointer;font-size:14px;flex-shrink:0;" title="Aceptar">✅</span>` : ''}
-                </div>`
-              }).join('')}
-            </div>`
-          ).join('')
-        }
-        ${pendientes.length ? `<div style="margin-top:12px;padding:10px;background:rgba(251,146,60,0.05);border-radius:8px;font-size:11px;color:var(--text-muted);">⏳ ${pendientes.length} cotización${pendientes.length!==1?'es':''} pendiente${pendientes.length!==1?'s':''} de resolver</div>` : ''}
-      </div>
-
-      <!-- Materiales / Compras (pagos sin proveedor) -->
-      ${_safe(() => {
-        // Deduplicar por ID antes de mostrar (previene duplicados por linkedTo + byTag)
-        const materiales = [...new Map(
-          pagos.filter(g => !g.metadata?.service_id && !provMap[g.metadata?.contact_id]).map(g=>[g.id,g])
-        ).values()]
-        if (!materiales.length) return ''
-        const totalMat = materiales.reduce((s,g)=>s+(+g.metadata?.amount||0),0)
-        return `
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-              <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;">🧱 MATERIALES / COMPRAS</div>
-              <span style="font-size:12px;font-weight:800;font-family:monospace;color:#94a3b8;">$${totalMat.toLocaleString('es-MX')}</span>
-            </div>
-            ${materiales.map(g=>`
-              <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-                <span style="flex:1;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(g.metadata?.label||g.content)}">${esc(g.metadata?.label||g.content)}</span>
-                <span style="font-size:12px;font-weight:800;font-family:monospace;color:#60a5fa;">$${(+g.metadata?.amount||0).toLocaleString('es-MX')}</span>
-                <span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">${(g.metadata?.date||g.created_at||'').slice(0,10)}</span>
-                <button onclick="deleteNode('${g.id}')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:0 2px;flex-shrink:0;" title="Eliminar este pago">×</button>
-              </div>`).join('')}
-          </div>`
-      })}
-
-      <!-- Tareas -->
-      ${tareas.length ? `
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;">
-        <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;margin-bottom:14px;">✅ TAREAS (${tareas.length})</div>
-        ${tareas.map(t=>`
-          <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <span style="font-size:13px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.metadata?.label||t.content)}</span>
-            ${t.metadata?.status ? `<span style="font-size:10px;color:var(--text-muted);">${esc(t.metadata.status)}</span>` : ''}
-          </div>`).join('')}
-      </div>` : ''}
+    <!-- ── TAB CONTENT ── -->
+    <div id="proj-tab-content" style="padding:20px 24px;overflow-y:auto;">
+      ${_renderProjTab(_projDashTab, d)}
     </div>`
 }
+
+window.switchProjTab = (tab) => {
+  _projDashTab = tab
+  const d = _computeProjData(_projDashId)
+  if (!d) return
+  const accentColor = (d.m.health?.status ? ({on_track:'#4ade80',at_risk:'#fbbf24',off_track:'#f87171',on_hold:'#60a5fa',done:'#a78bfa'}[d.m.health.status]) : null) || ({planning:'#94a3b8',active:'#4ade80',on_hold:'#fbbf24',done:'#a78bfa'}[d.m.stage]) || '#00f6ff'
+  // Update tab highlight
+  document.querySelectorAll('[id^="proj-tab-"]').forEach(btn => {
+    const t = btn.id.replace('proj-tab-','')
+    btn.style.borderBottom = `2px solid ${t === tab ? accentColor : 'transparent'}`
+    btn.style.color = t === tab ? accentColor : 'var(--text-muted)'
+    btn.style.fontWeight = t === tab ? '700' : '500'
+  })
+  // Re-render content only
+  const content = document.getElementById('proj-tab-content')
+  if (content) content.innerHTML = _renderProjTab(tab, d)
+}
+
+function _renderProjTab(tab, d) {
+  if (tab === 'resumen')  return _renderProjResumen(d)
+  if (tab === 'finanzas') return _renderProjFinanzas(d)
+  if (tab === 'kanban')   return _renderProjKanban(d)
+  if (tab === 'notas')    return _renderProjNotas(d)
+  return ''
+}
+
+// ── TAB: RESUMEN ─────────────────────────────────────────────────────────────
+function _renderProjResumen(d) {
+  const { p, m, budget, rCfg, tagStr, projSlug, milestonePct, tareas } = d
+  const _s = (fn) => { try { return fn() } catch(e) { return '' } }
+  const HCFG = { on_track:{emoji:'🟢',label:'En curso',color:'#4ade80'}, at_risk:{emoji:'🟡',label:'En riesgo',color:'#fbbf24'}, off_track:{emoji:'🔴',label:'Atrasado',color:'#f87171'}, on_hold:{emoji:'🔵',label:'Pausado',color:'#60a5fa'}, done:{emoji:'🟣',label:'Terminado',color:'#a78bfa'} }
+  const STAGES = [{v:'planning',l:'📐 Planificación'},{v:'active',l:'🚀 En ejecución'},{v:'on_hold',l:'⏸️ Pausado'},{v:'done',l:'✅ Terminado'}]
+  const h   = m.health || {}
+  const hc  = HCFG[h.status] || null
+  const mils = m.milestones || []
+  const milsDone = mils.filter(ms => ms.is_reached).length
+  const today = new Date().toISOString().split('T')[0]
+  const displayPct = h.progress != null ? h.progress : milestonePct
+  const pctSource  = h.progress != null ? 'manual' : (milestonePct != null ? 'hitos' : null)
+  const barColor   = hc?.color || (displayPct >= 75 ? '#4ade80' : displayPct >= 40 ? '#fbbf24' : '#00f6ff')
+  const members    = m.members || []
+
+  return `
+    <!-- Descripción -->
+    ${m.desc ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);line-height:1.6;">${esc(m.desc)}</div>` : ''}
+
+    <!-- Salud -->
+    <div style="background:var(--surface);border:1px solid ${hc?hc.color+'44':'var(--border)'};border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:${displayPct!=null||h.note?'14px':'0'};">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">SALUD</span>
+          ${hc ? `<span style="font-size:12px;font-weight:700;background:${hc.color}18;color:${hc.color};border-radius:6px;padding:3px 10px;">${hc.emoji} ${hc.label}</span>` : '<span style="font-size:12px;color:var(--text-dim);">Sin estado</span>'}
+          <select onchange="projSetStage('${p.id}',this.value)" onclick="event.stopPropagation()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:3px 8px;color:var(--text-secondary);font-size:11px;font-family:inherit;">
+            ${STAGES.map(s=>`<option value="${s.v}" ${m.stage===s.v?'selected':''}>${s.l}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      ${displayPct != null ? `
+        <div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-size:11px;color:var(--text-muted);">Avance ${pctSource==='hitos'?'<span style="color:#2dd4bf;font-size:10px;">(auto)</span>':''}</span>
+            <span style="font-size:13px;font-weight:800;color:${barColor};">${displayPct}%</span>
+          </div>
+          <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${displayPct}%;background:${barColor};border-radius:4px;transition:width .6s;"></div>
+          </div>
+          ${pctSource==='hitos' ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${milsDone}/${mils.length} hitos completados</div>` : ''}
+        </div>` : `<div style="font-size:12px;color:var(--text-dim);">Usa <strong style="color:#4ade80;">📊 Estado</strong> para registrar avance, o agrega hitos para cálculo automático.</div>`}
+      ${h.note ? `<div style="font-size:12px;color:var(--text-muted);font-style:italic;margin-top:10px;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;border-left:3px solid ${hc?.color||'var(--border)'};">"${esc(h.note)}"</div>` : ''}
+      ${h.updated_at ? `<div style="font-size:10px;color:var(--text-dim);margin-top:6px;">Última actualización: ${h.updated_at}</div>` : ''}
+    </div>
+
+    <!-- Hitos -->
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">🏁 HITOS</span>
+          ${mils.length ? `<span style="font-size:11px;color:#2dd4bf;font-weight:700;">${milsDone}/${mils.length}</span>` : ''}
+        </div>
+        <button onclick="openMilestoneForm('${p.id}')" style="font-size:11px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">+ Agregar</button>
+      </div>
+      ${mils.length === 0 ? `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px;">Sin hitos — defínelos para calcular avance automáticamente</div>` :
+        mils.map((ms,i) => {
+          const overdue = !ms.is_reached && ms.deadline && ms.deadline < today
+          const clr = ms.is_reached ? '#4ade80' : overdue ? '#f87171' : '#2dd4bf'
+          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <button onclick="toggleMilestone('${p.id}',${i})" style="width:22px;height:22px;border-radius:50%;border:2px solid ${clr};background:${ms.is_reached?clr:'transparent'};cursor:pointer;display:grid;place-items:center;font-size:12px;color:${ms.is_reached?'#000':'transparent'};flex-shrink:0;">✓</button>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.55;':''}">${esc(ms.name)}</div>
+              ${ms.deadline ? `<div style="font-size:10px;color:${clr};margin-top:1px;">${overdue?'⚠️ Vencido':'📅 Límite'}: ${ms.deadline}</div>` : ''}
+            </div>
+            <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px;" title="Eliminar">✕</button>
+          </div>`
+        }).join('')}
+      ${mils.length > 0 ? `<div style="margin-top:10px;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${Math.round(milsDone/mils.length*100)}%;background:#2dd4bf;border-radius:3px;transition:width .6s;"></div></div>` : ''}
+    </div>
+
+    <!-- Equipo -->
+    ${_s(() => {
+      if (!members.length) return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;"><span style="font-size:12px;font-weight:800;color:var(--text-muted);">👥 EQUIPO</span><button onclick="openMemberModal('${p.id}')" style="font-size:12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:4px 12px;cursor:pointer;">+ Añadir persona</button></div>`
+      const roleOrder = ['financiador','administrador','supervisor','ejecutor','colaborador']
+      const grouped = {}; members.forEach(mb => { const k=mb.role||'colaborador'; if(!grouped[k])grouped[k]=[]; grouped[k].push(mb) })
+      const roleCfg = { financiador:{label:'💰 Financiador',color:'#f59e0b'}, administrador:{label:'🗂️ Admin',color:'#60a5fa'}, ejecutor:{label:'🔧 Ejecutor',color:'#fb923c'}, supervisor:{label:'👁️ Supervisor',color:'#a78bfa'}, colaborador:{label:'🤝 Colaborador',color:'#4ade80'} }
+      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div style="font-size:12px;font-weight:800;color:var(--text-muted);">👥 EQUIPO (${members.length})</div>
+          <button onclick="openMemberModal('${p.id}')" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
+        </div>
+        ${roleOrder.filter(r=>grouped[r]).map(role => {
+          const cfg = roleCfg[role] || {label:role,color:'#94a3b8'}
+          return `<div style="margin-bottom:12px;"><div style="font-size:10px;font-weight:700;color:${cfg.color};margin-bottom:8px;">${cfg.label}</div><div style="display:flex;flex-wrap:wrap;gap:8px;">${grouped[role].map(mb => {
+            const c = allNodes.find(n => n.id === mb.contact_id)
+            const name = c ? (c.metadata?.name||c.content) : 'Sin nombre'
+            const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
+            return `<div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:7px 12px;">
+              <div style="width:28px;height:28px;border-radius:50%;background:${cfg.color}20;color:${cfg.color};display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;">${initials}</div>
+              <div><div style="font-size:12px;font-weight:600;color:var(--text-primary);">${esc(name)}</div>${mb.notes?`<div style="font-size:10px;color:var(--text-muted);">${esc(mb.notes)}</div>`:''}</div>
+              <button onclick="removeMember('${p.id}','${mb.contact_id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:0 2px;margin-left:4px;">×</button>
+            </div>`}).join('')}</div></div>`
+        }).join('')}
+      </div>`
+    })}
+
+    <!-- Tareas (resumen) -->
+    ${tareas.length ? `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <span style="font-size:12px;font-weight:800;color:var(--text-muted);">✅ TAREAS (${tareas.length})</span>
+        <button onclick="switchProjTab('kanban')" style="font-size:11px;color:#60a5fa;background:none;border:none;cursor:pointer;">Ver todas →</button>
+      </div>
+      ${tareas.slice(0,5).map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <span style="font-size:13px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.metadata?.label||t.content)}</span>
+        ${t.metadata?.status?`<span style="font-size:10px;color:var(--text-muted);">${esc(t.metadata.status)}</span>`:''}
+      </div>`).join('')}
+    </div>` : ''}
+  `
+}
+
+// ── TAB: FINANZAS ────────────────────────────────────────────────────────────
+function _renderProjFinanzas(d) {
+  const { p, m, budget, tagStr, projSlug, cots, aceptadas, pendientes, comprometido,
+          pagos, pagado, pendientePago, sinComprometer, overBudget, pct, gaugeColor,
+          cotsByCat, provMap, milestonePct, disponible } = d
+  const _s = (fn) => { try { return fn() } catch(e) { return '' } }
+
+  // ── Mini-calendario de pagos ──────────────────────────────
+  const calHTML = _s(() => {
+    const today = new Date()
+    const year  = today.getFullYear()
+    const month = today.getMonth()
+    const todayD = today.getDate()
+    const daysInMonth = new Date(year, month+1, 0).getDate()
+    const firstDay    = new Date(year, month, 1).getDay()
+    const monthName   = today.toLocaleDateString('es-MX', {month:'long', year:'numeric'})
+    const pagosFijos  = allNodes.filter(n => (n.type==='bill'||n.type==='subscription') && tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t))
+    const dayMap = {}
+    pagosFijos.forEach(n => {
+      const day = n.metadata?.dayOfMonth; if (!day) return
+      if (!dayMap[day]) dayMap[day] = []
+      dayMap[day].push(n)
+    })
+    const DAYS = ['D','L','M','M','J','V','S']
+    let cells = ''
+    for (let i=0; i<firstDay; i++) cells += `<div></div>`
+    for (let d=1; d<=daysInMonth; d++) {
+      const isToday = d === todayD
+      const payments = dayMap[d] || []
+      const hasPaid   = payments.some(n => n.metadata?.paid)
+      const hasUnpaid = payments.some(n => !n.metadata?.paid)
+      const dotColor  = hasPaid && !hasUnpaid ? '#4ade80' : hasUnpaid ? '#f87171' : null
+      cells += `<div title="${payments.map(n=>esc(n.metadata?.label||n.content)).join(', ')}"
+        style="aspect-ratio:1;display:grid;place-items:center;border-radius:6px;font-size:11px;font-weight:${isToday?'800':'400'};color:${isToday?'#000':'var(--text-secondary)'};background:${isToday?'#00f6ff':dotColor?dotColor+'18':'transparent'};border:${dotColor?`1px solid ${dotColor}50`:isToday?'none':'none'};cursor:${payments.length?'pointer':'default'};position:relative;">
+        ${d}${dotColor?`<div style="position:absolute;bottom:1px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:${dotColor};"></div>`:''}
+      </div>`
+    }
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:12px;text-transform:capitalize;">📅 CALENDARIO DE PAGOS — ${monthName}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:6px;">
+        ${DAYS.map(d=>`<div style="text-align:center;font-size:9px;font-weight:700;color:var(--text-dim);padding:2px 0;">${d}</div>`).join('')}
+        ${cells}
+      </div>
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text-muted);">
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;margin-right:4px;"></span>Pagado</span>
+        <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f87171;margin-right:4px;"></span>Pendiente</span>
+      </div>
+    </div>`
+  })
+
+  // ── Panel financiero ──────────────────────────────────────
+  const finPanel = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">💼 RESUMEN FINANCIERO</span>
+        ${budget === 0 ? `<button onclick="openProyectoModal('${p.id}')" style="font-size:11px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:3px 10px;cursor:pointer;">+ Definir presupuesto</button>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:${budget>0?'14px':'0'};">
+        ${[
+          {label:'Presupuesto',val:budget,color:'#a78bfa',icon:'💰',tip:'Total planificado',show:budget>0},
+          {label:'Comprometido',val:comprometido,color:'#4ade80',icon:'📋',tip:'Cotizaciones aceptadas',show:true},
+          {label:'Pagado',val:pagado,color:'#60a5fa',icon:'✅',tip:'Total liquidado',show:true},
+          {label:'Por pagar',val:pendientePago,color:pendientePago>0?'#fb923c':'#94a3b8',icon:'⏳',tip:'Comprometido menos pagado',show:true},
+          {label:'Disponible',val:disponible??0,color:disponible!=null&&disponible<0?'#f87171':'#94a3b8',icon:disponible!=null&&disponible<0?'🚨':'🔵',tip:'Presupuesto menos comprometido',show:budget>0},
+        ].filter(x=>x.show).map(x=>`<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;text-align:center;" title="${x.tip}">
+          <div style="font-size:15px;margin-bottom:4px;">${x.icon}</div>
+          <div style="font-size:13px;font-weight:800;font-family:monospace;color:${x.color};">$${Math.abs(x.val).toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${x.label}</div>
+        </div>`).join('')}
+      </div>
+      ${budget > 0 ? `<div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span style="font-size:11px;color:var(--text-muted);">Uso del presupuesto</span>
+          <span style="font-size:11px;font-weight:700;color:${gaugeColor};">${pct}%${overBudget?' ⚠️':''}</span>
+        </div>
+        <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:${gaugeColor};border-radius:4px;transition:width .6s;"></div>
+        </div>
+      </div>` : ''}
+    </div>`
+
+  // ── Proveedores con historial de abonos ───────────────────
+  const provsHTML = _s(() => {
+    if (!Object.keys(provMap).length) return ''
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:14px;">⚙️ PROVEEDORES — HISTORIAL DE PAGOS</div>
+      ${Object.entries(provMap).map(([pid, pd]) => {
+        const prov = allNodes.find(n => n.id === pid)
+        const provName = prov?.metadata?.name || prov?.content || 'Proveedor'
+        const acordado   = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+        // Abonos = expense nodes con contact_id = pid Y es_abono=true O project_tag = projSlug
+        const abonos = allNodes.filter(n =>
+          n.type==='expense' && n.metadata?.contact_id===pid &&
+          tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)
+        ).sort((a,b) => (a.metadata?.date||a.created_at||'').localeCompare(b.metadata?.date||b.created_at||''))
+        const pagadoProv = abonos.reduce((s,a)=>s+(+a.metadata?.amount||0),0)
+        const saldo      = Math.max(0, acordado - pagadoProv)
+        const excedente  = pagadoProv > acordado && acordado > 0
+        const pct2       = acordado > 0 ? Math.min(100, Math.round(pagadoProv/acordado*100)) : 0
+        return `<div style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+            <div style="width:34px;height:34px;border-radius:50%;background:rgba(251,146,60,0.12);color:#fb923c;display:grid;place-items:center;font-size:14px;font-weight:800;flex-shrink:0;">${esc(provName.charAt(0).toUpperCase())}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${esc(provName)}</div>
+              <div style="font-size:11px;color:var(--text-muted);">Acordado: <span style="color:#4ade80;font-family:monospace;">$${acordado.toLocaleString('es-MX')}</span> · Pagado: <span style="color:#60a5fa;font-family:monospace;">$${pagadoProv.toLocaleString('es-MX')}</span>${saldo>0?` · Saldo: <span style="color:#fb923c;font-family:monospace;">$${saldo.toLocaleString('es-MX')}</span>`:' · ✅ Liquidado'}${excedente?' <span style="color:#f87171;font-weight:700;">⚠️</span>':''}</div>
+            </div>
+            <button onclick="openAbonoModal('${pid}','${esc(provName)}','${projSlug}','${p.id}')" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:600;flex-shrink:0;">💸 Abono</button>
+          </div>
+          ${acordado > 0 ? `<div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-bottom:10px;"><div style="height:100%;width:${pct2}%;background:${pct2>=100?'#4ade80':'#60a5fa'};border-radius:2px;"></div></div>` : ''}
+          ${abonos.length > 0 ? `<div style="margin-left:8px;border-left:2px solid rgba(255,255,255,0.08);padding-left:12px;">
+            ${abonos.map(a => {
+              const METHOD_ICON = {transferencia:'🏦',efectivo:'💵',cheque:'📋',tarjeta:'💳',crypto:'₿'}
+              const icon = METHOD_ICON[a.metadata?.method] || '💸'
+              const dateStr = (a.metadata?.date||a.created_at||'').slice(0,10)
+              return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;">
+                <span style="color:var(--text-dim);flex-shrink:0;width:80px;">${dateStr}</span>
+                <span style="flex-shrink:0;">${icon}</span>
+                <span style="flex:1;color:var(--text-secondary);">${esc(a.metadata?.notes||a.metadata?.label||'Abono')}</span>
+                <span style="font-family:monospace;font-weight:700;color:#60a5fa;flex-shrink:0;">$${(+a.metadata?.amount||0).toLocaleString('es-MX')}</span>
+                <button onclick="deleteNode('${a.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;flex-shrink:0;" title="Eliminar">×</button>
+              </div>`
+            }).join('')}
+          </div>` : `<div style="font-size:11px;color:var(--text-dim);margin-left:8px;">Sin abonos registrados aún</div>`}
+        </div>`
+      }).join('')}
+    </div>`
+  })
+
+  // ── Pagos fijos (con editar) ──────────────────────────────
+  const pagosFijosHTML = _s(() => {
+    const pagosFijos = allNodes.filter(n =>
+      (n.type==='bill'||n.type==='subscription') &&
+      tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)
+    ).sort((a,b) => (a.metadata?.dayOfMonth||99)-(b.metadata?.dayOfMonth||99))
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">📅 PAGOS FIJOS / RECURRENTES</span>
+        <button onclick="openAgendaModal('bill','${projSlug}')" style="font-size:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">+ Añadir</button>
+      </div>
+      ${pagosFijos.length === 0 ? `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Sin pagos fijos — usa el botón "📅 Pago Fijo" en acciones rápidas</div>` :
+        pagosFijos.map(n => {
+          const amt = n.metadata?.amount || 0
+          const day = n.metadata?.dayOfMonth
+          const today2 = new Date()
+          const next = day ? new Date(today2.getFullYear(), today2.getMonth(), day) : null
+          if (next && next < today2) next?.setMonth(next.getMonth()+1)
+          const daysLeft = next ? Math.ceil((next-today2)/(1000*60*60*24)) : null
+          const urgent = daysLeft !== null && daysLeft <= 7
+          return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            ${day ? `<span style="font-size:10px;color:${urgent?'#fb923c':'var(--text-muted)'};background:${urgent?'rgba(251,146,60,0.12)':'rgba(255,255,255,0.06)'};border-radius:4px;padding:2px 7px;flex-shrink:0;font-weight:${urgent?'700':'400'};">día ${day}${urgent?` (${daysLeft}d)`:''}</span>` : ''}
+            <span style="flex:1;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.label||n.content)}</span>
+            <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;flex-shrink:0;">$${amt.toLocaleString('es-MX')}</span>
+            <button onclick="toggleBillPaid('${n.id}')" style="font-size:10px;background:${n.metadata?.paid?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.05)'};border:1px solid ${n.metadata?.paid?'rgba(74,222,128,0.3)':'rgba(255,255,255,0.1)'};color:${n.metadata?.paid?'#4ade80':'var(--text-muted)'};border-radius:5px;padding:2px 7px;cursor:pointer;flex-shrink:0;">${n.metadata?.paid?'✓':'Pagar'}</button>
+            <button onclick="editAgendaItem('${n.id}')" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;flex-shrink:0;" title="Editar">✏️</button>
+            <button onclick="deleteAgendaItem('${n.id}')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;flex-shrink:0;" title="Eliminar">×</button>
+          </div>`
+        }).join('')}
+      ${pagosFijos.length > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;">
+        <span style="font-size:11px;color:var(--text-muted);">Total mensual estimado</span>
+        <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;">$${pagosFijos.reduce((s,n)=>s+(+n.metadata?.amount||0),0).toLocaleString('es-MX')}</span>
+      </div>` : ''}
+    </div>`
+  })
+
+  // ── Cotizaciones ──────────────────────────────────────────
+  const cotsHTML = _s(() => {
+    if (!cots.length) return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
+      <div style="font-size:12px;font-weight:800;color:var(--text-muted);margin-bottom:10px;">📄 COTIZACIONES</div>
+      <div style="color:var(--text-dim);font-size:13px;">Sin cotizaciones — usa el botón "📄 Cotización" arriba</div>
+    </div>`
+    const STATUS_CFG = { pendiente:{label:'Pendiente',color:'#94a3b8'}, aceptada:{label:'Aceptada',color:'#4ade80'}, rechazada:{label:'Rechazada',color:'#f87171'}, en_proceso:{label:'En proceso',color:'#60a5fa'}, pagada:{label:'Pagada',color:'#a78bfa'}, parcial:{label:'Parcial',color:'#fbbf24'} }
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">📄 COTIZACIONES (${cots.length})</span>
+        <button onclick="openCotizacionModal(null,'${projSlug}')" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">+ Nueva</button>
+      </div>
+      ${Object.entries(d.cotsByCat).map(([cat,cs]) => `
+        <div style="margin-bottom:12px;">
+          <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;">${esc(cat)}</div>
+          ${cs.map(c => {
+            const stCfg = STATUS_CFG[c.metadata?.status] || STATUS_CFG.pendiente
+            const prov  = c.metadata?.provider_id ? allNodes.find(n=>n.id===c.metadata.provider_id) : null
+            return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="openCotizacionModal('${c.id}')">
+              <span style="flex:1;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.metadata?.label||c.content)}</span>
+              ${prov?`<span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">${esc(prov.metadata?.name||prov.content)}</span>`:''}
+              <span style="font-size:12px;font-weight:800;font-family:monospace;color:#fb923c;flex-shrink:0;">$${(+c.metadata?.amount||0).toLocaleString('es-MX')}</span>
+              <span style="font-size:9px;padding:2px 7px;border-radius:4px;background:${stCfg.color}22;color:${stCfg.color};font-weight:700;flex-shrink:0;">${stCfg.label}</span>
+              ${c.metadata?.status !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${c.id}','aceptada')" style="color:#4ade80;cursor:pointer;font-size:14px;flex-shrink:0;" title="Aceptar">✅</span>` : ''}
+            </div>`
+          }).join('')}
+        </div>`).join('')}
+      ${pendientes.length ? `<div style="padding:8px 10px;background:rgba(251,146,60,0.05);border-radius:8px;font-size:11px;color:var(--text-muted);">⏳ ${pendientes.length} cotización${pendientes.length!==1?'es':''} pendiente${pendientes.length!==1?'s':''}</div>` : ''}
+    </div>`
+  })
+
+  // ── Materiales / compras ──────────────────────────────────
+  const matHTML = _s(() => {
+    const materiales = [...new Map(pagos.filter(g => !g.metadata?.service_id && !provMap[g.metadata?.contact_id]).map(g=>[g.id,g])).values()]
+    if (!materiales.length) return ''
+    const total = materiales.reduce((s,g)=>s+(+g.metadata?.amount||0),0)
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">🧱 MATERIALES / COMPRAS</span>
+        <span style="font-size:12px;font-weight:800;font-family:monospace;color:#94a3b8;">$${total.toLocaleString('es-MX')}</span>
+      </div>
+      ${materiales.map(g=>`<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <span style="flex:1;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(g.metadata?.label||g.content)}">${esc(g.metadata?.label||g.content)}</span>
+        <span style="font-size:12px;font-weight:800;font-family:monospace;color:#60a5fa;">$${(+g.metadata?.amount||0).toLocaleString('es-MX')}</span>
+        <span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">${(g.metadata?.date||g.created_at||'').slice(0,10)}</span>
+        <button onclick="deleteNode('${g.id}')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;flex-shrink:0;">×</button>
+      </div>`).join('')}
+    </div>`
+  })
+
+  return calHTML + finPanel + provsHTML + pagosFijosHTML + cotsHTML + matHTML
+}
+
+// ── TAB: KANBAN INTERNO ──────────────────────────────────────────────────────
+function _renderProjKanban(d) {
+  const { p, m, tagStr, projSlug } = d
+  // Get all task nodes linked to this project
+  const linkedIds = new Set(m.linkedTo || [])
+  const allTasks = allNodes.filter(n => {
+    if (n.type !== 'kanban' && n.type !== 'tarea') return false
+    if (linkedIds.has(n.id)) return true
+    if (tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)) return true
+    if ((n.metadata?.tags||[]).some(t => tagStr.includes(t.replace(/^#/,'').toLowerCase()))) return true
+    return false
+  })
+
+  // Columns: default + custom from project metadata
+  const customCols = m.kanban_columns || []
+  const defaultCols = [
+    {id:'todo',        label:'📋 Pendiente',   color:'#94a3b8'},
+    {id:'in_progress', label:'⚡ En progreso',  color:'#fbbf24'},
+    {id:'done',        label:'✅ Listo',        color:'#4ade80'},
+  ]
+  const columns = [...defaultCols, ...customCols.map(c=>({id:c.id||c.label?.toLowerCase().replace(/\s/g,'_'), label:c.label, color:c.color||'#60a5fa'}))]
+
+  return `<div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-size:12px;font-weight:800;color:var(--text-muted);">KANBAN DEL PROYECTO — ${esc(m.label||p.content)}</span>
+    <button onclick="_projAddKanbanTask('${projSlug}','${p.id}')" style="font-size:12px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Tarea</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+    ${columns.map(col => {
+      const tasks = allTasks.filter(n => {
+        const s = n.metadata?.status || 'todo'
+        return s === col.id
+      })
+      return `<div style="background:var(--surface);border:1px solid ${col.color}30;border-radius:12px;padding:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <span style="font-size:12px;font-weight:700;color:${col.color};">${col.label}</span>
+          <span style="font-size:10px;background:${col.color}15;color:${col.color};border-radius:10px;padding:1px 7px;">${tasks.length}</span>
+        </div>
+        ${tasks.length === 0 ? `<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px 0;">Vacío</div>` :
+          tasks.map(t => `<div ondblclick="openNodeEditModal && openNodeEditModal('${t.id}')" style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;" title="Doble clic para editar"
+            onclick="_projMoveTask('${t.id}','${col.id}','${p.id}')">
+            <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:4px;">${esc(t.metadata?.label||t.content)}</div>
+            ${t.metadata?.priority ? `<span style="font-size:10px;color:var(--text-muted);">⚑ ${t.metadata.priority}</span>` : ''}
+            ${t.metadata?.deadline ? `<div style="font-size:10px;color:${t.metadata.deadline<new Date().toISOString().split('T')[0]?'#f87171':'var(--text-dim)'};margin-top:2px;">📅 ${t.metadata.deadline}</div>` : ''}
+          </div>`).join('')}
+        <button onclick="_projAddKanbanTask('${projSlug}','${p.id}','${col.id}')" style="width:100%;margin-top:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.1);color:var(--text-dim);border-radius:7px;padding:6px;cursor:pointer;font-size:12px;">+ Agregar</button>
+      </div>`
+    }).join('')}
+  </div>`
+}
+
+// ── TAB: NOTAS ───────────────────────────────────────────────────────────────
+function _renderProjNotas(d) {
+  const { p, m, tagStr, projSlug } = d
+  const linkedIds = new Set(m.linkedTo || [])
+  const notes = allNodes.filter(n => {
+    if (n.type !== 'nota' && n.type !== 'note') return false
+    if (linkedIds.has(n.id)) return true
+    if (tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)) return true
+    if ((n.metadata?.tags||[]).some(t => tagStr.includes(t.replace(/^#/,'').toLowerCase()))) return true
+    return false
+  })
+  return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <span style="font-size:12px;font-weight:800;color:var(--text-muted);">NOTAS DEL PROYECTO (${notes.length})</span>
+    <button onclick="switchView('notas');setTimeout(()=>document.getElementById('nexus-input')?.focus(),200)" style="font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Nueva nota</button>
+  </div>
+  ${notes.length === 0 ? `<div style="text-align:center;padding:40px;color:var(--text-dim);">
+    <div style="font-size:32px;margin-bottom:12px;">🧠</div>
+    <div style="font-size:14px;">Sin notas para este proyecto</div>
+    <div style="font-size:12px;margin-top:6px;">Escribe notas en la Bóveda Neural usando el tag <strong style="color:#2dd4bf;">#${projSlug}</strong></div>
+  </div>` :
+  `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+    ${notes.map(n => {
+      const imgs = n.metadata?.images || []
+      const src = imgs.length ? (typeof imgs[0]==='string'?imgs[0]:imgs[0].url||'') : ''
+      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all .2s;"
+        onmouseenter="this.style.borderColor='rgba(167,139,250,0.4)'"
+        onmouseleave="this.style.borderColor='var(--border)'">
+        ${src?`<img src="${src}" style="width:100%;height:80px;object-fit:cover;border-radius:8px;margin-bottom:10px;" />`:''}
+        <div style="font-size:13px;color:var(--text-primary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">${esc(n.content||n.metadata?.label||'')}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:8px;">${(n.created_at||'').slice(0,10)}</div>
+      </div>`
+    }).join('')}
+  </div>`}`
+}
+
+// ── Helpers for project kanban ────────────────────────────────────────────────
+window._projAddKanbanTask = (projSlug, projId, colId) => {
+  const name = window.prompt('Nueva tarea para el proyecto:')
+  if (!name?.trim()) return
+  const meta = { label:name.trim(), status: colId||'todo', project_tag: projSlug, tags:['#'+projSlug,'#tarea'] }
+  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+    const tmp = { id:Math.random().toString(36).substr(2,9), type:'kanban', content:name.trim(), metadata:meta, created_at:new Date().toISOString() }
+    allNodes.unshift(tmp)
+    autoLinkToProject(tmp.id, projSlug)
+    openProjectDashboard(projId)
+  } else {
+    supabase.from('nodes').insert({ owner_id:currentUser?.id, type:'kanban', content:name.trim(), metadata:meta }).select().then(({data}) => {
+      if (data?.[0]) { allNodes.unshift(data[0]); autoLinkToProject(data[0].id, projSlug) }
+      openProjectDashboard(projId)
+    })
+  }
+}
+
+window._projMoveTask = async (taskId, currentColId, projId) => {
+  // Cycle through statuses on click (pending → in_progress → done → pending)
+  const CYCLE = ['todo','in_progress','done']
+  const task = allNodes.find(n => n.id === taskId); if (!task) return
+  const current = task.metadata?.status || 'todo'
+  const nextIdx = (CYCLE.indexOf(current) + 1) % CYCLE.length
+  task.metadata = { ...task.metadata, status: CYCLE[nextIdx] }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+    await supabase.from('nodes').update({ metadata:task.metadata }).eq('id', taskId)
+  switchProjTab('kanban')
+}
+
 
 // ═══════════════════════════════════════════════════════════
 // COTIZACIONES — Phase 2
@@ -7330,17 +7639,26 @@ window.changeCotizacionStatus = async (id, status) => {
 // ═══════════════════════════════════════════════════════════
 
 let currentProyectoId = null
+let _projDashTab  = 'resumen'   // active tab inside project dashboard
+let _projDashId   = null        // project ID currently open
 
 window.openProyectoModal = (id) => {
   const node = allNodes.find(n => n.id === id)
   if (!node) return
   currentProyectoId = id
   const m = node.metadata || {}
-  document.getElementById('proy-label').value  = m.label || node.content || ''
-  document.getElementById('proy-budget').value = m.budget || ''
-  document.getElementById('proy-rol').value    = m.rol || 'dueño'
-  document.getElementById('proy-desc').value   = m.desc || m.notes || ''
-  // Mostrar slug actual (o calculado) para que el usuario sepa qué usar en el parser
+  document.getElementById('proy-label').value    = m.label || node.content || ''
+  document.getElementById('proy-budget').value   = m.budget || ''
+  document.getElementById('proy-rol').value      = m.rol || 'dueño'
+  document.getElementById('proy-desc').value     = m.desc || m.notes || ''
+  document.getElementById('proy-emoji').value    = m.emoji || ''
+  document.getElementById('proy-cover').value    = m.cover_url || ''
+  document.getElementById('proy-category').value = m.category || 'inmueble'
+  document.getElementById('proy-stage').value    = m.stage || 'planning'
+  document.getElementById('proy-deadline').value = m.deadline || ''
+  // Cover preview
+  previewProjectCover(m.cover_url || '')
+  // Slug display
   const slugDisplay = document.getElementById('proy-slug-display')
   if (slugDisplay) {
     const slug = m.project_slug || (m.tags||[]).find(t=>t!=='#proyecto'&&t.startsWith('#'))?.slice(1) || ''
@@ -7348,6 +7666,20 @@ window.openProyectoModal = (id) => {
     slugDisplay.style.color = slug ? '#2dd4bf' : '#94a3b8'
   }
   document.getElementById('proyecto-modal').classList.remove('hidden')
+}
+
+window.previewProjectCover = (url) => {
+  const preview = document.getElementById('proy-cover-preview')
+  const img     = document.getElementById('proy-cover-img')
+  if (!preview || !img) return
+  if (url && url.startsWith('http')) {
+    img.src = url
+    img.onerror = () => { preview.style.display = 'none' }
+    img.onload  = () => { preview.style.display = '' }
+    preview.style.display = ''
+  } else {
+    preview.style.display = 'none'
+  }
 }
 
 window.closeProyectoModal = () => document.getElementById('proyecto-modal').classList.add('hidden')
@@ -7371,14 +7703,25 @@ window.saveProyecto = async () => {
     projectTags = ['#proyecto', ...(projectSlug ? ['#' + projectSlug] : [])]
   }
 
+  const coverUrl  = document.getElementById('proy-cover')?.value.trim() || undefined
+  const emoji     = document.getElementById('proy-emoji')?.value.trim() || undefined
+  const category  = document.getElementById('proy-category')?.value || undefined
+  const stageVal  = document.getElementById('proy-stage')?.value || undefined
+  const deadline  = document.getElementById('proy-deadline')?.value || undefined
+
   node.metadata = {
     ...node.metadata,
     label,
-    budget: budgetVal > 0 ? budgetVal : undefined,
-    rol:    document.getElementById('proy-rol').value,
-    desc:   document.getElementById('proy-desc').value.trim() || undefined,
-    tags:   projectTags,
+    budget:    budgetVal > 0 ? budgetVal : undefined,
+    rol:       document.getElementById('proy-rol').value,
+    desc:      document.getElementById('proy-desc').value.trim() || undefined,
+    tags:      projectTags,
     project_slug: projectSlug || undefined,
+    cover_url: coverUrl,
+    emoji,
+    category,
+    stage:     stageVal,
+    deadline,
   }
   node.content = label
   if (localStorage.getItem('nexus_admin_bypass') !== 'true')
