@@ -6927,24 +6927,42 @@ window.selectMemberRole = (roleId, btn) => {
 
 window.filterMemberSearch = (q = '') => {
   const res = document.getElementById('member-search-results')
-  if (!q) { res.innerHTML = ''; return }
-  const contacts = allNodes.filter(n => n.type === 'contact' &&
-    (n.metadata?.name||n.content).toLowerCase().includes(q.toLowerCase()))
-  res.innerHTML = contacts.slice(0,8).map(c => {
-    const name = esc(c.metadata?.name || c.content)
-    const type = c.metadata?.cType || 'persona'
-    const clr = type === 'proveedor' ? '#fb923c' : '#60a5fa'
-    return `<div onclick="selectMemberContact('${c.id}','${name}')"
-      style="padding:8px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);"
+  if (!q.trim()) { res.innerHTML = ''; return }
+  const lq = q.toLowerCase()
+  // Use getContacts() to cover both old (persona) and new (contact) types
+  const contacts = getContacts().filter(c => {
+    const name = (c.metadata?.name || c.content || '').toLowerCase()
+    const spec = Array.isArray(c.metadata?.specialties)
+      ? c.metadata.specialties.join(' ').toLowerCase()
+      : (c.metadata?.specialty || '').toLowerCase()
+    const city = (c.metadata?.city || '').toLowerCase()
+    return name.includes(lq) || spec.includes(lq) || city.includes(lq)
+  })
+  if (!contacts.length) {
+    res.innerHTML = `<div style="padding:12px;text-align:center;color:var(--text-muted);font-size:12px;">Sin resultados para "<b>${esc(q)}</b>"<br><span style="font-size:11px;color:var(--text-dim);">Agrega el contacto primero desde la sección Contactos</span></div>`
+    return
+  }
+  res.innerHTML = contacts.slice(0, 8).map(c => {
+    const m = c.metadata || {}
+    const name = esc(m.name || c.content)
+    // Support both new model (roles[]) and old model (cType)
+    const roleLabel = Array.isArray(m.roles) && m.roles.length
+      ? m.roles.join(' · ')
+      : (m.cType || 'contacto')
+    const specs = Array.isArray(m.specialties) ? m.specialties.slice(0, 2).join(', ') : (m.specialty || '')
+    const clr = m.color || (roleLabel.includes('proveedor') ? '#fb923c' : roleLabel.includes('cliente') ? '#4ade80' : '#60a5fa')
+    const initials = (m.name || c.content || '?').slice(0, 2).toUpperCase()
+    return `<div onclick="selectMemberContact('${c.id}','${name.replace(/'/g,"\\'")}')"
+      style="padding:8px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);margin-bottom:2px;"
       onmouseenter="this.style.background='rgba(255,255,255,0.08)'"
       onmouseleave="this.style.background='rgba(255,255,255,0.04)'">
-      <div style="width:28px;height:28px;border-radius:50%;background:${clr}20;color:${clr};display:grid;place-items:center;font-size:12px;font-weight:800;flex-shrink:0;">${name.charAt(0)}</div>
-      <div style="flex:1;">
-        <div style="font-size:13px;color:var(--text-primary);">${name}</div>
-        <div style="font-size:10px;color:var(--text-muted);">${type}</div>
+      <div style="width:32px;height:32px;border-radius:50%;background:${clr}25;color:${clr};display:grid;place-items:center;font-size:12px;font-weight:800;flex-shrink:0;">${initials}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+        <div style="font-size:10px;color:var(--text-muted);">${specs || roleLabel}</div>
       </div>
     </div>`
-  }).join('') || `<div style="padding:10px;text-align:center;color:var(--text-muted);font-size:12px;">Sin resultados — puedes crear el contacto primero</div>`
+  }).join('')
 }
 
 window.selectMemberContact = (id, name) => {
@@ -10035,9 +10053,9 @@ window.openMilestoneModal = function(projectId, idx = -1) {
 window.filterMsResponsible = (q) => {
   const results = document.getElementById('ms-responsible-results')
   if (!q.trim()) { results.style.display='none'; return }
-  const matches = allNodes.filter(n => n.type==='contact' && (
+  const matches = getContacts().filter(n =>
     (n.metadata?.name||n.content||'').toLowerCase().includes(q.toLowerCase())
-  )).slice(0,8)
+  ).slice(0,8)
   if (!matches.length) { results.style.display='none'; return }
   results.innerHTML = matches.map(n => {
     const name = esc(n.metadata?.name||n.content)
