@@ -6837,11 +6837,17 @@ window.openProveedorPicker = (projectTag = '') => {
 window.closeProveedorPicker = () => document.getElementById('proveedor-picker-modal').classList.add('hidden')
 
 window.filterProveedorPicker = (q = '') => {
-  // Support both old (cType) and new (roles array) contact models
-  const provs = allNodes.filter(n => {
-    if (n.type !== 'contact') return false
+  // getContacts() covers BOTH 'contact' and 'persona' types (old + new model)
+  // Show anyone with role 'proveedor' OR cType 'proveedor' — or ALL contacts if no role filter needed
+  const provs = getContacts().filter(n => {
     const m = n.metadata || {}
-    return m.cType === 'proveedor' || (Array.isArray(m.roles) && m.roles.includes('proveedor'))
+    // New model: has roles[] — include if any role includes proveedor OR if they have ANY role (contacts are eligible)
+    if (Array.isArray(m.roles) && m.roles.length > 0) return true
+    // Old model: cType === proveedor
+    if (m.cType === 'proveedor') return true
+    // Legacy: persona type nodes
+    if (n.type === 'persona') return true
+    return false
   })
   const lq = q.toLowerCase().trim()
   const filtered = !lq ? provs : provs.filter(p => {
