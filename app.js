@@ -1,6 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 import Fuse from 'fuse.js'
 
+// ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
+import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
+import { getTransactions, calcBalance, buildRunningBalance, currentPeriod } from './src/finance-engine.js'
+import Sortable from 'sortablejs'
+
 // ─────────────────────────────────────────
 // Clientes y Estado
 // ─────────────────────────────────────────
@@ -349,6 +354,11 @@ function renderKanban(nodes) {
   if (!root) return
 
   const today = new Date().toISOString().split('T')[0]
+  // Linear.app-style: flex row, thin borders, minimal cards
+  root.style.cssText = 'display:flex; gap:16px; overflow-x:auto; padding-bottom:8px;'
+  const COL_COLORS = { todo:'#94a3b8', in_progress:'#fbbf24', done:'#4ade80' }
+  const PCLR = { alta:'#f87171', '1':'#f87171', media:'#fbbf24', baja:'#4ade80' }
+
   root.innerHTML = boardLists.map(list => {
     const cards = nodes.filter(n => {
       if (n.type !== 'kanban') return false
@@ -361,60 +371,121 @@ function renderKanban(nodes) {
       }
       return true
     })
+    const colColor = COL_COLORS[list.id] || '#60a5fa'
+
+    const cardsHtml = cards.map(n => {
+      const m = n.metadata || {}
+      const isPrio = m.priority === '1' || m.priority === 'alta'
+      const dl = m.date_deadline || m.due_date
+      const isOverdue = dl && dl < today && m.status !== 'done'
+      const projTag = m.project_tag
+      const projNode = projTag ? allNodes.find(p => p.type==='proyecto' && p.metadata?.project_slug === projTag) : null
+      const imgs = m.images
+      const coverSrc = imgs?.length ? (typeof imgs[0]==='string' ? imgs[0] : (imgs[0].url || imgs[0].data || '')) : ''
+      const lblColor = m.label_color ? (typeof LABEL_COLORS !== 'undefined' ? LABEL_COLORS[m.label_color] : null) : null
+      const ck = m.checklist || []
+      const ckDone = ck.filter(c => c.done).length
+      const ckTotal = ck.length
+      const hasAttach = (m.attachments?.length || 0) > 0
+      const pClr = PCLR[m.priority]
+
+      const meta = []
+      if (isPrio || pClr) {
+        const pc = pClr || '#fbbf24'
+        const plbl = m.priority === 'alta' || m.priority === '1' ? 'ALTA' : (m.priority || 'ALTA').toUpperCase()
+        meta.push(`<span style="font-size:10px;background:${pc}25;color:${pc};border-radius:4px;padding:1px 6px;font-weight:700;">⚑ ${plbl}</span>`)
+      }
+      if (dl) meta.push(`<span style="font-size:10px;color:${isOverdue?'#f87171':'var(--text-dim)'};">📅 ${dl}</span>`)
+      if (ckTotal > 0) meta.push(`<span style="font-size:10px;color:${ckDone===ckTotal?'#4ade80':'var(--text-dim)'};">☑ ${ckDone}/${ckTotal}</span>`)
+      if (hasAttach) meta.push(`<span style="font-size:10px;color:var(--text-dim);">📎 ${m.attachments.length}</span>`)
+      if (projNode) meta.push(`<span style="font-size:10px;background:rgba(45,212,191,0.1);color:#2dd4bf;border-radius:4px;padding:1px 6px;">🏗️ ${esc(projNode.metadata?.label||projTag)}</span>`)
+      if ((m.comments||[]).length > 0) meta.push(`<span style="font-size:10px;color:var(--text-dim);">💬 ${m.comments.length}</span>`)
+
+      const otherTags = (m.tags || [])
+        .filter(t => t.toLowerCase() !== '#tarea' && t.toLowerCase() !== `#${(m.project_tag||'__')}`)
+      const tagsHtml = otherTags.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">${
+        otherTags.map(t => `<span class="tag-pill" onclick="event.stopPropagation(); setFilter('${t}')" style="background:var(--accent-cyan-dim); color:var(--accent-cyan); font-size:9px; padding:1px 5px; border-radius:3px; cursor:pointer;">${esc(t)}</span>`).join('')
+      }</div>` : ''
+
+      return `<div class="trello-card kanban-card" id="card-${n.id}" data-node-id="${n.id}"
+            style="background:var(--bg-panel); border:1px solid rgba(255,255,255,0.07); border-radius:8px; padding:10px 12px; cursor:pointer; transition:border-color 0.15s, transform 0.1s;"
+            onmouseover="this.style.borderColor='rgba(255,255,255,0.18)'; this.style.transform='translateY(-1px)'"
+            onmouseout="this.style.borderColor='rgba(255,255,255,0.07)'; this.style.transform=''"
+            onclick="openCardModal('${n.id}')">
+        ${lblColor ? `<div style="height:3px;border-radius:2px;background:${lblColor};margin-bottom:8px;"></div>` : ''}
+        ${coverSrc ? `<img src="${coverSrc}" style="width:100%;height:100px;object-fit:cover;border-radius:6px;margin-bottom:8px;" onerror="this.style.display='none'" />` : ''}
+        <div class="trello-card-title" style="font-size:13px;font-weight:500;color:var(--text-primary);line-height:1.4;">${esc(m.label || n.content)}</div>
+        ${meta.length ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;">${meta.join('')}</div>` : ''}
+        ${tagsHtml}
+      </div>`
+    }).join('')
+
     return `
-      <div class="trello-list" 
-           id="list-${list.id}" 
-           ondragover="allowDrop(event)" 
-           ondrop="cardDrop(event, '${list.id}')">
-        <div class="trello-list-header">
-          <span class="trello-list-title">${list.title}</span>
-          <span style="color:#8c9bab; cursor:pointer;" onclick="manageList('${list.id}')">...</span>
+      <div class="trello-list" id="list-${list.id}"
+           style="flex:0 0 280px; display:flex; flex-direction:column; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:12px; overflow:hidden; max-height:calc(100vh - 200px);">
+        <div class="trello-list-header" style="padding:12px 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid ${colColor}40; background:transparent;">
+          <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${colColor};flex-shrink:0;"></span>
+            <span class="trello-list-title" style="font-size:12px;font-weight:700;color:${colColor};letter-spacing:0.5px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(list.title)}</span>
+            <span style="font-size:11px;background:${colColor}22;color:${colColor};border-radius:10px;padding:0 6px;font-weight:600;">${cards.length}</span>
+          </div>
+          <span style="color:#8c9bab; cursor:pointer; font-size:14px;" onclick="manageList('${list.id}')">⋯</span>
         </div>
-        <div class="trello-cards-container">
-          ${cards.map(n => `
-            <div class="trello-card" 
-                 id="card-${n.id}" 
-                 draggable="true" 
-                 ondragstart="cardDragStart(event, '${n.id}')"
-                 ondragend="this.style.opacity='1'"
-                 onclick="openCardModal('${n.id}')">
-              ${(() => { const imgs = n.metadata?.images; if (!imgs?.length) return ''; const src = typeof imgs[0]==='string' ? imgs[0] : (imgs[0].url||imgs[0].data||''); return src ? `<div style="margin:-12px -12px 10px -12px;height:120px;overflow:hidden;border-radius:8px 8px 0 0;"><img src="${src}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.style.display='none'"/></div>` : '' })()}
-              ${(() => {
-                const isPrio = n.metadata?.priority === '1'
-                const dl = n.metadata?.date_deadline
-                const today = new Date().toISOString().split('T')[0]
-                const isOverdue = dl && dl < today && n.metadata?.status !== 'done'
-                const projTag = n.metadata?.project_tag
-                const projNode = projTag ? allNodes.find(p => p.type==='proyecto' && p.metadata?.project_slug === projTag) : null
-                const badges = []
-                if (isPrio) badges.push(`<span style="font-size:9px;background:rgba(251,191,36,0.15);color:#fbbf24;border:1px solid rgba(251,191,36,0.3);border-radius:5px;padding:1px 5px;font-weight:700;">⭐ ALTA</span>`)
-                if (dl) badges.push(`<span style="font-size:9px;background:${isOverdue?'rgba(248,113,113,0.15)':'rgba(148,163,184,0.1)'};color:${isOverdue?'#f87171':'#94a3b8'};border:1px solid ${isOverdue?'rgba(248,113,113,0.3)':'rgba(148,163,184,0.2)'};border-radius:5px;padding:1px 5px;">${isOverdue?'🔴':'📅'} ${dl}</span>`)
-                if (projNode) badges.push(`<span style="font-size:9px;background:rgba(45,212,191,0.1);color:#2dd4bf;border:1px solid rgba(45,212,191,0.2);border-radius:5px;padding:1px 5px;">🏗️ ${esc(projNode.metadata?.label||projTag)}</span>`)
-                return badges.length ? `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">${badges.join('')}</div>` : ''
-              })()}
-              <div class="trello-card-title">${esc(n.metadata?.label || n.content)}</div>
-              <div class="trello-card-meta">
-                 ${(n.metadata?.comments || []).length > 0 ? `<span>💬 ${(n.metadata?.comments || []).length}</span>` : ''}
-                 ${n.metadata?.subtasks?.length ? `<span>⤷ ${n.metadata.subtasks.length}</span>` : ''}
-              </div>
-              <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
-                 ${(n.metadata?.tags || [])
-                   .filter(t => t.toLowerCase() !== '#tarea' && t.toLowerCase() !== `#${(n.metadata?.project_tag||'__')}`)
-                   .map(t => `<span class="tag-pill" onclick="event.stopPropagation(); setFilter('${t}')" style="background:var(--accent-cyan-dim); color:var(--accent-cyan); font-size:8px; padding:1px 4px; border-radius:3px; cursor:pointer;">${t}</span>`).join('')}
-              </div>
-            </div>
-          `).join('')}
+        <div class="trello-cards-container kanban-col-body" data-status="${list.id}"
+             style="padding:10px; flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px; min-height:80px;">
+          ${cardsHtml}
         </div>
-        <div class="btn-add-card" onclick="startQuickAdd('${list.id}')">
+        <div class="btn-add-card" onclick="startQuickAdd('${list.id}')"
+             style="padding:8px 12px; font-size:12px; color:var(--text-dim); cursor:pointer; border-top:1px solid rgba(255,255,255,0.04);">
            <span>+</span> Añade una tarjeta
         </div>
       </div>
     `
   }).join('') + `
-    <div class="btn-add-list" onclick="addNewList()">
+    <div class="btn-add-list" onclick="addNewList()"
+         style="flex:0 0 200px; align-self:flex-start; padding:14px; font-size:12px; color:var(--text-dim); cursor:pointer; border:1px dashed rgba(255,255,255,0.08); border-radius:12px; background:rgba(255,255,255,0.01);">
       <span>+</span> Añade otra lista
     </div>
   `
+
+  // Initialize SortableJS on each column
+  initKanbanSortable()
+}
+
+// ── SortableJS initialization for Muro Táctico kanban ────────────────────────
+function initKanbanSortable() {
+  document.querySelectorAll('#kanban-root .kanban-col-body').forEach(col => {
+    if (col._sortable) { try { col._sortable.destroy() } catch (e) {} }
+    col._sortable = new Sortable(col, {
+      group: 'nexus-kanban',
+      animation: 150,
+      ghostClass: 'kanban-ghost',
+      chosenClass: 'kanban-chosen',
+      dragClass: 'kanban-drag',
+      delay: 50,
+      delayOnTouchOnly: true,
+      onEnd: async (evt) => {
+        const cardId = evt.item.dataset.nodeId
+        const newStatus = evt.to.dataset.status
+        if (!cardId || !newStatus) return
+        const node = allNodes.find(n => n.id === cardId)
+        if (!node) return
+        node.metadata = node.metadata || {}
+        node.metadata.status = newStatus
+        // Stamp the date when a card is moved to done so we can hide it next day
+        if (newStatus === 'done') {
+          node.metadata.done_at = new Date().toISOString().split('T')[0]
+        } else {
+          delete node.metadata.done_at
+        }
+        try {
+          if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+            await updateNodeMetadata(cardId, node.metadata)
+          }
+        } catch (e) { /* offline-safe: state already mutated locally */ }
+      }
+    })
+  })
 }
 
 window.addNewList = () => {
@@ -815,100 +886,9 @@ document.getElementById('tm-btn-delete')?.addEventListener('click', async () => 
 // ─────────────────────────────────────────
 // Core Logic: Semantic Parser
 // ─────────────────────────────────────────
+// ── SEMANTIC PARSER — delegates to src/parser.js (v2 with chrono-node) ───────
 function parseNode(text) {
-  const t = text.trim()
-  let type = 'note'
-  let metadata = { tags: [] }
-  let cleanContent = t
-
-  // 1. Finanzas: +$ o -$
-  if (t.startsWith('+$') || t.startsWith('-$')) {
-    const isIncome = t.startsWith('+$')
-    type = isIncome ? 'income' : 'expense'
-    const acMatch = t.match(/@(\w+)/)
-    const acHint = acMatch ? acMatch[1].toLowerCase() : null
-    const match = t.match(/^([+-]\$\d+(?:\.\d+)?)\s*(.*)/)
-    if (match) {
-      metadata.amount = parseFloat(match[1].replace('+$', '').replace('-$', ''))
-      metadata.currency = 'USD'
-      const rawLabel = match[2] || (isIncome ? 'Ingreso' : 'Gasto')
-      metadata.label = rawLabel.replace(/@\w+/g, '').replace(/#\w+/g, '').trim() || (isIncome ? 'Ingreso' : 'Gasto')
-      cleanContent = metadata.label
-      if (acHint) metadata.account_hint = acHint
-      // Extrae #hashtags del texto para vinculación a proyectos (ej: -$500 pintura @efectivo #villamarina)
-      const hashTags = [...t.matchAll(/#(\w+)/g)].map(m => '#' + m[1].toLowerCase())
-      if (hashTags.length) metadata.tags = hashTags
-    }
-  }
-  // 2. Supertags: #tarea, #persona, #proyecto
-  else if (t.includes('#tarea')) {
-    type = 'kanban'
-    metadata.status = 'todo'
-    metadata.tags.push('#tarea')
-    cleanContent = t.replace('#tarea', '').trim()
-    // ! al inicio o final → prioridad alta (Odoo-style)
-    if (/^!|!$/.test(cleanContent)) {
-      metadata.priority = '1'
-      cleanContent = cleanContent.replace(/^!|!$/g, '').trim()
-    } else {
-      metadata.priority = '0'
-    }
-    // Fecha límite: detecta patrón YYYY-MM-DD en el texto
-    const dlMatch = cleanContent.match(/\b(\d{4}-\d{2}-\d{2})\b/)
-    if (dlMatch) {
-      metadata.date_deadline = dlMatch[1]
-      cleanContent = cleanContent.replace(dlMatch[1], '').trim()
-    }
-    // #proyecto-slug para vincular tarea a proyecto
-    const taskProjMatch = cleanContent.match(/#(\w+)/)
-    if (taskProjMatch) {
-      const slug = taskProjMatch[1].toLowerCase()
-      if (slug !== 'tarea') {
-        metadata.project_tag = slug
-        metadata.tags.push('#' + slug)
-        cleanContent = cleanContent.replace('#' + taskProjMatch[1], '').trim()
-      }
-    }
-    metadata.label = cleanContent
-  }
-  else if (t.includes('#persona')) {
-    type = 'contact'
-    metadata.cType = 'persona'
-    metadata.tags.push('#persona')
-    cleanContent = t.replace('#persona', '').trim()
-    metadata.name  = cleanContent
-    metadata.label = cleanContent
-    metadata.color = '#fdba74'
-  }
-  else if (t.includes('#proyecto')) {
-    type = 'proyecto'
-    cleanContent = t.replace('#proyecto', '').trim()
-    metadata.label = cleanContent
-    // Auto-genera slug único a partir del nombre para que autoLinkToProject funcione
-    const slug = cleanContent.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quita acentos
-      .replace(/[^a-z0-9]/g, '')                        // solo alfanumérico
-    metadata.tags = ['#proyecto', ...(slug ? ['#' + slug] : [])]
-    metadata.project_slug = slug || undefined
-  }
-  else if (t.includes('#cotizacion') || t.includes('#cotización')) {
-    type = 'cotizacion'
-    metadata.tags.push('#cotizacion')
-    metadata.status = 'pendiente'
-    const amtMatch = t.match(/\$(\d+(?:[\.,]\d+)?)/)
-    if (amtMatch) metadata.amount = parseFloat(amtMatch[1].replace(',', ''))
-    const projMatch = t.match(/@(\w+)/)
-    if (projMatch) metadata.project_tag = projMatch[1].toLowerCase()
-    cleanContent = t.replace(/#cotizaci[oó]n/,'').replace(/\$[\d.,]+/,'').replace(/@\w+/,'').trim()
-    metadata.label = cleanContent
-  }
-  // 3. Nota por defecto
-  else {
-    type = 'note'
-    metadata.supertags = []
-  }
-
-  return { type, metadata, content: cleanContent }
+  return _parseNodeV2(text)
 }
 
 // ── OFFLINE SYNC QUEUE ────────────────────────────────────────────────────────
@@ -1294,7 +1274,12 @@ nexusInput?.addEventListener('input', () => {
       note:     { label:'💡 NOTA LIBRE → Bóveda Neural', bg:'rgba(148,163,184,0.06)', border:'rgba(148,163,184,0.2)', color:'#94a3b8' },
     }
     const c = cfg[type] || cfg.note
-    preview.textContent = c.label + '   ↵ Enter para guardar'
+    const extras = []
+    if (metadata.priority) extras.push(`⚑ ${String(metadata.priority).toUpperCase()}`)
+    const detectedDate = metadata.due_date || metadata.date_deadline || metadata.date
+    if (detectedDate) extras.push(`📅 ${detectedDate}`)
+    const extraStr = extras.length ? `  |  ${extras.join('  ')}` : ''
+    preview.textContent = `${c.label}${extraStr}   ↵ Enter para guardar`
     preview.style.cssText = `display:block; position:absolute; bottom:calc(100% + 0px); left:0; right:0; padding:7px 18px; font-size:11px; font-weight:600; font-family:'JetBrains Mono',monospace; border-radius:12px 12px 0 0; border:1px solid ${c.border}; border-bottom:none; background:${c.bg}; color:${c.color}; letter-spacing:0.04em; pointer-events:none; z-index:10;`
   }
 })
@@ -1865,11 +1850,12 @@ function renderFinance(nodes) {
   if (!root) return
 
   const accounts = nodes.filter(n => n.type === 'account')
-  const txs = nodes.filter(n => (n.type === 'income' || n.type === 'expense' || n.type === 'loan') &&
-    (activeAccount === 'all' || (n.metadata?.account_id === activeAccount)))
-
-  const income  = txs.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
-  const expense = txs.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  // Unified FinancialEngine
+  const txs = getTransactions(nodes, activeAccount)
+  const _initBalForCalc = (activeAccount !== 'all')
+    ? (accounts.find(a => a.id === activeAccount)?.metadata?.balance || 0)
+    : 0
+  const { income, expense } = calcBalance(txs, _initBalForCalc)
 
   const accountTabsHtml = `
     <div class="fin-tabs" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
@@ -2028,15 +2014,9 @@ function renderFinance(nodes) {
     return db.localeCompare(da)
   })
 
-  // Running balance
+  // Running balance — unified FinancialEngine
   const initBal = activeAccount !== 'all' ? (accounts.find(a=>a.id===activeAccount)?.metadata?.balance || 0) : 0
-  let running = initBal
-  const txsWithBalance = sortedTxs.slice().reverse().map(tx => {
-    const amt = tx.metadata?.amount || 0
-    if (tx.type === 'income') running += amt
-    else if (tx.type === 'expense') running -= amt
-    return { ...tx, _runningBalance: running }
-  }).reverse()
+  const txsWithBalance = buildRunningBalance(txs, initBal)
 
   const txTableHtml = `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
@@ -3185,16 +3165,27 @@ function renderAgenda(nodes) {
     const dt = new Date(d)
     return dt.getFullYear() === curY && dt.getMonth() === curM
   }
-  const incomeAll = nodes.filter(n => n.type === 'income' && isCurrentMonth(n))
-  const incomeNodes = agendaPlanAccounts.size === 0
-    ? incomeAll
-    : incomeAll.filter(n => !n.metadata?.account_id || agendaPlanAccounts.has(n.metadata.account_id))
-  const expenseAll = nodes.filter(n => n.type === 'expense' && isCurrentMonth(n))
-  const expenseNodes = agendaPlanAccounts.size === 0
-    ? expenseAll
-    : expenseAll.filter(n => !n.metadata?.account_id || agendaPlanAccounts.has(n.metadata.account_id))
-  const totalIn  = incomeNodes.reduce((s,n)  => s + (n.metadata?.amount||0), 0)
-  const totalOut = expenseNodes.reduce((s,n) => s + (n.metadata?.amount||0), 0) + totalFixed
+  // Unified FinancialEngine — same source of truth as Bio-Finanzas
+  const period = currentPeriod() // 'YYYY-MM'
+  let incomeNodes = [], expenseNodes = []
+  if (agendaPlanAccounts.size === 0) {
+    const txs = getTransactions(nodes, 'all', period)
+    incomeNodes = txs.filter(n => n.type === 'income')
+    expenseNodes = txs.filter(n => n.type === 'expense')
+  } else {
+    const seen = new Set()
+    for (const accId of agendaPlanAccounts) {
+      const txs = getTransactions(nodes, accId, period)
+      for (const t of txs) {
+        if (seen.has(t.id)) continue
+        seen.add(t.id)
+        if (t.type === 'income') incomeNodes.push(t)
+        else if (t.type === 'expense') expenseNodes.push(t)
+      }
+    }
+  }
+  const totalIn  = incomeNodes.reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const totalOut = expenseNodes.reduce((s, n) => s + (n.metadata?.amount || 0), 0) + totalFixed
 
   const planBody = document.getElementById('agenda-plan-body')
   const planFoot = document.getElementById('agenda-plan-foot')
@@ -6265,15 +6256,19 @@ function renderPulsoSemanal() {
 // ── Hábitos ────────────────────────────────────────────────
 
 function computeHabitStreaks() {
-  // Todos los nodos que tienen etiqueta #hábito
+  // Todos los nodos que tienen etiqueta #hábito o is_habit:true (parser v2)
   const habitNodes = allNodes.filter(n => {
+    if (n.metadata?.is_habit === true) return true
     const tags = (n.metadata?.tags||[]).map(t=>t.replace(/^#/,'').toLowerCase())
     return tags.includes('hábito') || tags.includes('habito')
   })
 
-  // Extraer nombres de hábito (otras etiquetas además de #hábito)
+  // Extraer nombres de hábito (otras etiquetas además de #hábito, o habit_name del parser v2)
   const habitNames = new Set()
   habitNodes.forEach(n => {
+    if (n.metadata?.is_habit && n.metadata?.habit_name) {
+      habitNames.add(n.metadata.habit_name.toLowerCase().replace(/\s+/g, '_'))
+    }
     ;(n.metadata?.tags||[]).forEach(t => {
       const clean = t.replace(/^#/,'').toLowerCase()
       if (clean !== 'hábito' && clean !== 'habito') habitNames.add(clean)
@@ -6283,11 +6278,16 @@ function computeHabitStreaks() {
   // Por cada hábito, calcular: días con registro, racha actual, días desde último
   const habits = []
   habitNames.forEach(name => {
-    const myNodes = habitNodes.filter(n =>
-      (n.metadata?.tags||[]).map(t=>t.replace(/^#/,'').toLowerCase()).includes(name)
+    const myNodes = habitNodes.filter(n => {
+      const tagMatch = (n.metadata?.tags||[]).map(t=>t.replace(/^#/,'').toLowerCase()).includes(name)
+      const v2Match = n.metadata?.is_habit && n.metadata?.habit_name &&
+        n.metadata.habit_name.toLowerCase().replace(/\s+/g,'_') === name
+      return tagMatch || v2Match
+    })
+    // Build set of dates (parser v2 stores habit_date; legacy uses metadata.date)
+    const datesSet = new Set(
+      myNodes.map(n => n.metadata?.habit_date || n.metadata?.date || n.created_at?.slice(0,10)).filter(Boolean)
     )
-    // Build set of dates
-    const datesSet = new Set(myNodes.map(n => n.metadata?.date || n.created_at?.slice(0,10)).filter(Boolean))
     const today = new Date().toISOString().slice(0,10)
     const sortedDates = [...datesSet].sort()
     const lastDate = sortedDates[sortedDates.length-1] || ''
@@ -7423,6 +7423,9 @@ window.openProjectDashboard = (projectId) => {
     <div id="proj-tab-content" style="padding:20px 24px;overflow-y:auto;">
       ${_renderProjTab(_projDashTab, d)}
     </div>`
+  if (_projDashTab === 'kanban') {
+    try { initProjKanbanSortable(_projDashId) } catch (e) { /* ignore */ }
+  }
 }
 
 window.switchProjTab = (tab) => {
@@ -7440,6 +7443,9 @@ window.switchProjTab = (tab) => {
   // Re-render content only
   const content = document.getElementById('proj-tab-content')
   if (content) content.innerHTML = _renderProjTab(tab, d)
+  if (tab === 'kanban') {
+    try { initProjKanbanSortable(_projDashId) } catch (e) { /* ignore */ }
+  }
 }
 
 function _renderProjTab(tab, d) {
@@ -7899,18 +7905,19 @@ function _renderProjKanban(d) {
         const s = n.metadata?.status || 'todo'
         return s === col.id
       })
-      return `<div ondragover="event.preventDefault()" ondrop="projKanbanDrop(event,'${col.id}')" style="background:var(--surface);border:1px solid ${col.color}30;border-radius:12px;padding:12px;">
+      return `<div style="background:rgba(255,255,255,0.02);border:1px solid ${col.color}30;border-radius:12px;padding:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
           <span style="font-size:12px;font-weight:700;color:${col.color};">${col.label}</span>
           <span style="font-size:10px;background:${col.color}15;color:${col.color};border-radius:10px;padding:1px 7px;">${tasks.length}</span>
         </div>
+        <div class="proj-kanban-col-body" data-status="${col.id}" style="min-height:60px;display:flex;flex-direction:column;gap:6px;">
         ${tasks.length === 0 ? `<div style="text-align:center;padding:20px 12px;color:var(--text-dim);">
           <div style="font-size:24px;margin-bottom:8px;opacity:0.3;">📋</div>
           <div style="font-size:11px;">Arrastra aquí o</div>
           <div style="font-size:11px;">clic en + Agregar</div>
         </div>` :
           tasks.map(t => {
-            const PCLR = {alta:'#f87171',media:'#fbbf24',baja:'#4ade80'}
+            const PCLR = {alta:'#f87171',media:'#fbbf24',baja:'#4ade80','1':'#f87171'}
             const pClr = PCLR[t.metadata?.priority] || ''
             const today2 = new Date().toISOString().split('T')[0]
             const lbl = t.metadata?.label_color ? LABEL_COLORS[t.metadata.label_color] : null
@@ -7918,15 +7925,15 @@ function _renderProjKanban(d) {
             const ckDone = ck.filter(c=>c.done).length
             const hasCover = t.metadata?.cover_url
             const hasAttach = t.metadata?.attachments?.length > 0
-            return `<div draggable="true" ondragstart="projKanbanDragStart(event,'${t.id}')" style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;margin-bottom:8px;cursor:pointer;position:relative;" title="Clic = mover estado · Editar = ✏️ · Arrastrar = mover columna">
-              ${lbl ? `<div style="height:5px;background:${lbl};"></div>` : ''}
-              ${hasCover ? `<img src="${t.metadata.cover_url}" style="width:100%;height:120px;object-fit:cover;object-position:center;" />` : ''}
-              <div style="padding:10px;">
-                <button onclick="event.stopPropagation();openProjTaskModal('${projSlug}','${p.id}','${t.id}')" style="position:absolute;top:${lbl?'12':'6'}px;right:6px;background:none;border:none;cursor:pointer;font-size:12px;opacity:0.4;" title="Editar tarea">✏️</button>
+            return `<div data-task-id="${t.id}" style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;cursor:pointer;position:relative;transition:border-color 0.15s, transform 0.1s;" onmouseover="this.style.borderColor='rgba(255,255,255,0.18)';this.style.transform='translateY(-1px)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.07)';this.style.transform=''" title="Arrastrar para mover · Click ✏️ para editar">
+              ${lbl ? `<div style="height:3px;background:${lbl};"></div>` : ''}
+              ${hasCover ? `<img src="${t.metadata.cover_url}" style="width:100%;height:100px;object-fit:cover;object-position:center;" onerror="this.style.display='none'" />` : ''}
+              <div style="padding:10px 12px;">
+                <button onclick="event.stopPropagation();openProjTaskModal('${projSlug}','${p.id}','${t.id}')" style="position:absolute;top:${lbl?'8':'6'}px;right:6px;background:none;border:none;cursor:pointer;font-size:12px;opacity:0.4;" title="Editar tarea">✏️</button>
                 <div onclick="_projMoveTask('${t.id}','${col.id}','${p.id}')">
-                  <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:4px;padding-right:20px;">${esc(t.metadata?.label||t.content)}</div>
+                  <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:4px;padding-right:20px;line-height:1.4;">${esc(t.metadata?.label||t.content)}</div>
                   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;">
-                    ${t.metadata?.priority ? `<span style="font-size:10px;background:${pClr}20;color:${pClr};border-radius:4px;padding:1px 6px;font-weight:700;">⚑ ${t.metadata.priority}</span>` : ''}
+                    ${t.metadata?.priority ? `<span style="font-size:10px;background:${pClr}25;color:${pClr||'#fbbf24'};border-radius:4px;padding:1px 6px;font-weight:700;">⚑ ${t.metadata.priority}</span>` : ''}
                     ${t.metadata?.deadline ? `<span style="font-size:10px;color:${t.metadata.deadline<today2?'#f87171':'var(--text-dim)'};">📅 ${t.metadata.deadline}</span>` : ''}
                     ${hasAttach ? `<span style="font-size:10px;color:var(--text-muted);">📎 ${t.metadata.attachments.length}</span>` : ''}
                   </div>
@@ -7938,10 +7945,55 @@ function _renderProjKanban(d) {
               </div>
             </div>`
           }).join('')}
-        <button onclick="_projAddKanbanTask('${projSlug}','${p.id}','${col.id}')" style="width:100%;margin-top:4px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.1);color:var(--text-dim);border-radius:7px;padding:6px;cursor:pointer;font-size:12px;">+ Agregar</button>
+        </div>
+        <button onclick="_projAddKanbanTask('${projSlug}','${p.id}','${col.id}')" style="width:100%;margin-top:8px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.1);color:var(--text-dim);border-radius:7px;padding:6px;cursor:pointer;font-size:12px;">+ Agregar</button>
       </div>`
     }).join('')}
   </div>`
+}
+
+// ── SortableJS init for project Kanban ───────────────────────────────────────
+function initProjKanbanSortable(projId) {
+  document.querySelectorAll('.proj-kanban-col-body').forEach(col => {
+    if (col._sortable) { try { col._sortable.destroy() } catch (e) {} }
+    col._sortable = new Sortable(col, {
+      group: 'proj-kanban-' + (projId || 'default'),
+      animation: 150,
+      ghostClass: 'kanban-ghost',
+      chosenClass: 'kanban-chosen',
+      dragClass: 'kanban-drag',
+      delay: 50,
+      delayOnTouchOnly: true,
+      onEnd: async (evt) => {
+        const taskId = evt.item.dataset.taskId
+        const newStatus = evt.to.dataset.status
+        if (!taskId || !newStatus) return
+        const proj = allNodes.find(n => n.id === projId)
+        if (!proj) return
+        // Try embedded tasks first, then linked nodes
+        const tasks = proj.metadata?.kanban_tasks || []
+        const task = tasks.find(t => t.id === taskId)
+        try {
+          if (task) {
+            task.status = newStatus
+            proj.metadata.kanban_tasks = tasks
+            if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+              await supabase.from('nodes').update({ metadata: proj.metadata }).eq('id', proj.id)
+            }
+          } else {
+            const taskNode = allNodes.find(n => n.id === taskId)
+            if (taskNode) {
+              taskNode.metadata = taskNode.metadata || {}
+              taskNode.metadata.status = newStatus
+              if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+                await updateNodeMetadata(taskId, taskNode.metadata)
+              }
+            }
+          }
+        } catch (e) { /* state already mutated locally; offline-safe */ }
+      }
+    })
+  })
 }
 
 window.addProjKanbanColumn = async (projId) => {
@@ -8012,15 +8064,28 @@ function _renderProjNotas(d) {
   </div>` :
   `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
     ${notes.map(n => {
-      const imgs = n.metadata?.images || []
+      const m = n.metadata || {}
+      const imgs = m.images || []
       const src = imgs.length ? (typeof imgs[0]==='string'?imgs[0]:imgs[0].url||'') : ''
-      const title = n.metadata?.label || n.content?.split('\n')[0]?.slice(0,60) || 'Sin título'
-      return `<div onclick="openProjNoteModal('${projSlug}','${p.id}','${n.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all .2s;"
+      const title = m.label || n.content?.split('\n')[0]?.slice(0,60) || 'Sin título'
+      // Bóveda Neural-style bg color support
+      const noteColor = m.color || m.bg_color || ''
+      const noteCssMap = (typeof NOTE_COLORS !== 'undefined') ? NOTE_COLORS : {}
+      const colorCss = noteCssMap[noteColor] || ''
+      const baseStyle = colorCss
+        ? colorCss
+        : `background:var(--surface);border-color:var(--border);`
+      // Markdown-lite preview: bold + headers
+      const rawBody = (n.content || '').replace(/^#\s+(.+)$/gm, '$1').slice(0, 200)
+      const previewBody = esc(rawBody)
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/\n/g, ' ')
+      return `<div onclick="openProjNoteModal('${projSlug}','${p.id}','${n.id}')" style="${baseStyle}border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all .2s;"
         onmouseenter="this.style.borderColor='rgba(167,139,250,0.4)'"
         onmouseleave="this.style.borderColor='var(--border)'">
-        ${src?`<img src="${src}" style="width:100%;height:80px;object-fit:cover;border-radius:8px;margin-bottom:10px;" />`:''}
+        ${src?`<img src="${src}" style="width:100%;height:80px;object-fit:cover;border-radius:8px;margin-bottom:10px;" onerror="this.style.display='none'" />`:''}
         <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:6px;">${esc(title)}</div>
-        <div style="font-size:11px;color:var(--text-muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${esc(n.content||'')}</div>
+        <div style="font-size:11px;color:var(--text-muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${previewBody}</div>
         <div style="font-size:10px;color:var(--text-dim);margin-top:8px;">${(n.created_at||'').slice(0,10)}</div>
       </div>`
     }).join('')}
