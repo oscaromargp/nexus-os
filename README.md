@@ -2,19 +2,15 @@
   <img src="assets/banner.png" alt="Nexus OS" width="100%"/>
 </p>
 
-<p align="center">
-  <img src="https://via.placeholder.com/1200x360/02040a/00F6FF?text=⬡+NEXUS+OS+—+Dashboard+Personal+con+Parser+Semántico" alt="Nexus OS Banner" width="100%"/>
-</p>
-
 <h1 align="center">⬡ Nexus OS</h1>
 
 <p align="center">
-  <strong>Dashboard personal con parser semántico natural — captura todo, entiende todo, conecta todo.</strong>
+  <strong>Dashboard personal con parser semántico bilingüe — captura todo, entiende todo, conecta todo.</strong>
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/versión-6.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
-  <img src="https://img.shields.io/badge/versión-4.1-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/estado-activo-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Vercel"/>
   <img src="https://img.shields.io/badge/backend-Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase"/>
@@ -26,11 +22,11 @@
   <a href="#-acerca-del-proyecto">Acerca</a> •
   <a href="#-características">Características</a> •
   <a href="#-demo">Demo</a> •
+  <a href="#-parser-semántico-v2">Parser</a> •
   <a href="#-comenzando">Comenzando</a> •
-  <a href="#-parser-semántico">Parser</a> •
-  <a href="#-vistas">Vistas</a> •
-  <a href="#️-estructura-del-proyecto">Estructura</a> •
-  <a href="#️-deploy-a-vercel">Deploy</a> •
+  <a href="#-migración-sql-supabase">SQL</a> •
+  <a href="#-estructura-del-proyecto">Estructura</a> •
+  <a href="#-deploy-en-vercel">Deploy</a> •
   <a href="#-contacto">Contacto</a>
 </p>
 
@@ -39,14 +35,12 @@
 ## 📖 Acerca del Proyecto
 
 <p align="center">
-  <img src="https://via.placeholder.com/700x420/0d1117/00F6FF?text=Panel+de+Comandos+—+Nexus+OS+v4.1" alt="Nexus OS — Panel de Comandos" width="700"/>
+  <img src="assets/screenshots/dashboard.png" alt="Nexus OS Dashboard" width="700"/>
 </p>
 
-**Nexus OS** es un sistema operativo personal que vive en el navegador. En lugar de formularios y menús, usas lenguaje natural: escribes una línea y el parser semántico detecta si es una tarea, un gasto, un ingreso, una cotización o un evento, y lo enruta automáticamente a la vista correcta.
+**Nexus OS** es un sistema operativo personal de productividad construido como SPA (*Single Page Application*). Centraliza tareas, finanzas, notas, contactos y proyectos en un solo lugar, conectados por un **parser semántico bilingüe** que entiende lenguaje natural en español e inglés.
 
-Construido como SPA de una sola página sin frameworks pesados, con persistencia real en **Supabase** y deploy instantáneo en **Vercel**. Diseñado para quienes manejan proyectos de construcción, proveedores, finanzas personales y notas estratégicas en un solo lugar.
-
-La filosofía: **"Everything is a Node"** — tareas, gastos, notas, contactos y proyectos son todos nodos unificados diferenciados por `type` + `metadata` JSONB. Una sola tabla, toda la potencia.
+Todo en Nexus OS existe como un **nodo** — una unidad de información con tipo, contenido y metadatos — almacenado en Supabase. Las `#etiquetas` actúan como sistema nervioso que conecta nodos entre vistas sin duplicar datos.
 
 ### 🛠️ Construido Con
 
@@ -56,7 +50,8 @@ La filosofía: **"Everything is a Node"** — tareas, gastos, notas, contactos y
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind"/>
   <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase"/>
   <img src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel"/>
-  <img src="https://img.shields.io/badge/Fuse.js-FF6B35?style=for-the-badge" alt="Fuse.js"/>
+  <img src="https://img.shields.io/badge/chrono--node-FF6B6B?style=for-the-badge" alt="chrono-node"/>
+  <img src="https://img.shields.io/badge/SortableJS-4A90E2?style=for-the-badge" alt="SortableJS"/>
 </p>
 
 ---
@@ -65,29 +60,71 @@ La filosofía: **"Everything is a Node"** — tareas, gastos, notas, contactos y
 
 | Característica | Descripción |
 |---|---|
-| 🧠 **Parser Semántico** | Escribe en lenguaje natural — detecta tipo, cuenta (`@cuenta`), monto, proyecto y etiquetas automáticamente |
-| 🏗️ **Proyectos** | Dashboard financiero con 5 KPIs, gráfica SVG donut, desglose por categoría y proveedor tipo tabla dinámica, hitos con responsable y fecha, cotizaciones con historial de abonos |
-| 📌 **Muro Táctico** | Kanban estilo Trello: cover image, etiquetas de color, checklists con barra de progreso, adjuntos y modal de detalle completo |
-| 📄 **Cotizaciones** | CRUD con categorías, estados, auto-link a proyecto, historial de abonos por cotización con método de pago y URL de comprobante |
-| 💹 **Bio-Finanzas** | Multi-cuenta, semáforo en tiempo real, gráficas reactivas, export CSV, filtro por cuenta/tipo |
-| 🧠 **Bóveda Neural** | Notas estilo Google Keep con editor de texto enriquecido (negrita, color, listas, imágenes), adjuntos por `Ctrl+V`, filtro por tags |
-| 📅 **Línea de Tiempo** | Calendario con vistas mes / semana / día — eventos de tareas, gastos e ingresos en un solo lugar |
-| 📖 **Crónica** | Histórico diario en 3 columnas: tareas completadas, movimientos financieros, notas del día |
-| 🔍 **Búsqueda Global** | Por tipo, tag, contenido — filtro instantáneo con Fuse.js en todo el historial |
-| 🔄 **Transform Note** | Convierte cualquier nota en tarea, gasto, ingreso o evento con un clic |
-| 🖨️ **Print / Export CSV** | Imprime la vista activa o descarga CSV de cualquier módulo. Backup completo en JSON |
-| ⚙️ **Configuración** | Importar transacciones, contactos y proyectos desde CSV con validación y preview antes de confirmar |
+| ⌨️ **Parser Semántico v2** | Bilingüe (ES/EN), fechas en lenguaje natural (mañana, lunes, next friday), prioridades (p1/p2/p3, !alta) |
+| 🗂️ **Muro Táctico Kanban** | Drag & drop real con SortableJS, checklist por tarjeta con persona+fecha, modal de detalle |
+| 💰 **Bio-Finanzas** | Multi-cuenta, tabla con saldo corriente, impresión, CSV, motor financiero unificado |
+| 🧠 **Bóveda Neural** | Notas estilo Google Keep, adjuntos Ctrl+V, colores, pin, editor enriquecido |
+| 🏗️ **Proyectos completos** | Kanban + Wiki + Notas + Finanzas + Hitos + Cotizaciones + Equipo |
+| 📖 **Wiki de Proyecto** | Editor Markdown con preview, índice automático, estilo GitHub Wiki |
+| 📅 **Calendario & Crónica** | Vistas mes/semana/día, crónica histórica en 3 columnas, agenda financiera |
+| 🔁 **Hábitos** | Tracker con racha automática, formato `- [ ] Hábito #habito` |
+| 👥 **Contactos & Proveedores** | Roles múltiples, catálogo de especialidades, búsqueda universal |
+| 🔍 **Búsqueda global** | Fuzzy search con Fuse.js por tags, tipo, contenido |
+| 🏷️ **Inteligencia de Tags** | Co-ocurrencias, tags durmientes, tendencias semanales |
+| 🔐 **Auth completa** | Registro, login, reset password, sesión persistente vía Supabase Auth |
 
 ---
 
 ## 🎬 Demo
 
 <p align="center">
-  <img src="https://via.placeholder.com/700x420/0d1117/fb923c?text=Demo+GIF+—+Próximamente" alt="Demo animado" width="700"/>
+  <img src="assets/screenshots/demo.gif" alt="Demo animado de Nexus OS" width="700"/>
 </p>
 
-> GIF en proceso. Mientras tanto, prueba el proyecto en vivo:
-> **[nexus-os-chi.vercel.app](https://nexus-os-chi.vercel.app)**
+> ¿No ves el GIF? [Ve el repositorio en GitHub](https://github.com/oscaromargp/nexus-os)
+
+<p align="center">
+  <img src="assets/screenshots/kanban.png" alt="Muro Táctico Kanban" width="45%"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/finanzas.png" alt="Bio-Finanzas" width="45%"/>
+</p>
+
+---
+
+## ⌨️ Parser Semántico v2
+
+El parser entiende texto natural y crea el nodo correcto automáticamente. Escribe en la barra inferior y presiona `Enter`.
+
+### Tipos de nodo
+
+```
+#tarea Revisar propuesta Q2 p1 lunes     → Tarea kanban, alta prioridad, próximo lunes
++$1500 Pago freelance @bbva today        → Ingreso $1,500 en cuenta BBVA, fecha hoy
+-$350 Renta oficina @efectivo #oficina   → Gasto $350, vinculado al tag #oficina
+Reflexión sobre el producto #idea        → Nota en Bóveda Neural
+#persona Juan Pérez — CEO Startup XYZ   → Nuevo contacto tipo Persona
+📅 Reunión con cliente jueves 3pm        → Evento en Calendario
+- [ ] Leer 20 min #habito                → Registro de hábito diario con tracker de racha
+```
+
+### Prioridades
+
+| Sintaxis | Nivel |
+|---|---|
+| `p1` · `!alta` · `!high` | 🔴 Alta |
+| `p2` · `!media` · `!medium` | 🟠 Media |
+| `p3` · `!baja` · `!low` | 🟢 Baja |
+
+### Fechas en lenguaje natural
+
+El parser detecta fechas en cualquier posición del texto. Si el día ya pasó en la semana actual, toma el próximo:
+
+```
+hoy · mañana · pasado mañana
+lunes · martes · miércoles · jueves · viernes · sábado · domingo
+today · tomorrow · monday · tuesday · wednesday · thursday · friday · saturday · sunday
+DD/MM/YYYY · YYYY-MM-DD
+```
 
 ---
 
@@ -95,273 +132,221 @@ La filosofía: **"Everything is a Node"** — tareas, gastos, notas, contactos y
 
 ### Prerrequisitos
 
-- [Node.js](https://nodejs.org/) `>= 18`
-- Cuenta en [Supabase](https://supabase.com) — plan gratuito suficiente
-- Cuenta en [Vercel](https://vercel.com) — plan gratuito suficiente
+- [Node.js](https://nodejs.org) `>= 18`
+- Cuenta en [Supabase](https://supabase.com) (gratuita)
+- [Git](https://git-scm.com)
 
-### 1. Clonar e instalar
+### Instalación
 
-```sh
-git clone https://github.com/oscaromargp/nexus-os.git
-cd nexus-os
-npm install
-```
+1. Clona el repositorio
+   ```sh
+   git clone https://github.com/oscaromargp/nexus-os.git
+   cd nexus-os
+   ```
 
-### 2. Migración SQL en Supabase
+2. Instala las dependencias
+   ```sh
+   npm install
+   ```
 
-Entra a tu proyecto de Supabase → **SQL Editor** → pega y ejecuta:
+3. Crea el archivo de variables de entorno
+   ```sh
+   cp .env.example .env
+   ```
+
+4. Edita `.env` con tus credenciales de Supabase:
+   ```env
+   VITE_SUPABASE_URL=https://tuproyecto.supabase.co
+   VITE_SUPABASE_ANON_KEY=tu-anon-key-aqui
+   ```
+
+5. Ejecuta la migración SQL en Supabase (ver sección abajo)
+
+6. Inicia el servidor de desarrollo
+   ```sh
+   npm run dev
+   ```
+
+---
+
+## 🗄️ Migración SQL Supabase
+
+Ejecuta este SQL en **Supabase → SQL Editor** para crear la tabla de nodos con Row Level Security habilitado:
 
 ```sql
--- ============================================================
--- NEXUS OS — Schema v4.1
--- Ejecutar en: Supabase > SQL Editor
--- ============================================================
-
--- Extensión UUID (ya habilitada por defecto en Supabase)
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Tabla principal: todos los elementos son nodos
-CREATE TABLE IF NOT EXISTS public.nodes (
-  id          UUID          PRIMARY KEY DEFAULT uuid_generate_v4(),
-  owner_id    UUID          NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  content     TEXT          NOT NULL DEFAULT '',
-  type        TEXT          NOT NULL DEFAULT 'note'
-              CHECK (type IN (
-                'note', 'task', 'income', 'expense',
-                'kanban', 'persona', 'proyecto', 'event'
-              )),
-  metadata    JSONB         NOT NULL DEFAULT '{}'::jsonb,
-  created_at  TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+-- Tabla principal de nodos
+CREATE TABLE IF NOT EXISTS nodes (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL,
+  content     TEXT,
+  metadata    JSONB DEFAULT '{}',
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Índices de performance
-CREATE INDEX IF NOT EXISTS idx_nodes_owner_id   ON public.nodes (owner_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_type       ON public.nodes (type);
-CREATE INDEX IF NOT EXISTS idx_nodes_created_at ON public.nodes (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_nodes_metadata   ON public.nodes USING gin (metadata);
+-- Índices para búsqueda rápida
+CREATE INDEX IF NOT EXISTS nodes_user_id_idx    ON nodes(user_id);
+CREATE INDEX IF NOT EXISTS nodes_type_idx       ON nodes(type);
+CREATE INDEX IF NOT EXISTS nodes_created_at_idx ON nodes(created_at DESC);
+CREATE INDEX IF NOT EXISTS nodes_metadata_idx   ON nodes USING GIN(metadata);
 
--- Row Level Security: cada usuario ve y modifica solo sus nodos
-ALTER TABLE public.nodes ENABLE ROW LEVEL SECURITY;
+-- Trigger para actualizar updated_at automáticamente
+CREATE OR REPLACE FUNCTION update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-CREATE POLICY "nodes_select_own" ON public.nodes
-  FOR SELECT USING (auth.uid() = owner_id);
+CREATE TRIGGER nodes_updated_at
+  BEFORE UPDATE ON nodes
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-CREATE POLICY "nodes_insert_own" ON public.nodes
-  FOR INSERT WITH CHECK (auth.uid() = owner_id);
+-- Row Level Security (RLS)
+ALTER TABLE nodes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "nodes_update_own" ON public.nodes
-  FOR UPDATE USING (auth.uid() = owner_id)
-  WITH CHECK (auth.uid() = owner_id);
+CREATE POLICY "Usuarios ven solo sus nodos"
+  ON nodes FOR SELECT
+  USING (auth.uid() = user_id);
 
-CREATE POLICY "nodes_delete_own" ON public.nodes
-  FOR DELETE USING (auth.uid() = owner_id);
+CREATE POLICY "Usuarios insertan sus nodos"
+  ON nodes FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Usuarios actualizan sus nodos"
+  ON nodes FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Usuarios eliminan sus nodos"
+  ON nodes FOR DELETE
+  USING (auth.uid() = user_id);
 ```
 
-### 3. Variables de entorno
+### Tipos de nodo (`type`) disponibles
 
-```sh
-cp .env.example .env
-```
-
-Edita `.env` con los valores de tu proyecto (Supabase → **Project Settings → API**):
-
-```env
-VITE_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-### 4. Correr en local
-
-```sh
-npm run dev
-# Abre http://localhost:5173/app.html
-```
-
----
-
-## 🧠 Parser Semántico
-
-El corazón de Nexus OS. Escribe una línea en el campo de entrada — el sistema detecta tipo, extrae monto, cuenta, proyecto y etiquetas sin que toques un formulario.
-
-### Sintaxis completa
-
-| Patrón | Tipo detectado | Ejemplo |
-|---|---|---|
-| `#tarea texto` | ✅ Tarea / Kanban | `#tarea llamar al arquitecto #casatulum` |
-| `-$monto @cuenta` | 💸 Gasto | `-$850 cemento @efectivo #casatulum` |
-| `+$monto @cuenta` | 💰 Ingreso | `+$12000 pago cliente @bbva` |
-| `#cotizacion $monto` | 📄 Cotización | `#cotizacion $45000 instalación eléctrica @casatulum` |
-| `#proyecto nombre` | 🏗️ Proyecto nuevo | `#proyecto Casa Centenario` |
-| `#persona nombre` | 👤 Contacto | `#persona Carlos electricista` |
-| texto libre | 📝 Nota | `revisar planos mañana con el arquitecto` |
-
-### Modificadores
-
-| Símbolo | Función |
+| Tipo | Descripción |
 |---|---|
-| `@cuenta` | Vincula el movimiento a una cuenta (efectivo, bbva, crypto…) |
-| `#tag` | Etiqueta libre — si coincide con el slug de un proyecto, aparece en "Pagado" del dashboard financiero |
-| `@proyecto` en cotización | Auto-link al proyecto (aparece en su sección de cotizaciones) |
+| `note` | Nota libre / hábito |
+| `kanban` | Tarea del Muro Táctico |
+| `income` | Ingreso financiero |
+| `expense` | Gasto financiero |
+| `contact` | Contacto / proveedor |
+| `persona` | Persona (formato legado) |
+| `proyecto` | Proyecto |
+| `event` | Evento de calendario |
+| `cotizacion` | Cotización vinculada a proyecto |
+| `account` | Cuenta financiera |
+| `bill` | Factura / recibo |
+| `subscription` | Suscripción recurrente |
+| `card` | Tarjeta de crédito/débito |
 
-### Ejemplos reales
+---
+
+## 💡 Uso
+
+### Hábitos
 
 ```
--$1200 cemento @efectivo #casatulum
-+$25000 anticipo diseño @bbva #freelance
-#tarea confirmar entrega de ventanas #casatulum
-#cotizacion $38500 impermeabilización techo @casatulum
-nota libre: el contratista llega el lunes a las 9am
-#persona Juan Pérez plomero tel:612-555-1234
+- [ ] Leer 20 min #habito
+- [ ] Ejercicio 30 min #habito
+- [ ] Meditar #habito
 ```
 
----
+El sistema detecta el `- [ ]` como checkbox Markdown + el tag `#habito` y crea un nodo de hábito con fecha. El tracker calcula la racha automáticamente.
 
-## 🗂️ Vistas
+### Vincular transacciones a un proyecto
 
-| Vista | Ícono | Descripción |
-|---|---|---|
-| **Panel de Comandos** | 📊 | Feed principal con color-coding por tipo, semáforo de cuentas y pulso semanal |
-| **Muro Táctico** | 📌 | Kanban con columnas de estado, cover images, checklists, etiquetas y modal Trello-like |
-| **Bio-Finanzas** | 💹 | Multi-cuenta, balance consolidado, gráficas reactivas, export CSV |
-| **Bóveda Neural** | 🧠 | Notas estilo Keep con editor enriquecido, adjuntos por paste y búsqueda por tags |
-| **Línea de Tiempo** | 📅 | Calendario mes / semana / día con eventos de todos los módulos |
-| **Crónica** | 📖 | Histórico diario en 3 columnas: tareas, finanzas, notas |
-| **Proyectos** | 🏗️ | Dashboard por proyecto: KPIs, gráfica SVG, hitos, cotizaciones con abonos, notas aisladas |
-| **Contactos** | 👥 | CRM ligero: proveedores con servicios, cuentas bancarias, RFC, CLABE, cripto |
-| **Configuración** | ⚙️ | Importar CSV (transacciones, contactos, proyectos), backup JSON, restaurar datos |
-| **Ayuda** | ❓ | Guía completa del sistema en acordeón por módulo |
+```
+-$500 Cemento @efectivo #casatulum
++$15000 Anticipo cliente @bbva #casatulum
+```
+
+Cualquier nodo con el tag del proyecto aparece automáticamente en el dashboard financiero de ese proyecto.
+
+### Wiki de Proyecto
+
+Cada proyecto tiene una pestaña **📖 Wiki** con editor Markdown. Soporta encabezados, listas, código, tablas y links. El índice lateral se genera automáticamente de los encabezados `#`, `##`, `###`.
 
 ---
 
-## 🏗️ Dashboard de Proyectos
-
-El módulo de Proyectos incluye un **dashboard financiero visual** con:
-
-- **5 KPIs**: Presupuesto total, Comprometido, Pagado, Pendiente, Sin comprometer
-- **Gráfica SVG donut**: distribución visual pagado / pendiente / disponible
-- **Desglose por categoría** (carpintería, albañilería, instalaciones…) — tipo tabla dinámica
-- **Top 6 proveedores** con monto comprometido y pagado por cada uno
-- **Hitos**: fecha, responsable, descripción, fecha de cumplimiento real — todo editable con modal
-- **Cotizaciones**: CRUD completo + historial de abonos por cotización (fecha, monto, método, URL de comprobante)
-- **Kanban interno**: tarjetas con cover image, etiquetas de color, checklists con progreso, adjuntos
-- **Notas de proyecto**: aisladas del resto del sistema, editor de texto enriquecido
-
----
-
-## 📸 Capturas de Pantalla
-
-<p align="center">
-  <img src="https://via.placeholder.com/700x420/0d1117/22c55e?text=Dashboard+Financiero+—+KPIs+%2B+Donut+SVG" alt="Dashboard Financiero" width="45%"/>
-  &nbsp;&nbsp;
-  <img src="https://via.placeholder.com/700x420/0d1117/f59e0b?text=Muro+Táctico+—+Kanban+Trello-like" alt="Muro Táctico Kanban" width="45%"/>
-</p>
-
-<p align="center">
-  <img src="https://via.placeholder.com/700x420/0d1117/a855f7?text=Bóveda+Neural+—+Editor+Enriquecido" alt="Bóveda Neural" width="45%"/>
-  &nbsp;&nbsp;
-  <img src="https://via.placeholder.com/700x420/0d1117/3b82f6?text=Cotizaciones+—+Abonos+por+cotización" alt="Cotizaciones" width="45%"/>
-</p>
-
-> ¿No tienes imágenes aún? Revisa `assets/IMAGES.md` para la guía de qué screenshots tomar.
-
----
-
-## 🗂️ Estructura del Proyecto
+## 📁 Estructura del Proyecto
 
 ```
 nexus-os/
-├── app.html                  # SPA principal — todas las vistas (~4000 líneas)
-├── app.js                    # Lógica completa — parser, módulos, render (~9000 líneas)
-├── index.html                # Landing / login con auth de Supabase
-├── main.js                   # Auth flow, session guard
-├── reset-password.html       # Flujo de reset de contraseña
-├── privacy.html              # Política de privacidad
-├── terms.html                # Términos de servicio
-├── style.css                 # Estilos globales (Tailwind base)
-├── vite.config.js            # Configuración Vite
-├── tailwind.config.js        # Configuración Tailwind CSS
-├── postcss.config.js         # PostCSS para Tailwind
-├── vercel.json               # Rewrites y config de Vercel
-├── .env.example              # Variables de entorno de ejemplo
+├── index.html              # Landing page / registro
+├── app.html                # SPA principal (7 vistas)
+├── app.js                  # Lógica principal (~10,000 líneas)
+├── style.css               # Estilos globales
 ├── src/
-│   ├── logic.js              # Utilidades y helpers compartidos
-│   └── __tests__/            # Tests unitarios (Vitest)
-├── scripts/
-│   └── take-screenshots.mjs  # Script Puppeteer para screenshots automáticos
-├── docs/
-│   ├── database_schema.md    # Schema SQL completo y ejemplos de metadata
-│   └── manifest.json         # PWA manifest
+│   ├── parser.js           # Parser semántico v2 (bilingüe + chrono-node)
+│   ├── finance-engine.js   # Motor financiero unificado
+│   ├── logic.js            # Helpers compartidos
+│   └── __tests__/          # Tests unitarios (Vitest)
 ├── assets/
-│   ├── IMAGES.md             # Guía de qué imágenes agregar
-│   ├── banner.png            # Banner principal del README
-│   ├── screenshot.png        # Screenshot principal
-│   └── demo.gif              # Demo animado
-├── public/
-│   └── sw.js                 # Service Worker para PWA offline
-└── dist/                     # Build de producción (generado por Vite)
+│   ├── banner.png          # Banner del proyecto
+│   └── screenshots/        # Capturas de pantalla
+├── public/                 # Assets estáticos
+├── privacy.html            # Política de privacidad
+├── terms.html              # Términos de uso
+├── reset-password.html     # Reset de contraseña
+├── vite.config.js          # Config de Vite (multi-page)
+├── tailwind.config.js      # Config de Tailwind CSS
+└── package.json
 ```
+
+### Las 7 vistas de la app
+
+| Vista | Descripción |
+|---|---|
+| 📡 **Panel de Comandos** (Feed) | Color-coding por tipo, búsqueda, hábitos, transformar nodos |
+| 🗂️ **Muro Táctico** | Kanban con drag & drop, checklist avanzado, modal de detalle |
+| 💰 **Bio-Finanzas** | Multi-cuenta, tabla con saldo corriente, KPIs, impresión, CSV |
+| 🧠 **Bóveda Neural** | Notas estilo Keep, pin, colores, adjuntos, editor enriquecido |
+| 📅 **Calendario / Línea de Tiempo** | Vistas mes/semana/día, agenda financiera |
+| 📜 **Crónica** | Histórico diario en 3 columnas (mañana · tarde · noche) |
+| 🏗️ **Proyectos** | Kanban + Wiki + Notas + Finanzas + Hitos + Cotizaciones |
 
 ---
 
-## ☁️ Deploy a Vercel
+## 🌐 Deploy en Vercel
 
-**Opción A — Interfaz web (recomendado):**
+El proyecto está configurado para deploy multi-página en Vercel.
 
-1. Haz push del repo a GitHub
-2. Entra a [vercel.com/new](https://vercel.com/new) → importa el repositorio
-3. Vercel detecta Vite automáticamente
-4. Agrega las variables de entorno:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-5. Click en **Deploy** ✅
+### Deploy automático desde GitHub
 
-**Opción B — CLI:**
+1. Importa el repositorio en [vercel.com](https://vercel.com/new)
+2. Framework preset: **Vite**
+3. Agrega las variables de entorno:
+   ```
+   VITE_SUPABASE_URL=https://tuproyecto.supabase.co
+   VITE_SUPABASE_ANON_KEY=tu-anon-key-aqui
+   ```
+4. Clic en **Deploy** — Vercel auto-despliega en cada push a `main`
+
+### URL de producción
+
+🔗 **[nexus-os-chi.vercel.app](https://nexus-os-chi.vercel.app)**
+
+---
+
+## 🧪 Tests
 
 ```sh
-# Instalar CLI de Vercel (primera vez)
-npm i -g vercel
-
-# Login
-vercel login
-
-# Deploy a producción
-vercel deploy --prod --yes
+npm run test          # Ejecutar tests una vez
+npm run test:watch    # Watch mode
 ```
 
-> **Variables en Vercel:** Dashboard → Project → Settings → Environment Variables
-
----
-
-## 💡 Uso Rápido
-
-### Registrar un gasto
-
-```
--$1500 mano de obra albañil @efectivo #casatulum
-```
-→ Se crea un nodo `expense` con monto, cuenta y tag de proyecto. Aparece en Bio-Finanzas Y en el dashboard del proyecto.
-
-### Crear una tarea
-
-```
-#tarea revisar planos estructurales antes del viernes #casatulum
-```
-→ Se crea en el Muro Táctico en columna "Por hacer", vinculada al proyecto.
-
-### Registrar un pago parcial (abono)
-
-1. Abre **Proyectos** → selecciona el proyecto → **Cotizaciones**
-2. Click en una cotización → sección "Historial de Abonos"
-3. Llena fecha, monto, método de pago y URL del comprobante
-4. El dashboard actualiza el KPI "Pagado" en tiempo real
+Tests unitarios del parser semántico y motor financiero en `src/__tests__/`.
 
 ---
 
 ## 🤝 Contribuyendo
 
-¡Las contribuciones son bienvenidas! Por favor lee las guías antes de empezar.
+¡Las contribuciones son bienvenidas!
 
-1. Haz un fork del repositorio
+1. Fork del repositorio
 2. Crea tu rama: `git checkout -b feature/nueva-funcionalidad`
 3. Haz commit: `git commit -m 'feat: agrega nueva funcionalidad'`
 4. Push: `git push origin feature/nueva-funcionalidad`
@@ -371,7 +356,7 @@ vercel deploy --prod --yes
 
 ## 💖 Apoya este Proyecto
 
-Si Nexus OS te fue útil, considera hacer una contribución. Me ayuda a seguir construyendo herramientas de código abierto.
+Si Nexus OS te fue útil, considera hacer una contribución. Esto me ayuda a seguir creando herramientas de código abierto.
 
 <p align="center">
   <strong>Donaciones en Criptomonedas — Red XRP</strong><br><br>
@@ -402,24 +387,12 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para m�
   <a href="https://github.com/oscaromargp">
     <img src="https://img.shields.io/badge/GitHub-oscaromargp-181717?style=for-the-badge&logo=github" alt="GitHub"/>
   </a>
-  &nbsp;
-  <a href="https://wa.me/526121077805?text=Hola%20Oscar%2C%20vi%20tu%20proyecto%20Nexus%20OS%20en%20GitHub...">
-    <img src="https://img.shields.io/badge/WhatsApp-Contactar-25D366?style=for-the-badge&logo=whatsapp&logoColor=white" alt="WhatsApp"/>
-  </a>
 </p>
 
 <p align="center">
   <a href="https://github.com/oscaromargp/nexus-os">Ver Repositorio</a> •
-  <a href="https://nexus-os-chi.vercel.app">Demo en vivo</a>
+  <a href="https://nexus-os-chi.vercel.app">Ver Demo en Vivo</a>
 </p>
-
----
-
-## 👥 Contribuidores
-
-<a href="https://github.com/oscaromargp">
-  <img src="https://github.com/oscaromargp.png" width="50" style="border-radius:50%" alt="oscaromargp"/>
-</a>
 
 ---
 
@@ -444,9 +417,9 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para m�
 
 ---
 
-- [Supabase](https://supabase.com) — infraestructura de base de datos y autenticación
-- [Vite](https://vitejs.dev) — build system ultrarrápido
-- [Tailwind CSS](https://tailwindcss.com) — sistema de diseño utility-first
-- [Fuse.js](https://fusejs.io) — búsqueda fuzzy para la búsqueda global
-- [Shields.io](https://shields.io) — badges
-- [awesome-readme](https://github.com/matiassingers/awesome-readme) — inspiración y guía
+- [Supabase](https://supabase.com) — por el backend sin servidor
+- [chrono-node](https://github.com/wanasit/chrono) — por el parser de fechas en lenguaje natural
+- [SortableJS](https://sortablejs.github.io/Sortable/) — por el drag & drop del Kanban
+- [Fuse.js](https://www.fusejs.io/) — por la búsqueda fuzzy
+- [Shields.io](https://shields.io) — por los badges
+- [awesome-readme](https://github.com/matiassingers/awesome-readme) — por la inspiración

@@ -1884,10 +1884,10 @@
     <!-- AYUDA -->
     <div id="view-ayuda" class="view-section">
       <div class="view-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-        <h1 class="view-title">📚 Guía de Uso — Nexus OS</h1>
+        <h1 class="view-title">📚 Guía de Uso — Nexus OS v6</h1>
         <button onclick="switchView('settings')" style="background:linear-gradient(135deg,#00f0ff,#1af3ff); color:#000; border:none; border-radius:10px; padding:9px 18px; font-weight:800; font-size:13px; cursor:pointer;">💬 Enviar Feedback</button>
       </div>
-      <div style="display:flex;flex-direction:column;gap:12px;max-width:800px;">
+      <div style="display:flex;flex-direction:column;gap:12px;max-width:860px;">
 
         <!-- INICIO RÁPIDO -->
         <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
@@ -1896,51 +1896,240 @@
             <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
           <div class="ayuda-body" style="display:none;margin-top:16px;">
-            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Nexus OS es un sistema operativo personal. Todo vive en <b style="color:#fff;">nodos</b> — tareas, notas, transacciones, proyectos, contactos.</p>
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Nexus OS es tu sistema operativo personal. Todo vive como <b style="color:#fff;">nodos</b> — tareas, notas, transacciones, proyectos y contactos — conectados por <b style="color:#00f0ff;">#etiquetas</b>.</p>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">1. Escribe en la <b style="color:#fff;">barra inferior</b> y presiona Enter — crea un nodo al instante.</div>
-              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">2. Navega con el <b style="color:#fff;">menú lateral</b> entre vistas: Feed, Kanban, Finanzas, Notas, Proyectos.</div>
-              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">3. Usa <b style="color:#fff;">Proyectos</b> para gestionar trabajo con Kanban, hitos, cotizaciones y equipo.</div>
-              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">4. Vincula todo con <b style="color:#fff;">#etiquetas</b> — cada nodo puede tener múltiples tags.</div>
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">1. Escribe en la <b style="color:#fff;">barra inferior</b> y presiona <kbd style="background:rgba(255,255,255,0.12);padding:1px 5px;border-radius:3px;font-size:10px;">Enter</kbd> — el parser detecta el tipo automáticamente.</div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">2. Navega con el <b style="color:#fff;">menú lateral</b> entre las 7 vistas: Feed · Muro Táctico · Bio-Finanzas · Bóveda Neural · Calendario · Crónica · Proyectos.</div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">3. Usa <b style="color:#fff;">Proyectos</b> para gestionar trabajo con Kanban drag &amp; drop, Wiki, hitos, cotizaciones y equipo.</div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">4. <b style="color:#fff;">#etiquetas</b> conectan todo — el mismo tag en una tarea, un gasto y una nota los reúne en la vista de Tags.</div>
+              <div style="padding:10px 14px;background:rgba(248,113,113,0.05);border:1px solid rgba(248,113,113,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">5. <b style="color:#fff;">ESC</b> cierra cualquier modal abierto desde cualquier vista.</div>
             </div>
           </div>
         </div>
 
-        <!-- PARSER -->
+        <!-- PARSER SEMÁNTICO v2 -->
         <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">⌨️ Parser Semántico — La barra de comandos</h2>
+            <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">⌨️ Parser Semántico v2 — Barra de comandos</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
           <div class="ayuda-body" style="display:none;margin-top:16px;">
-          <p style="color:var(--text-muted); font-size:13px; margin-bottom:16px;">Escribe en la barra inferior y presiona <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px; font-size:11px;">Enter</kbd>. El sistema detecta el tipo de nodo automáticamente.</p>
-          <div style="display:flex; flex-direction:column; gap:10px;">
-            <div style="background:rgba(167,139,250,0.06); border:1px solid rgba(167,139,250,0.2); border-radius:10px; padding:14px;">
-              <code style="color:#a78bfa; font-family:'JetBrains Mono',monospace;">#tarea Revisar informe Q2</code>
-              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Crea una tarjeta en el Muro Táctico con estado "Pendiente".</p>
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:16px;">Escribe en lenguaje natural y presiona <kbd style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;font-size:11px;">Enter</kbd>. El parser v2 es bilingüe (ES/EN) con soporte de fechas en lenguaje natural y prioridades.</p>
+
+            <!-- TIPOS DE NODO -->
+            <p style="color:#fff;font-size:12px;font-weight:700;margin-bottom:8px;letter-spacing:0.5px;">TIPOS DE NODO</p>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px;">
+              <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:12px 14px;">
+                <code style="color:#a78bfa;font-family:'JetBrains Mono',monospace;font-size:12px;">#tarea Revisar informe Q2</code>
+                <p style="color:var(--text-muted);font-size:12px;margin:5px 0 0;">→ Tarjeta en el Muro Táctico, estado "Pendiente".</p>
+              </div>
+              <div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:12px 14px;">
+                <code style="color:#4ade80;font-family:'JetBrains Mono',monospace;font-size:12px;">+$1500 Pago freelance @bbva</code>
+                <p style="color:var(--text-muted);font-size:12px;margin:5px 0 0;">→ Ingreso de $1,500 asignado a la cuenta BBVA.</p>
+              </div>
+              <div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:10px;padding:12px 14px;">
+                <code style="color:#f87171;font-family:'JetBrains Mono',monospace;font-size:12px;">-$350 Renta oficina @efectivo #oficina</code>
+                <p style="color:var(--text-muted);font-size:12px;margin:5px 0 0;">→ Gasto de $350 en cuenta Efectivo, vinculado al tag #oficina.</p>
+              </div>
+              <div style="background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.2);border-radius:10px;padding:12px 14px;">
+                <code style="color:#60a5fa;font-family:'JetBrains Mono',monospace;font-size:12px;">Reflexión sobre el producto #idea</code>
+                <p style="color:var(--text-muted);font-size:12px;margin:5px 0 0;">→ Texto libre = nota en la Bóveda Neural.</p>
+              </div>
+              <div style="background:rgba(253,186,116,0.06);border:1px solid rgba(253,186,116,0.2);border-radius:10px;padding:12px 14px;">
+                <code style="color:#fdba74;font-family:'JetBrains Mono',monospace;font-size:12px;">#persona Juan Pérez — CEO Startup XYZ</code>
+                <p style="color:var(--text-muted);font-size:12px;margin:5px 0 0;">→ Nuevo contacto tipo Persona.</p>
+              </div>
+              <div style="background:rgba(45,212,191,0.06);border:1px solid rgba(45,212,191,0.2);border-radius:10px;padding:12px 14px;">
+                <code style="color:#2dd4bf;font-family:'JetBrains Mono',monospace;font-size:12px;">📅 Reunión con cliente jueves 3pm</code>
+                <p style="color:var(--text-muted);font-size:12px;margin:5px 0 0;">→ Texto con fecha o emoji 📅 = evento en el Calendario.</p>
+              </div>
             </div>
-            <div style="background:rgba(74,222,128,0.06); border:1px solid rgba(74,222,128,0.2); border-radius:10px; padding:14px;">
-              <code style="color:#4ade80; font-family:'JetBrains Mono',monospace;">+$1500 Pago freelance @bbva</code>
-              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Registra un ingreso de $1,500 asignado a la cuenta "bbva".</p>
+
+            <!-- PRIORIDADES -->
+            <p style="color:#fff;font-size:12px;font-weight:700;margin-bottom:8px;letter-spacing:0.5px;">PRIORIDADES</p>
+            <p style="color:var(--text-muted);font-size:12px;margin-bottom:10px;">Agrega la prioridad en cualquier posición del texto:</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;">
+              <div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:10px 12px;">
+                <code style="color:#f87171;font-size:11px;font-family:'JetBrains Mono',monospace;">p1 · !alta · !high</code>
+                <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">🔴 Prioridad alta</p>
+              </div>
+              <div style="background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.2);border-radius:8px;padding:10px 12px;">
+                <code style="color:#fb923c;font-size:11px;font-family:'JetBrains Mono',monospace;">p2 · !media · !medium</code>
+                <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">🟠 Prioridad media</p>
+              </div>
+              <div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.2);border-radius:8px;padding:10px 12px;">
+                <code style="color:#4ade80;font-size:11px;font-family:'JetBrains Mono',monospace;">p3 · !baja · !low</code>
+                <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">🟢 Prioridad baja</p>
+              </div>
+              <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;">
+                <code style="color:#a78bfa;font-size:11px;font-family:'JetBrains Mono',monospace;">#tarea Llamar banco p1</code>
+                <p style="color:var(--text-muted);font-size:11px;margin:4px 0 0;">Tarea con prioridad alta</p>
+              </div>
             </div>
-            <div style="background:rgba(248,113,113,0.06); border:1px solid rgba(248,113,113,0.2); border-radius:10px; padding:14px;">
-              <code style="color:#f87171; font-family:'JetBrains Mono',monospace;">-$350 Renta oficina @efectivo</code>
-              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Registra un gasto de $350 asignado a la cuenta "efectivo".</p>
+
+            <!-- FECHAS EN LENGUAJE NATURAL -->
+            <p style="color:#fff;font-size:12px;font-weight:700;margin-bottom:8px;letter-spacing:0.5px;">FECHAS EN LENGUAJE NATURAL</p>
+            <p style="color:var(--text-muted);font-size:12px;margin-bottom:10px;">El parser entiende fechas en español e inglés. Si el día ya pasó en la semana actual, toma el siguiente:</p>
+            <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:6px;">
+              <div style="display:flex;gap:12px;align-items:baseline;padding:8px 12px;background:rgba(0,246,255,0.04);border:1px solid rgba(0,246,255,0.12);border-radius:8px;">
+                <code style="color:#00f0ff;font-family:'JetBrains Mono',monospace;font-size:11px;min-width:200px;">#tarea Stand-up hoy</code>
+                <span style="color:var(--text-muted);font-size:11px;">→ fecha = hoy</span>
+              </div>
+              <div style="display:flex;gap:12px;align-items:baseline;padding:8px 12px;background:rgba(0,246,255,0.04);border:1px solid rgba(0,246,255,0.12);border-radius:8px;">
+                <code style="color:#00f0ff;font-family:'JetBrains Mono',monospace;font-size:11px;min-width:200px;">#tarea Entregar propuesta mañana</code>
+                <span style="color:var(--text-muted);font-size:11px;">→ fecha = mañana</span>
+              </div>
+              <div style="display:flex;gap:12px;align-items:baseline;padding:8px 12px;background:rgba(0,246,255,0.04);border:1px solid rgba(0,246,255,0.12);border-radius:8px;">
+                <code style="color:#00f0ff;font-family:'JetBrains Mono',monospace;font-size:11px;min-width:200px;">#tarea Deploy lunes p1</code>
+                <span style="color:var(--text-muted);font-size:11px;">→ próximo lunes, alta prioridad</span>
+              </div>
+              <div style="display:flex;gap:12px;align-items:baseline;padding:8px 12px;background:rgba(0,246,255,0.04);border:1px solid rgba(0,246,255,0.12);border-radius:8px;">
+                <code style="color:#00f0ff;font-family:'JetBrains Mono',monospace;font-size:11px;min-width:200px;">+$2000 Pago cliente @bbva today</code>
+                <span style="color:var(--text-muted);font-size:11px;">→ ingreso con fecha de hoy</span>
+              </div>
+              <div style="display:flex;gap:12px;align-items:baseline;padding:8px 12px;background:rgba(0,246,255,0.04);border:1px solid rgba(0,246,255,0.12);border-radius:8px;">
+                <code style="color:#00f0ff;font-family:'JetBrains Mono',monospace;font-size:11px;min-width:200px;">#tarea Revisión 15/06/2026</code>
+                <span style="color:var(--text-muted);font-size:11px;">→ fecha exacta DD/MM/AAAA</span>
+              </div>
             </div>
-            <div style="background:rgba(96,165,250,0.06); border:1px solid rgba(96,165,250,0.2); border-radius:10px; padding:14px;">
-              <code style="color:#60a5fa; font-family:'JetBrains Mono',monospace;">Reflexión sobre el producto #idea</code>
-              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Texto libre → nota en la Bóveda Neural.</p>
+            <p style="color:var(--text-muted);font-size:11px;margin-top:8px;padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:8px;">
+              📅 Días válidos: <b style="color:#fff;">hoy · mañana · pasado mañana · lunes · martes · miércoles · jueves · viernes · sábado · domingo · today · tomorrow · monday … sunday</b>
+            </p>
+          </div>
+        </div>
+
+        <!-- MURO TÁCTICO (KANBAN) -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:#a78bfa;margin:0;">🗂️ Muro Táctico — Kanban</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Vista Kanban con <b style="color:#fff;">drag &amp; drop</b> real (SortableJS). Arrastra tarjetas entre columnas para cambiar su estado.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                🖱️ <b style="color:#fff;">Drag &amp; Drop</b> — Arrastra cualquier tarjeta a otra columna. El estado se actualiza automáticamente en Supabase.
+              </div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                📌 <b style="color:#fff;">Modal de detalle</b> — Clic en cualquier tarjeta para ver/editar: título, descripción, etiquetas de color, imagen de portada, adjuntos y checklist.
+              </div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                🗂️ <b style="color:#fff;">Columnas personalizables</b> — Pendiente · En progreso · En revisión · Completado. Se pueden renombrar desde el modal de configuración del tablero.
+              </div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                🖼️ <b style="color:#fff;">Imagen de portada</b> — Ctrl+V dentro del modal de detalle para pegar una captura de pantalla directamente como imagen.
+              </div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                🔄 <b style="color:#fff;">Transform</b> — Desde el menú de cualquier nota del Feed puedes convertirla en tarea, gasto, ingreso o evento con un clic.
+              </div>
             </div>
-            <div style="background:rgba(253,186,116,0.06); border:1px solid rgba(253,186,116,0.2); border-radius:10px; padding:14px;">
-              <code style="color:#fdba74; font-family:'JetBrains Mono',monospace;">#persona Juan Pérez — CEO Startup XYZ</code>
-              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Crea un contacto tipo Persona en la sección Contactos.</p>
-            </div>
-            <div style="background:rgba(34,197,94,0.06); border:1px solid rgba(34,197,94,0.2); border-radius:10px; padding:14px;">
-              <code style="color:#4ade80; font-family:'JetBrains Mono',monospace;">📅 Reunión con cliente jueves 3pm</code>
-              <p style="color:var(--text-muted); font-size:12px; margin-top:6px;">Texto con fecha o emoji 📅 → evento en el Calendario.</p>
+            <p style="color:var(--text-muted);font-size:12px;padding:10px 14px;background:rgba(255,255,255,0.03);border-radius:8px;">
+              💡 <b style="color:#fff;">Tip</b> — Crea tareas rápido desde la barra: <code style="color:#a78bfa;">#tarea Diseño landing p2 viernes</code> y aparece directamente en la columna Pendiente con prioridad y fecha.
+            </p>
+          </div>
+        </div>
+
+        <!-- CHECKLIST AVANZADO -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:#2dd4bf;margin:0;">✅ Checklist en Tarjetas Kanban</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Cada tarjeta del Muro Táctico y del Kanban de proyecto puede tener un <b style="color:#fff;">checklist avanzado</b> con asignación de persona y fecha límite por ítem.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+              <div style="padding:12px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;">
+                <p style="color:#2dd4bf;font-size:12px;font-weight:700;margin-bottom:8px;">Cómo agregar ítems al checklist:</p>
+                <ol style="color:var(--text-muted);font-size:12px;line-height:1.9;padding-left:18px;margin:0;">
+                  <li>Abre el modal de detalle de cualquier tarjeta (clic en la tarjeta)</li>
+                  <li>Busca la sección <b style="color:#fff;">Checklist</b> dentro del modal</li>
+                  <li>Escribe el texto del ítem y pulsa <kbd style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;font-size:10px;">Enter</kbd> o el botón ＋</li>
+                  <li>Asigna una <b style="color:#fff;">persona responsable</b> desde el selector de contactos</li>
+                  <li>Agrega una <b style="color:#fff;">fecha límite</b> opcional al ítem</li>
+                </ol>
+              </div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.04);border:1px solid rgba(45,212,191,0.12);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                📊 El <b style="color:#fff;">progreso del checklist</b> se muestra como barra en la tarjeta del tablero (ej: 2/5 ítems completados).
+              </div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.04);border:1px solid rgba(45,212,191,0.12);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                👤 La persona asignada aparece con su avatar/inicial en la tarjeta del tablero para visibilidad rápida.
+              </div>
             </div>
           </div>
-          </div><!-- /ayuda-body -->
+        </div>
+
+        <!-- HÁBITOS -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:#fb923c;margin:0;">🔁 Hábitos — Tracker diario</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Registra hábitos diarios con el formato especial <code style="color:#fb923c;">- [ ] Nombre #habito</code>. El sistema calcula tu racha automáticamente.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+              <div style="background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.2);border-radius:10px;padding:12px 14px;">
+                <p style="color:#fb923c;font-size:12px;font-weight:700;margin-bottom:8px;">Formato del hábito:</p>
+                <code style="color:#fff;font-family:'JetBrains Mono',monospace;font-size:12px;">- [ ] Leer 20 min #habito</code>
+                <p style="color:var(--text-muted);font-size:12px;margin:8px 0 0;">→ Crea un registro de hábito para hoy. El <code style="color:#fb923c;">- [ ]</code> es la sintaxis exacta (checkbox Markdown).</p>
+              </div>
+              <div style="background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;padding:12px 14px;">
+                <p style="color:#fb923c;font-size:12px;font-weight:700;margin-bottom:8px;">Más ejemplos:</p>
+                <div style="display:flex;flex-direction:column;gap:5px;">
+                  <code style="color:#fdba74;font-family:'JetBrains Mono',monospace;font-size:11px;">- [ ] Ejercicio 30 min #habito</code>
+                  <code style="color:#fdba74;font-family:'JetBrains Mono',monospace;font-size:11px;">- [ ] Meditar #habito</code>
+                  <code style="color:#fdba74;font-family:'JetBrains Mono',monospace;font-size:11px;">- [ ] No azúcar #habito</code>
+                  <code style="color:#fdba74;font-family:'JetBrains Mono',monospace;font-size:11px;">- [ ] Agua 2L #habito</code>
+                </div>
+              </div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.04);border:1px solid rgba(251,146,60,0.12);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                🔥 <b style="color:#fff;">Racha automática</b> — El sistema detecta registros consecutivos del mismo hábito y muestra tu racha actual (ej: 🔥 7 días).
+              </div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.04);border:1px solid rgba(251,146,60,0.12);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                📅 <b style="color:#fff;">Un registro por día</b> — Registra el mismo hábito cada día para mantener la racha. El nombre del hábito es el texto antes de <code style="color:#fb923c;">#habito</code>.
+              </div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.04);border:1px solid rgba(251,146,60,0.12);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                📊 <b style="color:#fff;">Visualización</b> — Los hábitos aparecen en el Panel de Comandos (Feed) con tarjetas especiales mostrando nombre, racha y estado del día.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- WIKI DE PROYECTO -->
+        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 style="font-size:15px;font-weight:800;color:#2dd4bf;margin:0;">📖 Wiki de Proyecto</h2>
+            <span style="color:var(--text-muted);font-size:18px;">›</span>
+          </div>
+          <div class="ayuda-body" style="display:none;margin-top:16px;">
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Cada proyecto tiene una pestaña <b style="color:#2dd4bf;">📖 Wiki</b> para documentar todo lo relacionado al proyecto, estilo GitHub Wiki. Escribe en Markdown y el sistema lo renderiza al instante.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                📁 <b style="color:#fff;">Acceso</b> — Abre cualquier proyecto → pestaña <b style="color:#2dd4bf;">📖 Wiki</b> (junto a Resumen · Finanzas · Kanban · Notas).
+              </div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                ✏️ <b style="color:#fff;">Edición Markdown</b> — Clic en "✏️ Editar" para entrar al modo editor. Soporta encabezados, listas, negritas, cursivas, código, tablas y links.
+              </div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                📑 <b style="color:#fff;">Índice automático</b> — La sidebar genera automáticamente el índice de la wiki a partir de los encabezados (# ## ###) del documento.
+              </div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">
+                🔗 <b style="color:#fff;">Links &amp; recursos</b> — Agrega links a Google Drive, Figma, Notion o cualquier URL. La Wiki centraliza toda la documentación del proyecto.
+              </div>
+            </div>
+            <div style="background:rgba(45,212,191,0.04);border:1px solid rgba(45,212,191,0.12);border-radius:10px;padding:14px;">
+              <p style="color:#2dd4bf;font-size:12px;font-weight:700;margin-bottom:10px;">Sintaxis Markdown soportada:</p>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <code style="color:var(--text-muted);font-size:11px;font-family:'JetBrains Mono',monospace;"># Título principal</code>
+                <code style="color:var(--text-muted);font-size:11px;font-family:'JetBrains Mono',monospace;">## Sección</code>
+                <code style="color:var(--text-muted);font-size:11px;font-family:'JetBrains Mono',monospace;">**negrita**</code>
+                <code style="color:var(--text-muted);font-size:11px;font-family:'JetBrains Mono',monospace;">*cursiva*</code>
+                <code style="color:var(--text-muted);font-size:11px;font-family:'JetBrains Mono',monospace;">- Lista item</code>
+                <code style="color:var(--text-muted);font-size:11px;font-family:'JetBrains Mono',monospace;">[texto](url)</code>
+                <code style="color:var(--text-muted);font-size:11px;font-family:'JetBrains Mono',monospace;">`código inline`</code>
+                <code style="color:var(--text-muted);font-size:11px;font-family:'JetBrains Mono',monospace;">--- (separador)</code>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- PROYECTOS -->
@@ -1950,34 +2139,31 @@
             <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
           <div class="ayuda-body" style="display:none;margin-top:16px;">
-            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
-              <li>Crea un proyecto en <b style="color:#fff;">Proyectos</b> → <b style="color:#2dd4bf;">+ Nuevo Proyecto</b></li>
-              <li>Configura presupuesto, categoría, etiqueta principal y miembros del equipo</li>
-              <li>Usa la pestaña <b style="color:#fff;">Kanban</b> para gestionar tareas con columnas personalizables</li>
-              <li>Las tareas Kanban ahora soportan checklist, adjuntos, imagen de portada y etiquetas de color</li>
-              <li>Agrega <b style="color:#fff;">Hitos</b> para calcular avance automático — cada hito completado suma al %</li>
-              <li>Las <b style="color:#fff;">Cotizaciones</b> vinculadas al proyecto aparecen en la pestaña Finanzas</li>
-              <li>Registra <b style="color:#fff;">abonos/pagos</b> directamente en cada cotización desde el modal</li>
-              <li>El <b style="color:#2dd4bf;">Dashboard Financiero</b> muestra KPIs, donut de distribución y desglose por categoría/proveedor</li>
-              <li>Escribe <code style="color:#2dd4bf;">#casatulum</code> (la etiqueta del proyecto) en cualquier transacción para vincularla automáticamente</li>
-            </ul>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🆕 <b style="color:#fff;">Crear</b> → Proyectos → <b style="color:#2dd4bf;">+ Nuevo Proyecto</b>. Configura presupuesto, categoría, etiqueta y miembros.</div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📋 <b style="color:#fff;">Pestañas del proyecto</b>: Resumen · 💼 Finanzas · ✅ Kanban · 🧠 Notas · 📖 Wiki</div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🎯 <b style="color:#fff;">Hitos</b> — Cada hito completado suma % al avance del proyecto. Asigna responsable y fecha.</div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">💰 <b style="color:#fff;">Cotizaciones</b> — Crea cotizaciones en PDF, registra abonos/pagos y vincúlalas al proyecto. Aparecen en pestaña Finanzas.</div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🏷️ <b style="color:#fff;">Vincula transacciones</b> — Escribe <code style="color:#2dd4bf;">#etiqueta-proyecto</code> en cualquier gasto o ingreso para asociarlo automáticamente al dashboard financiero del proyecto.</div>
+              <div style="padding:10px 14px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">👥 <b style="color:#fff;">Equipo</b> — Agrega miembros con especialidades. Al "Contratar sin cotización" puedes buscar cualquier contacto (cliente, proveedor, persona) del sistema.</div>
+            </div>
           </div>
         </div>
 
-        <!-- CONTACTOS -->
+        <!-- CONTACTOS & PROVEEDORES -->
         <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">👥 Contactos &amp; Proveedores</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
           <div class="ayuda-body" style="display:none;margin-top:16px;">
-            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
-              <li>Ve a <b style="color:#fff;">Contactos</b> en el menú lateral y pulsa <b style="color:#00f0ff;">+ Nuevo Contacto</b></li>
-              <li>Tipos: <b style="color:#fff;">cliente · proveedor · colaborador</b></li>
-              <li>Haz clic en una tarjeta para ver perfil completo, historial y notas</li>
-              <li>Vincula un contacto a tus movimientos financieros con <code style="color:#fdba74;">@nombre</code></li>
-              <li>Los proveedores vinculados a proyectos aparecen en el dashboard financiero del proyecto</li>
-            </ul>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🆕 <b style="color:#fff;">Nuevo Contacto</b> → Contactos → <b style="color:#00f0ff;">+ Nuevo Contacto</b>. Roles disponibles: cliente · proveedor · colaborador · consultor.</div>
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🏷️ <b style="color:#fff;">Especialidades</b> — Asigna especialidades desde el catálogo personalizable en <b style="color:#fff;">Configuración → Catálogo de Especialidades</b>. Aparecen como badges en la tarjeta del contacto.</div>
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🔗 <b style="color:#fff;">Vinculación @cuenta</b> — Usa <code style="color:#fdba74;">@nombre</code> en gastos e ingresos: <code style="color:#4ade80;">+$5000 Honorarios @juan</code> para vincularlo al historial del contacto.</div>
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📋 <b style="color:#fff;">Perfil completo</b> — Clic en cualquier tarjeta: ver historial de transacciones vinculadas, notas, proyectos asociados y datos de contacto.</div>
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🔍 <b style="color:#fff;">Buscador universal</b> — Al añadir miembros a un proyecto o contratar un proveedor, el buscador encuentra <b style="color:#fff;">todos</b> tus contactos independientemente del tipo o rol.</div>
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📄 <b style="color:#fff;">Importar masivo</b> — Botón <b style="color:#fff;">📄 Plantilla / ⬆ Importar</b> para subir contactos en CSV.</div>
             </div>
           </div>
         </div>
@@ -1989,13 +2175,19 @@
             <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
           <div class="ayuda-body" style="display:none;margin-top:16px;">
-            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
-              <li>Crea cuentas con el botón <b style="color:#fff;">+ Cuenta</b> (BBVA, Efectivo, etc.)</li>
-              <li>Usa <code style="color:#4ade80;">+$1500 Honorarios @bbva</code> para ingresos, <code style="color:#f87171;">-$350 Renta @efectivo</code> para gastos</li>
-              <li>Haz transferencias entre cuentas con <b style="color:#fff;">⇄ Transferir</b></li>
-              <li>Exporta historial a CSV con <b style="color:#fff;">⬇ CSV</b></li>
-              <li>El <b style="color:#fff;">Semáforo de cuentas</b> te avisa si alguna está en rojo</li>
-            </ul>
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Gestiona ingresos, gastos y múltiples cuentas. Las cifras entre <b style="color:#fff;">Plan del Mes</b> y <b style="color:#fff;">Bio-Finanzas</b> son idénticas — calculadas por el mismo motor financiero.</p>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🏦 <b style="color:#fff;">+ Cuenta</b> — Crea cuentas (BBVA, Efectivo, PayPal, etc.) con saldo inicial. El semáforo avisa si alguna cae en rojo.</div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">💹 <b style="color:#fff;">Registrar desde la barra</b>:<br>
+                <code style="color:#4ade80;font-size:11px;">+$1500 Honorarios @bbva</code> → ingreso<br>
+                <code style="color:#f87171;font-size:11px;">-$350 Renta @efectivo</code> → gasto
+              </div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📊 <b style="color:#fff;">Tabla de movimientos</b> — Columnas: Concepto · Entrada · Salida · Saldo · Comprobante. El saldo es corriente (acumulado de más reciente a más antiguo).</div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🖨️ <b style="color:#fff;">Imprimir tabla</b> — Botón <b style="color:#fff;">🖨 Imprimir</b> genera una versión limpia de la tabla para guardar como PDF o imprimir directamente.</div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">⬇️ <b style="color:#fff;">Exportar CSV</b> — Descarga el historial filtrado por cuenta y período como archivo CSV compatible con Excel.</div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">⇄ <b style="color:#fff;">Transferencias</b> — Mueve fondos entre cuentas con el botón <b style="color:#fff;">⇄ Transferir</b>. Genera dos movimientos espejo automáticamente.</div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🗂️ <b style="color:#fff;">Detalle de transacción</b> — Clic en cualquier movimiento para ver/editar concepto, monto, cuenta, fecha, adjunto y etiquetas.</div>
+            </div>
           </div>
         </div>
 
@@ -2006,63 +2198,65 @@
             <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
           <div class="ayuda-body" style="display:none;margin-top:16px;">
-            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
-              <li>Guarda notas tipo Google Keep con colores, tags y formato rico (negrita, listas, links)</li>
-              <li>Haz doble clic en una nota para editarla con el editor enriquecido</li>
-              <li>Los proyectos <b style="color:#fff;">NO</b> aparecen aquí — solo notas y personas</li>
-              <li>Las notas vinculadas a un proyecto viven exclusivamente en la pestaña Notas del proyecto</li>
-              <li>Fija notas importantes con 📌</li>
-              <li>Cambia color de la tarjeta desde el modal de edición</li>
-            </ul>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="padding:10px 14px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📝 <b style="color:#fff;">Notas estilo Google Keep</b> — Tarjetas con colores, tags y formato enriquecido (negrita, cursiva, listas, links).</div>
+              <div style="padding:10px 14px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">✏️ <b style="color:#fff;">Editar</b> — Doble clic en una nota para abrir el editor enriquecido. Guarda con <kbd style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;font-size:10px;">Ctrl+Enter</kbd> o el botón Guardar.</div>
+              <div style="padding:10px 14px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🖼️ <b style="color:#fff;">Adjuntar imagen</b> — <kbd style="background:rgba(255,255,255,0.1);padding:1px 5px;border-radius:3px;font-size:10px;">Ctrl+V</kbd> dentro del editor pega capturas de pantalla directamente (compresión automática).</div>
+              <div style="padding:10px 14px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📌 <b style="color:#fff;">Fijar nota</b> — El ícono 📌 en la tarjeta mantiene la nota al principio de la vista.</div>
+              <div style="padding:10px 14px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🎨 <b style="color:#fff;">Colores</b> — Cambia el color de fondo de cada nota desde el modal de edición para categorizar visualmente.</div>
+              <div style="padding:10px 14px;background:rgba(96,165,250,0.04);border:1px solid rgba(96,165,250,0.1);border-radius:10px;font-size:12px;color:var(--text-muted);">ℹ️ Las notas vinculadas a un proyecto viven en la pestaña <b style="color:#fff;">🧠 Notas</b> de ese proyecto. La Bóveda Neural muestra solo notas generales.</div>
+            </div>
           </div>
         </div>
 
         <!-- TIEMPO & CRÓNICA -->
         <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h2 style="font-size:15px;font-weight:800;color:#a78bfa;margin:0;">📅 Tiempo &amp; Crónica</h2>
+            <h2 style="font-size:15px;font-weight:800;color:#a78bfa;margin:0;">📅 Calendario &amp; Crónica</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
           <div class="ayuda-body" style="display:none;margin-top:16px;">
-            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
-              <li>El <b style="color:#fff;">Calendario</b> muestra todos tus eventos — crea con <code style="color:#a78bfa;">📅 Reunión jueves 3pm</code></li>
-              <li>La <b style="color:#fff;">Crónica</b> es tu diario histórico — selecciona cualquier fecha para ver todo lo que registraste</li>
-              <li>Arrastra eventos en el calendario para cambiar de día</li>
-              <li>La <b style="color:#fff;">Agenda financiera</b> muestra suscripciones, pagos fijos y próximos vencimientos en el panel lateral</li>
-            </ul>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📅 <b style="color:#fff;">Crear evento</b> — Escribe <code style="color:#a78bfa;">📅 Reunión con cliente jueves 3pm</code> o usa texto con fecha: <code style="color:#a78bfa;">#tarea Review viernes 10am</code>.</div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🗓️ <b style="color:#fff;">Vistas del calendario</b> — Alterna entre vista Mes · Semana · Día con los botones de la barra superior.</div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📜 <b style="color:#fff;">Crónica</b> — Diario histórico en 3 columnas (mañana · tarde · noche). Selecciona cualquier fecha para ver todo lo que registraste ese día.</div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">💳 <b style="color:#fff;">Agenda financiera</b> — Panel lateral con suscripciones activas, pagos fijos y próximos vencimientos del mes.</div>
+            </div>
           </div>
         </div>
 
         <!-- IMPORTAR & EXPORTAR -->
         <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h2 style="font-size:15px;font-weight:800;color:#fb923c;margin:0;">📥 Importar &amp; Exportar datos</h2>
+            <h2 style="font-size:15px;font-weight:800;color:#fb923c;margin:0;">📥 Importar &amp; Exportar</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
           <div class="ayuda-body" style="display:none;margin-top:16px;">
-            <ul style="color:var(--text-muted);font-size:13px;line-height:2;padding-left:20px;">
-              <li>Ve a <b style="color:#fff;">Configuración → Datos &amp; Respaldo</b> para exportar todos tus datos como JSON</li>
-              <li>Importa transacciones bancarias, contactos y proyectos en lote desde CSV</li>
-              <li>Descarga la plantilla CSV correspondiente, llénala y súbela — el sistema valida antes de importar</li>
-              <li>Para contactos también puedes usar el botón <b style="color:#fff;">📄 Plantilla / ⬆ Importar</b> en la sección Contactos</li>
-            </ul>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">💾 <b style="color:#fff;">Backup JSON</b> — Configuración → Datos &amp; Respaldo → Exportar todos tus nodos como JSON.</div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📊 <b style="color:#fff;">CSV Transacciones</b> — Bio-Finanzas → botón ⬇ CSV. Exporta el historial filtrado por cuenta y período.</div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🖨️ <b style="color:#fff;">Imprimir Bio-Finanzas</b> — Bio-Finanzas → botón 🖨 Imprimir → genera PDF listo para guardar o enviar.</div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">👥 <b style="color:#fff;">Importar Contactos CSV</b> — Contactos → 📄 Plantilla para descargar el formato → ⬆ Importar para subir. El sistema valida antes de guardar.</div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📦 <b style="color:#fff;">Importar lote (transacciones/proyectos)</b> — Configuración → Importar CSV. Descarga la plantilla, llénala y súbela.</div>
+            </div>
           </div>
         </div>
 
         <!-- INTELIGENCIA DE TAGS -->
         <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
-            <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">🏷️ Inteligencia de Tags — Para qué sirve</h2>
+            <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">🏷️ Inteligencia de Tags</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
           </div>
           <div class="ayuda-body" style="display:none;margin-top:16px;">
-            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Los <b style="color:#fff;">tags (#etiquetas)</b> son el sistema nervioso de Nexus OS. Conectan tareas, gastos, notas y proyectos sin duplicar información.</p>
+            <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">Los <b style="color:#fff;">#tags</b> son el sistema nervioso de Nexus OS. Un mismo tag conecta tareas, gastos, notas y eventos sin duplicar información.</p>
             <div style="display:flex;flex-direction:column;gap:8px;">
-              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">✅ <b style="color:#fff;">Vincular a un proyecto</b> — escribe <code style="color:#00f0ff;">#casatulum</code> en cualquier nodo y aparecerá en el dashboard de ese proyecto.</div>
-              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">💰 <b style="color:#fff;">Seguimiento de gastos</b> — <code style="color:#4ade80;">-$500 cemento @efectivo #casatulum</code> suma automáticamente al proyecto.</div>
-              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🔁 <b style="color:#fff;">Hábitos</b> — crea un nodo con <code style="color:#a78bfa;">#hábito #ejercicio</code> y aparece en el tracker de hábitos.</div>
-              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📊 <b style="color:#fff;">Inteligencia de Tags</b> muestra: top tags, co-ocurrencias (tags que siempre van juntos), tags durmientes y tendencias semana a semana.</div>
-              <div style="padding:10px 14px;background:rgba(248,113,113,0.05);border:1px solid rgba(248,113,113,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">⚡ <b style="color:#fff;">Tip pro</b> — usa el mismo tag para todo lo de un proyecto: <code style="color:#f87171;">#tulum</code> en tareas, gastos, notas y eventos. La vista de Tags los agrupa todos.</div>
+              <div style="padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">✅ <b style="color:#fff;">Vincular a proyecto</b> — <code style="color:#00f0ff;">#casatulum</code> en cualquier nodo lo une al dashboard del proyecto automáticamente.</div>
+              <div style="padding:10px 14px;background:rgba(74,222,128,0.05);border:1px solid rgba(74,222,128,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">💰 <b style="color:#fff;">Gastos por proyecto</b> — <code style="color:#4ade80;">-$500 cemento @efectivo #casatulum</code> suma automáticamente al presupuesto del proyecto.</div>
+              <div style="padding:10px 14px;background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🔁 <b style="color:#fff;">Hábitos</b> — El tag especial <code style="color:#fb923c;">#habito</code> (con la sintaxis <code style="color:#fb923c;">- [ ] Nombre #habito</code>) activa el tracker de racha.</div>
+              <div style="padding:10px 14px;background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">📊 <b style="color:#fff;">Vista de Tags</b> — Muestra: top tags, co-ocurrencias (tags que siempre van juntos), tags durmientes y tendencias semana a semana.</div>
+              <div style="padding:10px 14px;background:rgba(248,113,113,0.05);border:1px solid rgba(248,113,113,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">⚡ <b style="color:#fff;">Tip pro</b> — Usa un tag consistente para todo lo de un proyecto: <code style="color:#f87171;">#tulum</code> en tareas, gastos, notas y eventos. La vista de Tags los agrupa todos.</div>
+              <div style="padding:10px 14px;background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.15);border-radius:10px;font-size:12px;color:var(--text-muted);">🔍 <b style="color:#fff;">Búsqueda por tag</b> — En el Feed, filtra por tag con el buscador. Solo muestra nodos que contengan ese tag.</div>
             </div>
           </div>
         </div>
@@ -2076,18 +2270,22 @@
           <div class="ayuda-body" style="display:none;margin-top:16px;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
               <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Guardar nodo</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Enter</kbd></div>
-              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Cerrar modal</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Esc</kbd></div>
-              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Adjuntar captura</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Ctrl+V</kbd></div>
-              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Nueva línea</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Shift+Enter</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Cerrar modal / panel</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Esc</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Pegar imagen / adjunto</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Ctrl+V</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Nueva línea en barra</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Shift+Enter</kbd></div>
               <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Negrita (editor)</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Ctrl+B</kbd></div>
               <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Cursiva (editor)</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Ctrl+I</kbd></div>
-              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Colapsar nav</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">◀ Pestaña</kbd></div>
-              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Colapsar panel</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">▶ Pestaña</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Guardar en editor</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">Ctrl+Enter</kbd></div>
+              <div style="display:flex;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;"><span style="color:var(--text-muted);font-size:13px;">Colapsar sidebar</span><kbd style="background:rgba(255,255,255,0.1);padding:2px 8px;border-radius:4px;font-size:11px;color:#fff;">◀ Pestaña</kbd></div>
+            </div>
+            <div style="margin-top:12px;padding:10px 14px;background:rgba(0,246,255,0.04);border:1px solid rgba(0,246,255,0.12);border-radius:8px;font-size:12px;color:var(--text-muted);">
+              💡 <b style="color:#fff;">Tip</b> — En el Muro Táctico, arrastra tarjetas entre columnas con el mouse. El cambio de estado se guarda automáticamente.
             </div>
           </div>
         </div>
 
       </div>
+    </div><!-- /view-ayuda -->
 
     <!-- ── HERRAMIENTAS ── -->
     <div id="view-herramientas" class="view-section">
