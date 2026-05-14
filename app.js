@@ -7789,159 +7789,176 @@ function _renderProjFinanzas(d) {
   const { p, m, budget, tagStr, projSlug, cots, aceptadas, pendientes, comprometido,
           pagos, pagado, pendientePago, sinComprometer, overBudget, pct, gaugeColor,
           cotsByCat, provMap, milestonePct, disponible } = d
-  const _s = (fn) => { try { return fn() } catch(e) { return '' } }
+  const _s    = (fn) => { try { return fn() } catch(e) { return '' } }
+  const fmtM  = (n) => '$' + Math.abs(n||0).toLocaleString('es-MX',{maximumFractionDigits:0})
 
-  // ── Dashboard financiero ──────────────────────────────────
+  // ── Dashboard financiero (rediseñado) ─────────────────────
   const dashHTML = _s(() => {
-    const linkedIds = new Set(m.linkedTo || [])
-    // KPIs row
-    const kpiData = [
-      { label:'Presupuesto', val:budget, color:'#a78bfa', icon:'💰' },
-      { label:'Comprometido', val:comprometido, color:'#fb923c', icon:'📋' },
-      { label:'Pagado', val:pagado, color:'#4ade80', icon:'✅' },
-      { label:'Por pagar', val:pendientePago, color:'#f87171', icon:'⏳' },
-      { label:'Disponible', val:disponible >= 0 ? disponible : 0, color:'#2dd4bf', icon:'🏦' },
-    ]
-    const kpisHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:16px;">
-      ${kpiData.map(k => `<div style="background:${k.color}10;border:1px solid ${k.color}30;border-radius:10px;padding:10px;text-align:center;">
-        <div style="font-size:18px;margin-bottom:4px;">${k.icon}</div>
-        <div style="font-size:11px;color:var(--text-muted);font-weight:600;">${k.label}</div>
-        <div style="font-size:14px;font-weight:800;color:${k.color};font-family:'JetBrains Mono',monospace;">$${(k.val||0).toLocaleString('es-MX')}</div>
-      </div>`).join('')}
-    </div>`
-    // Progress bars
-    const pct2 = budget > 0 ? Math.min(Math.round(comprometido/budget*100),100) : 0
-    const paidPct = budget > 0 ? Math.min(Math.round(pagado/budget*100),100) : (comprometido > 0 ? Math.min(Math.round(pagado/comprometido*100),100) : 0)
-    const barsHTML = `<div style="margin-bottom:16px;">
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;"><span>Comprometido vs Presupuesto</span><span>${pct2}%</span></div>
-      <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;margin-bottom:10px;"><div style="height:100%;width:${pct2}%;background:#fb923c;border-radius:3px;transition:width .6s;"></div></div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;"><span>Pagado vs Comprometido</span><span>${paidPct}%</span></div>
-      <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${paidPct}%;background:#4ade80;border-radius:3px;transition:width .6s;"></div></div>
-    </div>`
-    // Donut SVG
-    let donutHTML = ''
-    if (comprometido > 0 || pagado > 0) {
-      const total2 = Math.max(budget || comprometido, comprometido)
-      const segments = [
-        { val: pagado, color: '#4ade80', label: 'Pagado' },
-        { val: Math.max(0,pendientePago), color: '#f87171', label: 'Pendiente' },
-        { val: Math.max(0,disponible||0), color: '#2dd4bf', label: 'Disponible' },
-      ].filter(s => s.val > 0)
-      const sum = segments.reduce((a,s) => a + s.val, 0) || 1
-      let ang = -90; const R=42, cx=60, cy=60
-      const paths = segments.map(s => {
-        const pct3 = s.val/sum, sweep = pct3*360
-        const r = Math.PI/180, x1=cx+R*Math.cos(ang*r), y1=cy+R*Math.sin(ang*r)
-        const endA = ang+sweep, x2=cx+R*Math.cos(endA*r), y2=cy+R*Math.sin(endA*r)
-        const large = sweep>180?1:0
-        const dp = `M${cx},${cy} L${x1},${y1} A${R},${R},0,${large},1,${x2},${y2} Z`
-        ang = endA
-        return `<path d="${dp}" fill="${s.color}" opacity="0.85"/>`
-      }).join('')
-      donutHTML = `<div style="display:flex;align-items:center;gap:20px;margin-bottom:16px;">
-        <svg viewBox="0 0 120 120" style="width:100px;height:100px;flex-shrink:0;">
-          <circle cx="60" cy="60" r="42" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-          <circle cx="60" cy="60" r="26" fill="var(--bg-panel)"/>
-          ${paths}
-        </svg>
-        <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
-          ${segments.map(s => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;">
-            <div style="width:10px;height:10px;border-radius:2px;background:${s.color};flex-shrink:0;"></div>
-            <span style="color:var(--text-muted);flex:1;">${s.label}</span>
-            <span style="font-weight:700;color:${s.color};font-family:'JetBrains Mono',monospace;">$${s.val.toLocaleString('es-MX')}</span>
-          </div>`).join('')}
+    // ── Ring donut con stroke-dasharray ────────────────────
+    const R = 40, cx = 60, cy = 60, C = 2 * Math.PI * R
+    const refTotal = Math.max(budget, comprometido, 1)
+    const donutSegs = [
+      { val: pagado,              color: '#4ade80', label: 'Pagado'     },
+      { val: Math.max(0,pendientePago), color: '#f87171', label: 'Por pagar' },
+      { val: Math.max(0,disponible||0), color: '#2dd4bf', label: 'Disponible'},
+    ].filter(s => s.val > 0)
+    const donutTotal = donutSegs.reduce((a,s) => a+s.val, 0) || 1
+    let offset = 0
+    const rings = donutSegs.map(s => {
+      const len = (s.val / donutTotal) * C
+      const el = `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${s.color}" stroke-opacity="0.9"
+        stroke-width="11" stroke-dasharray="${len.toFixed(2)} ${C.toFixed(2)}"
+        stroke-dashoffset="${(-offset).toFixed(2)}" stroke-linecap="butt"
+        transform="rotate(-90 ${cx} ${cy})"/>`
+      offset += len
+      return el
+    }).join('')
+
+    const donutCenter = budget > 0
+      ? `<text x="${cx}" y="${cy-5}" text-anchor="middle" fill="#fff" font-size="11" font-weight="800" font-family="JetBrains Mono,monospace">${pct}%</text>
+         <text x="${cx}" y="${cy+9}" text-anchor="middle" fill="#94a3b8" font-size="7.5">uso budget</text>`
+      : `<text x="${cx}" y="${cy+4}" text-anchor="middle" fill="#94a3b8" font-size="8">sin budget</text>`
+
+    const donutSVG = `<svg viewBox="0 0 120 120" style="width:110px;height:110px;flex-shrink:0;">
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="11"/>
+      ${rings}
+      ${donutCenter}
+    </svg>`
+
+    // ── Barra apilada de presupuesto ────────────────────────
+    const stackedBar = budget > 0 ? (() => {
+      const pagadoPct    = Math.min(Math.round(pagado/budget*100), 100)
+      const pendPct      = Math.min(Math.round(pendientePago/budget*100), Math.max(0,100-pagadoPct))
+      const dispPct      = Math.max(0, 100 - pagadoPct - pendPct)
+      const overPct      = comprometido > budget ? Math.min(Math.round((comprometido-budget)/budget*100), 30) : 0
+      return `<div style="margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:6px;">
+          <span>Distribución del presupuesto</span>
+          <span style="font-weight:700;color:${overBudget?'#f87171':gaugeColor};">${fmtM(budget)}${overBudget?' ⚠️ Excedido':''}</span>
+        </div>
+        <div style="height:10px;background:rgba(255,255,255,0.05);border-radius:5px;overflow:hidden;display:flex;">
+          <div style="width:${pagadoPct}%;background:#4ade80;transition:width .6s;" title="Pagado ${fmtM(pagado)}"></div>
+          <div style="width:${pendPct}%;background:#f87171;transition:width .6s;" title="Por pagar ${fmtM(pendientePago)}"></div>
+          <div style="width:${dispPct}%;background:#2dd4bf;transition:width .6s;opacity:0.5;" title="Disponible ${fmtM(Math.max(0,disponible||0))}"></div>
+          ${overPct > 0 ? `<div style="width:${overPct}%;background:repeating-linear-gradient(45deg,#f87171,#f87171 3px,transparent 3px,transparent 6px);opacity:0.7;" title="Excedido"></div>` : ''}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;">
+          ${[['#4ade80','Pagado',pagado],['#f87171','Por pagar',pendientePago],['#2dd4bf','Disponible',Math.max(0,disponible||0)]].filter(x=>x[2]>0).map(([c,l,v])=>`<div style="display:flex;align-items:center;gap:4px;font-size:10px;"><span style="width:8px;height:8px;border-radius:2px;background:${c};display:inline-block;flex-shrink:0;"></span><span style="color:var(--text-muted);">${l}:</span><span style="font-weight:700;color:${c};font-family:monospace;">${fmtM(v)}</span></div>`).join('')}
         </div>
       </div>`
-    }
-    // Category breakdown from cotizaciones
+    })() : ''
+
+    // ── KPI cards ───────────────────────────────────────────
+    const kpiData = [
+      { label:'Presupuesto', val:budget,       color:'#a78bfa', icon:'💼', show: budget>0     },
+      { label:'Comprometido',val:comprometido, color:'#fb923c', icon:'📋', show: true          },
+      { label:'Pagado',      val:pagado,       color:'#4ade80', icon:'✅', show: true          },
+      { label:'Por pagar',   val:pendientePago,color:pendientePago>0?'#f87171':'#94a3b8', icon:'⏳', show: true },
+      { label:disponible<0?'Excedido':'Disponible', val:Math.abs(disponible||0), color:disponible!=null&&disponible<0?'#f87171':'#2dd4bf', icon:disponible<0?'🚨':'🏦', show:budget>0 },
+    ].filter(k=>k.show)
+    const kpisHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:8px;margin-bottom:16px;">
+      ${kpiData.map(k => `
+      <div style="background:${k.color}0d;border:1px solid ${k.color}28;border-radius:12px;padding:12px 8px;text-align:center;position:relative;overflow:hidden;">
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,${k.color}08 0%,transparent 60%);pointer-events:none;"></div>
+        <div style="font-size:17px;margin-bottom:5px;">${k.icon}</div>
+        <div style="font-size:10px;color:var(--text-muted);font-weight:700;letter-spacing:.03em;margin-bottom:3px;">${k.label.toUpperCase()}</div>
+        <div style="font-size:13px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;">${fmtM(k.val)}</div>
+      </div>`).join('')}
+    </div>`
+
+    // ── Desglose por categoría (barras horizontales) ────────
     const catMap = {}
     d.cots.forEach(c => {
       const cat = c.metadata?.category || 'Sin categoría'
-      if (!catMap[cat]) catMap[cat] = { comprometido:0, pagado:0 }
-      const amt = c.metadata?.amount || 0
-      catMap[cat].comprometido += amt
-      const abonos = c.metadata?.abonos || []
-      catMap[cat].pagado += abonos.reduce((s,a) => s+(+a.amount||0), 0)
+      if (!catMap[cat]) catMap[cat] = { comprometido:0, pagado:0, count:0 }
+      catMap[cat].comprometido += +(c.metadata?.amount||0)
+      catMap[cat].pagado += (c.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
+      catMap[cat].count++
     })
-    const catEntries = Object.entries(catMap).sort((a,b) => b[1].comprometido - a[1].comprometido)
-    const maxCatAmount = catEntries.reduce((max, [,v]) => Math.max(max, v.comprometido), 1)
-    const catHTML = catEntries.length ? `<div style="margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:8px;">📊 DESGLOSE POR CATEGORÍA</div>
-      <div style="display:flex;flex-direction:column;gap:6px;">
-        ${catEntries.map(([cat,v]) => {
-          const pct4 = v.comprometido > 0 ? Math.round(v.pagado/v.comprometido*100) : 0
-          const barPct = Math.round((v.comprometido / maxCatAmount) * 100)
-          const icon = getCategoryIcon(cat)
-          return `<div>
-            <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">
-              <span style="color:var(--text-primary);font-weight:600;">${icon} ${esc(cat)}</span>
-              <span style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;">$${v.comprometido.toLocaleString('es-MX')}</span>
-            </div>
-            <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
-              <div style="height:100%;width:${pct4}%;background:#4ade80;border-radius:2px;"></div>
-            </div>
-            <div style="width:${barPct}%;height:4px;background:linear-gradient(90deg,#f97316,#fbbf24);border-radius:2px;margin-top:3px;"></div>
-          </div>`
-        }).join('')}
-      </div>
-    </div>` : ''
-    // Provider breakdown
-    const provEntries = Object.entries(d.provMap).sort((a,b) => {
-      const aTotal = a[1].cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
-      const bTotal = b[1].cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
-      return bTotal - aTotal
-    }).slice(0,6)
-    const provHTML = provEntries.length ? `<div style="margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:8px;">🔧 DESGLOSE POR PROVEEDOR</div>
-      <div style="display:flex;flex-direction:column;gap:4px;">
-        ${provEntries.map(([pid,pv]) => {
-          const prov = allNodes.find(n=>n.id===pid)
-          const name = prov ? (prov.metadata?.name||prov.content) : 'Desconocido'
-          const total3 = pv.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
-          return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <div style="width:28px;height:28px;border-radius:50%;background:rgba(251,146,60,0.15);color:#fb923c;display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;">${esc(name.charAt(0))}</div>
-            <span style="flex:1;font-size:12px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(name)}</span>
-            <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#fb923c;flex-shrink:0;">$${(total3||0).toLocaleString('es-MX')}</span>
-          </div>`
-        }).join('')}
-      </div>
-    </div>` : ''
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:14px;">💹 DASHBOARD FINANCIERO</div>
-      ${kpisHTML}${barsHTML}${donutHTML}${catHTML}${provHTML}
-    </div>`
-  })
-
-  // ── Panel financiero ──────────────────────────────────────
-  const finPanel = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">💼 RESUMEN FINANCIERO</span>
-        ${budget === 0 ? `<button onclick="openProyectoModal('${p.id}')" style="font-size:11px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:3px 10px;cursor:pointer;">+ Definir presupuesto</button>` : ''}
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:${budget>0?'14px':'0'};">
-        ${[
-          {label:'Presupuesto',val:budget,color:'#a78bfa',icon:'💰',tip:'Total planificado',show:budget>0},
-          {label:'Comprometido',val:comprometido,color:'#4ade80',icon:'📋',tip:'Cotizaciones aceptadas',show:true},
-          {label:'Pagado',val:pagado,color:'#60a5fa',icon:'✅',tip:'Total liquidado',show:true},
-          {label:'Por pagar',val:pendientePago,color:pendientePago>0?'#fb923c':'#94a3b8',icon:'⏳',tip:'Comprometido menos pagado',show:true},
-          {label:'Disponible',val:disponible??0,color:disponible!=null&&disponible<0?'#f87171':'#94a3b8',icon:disponible!=null&&disponible<0?'🚨':'🔵',tip:'Presupuesto menos comprometido',show:budget>0},
-        ].filter(x=>x.show).map(x=>`<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;text-align:center;" title="${x.tip}">
-          <div style="font-size:15px;margin-bottom:4px;">${x.icon}</div>
-          <div style="font-size:13px;font-weight:800;font-family:monospace;color:${x.color};">$${Math.abs(x.val).toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${x.label}</div>
-        </div>`).join('')}
-      </div>
-      ${budget > 0 ? `<div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
-          <span style="font-size:11px;color:var(--text-muted);">Uso del presupuesto</span>
-          <span style="font-size:11px;font-weight:700;color:${gaugeColor};">${pct}%${overBudget?' ⚠️':''}</span>
+    const catEntries = Object.entries(catMap).sort((a,b)=>b[1].comprometido-a[1].comprometido)
+    const maxCat = catEntries.reduce((mx,[,v])=>Math.max(mx,v.comprometido),1)
+    const catHTML = catEntries.length > 0 ? `
+      <div style="margin-bottom:16px;">
+        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;margin-bottom:10px;">📊 DESGLOSE POR CATEGORÍA</div>
+        <div style="display:flex;flex-direction:column;gap:9px;">
+          ${catEntries.map(([cat,v]) => {
+            const paidPct2 = v.comprometido>0 ? Math.round(v.pagado/v.comprometido*100) : 0
+            const widthPct  = Math.round(v.comprometido/maxCat*100)
+            const icon2 = getCategoryIcon(cat)
+            return `<div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                <span style="font-size:11px;font-weight:600;color:var(--text-primary);">${icon2} ${esc(cat)}</span>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:10px;color:${paidPct2>=100?'#4ade80':'var(--text-muted)'};">${paidPct2}% pagado</span>
+                  <span style="font-size:10px;font-weight:700;font-family:monospace;color:#fb923c;">${fmtM(v.comprometido)}</span>
+                </div>
+              </div>
+              <div style="height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;width:${widthPct}%;">
+                <div style="height:100%;width:${paidPct2}%;background:linear-gradient(90deg,#4ade80,#2dd4bf);border-radius:3px;transition:width .5s;"></div>
+              </div>
+            </div>`
+          }).join('')}
         </div>
-        <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
-          <div style="height:100%;width:${pct}%;background:${gaugeColor};border-radius:4px;transition:width .6s;"></div>
+      </div>` : ''
+
+    // ── Providers mini-chart ────────────────────────────────
+    const provEntries2 = Object.entries(d.provMap)
+      .map(([pid,pv]) => {
+        const prov = allNodes.find(n=>n.id===pid)
+        const name = prov ? (prov.metadata?.name||prov.content) : '?'
+        const total3 = pv.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+        const paid3  = pv.cotizaciones.flatMap(c=>c.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
+               + pv.pagos.reduce((s,e)=>s+(+e.metadata?.amount||0),0)
+        return { pid, name, total:total3, paid:paid3, saldo:Math.max(0,total3-paid3), pct:total3>0?Math.min(100,Math.round(paid3/total3*100)):0 }
+      })
+      .sort((a,b)=>b.total-a.total).slice(0,6)
+
+    const provChartHTML = provEntries2.length ? `
+      <div>
+        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;margin-bottom:10px;">🔧 PROVEEDORES</div>
+        <div style="display:flex;flex-direction:column;gap:7px;">
+          ${provEntries2.map(pv => `
+          <div style="display:flex;align-items:center;gap:10px;cursor:pointer;" ondblclick="showProveedorHistorial('${pv.pid}','${projSlug}','${esc(pv.name)}')" title="Doble clic → historial completo">
+            <div style="width:30px;height:30px;flex-shrink:0;position:relative;">
+              <svg viewBox="0 0 32 32" style="width:30px;height:30px;transform:rotate(-90deg);">
+                <circle cx="16" cy="16" r="12" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+                <circle cx="16" cy="16" r="12" fill="none" stroke="${pv.pct>=100?'#4ade80':pv.pct>0?'#60a5fa':'#94a3b8'}"
+                  stroke-width="4" stroke-linecap="round"
+                  stroke-dasharray="${(pv.pct/100*75.4).toFixed(1)} 75.4"
+                  stroke-dashoffset="0"/>
+              </svg>
+              <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;">${pv.pct}%</span>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pv.name)}</div>
+              <div style="font-size:10px;color:var(--text-muted);">${fmtM(pv.paid)} pagado de ${fmtM(pv.total)}</div>
+            </div>
+            ${pv.saldo > 0 ? `<span style="font-size:11px;font-weight:700;color:#f87171;font-family:monospace;flex-shrink:0;">${fmtM(pv.saldo)}</span>` : `<span style="font-size:11px;color:#4ade80;font-weight:700;flex-shrink:0;">✅</span>`}
+          </div>`).join('')}
+        </div>
+      </div>` : ''
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;">💹 FINANCIERO</span>
+        ${budget === 0 ? `<button onclick="openProyectoModal('${p.id}')" style="font-size:11px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:3px 10px;cursor:pointer;">💼 Definir presupuesto</button>` : ''}
+      </div>
+      ${kpisHTML}
+      ${stackedBar}
+      ${(comprometido > 0 || pagado > 0) ? `<div style="display:flex;align-items:flex-start;gap:20px;margin-bottom:16px;">
+        ${donutSVG}
+        <div style="flex:1;display:flex;flex-direction:column;gap:7px;padding-top:8px;">
+          ${donutSegs.map(s=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;">
+            <div style="width:10px;height:10px;border-radius:2px;background:${s.color};flex-shrink:0;"></div>
+            <span style="color:var(--text-muted);flex:1;">${s.label}</span>
+            <span style="font-weight:800;color:${s.color};font-family:'JetBrains Mono',monospace;">${fmtM(s.val)}</span>
+          </div>`).join('')}
         </div>
       </div>` : ''}
+      ${catHTML}
+      ${provChartHTML}
     </div>`
+  })
 
   // ── Proveedores con historial de abonos ───────────────────
   const provsHTML = _s(() => {
@@ -7999,39 +8016,111 @@ function _renderProjFinanzas(d) {
     </div>`
   })
 
-  // ── Pagos fijos (con editar) ──────────────────────────────
+  // ── Pagos fijos — rich cards ──────────────────────────────
   const pagosFijosHTML = _s(() => {
+    const METHOD_ICON = { transferencia:'🏦', efectivo:'💵', tarjeta:'💳', cheque:'📄', domiciliado:'🔄', cripto:'₿' }
+    const METHOD_LBL  = { transferencia:'Transferencia', efectivo:'Efectivo', tarjeta:'Tarjeta', cheque:'Cheque', domiciliado:'Cargo domiciliado', cripto:'Cripto' }
+    const FREQ_LBL    = { mensual:'📅 Mensual', bimestral:'📅 Bimestral', trimestral:'📅 Trimestral', semestral:'📅 Semestral', anual:'📅 Anual' }
+    const freqMos     = { mensual:1, bimestral:2, trimestral:3, semestral:6, anual:12 }
+
     const pagosFijos = allNodes.filter(n =>
       (n.type==='bill'||n.type==='subscription') &&
       tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)
     ).sort((a,b) => (a.metadata?.dayOfMonth||99)-(b.metadata?.dayOfMonth||99))
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">📅 PAGOS FIJOS / RECURRENTES</span>
-        <button onclick="openAgendaModal('bill','${projSlug}')" style="font-size:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">+ Añadir</button>
+
+    const today2 = new Date()
+
+    const totalFijo = pagosFijos.reduce((s,n) => s + (n.metadata?.amount||0), 0)
+    const totalPendFijo = pagosFijos.filter(n=>!n.metadata?.paid).reduce((s,n)=>s+(n.metadata?.amount||0),0)
+
+    const cards = pagosFijos.map(n => {
+      const nm   = n.metadata || {}
+      const amt  = nm.amount
+      const hasAmt = amt != null
+      const day  = nm.dayOfMonth
+      const freq = nm.frequency || 'mensual'
+      const mos  = freqMos[freq] || 1
+      const paid = nm.paid || false
+      const clr  = n.type === 'subscription' ? '#a78bfa' : '#fb923c'
+
+      // Calcular próxima fecha según frecuencia
+      let next = null, daysLeft = null, urgent = false, overdue = false
+      if (day) {
+        next = new Date(today2.getFullYear(), today2.getMonth(), day)
+        while (next <= today2) next.setMonth(next.getMonth() + mos)
+        daysLeft = Math.ceil((next - today2) / 86400000)
+        urgent   = daysLeft <= 7
+        overdue  = daysLeft < 0
+      }
+
+      const urgColor = overdue ? '#f87171' : urgent ? '#fb923c' : clr
+
+      // Destino / contacto
+      const contact = nm.contactId ? allNodes.find(n2=>n2.id===nm.contactId) : null
+      const contactName = contact ? (contact.metadata?.name||contact.content) : ''
+      const contactInitial = contactName ? contactName.charAt(0).toUpperCase() : ''
+
+      // Badge del día
+      const dayBadge = day ? `
+        <div style="min-width:44px;text-align:center;flex-shrink:0;">
+          <div style="background:${urgColor}18;border:1px solid ${urgColor}44;border-radius:10px;padding:6px 4px;">
+            <div style="font-size:18px;font-weight:900;color:${urgColor};font-family:'JetBrains Mono',monospace;line-height:1;">${day}</div>
+            <div style="font-size:8px;color:${urgColor}99;font-weight:700;text-transform:uppercase;letter-spacing:.04em;">día</div>
+          </div>
+          ${daysLeft !== null ? `<div style="font-size:9px;color:${urgColor};font-weight:700;margin-top:3px;text-align:center;">${overdue?'VENCIDO':daysLeft===0?'HOY':daysLeft===1?'MAÑANA':daysLeft+'d'}</div>` : ''}
+        </div>` : `<div style="min-width:44px;flex-shrink:0;"></div>`
+
+      // Avatar del contacto
+      const contactAvatar = contactName ? `
+        <div style="display:flex;align-items:center;gap:6px;margin-top:7px;">
+          <div style="width:20px;height:20px;border-radius:50%;background:${clr}22;color:${clr};display:grid;place-items:center;font-size:10px;font-weight:800;flex-shrink:0;">${contactInitial}</div>
+          <span style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(contactName)}</span>
+          ${nm.method ? `<span style="font-size:10px;margin-left:2px;">${METHOD_ICON[nm.method]||'💸'}</span><span style="font-size:10px;color:var(--text-dim);">${METHOD_LBL[nm.method]||nm.method}</span>` : ''}
+        </div>` : (nm.method ? `<div style="display:flex;align-items:center;gap:5px;margin-top:6px;"><span style="font-size:12px;">${METHOD_ICON[nm.method]||'💸'}</span><span style="font-size:11px;color:var(--text-muted);">${METHOD_LBL[nm.method]||nm.method}</span></div>` : '')
+
+      return `<div style="display:flex;align-items:flex-start;gap:10px;padding:13px 14px;background:${paid?'rgba(74,222,128,0.04)':urgColor+'0c'};border:1px solid ${paid?'rgba(74,222,128,0.18)':urgColor+'28'};border-radius:12px;margin-bottom:8px;transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 2px 16px rgba(0,0,0,0.25)'" onmouseout="this.style.boxShadow=''">
+        ${dayBadge}
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:13px;font-weight:700;color:${paid?'var(--text-muted)':'var(--text-primary)'};${paid?'text-decoration:line-through;opacity:.6;':''}flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(nm.label||n.content)}</span>
+            <span style="font-size:9px;padding:2px 7px;border-radius:10px;background:${clr}18;color:${clr};font-weight:700;white-space:nowrap;">${FREQ_LBL[freq]||freq}</span>
+          </div>
+          ${contactAvatar}
+          ${nm.dueDate && !paid ? `<div style="font-size:10px;color:var(--text-dim);margin-top:5px;">Próximo vencimiento: <span style="color:${urgColor};font-weight:600;">${nm.dueDate}</span></div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+          <div style="font-size:${hasAmt?'15':'12'}px;font-weight:${hasAmt?'900':'600'};font-family:'JetBrains Mono',monospace;color:${hasAmt?clr:'var(--text-dim)'}">${hasAmt?fmtM(amt):'Variable'}</div>
+          <div style="display:flex;gap:5px;">
+            <button onclick="toggleBillPaid('${n.id}')" style="font-size:10px;background:${paid?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.06)'};border:1px solid ${paid?'rgba(74,222,128,0.35)':'rgba(255,255,255,0.12)'};color:${paid?'#4ade80':'var(--text-muted)'};border-radius:6px;padding:3px 9px;cursor:pointer;font-weight:700;">${paid?'✓ Pagado':'Pagar'}</button>
+            <button onclick="editAgendaItem('${n.id}')" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:6px;padding:3px 7px;cursor:pointer;font-size:11px;" title="Editar">✏️</button>
+            <button onclick="deleteAgendaItem('${n.id}')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:3px 4px;" title="Eliminar">×</button>
+          </div>
+        </div>
+      </div>`
+    }).join('')
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;">📅 PAGOS RECURRENTES</span>
+          ${pagosFijos.length > 0 ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(167,139,250,0.12);color:#a78bfa;font-weight:700;">${pagosFijos.length}</span>` : ''}
+        </div>
+        <button onclick="openAgendaModal('bill','${projSlug}')" style="font-size:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:700;">+ Añadir</button>
       </div>
-      ${pagosFijos.length === 0 ? `<div style="text-align:center;padding:16px;color:var(--text-muted);font-size:12px;">Sin pagos fijos — usa el botón "📅 Pago Fijo" en acciones rápidas</div>` :
-        pagosFijos.map(n => {
-          const amt = n.metadata?.amount || 0
-          const day = n.metadata?.dayOfMonth
-          const today2 = new Date()
-          const next = day ? new Date(today2.getFullYear(), today2.getMonth(), day) : null
-          if (next && next < today2) next?.setMonth(next.getMonth()+1)
-          const daysLeft = next ? Math.ceil((next-today2)/(1000*60*60*24)) : null
-          const urgent = daysLeft !== null && daysLeft <= 7
-          return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-            ${day ? `<span style="font-size:10px;color:${urgent?'#fb923c':'var(--text-muted)'};background:${urgent?'rgba(251,146,60,0.12)':'rgba(255,255,255,0.06)'};border-radius:4px;padding:2px 7px;flex-shrink:0;font-weight:${urgent?'700':'400'};">día ${day}${urgent?` (${daysLeft}d)`:''}</span>` : ''}
-            <span style="flex:1;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.label||n.content)}</span>
-            <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;flex-shrink:0;">$${amt.toLocaleString('es-MX')}</span>
-            <button onclick="toggleBillPaid('${n.id}')" style="font-size:10px;background:${n.metadata?.paid?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.05)'};border:1px solid ${n.metadata?.paid?'rgba(74,222,128,0.3)':'rgba(255,255,255,0.1)'};color:${n.metadata?.paid?'#4ade80':'var(--text-muted)'};border-radius:5px;padding:2px 7px;cursor:pointer;flex-shrink:0;">${n.metadata?.paid?'✓':'Pagar'}</button>
-            <button onclick="editAgendaItem('${n.id}')" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:5px;padding:2px 7px;cursor:pointer;font-size:11px;flex-shrink:0;" title="Editar">✏️</button>
-            <button onclick="deleteAgendaItem('${n.id}')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;flex-shrink:0;" title="Eliminar">×</button>
-          </div>`
-        }).join('')}
-      ${pagosFijos.length > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;">
-        <span style="font-size:11px;color:var(--text-muted);">Total mensual estimado</span>
-        <span style="font-size:12px;font-weight:800;font-family:monospace;color:#a78bfa;">$${pagosFijos.reduce((s,n)=>s+(+n.metadata?.amount||0),0).toLocaleString('es-MX')}</span>
-      </div>` : ''}
+      ${pagosFijos.length === 0
+        ? `<div style="text-align:center;padding:24px 16px;color:var(--text-muted);font-size:12px;">
+            <div style="font-size:28px;margin-bottom:8px;opacity:.4;">📅</div>
+            Sin pagos recurrentes en este proyecto.<br>Agrégalos para llevar control de servicios y compromisos fijos.
+           </div>`
+        : cards}
+      ${pagosFijos.length > 0 ? `
+        <div style="margin-top:10px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div style="display:flex;gap:16px;">
+            <div style="font-size:10px;color:var(--text-muted);">Total periódico: <span style="font-weight:800;color:#a78bfa;font-family:monospace;">${fmtM(totalFijo)}</span></div>
+            ${totalPendFijo > 0 ? `<div style="font-size:10px;color:var(--text-muted);">Pendiente: <span style="font-weight:800;color:#fb923c;font-family:monospace;">${fmtM(totalPendFijo)}</span></div>` : ''}
+          </div>
+          <div style="font-size:9px;color:var(--text-dim);">${pagosFijos.filter(n=>n.metadata?.paid).length} de ${pagosFijos.length} pagados</div>
+        </div>` : ''}
     </div>`
   })
 
@@ -8086,8 +8175,8 @@ function _renderProjFinanzas(d) {
       const kanbanNode = allNodes.find(n => n.type==='kanban' && n.metadata?.cot_id===c.id)
       const kanbanChip = kanbanNode ? (() => {
         const kStatus = kanbanNode.metadata?.status || 'todo'
-        const kLabels = { todo:'Pendiente', doing:'En progreso', done:'Completado' }
-        const kColors = { todo:'#94a3b8', doing:'#60a5fa', done:'#4ade80' }
+        const kLabels = { todo:'Pendiente', in_progress:'En progreso', doing:'En progreso', done:'Completado' }
+        const kColors = { todo:'#94a3b8', in_progress:'#60a5fa', doing:'#60a5fa', done:'#4ade80' }
         return `<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,0.06);color:${kColors[kStatus]||'#94a3b8'};font-weight:700;border:1px solid ${kColors[kStatus]||'#94a3b8'}33;">🗊 ${kLabels[kStatus]||kStatus}</span>`
       })() : ''
 
@@ -8181,7 +8270,7 @@ function _renderProjFinanzas(d) {
     </div>`
   })
 
-  return dashHTML + finPanel + provsHTML + pagosFijosHTML + cotsHTML + matHTML
+  return dashHTML + provsHTML + pagosFijosHTML + cotsHTML + matHTML
 }
 
 // ── TAB: KANBAN INTERNO ──────────────────────────────────────────────────────
