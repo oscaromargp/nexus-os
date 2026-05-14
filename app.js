@@ -7849,34 +7849,130 @@ function _renderProjFinanzas(d) {
     </div>`
   })
 
-  // ── Cotizaciones ──────────────────────────────────────────
+  // ── Cotizaciones — cards visuales con historial de pagos ─────────────────────
   const cotsHTML = _s(() => {
-    if (!cots.length) return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;text-align:center;">
-      <div style="font-size:12px;font-weight:800;color:var(--text-muted);margin-bottom:10px;">📄 COTIZACIONES</div>
-      <div style="color:var(--text-dim);font-size:13px;">Sin cotizaciones — usa el botón "📄 Cotización" arriba</div>
+    if (!cots.length) return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:16px;text-align:center;">
+      <div style="font-size:28px;margin-bottom:8px;">📄</div>
+      <div style="font-size:13px;font-weight:700;color:var(--text-muted);margin-bottom:6px;">Sin cotizaciones</div>
+      <div style="color:var(--text-dim);font-size:12px;margin-bottom:16px;">Registra las propuestas de proveedores para este proyecto</div>
+      <button onclick="openCotizacionModal(null,'${projSlug}')" style="font-size:12px;background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:8px;padding:8px 18px;cursor:pointer;font-weight:700;">+ Nueva Cotización</button>
     </div>`
-    const STATUS_CFG = { pendiente:{label:'Pendiente',color:'#94a3b8'}, aceptada:{label:'Aceptada',color:'#4ade80'}, rechazada:{label:'Rechazada',color:'#f87171'}, en_proceso:{label:'En proceso',color:'#60a5fa'}, pagada:{label:'Pagada',color:'#a78bfa'}, parcial:{label:'Parcial',color:'#fbbf24'} }
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+
+    const STATUS_CFG = {
+      pendiente:  { label:'⏳ Pendiente',   color:'#94a3b8', bg:'rgba(148,163,184,0.08)' },
+      aceptada:   { label:'✅ Aceptada',     color:'#4ade80', bg:'rgba(74,222,128,0.08)'  },
+      rechazada:  { label:'❌ Rechazada',    color:'#f87171', bg:'rgba(248,113,113,0.08)' },
+      en_proceso: { label:'🔄 En proceso',   color:'#60a5fa', bg:'rgba(96,165,250,0.08)'  },
+      pagada:     { label:'💰 Pagada',       color:'#a78bfa', bg:'rgba(167,139,250,0.08)' },
+      parcial:    { label:'🔶 Pago parcial', color:'#fbbf24', bg:'rgba(251,191,36,0.08)'  },
+    }
+    const METHOD_ICON = { transferencia:'🏦', efectivo:'💵', tarjeta:'💳', cheque:'📄' }
+
+    const buildCotCard = (c) => {
+      const m       = c.metadata || {}
+      const stCfg   = STATUS_CFG[m.status] || STATUS_CFG.pendiente
+      const prov    = m.provider_id ? allNodes.find(n=>n.id===m.provider_id) : null
+      const provName= prov ? esc(prov.metadata?.name || prov.content) : null
+      const total   = +(m.amount || 0)
+      const abonos  = m.abonos || []
+      const pagado  = abonos.reduce((s,a) => s+(+a.amount||0), 0)
+      const saldo   = Math.max(0, total - pagado)
+      const pct     = total > 0 ? Math.min(100, Math.round(pagado/total*100)) : (pagado>0?100:0)
+      const isFullyPaid = pct >= 100
+
+      // Barra de color según avance
+      const barColor = pct === 0 ? '#94a3b8' : pct < 50 ? '#fbbf24' : pct < 100 ? '#60a5fa' : '#4ade80'
+
+      // Historial de pagos (máx 5 visibles + "ver más")
+      const abonosHTML = abonos.length === 0
+        ? `<div style="font-size:11px;color:var(--text-dim);font-style:italic;">Sin pagos registrados</div>`
+        : abonos.map((a,i) => `
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:4px;">
+              <span style="font-size:13px;flex-shrink:0;">${METHOD_ICON[a.method]||'💸'}</span>
+              <span style="font-size:11px;color:#4ade80;font-weight:700;font-family:monospace;flex-shrink:0;">Pago ${i+1}</span>
+              <span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">${a.date||''}</span>
+              <span style="flex:1;font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.notes||a.method||'')}</span>
+              ${a.receipt_url ? `<a href="${esc(a.receipt_url)}" target="_blank" onclick="event.stopPropagation()" title="Ver comprobante" style="color:#60a5fa;font-size:12px;flex-shrink:0;text-decoration:none;">🔗 Comprobante</a>` : ''}
+              <span style="font-size:11px;font-weight:800;color:#4ade80;font-family:monospace;flex-shrink:0;">$${(+a.amount).toLocaleString('es-MX')}</span>
+            </div>`).join('')
+
+      // Kanban status chip (si tiene tarea vinculada)
+      const kanbanNode = allNodes.find(n => n.type==='kanban' && n.metadata?.cot_id===c.id)
+      const kanbanChip = kanbanNode ? (() => {
+        const kStatus = kanbanNode.metadata?.status || 'todo'
+        const kLabels = { todo:'Pendiente', doing:'En progreso', done:'Completado' }
+        const kColors = { todo:'#94a3b8', doing:'#60a5fa', done:'#4ade80' }
+        return `<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,0.06);color:${kColors[kStatus]||'#94a3b8'};font-weight:700;border:1px solid ${kColors[kStatus]||'#94a3b8'}33;">🗊 ${kLabels[kStatus]||kStatus}</span>`
+      })() : ''
+
+      return `<div style="background:var(--bg-panel);border:1px solid ${stCfg.color}33;border-left:3px solid ${stCfg.color};border-radius:12px;padding:16px;margin-bottom:12px;transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 4px 24px rgba(0,0,0,0.3)'" onmouseout="this.style.boxShadow=''">
+        <!-- Header -->
+        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px;cursor:pointer;" onclick="openCotizacionModal('${c.id}')">${esc(m.label||c.content)}</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:${stCfg.bg};color:${stCfg.color};font-weight:700;">${stCfg.label}</span>
+              ${m.category ? `<span style="font-size:10px;color:var(--text-muted);background:rgba(255,255,255,0.04);padding:2px 6px;border-radius:4px;">${esc(m.category)}</span>` : ''}
+              ${kanbanChip}
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#fb923c;">$${total.toLocaleString('es-MX')}</div>
+            ${provName ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">👤 ${provName}</div>` : ''}
+          </div>
+        </div>
+
+        <!-- Barra de progreso de pagos -->
+        ${total > 0 || abonos.length > 0 ? `
+        <div style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+            <span style="font-size:11px;color:var(--text-muted);">💸 Pagos: <b style="color:${barColor};">${abonos.length} registro${abonos.length!==1?'s':''}</b></span>
+            <span style="font-size:11px;font-weight:800;color:${barColor};">${pct}% pagado</span>
+          </div>
+          <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width 0.5s;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:5px;">
+            <span style="font-size:10px;color:#4ade80;">Pagado: <b>$${pagado.toLocaleString('es-MX')}</b></span>
+            ${saldo > 0 ? `<span style="font-size:10px;color:#f87171;">Saldo: <b>$${saldo.toLocaleString('es-MX')}</b></span>` : `<span style="font-size:10px;color:#4ade80;font-weight:700;">✅ Saldado</span>`}
+          </div>
+        </div>` : ''}
+
+        <!-- Historial de pagos (expandible) -->
+        ${abonos.length > 0 ? `
+        <details style="margin-bottom:10px;">
+          <summary style="font-size:11px;font-weight:700;color:var(--text-muted);cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;padding:4px 0;user-select:none;">
+            <span>▶</span><span>📋 Historial de pagos (${abonos.length})</span>
+          </summary>
+          <div style="margin-top:8px;">
+            ${abonosHTML}
+          </div>
+        </details>` : ''}
+
+        ${m.notes ? `<div style="font-size:11px;color:var(--text-muted);background:rgba(255,255,255,0.03);border-radius:6px;padding:6px 10px;margin-bottom:10px;border-left:2px solid rgba(255,255,255,0.1);">📝 ${esc(m.notes)}</div>` : ''}
+
+        <!-- Acciones -->
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <button onclick="openCotizacionModal('${c.id}')" style="font-size:11px;padding:5px 12px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;cursor:pointer;font-weight:600;">✏️ Editar</button>
+          ${!isFullyPaid && m.status !== 'rechazada' ? `<button onclick="openCotizacionModal('${c.id}');setTimeout(()=>addCotAbono(),200)" style="font-size:11px;padding:5px 12px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;font-weight:600;">+ Registrar pago</button>` : ''}
+          ${m.status === 'pendiente' ? `<button onclick="changeCotizacionStatus('${c.id}','aceptada')" style="font-size:11px;padding:5px 12px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;">✅ Aceptar</button>` : ''}
+          <button onclick="printCotizacion('${c.id}')" style="font-size:11px;padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:6px;cursor:pointer;">🖨️ Imprimir</button>
+          <div style="flex:1;"></div>
+          <span style="font-size:10px;color:var(--text-dim);">${(c.created_at||'').slice(0,10)}</span>
+        </div>
+      </div>`
+    }
+
+    return `<div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">📄 COTIZACIONES (${cots.length})</span>
-        <button onclick="openCotizacionModal(null,'${projSlug}')" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">+ Nueva</button>
+        <button onclick="openCotizacionModal(null,'${projSlug}')" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:600;">+ Nueva</button>
       </div>
       ${Object.entries(d.cotsByCat).map(([cat,cs]) => `
-        <div style="margin-bottom:12px;">
-          <div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;">${esc(cat)}</div>
-          ${cs.map(c => {
-            const stCfg = STATUS_CFG[c.metadata?.status] || STATUS_CFG.pendiente
-            const prov  = c.metadata?.provider_id ? allNodes.find(n=>n.id===c.metadata.provider_id) : null
-            return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="openCotizacionModal('${c.id}')">
-              <span style="flex:1;font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.metadata?.label||c.content)}</span>
-              ${prov?`<span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">${esc(prov.metadata?.name||prov.content)}</span>`:''}
-              <span style="font-size:12px;font-weight:800;font-family:monospace;color:#fb923c;flex-shrink:0;">$${(+c.metadata?.amount||0).toLocaleString('es-MX')}</span>
-              <span style="font-size:9px;padding:2px 7px;border-radius:4px;background:${stCfg.color}22;color:${stCfg.color};font-weight:700;flex-shrink:0;">${stCfg.label}</span>
-              ${c.metadata?.status !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${c.id}','aceptada')" style="color:#4ade80;cursor:pointer;font-size:14px;flex-shrink:0;" title="Aceptar">✅</span>` : ''}
-            </div>`
-          }).join('')}
+        <div style="margin-bottom:4px;">
+          ${cs.length > 0 && Object.keys(d.cotsByCat).length > 1 ? `<div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:6px;margin-top:4px;text-transform:uppercase;letter-spacing:.08em;padding-left:2px;">${esc(cat)}</div>` : ''}
+          ${cs.map(buildCotCard).join('')}
         </div>`).join('')}
-      ${pendientes.length ? `<div style="padding:8px 10px;background:rgba(251,146,60,0.05);border-radius:8px;font-size:11px;color:var(--text-muted);">⏳ ${pendientes.length} cotización${pendientes.length!==1?'es':''} pendiente${pendientes.length!==1?'s':''}</div>` : ''}
     </div>`
   })
 
@@ -9051,11 +9147,21 @@ window.openCotizacionModal = (id = null, prefillProjectTag = '') => {
     if (exact) catEl.value = catVal
     else catEl.value = ''
   }
-  // Populate provider dropdown
-  const provs = allNodes.filter(n => n.type === 'contact' && n.metadata?.cType === 'proveedor')
+  // Populate provider dropdown — incluye todos los contactos (persona, contact, proveedor, etc.)
+  const provs = allNodes.filter(n => n.type === 'contact' || n.type === 'persona')
+    .sort((a,b) => {
+      const an = (a.metadata?.name || a.content || '').toLowerCase()
+      const bn = (b.metadata?.name || b.content || '').toLowerCase()
+      return an.localeCompare(bn)
+    })
   const sel = document.getElementById('cot-provider')
   sel.innerHTML = `<option value="">Sin proveedor</option>` +
-    provs.map(p => `<option value="${p.id}" ${m.provider_id===p.id?'selected':''}>${esc(p.metadata?.name||p.content)}</option>`).join('')
+    provs.map(p => {
+      const name = esc(p.metadata?.name || p.content)
+      const role = p.metadata?.cType || (p.metadata?.roles?.[0]) || ''
+      const roleLabel = role ? ` (${role})` : ''
+      return `<option value="${p.id}" ${m.provider_id===p.id?'selected':''}>${name}${roleLabel}</option>`
+    }).join('')
   document.getElementById('cot-delete').style.display = c ? 'inline-flex' : 'none'
   // Abonos
   _cotAbonosDraft = [...(m.abonos||[])]
@@ -9130,9 +9236,171 @@ window.saveCotizacion = async () => {
     }
   }
   await autoLinkToProject(savedId, projTag)
+  // Auto-sync Kanban: si hay pagos o la cotización está en proceso/aceptada, crea/actualiza tarjeta en Kanban
+  if (savedId) await syncCotizacionKanban(savedId, meta, projTag)
   closeCotizacionModal()
   renderAll()
   showToast(`Cotización "${label}" guardada`)
+}
+
+// ── Auto-sync cotización → Kanban del proyecto ────────────────────────────────
+async function syncCotizacionKanban(cotId, meta, projTag) {
+  if (!projTag) return
+  const abonos = meta.abonos || []
+  const total  = +(meta.amount || 0)
+  const pagado = abonos.reduce((s,a) => s+(+a.amount||0), 0)
+  const pct    = total > 0 ? Math.round(pagado/total*100) : (pagado>0?100:0)
+
+  // Determinar estado Kanban según avance
+  let kanbanStatus = 'todo'
+  if (meta.status === 'pagada' || pct >= 100) kanbanStatus = 'done'
+  else if (abonos.length > 0 || meta.status === 'en_proceso' || meta.status === 'parcial') kanbanStatus = 'doing'
+  else if (meta.status === 'aceptada') kanbanStatus = 'doing'
+
+  // Solo crear/actualizar si hay actividad real (aceptada, en proceso, pagos)
+  const hasActivity = ['aceptada','en_proceso','parcial','pagada'].includes(meta.status) || abonos.length > 0
+  if (!hasActivity) return
+
+  // Buscar tarjeta Kanban existente vinculada a esta cotización
+  const existing = allNodes.find(n => n.type === 'kanban' && n.metadata?.cot_id === cotId)
+  const label = meta.label || 'Cotización'
+  const provNode = meta.provider_id ? allNodes.find(n => n.id === meta.provider_id) : null
+  const provName = provNode ? (provNode.metadata?.name || provNode.content) : null
+
+  const kanbanMeta = {
+    status:      kanbanStatus,
+    cot_id:      cotId,
+    project_tag: projTag,
+    label,
+    tags:        ['#' + projTag, '#cotizacion'],
+    notes:       `Proveedor: ${provName||'Sin asignar'} | Pagado: ${pct}% ($${pagado.toLocaleString('es-MX')} de $${(+(meta.amount||0)).toLocaleString('es-MX')})`,
+    color:       kanbanStatus==='done' ? '#4ade80' : kanbanStatus==='doing' ? '#60a5fa' : '#94a3b8',
+  }
+
+  if (existing) {
+    // Actualizar tarjeta existente
+    existing.metadata = { ...existing.metadata, ...kanbanMeta }
+    if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser)
+      await supabase.from('nodes').update({ metadata: existing.metadata }).eq('id', existing.id)
+  } else {
+    // Crear nueva tarjeta
+    const bypass = localStorage.getItem('nexus_admin_bypass') === 'true'
+    if (bypass) {
+      allNodes.unshift({ id: 'demo_cot_'+Math.random().toString(36).substr(2,8), type:'kanban', content:label, metadata:kanbanMeta, created_at:new Date().toISOString() })
+    } else if (currentUser) {
+      const { data } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'kanban', content:label, metadata:kanbanMeta }).select()
+      if (data?.[0]) {
+        allNodes.unshift(data[0])
+        await autoLinkToProject(data[0].id, projTag)
+      }
+    }
+  }
+}
+
+// ── Reporte imprimible por cotización ────────────────────────────────────────
+window.printCotizacion = (id) => {
+  const c = allNodes.find(n => n.id === id)
+  if (!c) return
+  const m = c.metadata || {}
+  const prov = m.provider_id ? allNodes.find(n => n.id === m.provider_id) : null
+  const provName = prov ? (prov.metadata?.name || prov.content) : 'Sin asignar'
+  const provPhone = prov?.metadata?.phone || ''
+  const provEmail = prov?.metadata?.email || ''
+  const total = +(m.amount || 0)
+  const abonos = m.abonos || []
+  const pagado = abonos.reduce((s,a) => s+(+a.amount||0), 0)
+  const saldo  = Math.max(0, total - pagado)
+  const pct    = total > 0 ? Math.min(100, Math.round(pagado/total*100)) : 0
+  const STATUS_LABEL = { pendiente:'Pendiente', aceptada:'Aceptada', en_proceso:'En proceso', parcial:'Pago parcial', pagada:'Pagada completamente', rechazada:'Rechazada' }
+  const METHOD_LABEL = { transferencia:'Transferencia bancaria', efectivo:'Efectivo', tarjeta:'Tarjeta', cheque:'Cheque' }
+  const today = new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>Cotización — ${esc(m.label||c.content)}</title>
+<style>
+  body{font-family:'Helvetica Neue',Arial,sans-serif;color:#1a1a2e;margin:0;padding:32px;background:#fff;font-size:13px;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:16px;border-bottom:2px solid #fb923c;}
+  h1{margin:0;font-size:20px;font-weight:900;color:#fb923c;}
+  .badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:#dcfce7;color:#15803d;}
+  .badge.parcial{background:#fef3c7;color:#92400e;}
+  .badge.en_proceso{background:#dbeafe;color:#1d4ed8;}
+  .badge.pendiente{background:#f1f5f9;color:#475569;}
+  .badge.rechazada{background:#fee2e2;color:#991b1b;}
+  .badge.pagada{background:#ede9fe;color:#5b21b6;}
+  .section{margin-bottom:24px;}
+  .section-title{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#64748b;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid #e2e8f0;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .field label{font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:2px;}
+  .field span{font-size:13px;color:#1a1a2e;}
+  .progress-bar{background:#e2e8f0;border-radius:4px;height:8px;overflow:hidden;margin:8px 0;}
+  .progress-fill{height:100%;background:#fb923c;border-radius:4px;}
+  .pago-row{display:flex;gap:12px;align-items:center;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:6px;page-break-inside:avoid;}
+  .pago-num{font-size:11px;font-weight:800;color:#fb923c;min-width:54px;}
+  .pago-meta{flex:1;}
+  .pago-amount{font-size:14px;font-weight:800;color:#15803d;font-family:monospace;}
+  .totals{background:#f8fafc;border-radius:8px;padding:16px;margin-top:12px;}
+  .total-row{display:flex;justify-content:space-between;padding:4px 0;}
+  .total-row.final{border-top:2px solid #e2e8f0;margin-top:6px;padding-top:8px;font-size:15px;font-weight:800;}
+  .footer{margin-top:32px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center;}
+  @media print{body{padding:20px;}button{display:none!important;}}
+</style></head>
+<body>
+  <div class="header">
+    <div>
+      <div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">NEXUS OS — REPORTE DE COTIZACIÓN</div>
+      <h1>${esc(m.label||c.content)}</h1>
+      ${m.category ? `<div style="font-size:12px;color:#64748b;margin-top:4px;">📂 ${esc(m.category)}</div>` : ''}
+    </div>
+    <div style="text-align:right;">
+      <span class="badge ${m.status||'pendiente'}">${STATUS_LABEL[m.status||'pendiente']}</span>
+      <div style="font-size:11px;color:#94a3b8;margin-top:6px;">Reporte generado: ${today}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Información general</div>
+    <div class="grid2">
+      <div class="field"><label>Proveedor</label><span>${esc(provName)}</span></div>
+      ${provPhone ? `<div class="field"><label>Teléfono</label><span>${esc(provPhone)}</span></div>` : '<div></div>'}
+      ${provEmail ? `<div class="field"><label>Email</label><span>${esc(provEmail)}</span></div>` : '<div></div>'}
+      <div class="field"><label>Monto acordado</label><span style="font-size:18px;font-weight:900;color:#fb923c;">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+    </div>
+    ${m.notes ? `<div style="margin-top:12px;"><div class="field"><label>Condiciones / Notas</label><span>${esc(m.notes)}</span></div></div>` : ''}
+  </div>
+
+  <div class="section">
+    <div class="section-title">Progreso de pagos</div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:12px;">
+      <span>${pct}% pagado</span>
+      <span>${abonos.length} pago${abonos.length!==1?'s':''} registrado${abonos.length!==1?'s':''}</span>
+    </div>
+
+    ${abonos.length > 0 ? abonos.map((a,i) => `
+      <div class="pago-row">
+        <div class="pago-num">Pago ${i+1}</div>
+        <div class="pago-meta">
+          <div style="font-weight:600;">${a.date||''} — ${esc(METHOD_LABEL[a.method]||a.method||'')}</div>
+          ${a.notes ? `<div style="font-size:11px;color:#64748b;">${esc(a.notes)}</div>` : ''}
+          ${a.receipt_url ? `<div style="font-size:10px;color:#3b82f6;">🔗 Comprobante: ${esc(a.receipt_url)}</div>` : ''}
+        </div>
+        <div class="pago-amount">$${(+a.amount).toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+      </div>`).join('') : `<div style="color:#94a3b8;font-style:italic;font-size:12px;">Sin pagos registrados</div>`}
+
+    <div class="totals">
+      <div class="total-row"><span>Monto acordado</span><span style="font-family:monospace;">$${total.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+      <div class="total-row"><span>Total pagado</span><span style="font-family:monospace;color:#15803d;font-weight:700;">$${pagado.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+      <div class="total-row final"><span>Saldo pendiente</span><span style="font-family:monospace;color:${saldo>0?'#dc2626':'#15803d'};">$${saldo.toLocaleString('es-MX',{minimumFractionDigits:2})}</span></div>
+    </div>
+  </div>
+
+  <div class="footer">Nexus OS — Sistema de gestión de proyectos • oscaromargp.github.io/Oscaromargp</div>
+  <div style="text-align:center;margin-top:12px;"><button onclick="window.print()" style="padding:10px 28px;background:#fb923c;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Imprimir / Guardar PDF</button></div>
+</body></html>`
+
+  const win = window.open('', '_blank', 'width=900,height=700')
+  if (win) { win.document.write(html); win.document.close() }
 }
 
 window.deleteCotizacion = async () => {
