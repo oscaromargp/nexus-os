@@ -324,8 +324,12 @@ async function loadNodes() {
   if (!localStorage.getItem('nexus_onboarded') && localStorage.getItem('nexus_admin_bypass') !== 'true') {
     setTimeout(() => {
       const m = document.getElementById('welcome-modal')
-      if (m) m.style.display = 'flex'
-    }, 800)
+      if (m) {
+        m.style.display = 'flex'
+        // Asegurar que click en el backdrop cierra el modal
+        m.onclick = (ev) => { if (ev.target === m) window.closeWelcomeModal() }
+      }
+    }, 400)  // Reducido de 800ms a 400ms
   }
 }
 
@@ -429,7 +433,7 @@ function renderKanban(nodes) {
             <span class="trello-list-title" style="font-size:12px;font-weight:700;color:${colColor};letter-spacing:0.5px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(list.title)}</span>
             <span style="font-size:11px;background:${colColor}22;color:${colColor};border-radius:10px;padding:0 6px;font-weight:600;">${cards.length}</span>
           </div>
-          <span style="color:#8c9bab; cursor:pointer; font-size:14px;" onclick="manageList('${list.id}')">⋯</span>
+          <span title="Eliminar columna" style="color:#8c9bab; cursor:pointer; font-size:14px; padding:2px 6px; border-radius:6px; transition:background 0.15s,color 0.15s;" onmouseover="this.style.background='rgba(248,113,113,0.15)';this.style.color='#f87171'" onmouseout="this.style.background='';this.style.color='#8c9bab'" onclick="event.stopPropagation();manageList('${list.id}')">🗑</span>
         </div>
         <div class="trello-cards-container kanban-col-body" data-status="${list.id}"
              style="padding:10px; flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px; min-height:80px;">
@@ -518,10 +522,31 @@ window.confirmNewList = () => {
 }
 
 window.manageList = (id) => {
-  if (confirm(`¿Eliminar la lista "${id}"?`)) {
-    boardLists = boardLists.filter(l => l.id !== id)
-    renderKanban()
+  const list = boardLists.find(l => l.id === id)
+  if (!list) return
+  // Verificar si hay tarjetas en esta columna
+  const cards = allNodes.filter(n => n.type === 'kanban' && (n.metadata?.status || 'todo') === id)
+  if (cards.length > 0) {
+    const first = boardLists.find(l => l.id !== id)
+    const moveTo = first ? first.title : 'Pendiente'
+    const ok = confirm(`La columna "${list.title}" tiene ${cards.length} tarjeta${cards.length !== 1 ? 's' : ''}.\n\n¿Mover las tarjetas a "${moveTo}" y eliminar la columna?`)
+    if (!ok) return
+    // Mover tarjetas a la primera columna disponible
+    if (first) {
+      allNodes.forEach(n => {
+        if (n.type === 'kanban' && (n.metadata?.status || 'todo') === id) {
+          n.metadata = { ...(n.metadata || {}), status: first.id }
+          if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+            supabase.from('nodes').update({ metadata: n.metadata }).eq('id', n.id).then(() => {})
+          }
+        }
+      })
+    }
+  } else {
+    if (!confirm(`¿Eliminar la columna "${list.title}"? Esta acción no se puede deshacer.`)) return
   }
+  boardLists = boardLists.filter(l => l.id !== id)
+  renderKanban()
 }
 
 // DRAG & DROP HANDLERS
@@ -2684,9 +2709,9 @@ function buildTimeGrid(dayColumns) {
   const nowPx = now.getHours() * HOUR_H + Math.floor(now.getMinutes() * HOUR_H / 60)
 
   // Header
-  let headerHtml = `<div style="width:${TIME_W}px;padding:6px 4px;"></div>`
+  let headerHtml = `<div style="width:${TIME_W}px;min-width:${TIME_W}px;padding:6px 4px;flex-shrink:0;"></div>`
   dayColumns.forEach(({dayLabel, isToday}) => {
-    headerHtml += `<div style="padding:8px 4px;text-align:center;border-left:1px solid rgba(255,255,255,0.06);${isToday?'color:var(--accent-cyan);font-weight:800;':'color:var(--text-muted);font-weight:600;'}">${dayLabel}</div>`
+    headerHtml += `<div style="min-width:0;overflow:hidden;padding:8px 4px;text-align:center;border-left:1px solid rgba(255,255,255,0.06);${isToday?'color:var(--accent-cyan);font-weight:800;':'color:var(--text-muted);font-weight:600;'}">${dayLabel}</div>`
   })
 
   // All-day row
@@ -2766,7 +2791,7 @@ function renderCalWeek(root, nodes) {
     const allEv = calGetDayEvents(nodes, dateStr)
     dayColumns.push({
       date: dateStr, isToday,
-      dayLabel: `<div style="font-size:10px;">${DAYS[d.getDay()]}</div><div style="font-size:${isToday?20:15}px;">${d.getDate()}</div>`,
+      dayLabel: `<div style="font-size:10px;">${DAYS[d.getDay()]}</div><div style="font-size:15px;font-weight:${isToday?800:600};">${d.getDate()}</div>`,
       allDayEvents: allEv.filter(e => !e.metadata?.timeStart || e.metadata?.allDay),
       timedEvents:  allEv.filter(e =>  e.metadata?.timeStart && !e.metadata?.allDay)
     })
@@ -3182,6 +3207,15 @@ function renderAgenda(nodes) {
         if (t.type === 'income') incomeNodes.push(t)
         else if (t.type === 'expense') expenseNodes.push(t)
       }
+    }
+    // También incluir transacciones sin cuenta asignada (@cuenta no especificada)
+    const unassigned = getTransactions(nodes, 'all', period)
+      .filter(t => !t.metadata?.account_id)
+    for (const t of unassigned) {
+      if (seen.has(t.id)) continue
+      seen.add(t.id)
+      if (t.type === 'income') incomeNodes.push(t)
+      else if (t.type === 'expense') expenseNodes.push(t)
     }
   }
   const totalIn  = incomeNodes.reduce((s, n) => s + (n.metadata?.amount || 0), 0)
@@ -4349,40 +4383,37 @@ document.getElementById('btn-import-csv')?.addEventListener('click', async () =>
   document.getElementById('csv-import-area').value = ''
 })
 
+// Legacy Escape handler — mantenido para compatibilidad con modales más antiguos
+// El handler principal (keydown unificado al final del archivo) cubre los modales activos
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return
+  const isVisible = (el) => {
+    if (!el) return false
+    const s = window.getComputedStyle(el)
+    return s.display !== 'none' && s.visibility !== 'hidden'
+  }
   const modalIds = [
-    'card-modal','contact-modal','proj-task-modal','proveedor-picker-modal',
-    'milestone-modal','payment-modal','agenda-modal','account-modal',
-    'cotizacion-modal','member-modal','health-modal','node-detail-modal',
+    'contact-modal','proj-task-modal','proveedor-picker-modal',
+    'milestone-modal','agenda-modal',
+    'member-modal','health-modal','node-detail-modal',
     'transform-modal','search-overlay','tag-modal',
-    'note-edit-modal','transfer-modal','finance-detail-modal'
   ]
   const closeFns = {
-    'card-modal': 'closeCardModal',
     'contact-modal': 'closeContactModal',
     'proj-task-modal': 'closeProjTaskModal',
     'proveedor-picker-modal': 'closeProveedorPicker',
     'milestone-modal': 'closeMilestoneModal',
     'search-overlay': 'closeSearch',
-    'account-modal': 'closeAccountModal',
-    'cotizacion-modal': 'closeCotizacionModal',
-    'note-edit-modal': 'closeNoteModal',
-    'transfer-modal': 'closeTransferModal',
-    'finance-detail-modal': 'closeFinanceDetail',
     'agenda-modal': 'closeAgendaModal',
   }
   for (const id of modalIds) {
     const el = document.getElementById(id)
-    if (!el) continue
-    const isVisible = !el.classList.contains('hidden') || el.style.display === 'flex' || el.style.display === 'block'
-    if (isVisible) {
-      const fn = closeFns[id]
-      if (fn && window[fn]) { window[fn](); return }
-      else { el.classList.add('hidden'); return }
-    }
+    if (!isVisible(el)) continue
+    const fn = closeFns[id]
+    if (fn && window[fn]) { window[fn](); return }
+    else { el.classList.add('hidden'); return }
   }
-  // Also close any modal-overlay that's visible
+  // Cierra cualquier modal-overlay visible
   document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(el => {
     el.classList.add('hidden')
   })
@@ -5254,6 +5285,7 @@ window.saveContact = async () => {
   } else {
     const newNode = {
       id: uid(),
+      owner_id: currentUser?.id,
       content: name,
       type: 'persona',
       metadata: meta,
@@ -5261,7 +5293,7 @@ window.saveContact = async () => {
     }
     allNodes.unshift(newNode)
     if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
-      await supabase.from('nodes').insert([{ content: name, type: 'persona', metadata: meta }])
+      await supabase.from('nodes').insert([{ id: newNode.id, owner_id: currentUser?.id, content: name, type: 'persona', metadata: meta }])
     }
     showToast('✅ Contacto creado')
   }
@@ -8708,6 +8740,51 @@ window.importBackup = async (input) => {
   showToast(`✅ Restaurados ${nodes.length} nodos desde respaldo`)
 }
 
+// ── Borrado masivo por tipo ───────────────────────────────────────────────────
+window.deleteNodesByType = async (type, label) => {
+  // Contactos usan ambos tipos: 'persona' y 'contact'
+  const types = type === 'persona' ? ['persona', 'contact'] : [type]
+  const affected = allNodes.filter(n => types.includes(n.type))
+  if (!affected.length) { showToast(`ℹ️ No hay ${label} para eliminar`); return }
+  if (!confirm(`¿Eliminar ${affected.length} ${label}?\n\nEsta acción no se puede deshacer.`)) return
+  // Eliminar en Supabase
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true' && currentUser) {
+    for (const type_ of types) {
+      await supabase.from('nodes').delete().eq('owner_id', currentUser.id).eq('type', type_)
+    }
+  }
+  allNodes = allNodes.filter(n => !types.includes(n.type))
+  saveNodesToCache(allNodes)
+  renderAll()
+  showToast(`🗑 ${affected.length} ${label} eliminados`)
+}
+
+// ── Limpiar datos de demostración ─────────────────────────────────────────────
+window.deleteDemoData = async () => {
+  const demoNodes = allNodes.filter(n => n.id?.startsWith('demo_'))
+  if (!demoNodes.length) { showToast('ℹ️ No hay datos de demo'); return }
+  if (!confirm(`¿Eliminar ${demoNodes.length} nodos de demostración?`)) return
+  allNodes = allNodes.filter(n => !n.id?.startsWith('demo_'))
+  saveNodesToCache(allNodes)
+  renderAll()
+  showToast(`🧹 ${demoNodes.length} nodos demo eliminados`)
+}
+
+// ── Reinicio total ────────────────────────────────────────────────────────────
+window.resetAllData = async () => {
+  if (!currentUser) { showToast('⚠️ Debes estar autenticado para reiniciar'); return }
+  const count = allNodes.length
+  if (!confirm(`⚠️ REINICIO TOTAL\n\nEsto eliminará TODOS tus ${count} nodos de Nexus OS en Supabase.\nEsta acción NO SE PUEDE DESHACER.\n\n¿Estás seguro?`)) return
+  if (!confirm(`Confirmación final: ¿Eliminar permanentemente tus ${count} nodos?`)) return
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').delete().eq('owner_id', currentUser.id)
+  }
+  allNodes = []
+  saveNodesToCache([])
+  renderAll()
+  showToast('🔄 Nexus OS reiniciado — todos los datos eliminados')
+}
+
 // ═══════════════════════════════════════════════════════════
 window.printProjectReport = (projectId) => {
   const d = _computeProjData(projectId)
@@ -9398,6 +9475,13 @@ document.addEventListener('keydown', e => {
 
   // ── Escape — cierra modales en cascada ──────────────────────────────────
   if (e.key === 'Escape') {
+    // Helper: detecta correctamente si un modal es visible,
+    // sin importar si usa clase 'hidden' o style.display
+    const isModalVisible = (el) => {
+      if (!el) return false
+      const style = window.getComputedStyle(el)
+      return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0'
+    }
     const checks = [
       ['welcome-modal',         () => window.closeWelcomeModal?.()],
       ['global-search-modal',   () => window.closeGlobalSearch?.()],
@@ -9413,8 +9497,7 @@ document.addEventListener('keydown', e => {
     ]
     for (const [id, fn] of checks) {
       const el = document.getElementById(id)
-      const visible = el && (el.style.display === 'flex' || !el.classList.contains('hidden'))
-      if (visible) { fn(); return }
+      if (isModalVisible(el)) { fn(); return }
     }
     return
   }

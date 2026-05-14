@@ -616,6 +616,7 @@
     /* ── Calendar Time Grid ──────────────────────────────── */
     .cal-timegrid-wrapper {
       display: flex; flex-direction: column;
+      width: 100%; min-width: 0;
       height: 620px;
       border: 1px solid var(--glass-border);
       border-radius: 16px; overflow: hidden;
@@ -623,18 +624,23 @@
     }
     .cal-timegrid-header {
       display: grid; flex-shrink: 0;
+      width: 100%; min-width: 0;
       background: rgba(0,0,0,0.35);
       border-bottom: 1px solid var(--glass-border);
+      overflow: hidden;
     }
     .cal-timegrid-allday {
       display: grid; flex-shrink: 0;
+      width: 100%; min-width: 0;
       border-bottom: 1px solid var(--glass-border);
       background: rgba(0,0,0,0.2); min-height: 28px;
+      overflow: hidden;
     }
-    .cal-timegrid-scroll { overflow-y: auto; flex: 1; position: relative; }
-    .cal-timegrid-body  { display: grid; position: relative; }
+    .cal-timegrid-scroll { overflow-y: auto; overflow-x: hidden; flex: 1; position: relative; width: 100%; min-width: 0; }
+    .cal-timegrid-body  { display: grid; position: relative; width: 100%; min-width: 0; }
     .cal-timecol {
       position: relative;
+      min-width: 0; overflow: visible;
       border-right: 1px solid var(--glass-border);
       background: rgba(0,0,0,0.2);
     }
@@ -646,6 +652,7 @@
     }
     .cal-daycol {
       position: relative;
+      min-width: 0;
       border-right: 1px solid rgba(255,255,255,0.04);
       cursor: crosshair;
     }
@@ -1823,6 +1830,49 @@
         </div>
       </div>
 
+      <!-- GESTIÓN AVANZADA DE DATOS -->
+      <div class="settings-card" style="margin-top:24px;border-color:rgba(248,113,113,0.2);">
+        <h2 style="font-size:15px;font-weight:800;color:#f87171;margin-bottom:8px;">🗑 Gestión Avanzada de Datos</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Elimina grupos de datos o reinicia tu cuenta. <b style="color:#fbbf24;">Estas acciones no se pueden deshacer.</b> Descarga un respaldo primero.</p>
+
+        <!-- Borrado por tipo -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">Borrar por tipo</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <button onclick="deleteNodesByType('income','💰 ingresos')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Ingresos</button>
+            <button onclick="deleteNodesByType('expense','💸 gastos')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Gastos</button>
+            <button onclick="deleteNodesByType('persona','👥 contactos')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Contactos</button>
+            <button onclick="deleteNodesByType('kanban','📌 tareas')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Tareas Kanban</button>
+            <button onclick="deleteNodesByType('note','📝 notas')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Notas</button>
+            <button onclick="deleteNodesByType('cotizacion','📄 cotizaciones')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Cotizaciones</button>
+            <button onclick="deleteNodesByType('proyecto','🏗️ proyectos')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Proyectos</button>
+            <button onclick="deleteNodesByType('account','🏦 cuentas')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Cuentas</button>
+          </div>
+        </div>
+
+        <!-- Borrar datos de demostración -->
+        <div style="margin-bottom:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#fbbf24;">🧪 Datos de Demostración</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Elimina sólo los nodos insertados por el modo demo (id con prefijo "demo_")</div>
+            </div>
+            <button onclick="deleteDemoData()" style="padding:9px 18px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🗑 Limpiar Demo</button>
+          </div>
+        </div>
+
+        <!-- Reset total -->
+        <div style="padding-top:12px;border-top:1px solid rgba(248,113,113,0.15);">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#f87171;">☢️ Reinicio Total</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Elimina TODOS tus nodos en Supabase. La sesión continúa pero Nexus queda vacío.</div>
+            </div>
+            <button onclick="resetAllData()" style="padding:9px 18px;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.4);color:#f87171;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">☢️ Reiniciar Todo</button>
+          </div>
+        </div>
+      </div>
+
       <!-- IMPORTAR DATOS (PLANTILLAS) -->
       <div class="settings-card" style="margin-top:24px;">
         <h2 style="font-size:15px;font-weight:800;color:#60a5fa;margin-bottom:8px;">📥 Importar Datos</h2>
@@ -1890,7 +1940,7 @@
       <div style="display:flex;flex-direction:column;gap:12px;max-width:860px;">
 
         <!-- INICIO RÁPIDO -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">🚀 Inicio Rápido</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -1908,7 +1958,7 @@
         </div>
 
         <!-- PARSER SEMÁNTICO v2 -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">⌨️ Parser Semántico v2 — Barra de comandos</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -1999,7 +2049,7 @@
         </div>
 
         <!-- MURO TÁCTICO (KANBAN) -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:#a78bfa;margin:0;">🗂️ Muro Táctico — Kanban</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2030,7 +2080,7 @@
         </div>
 
         <!-- CHECKLIST AVANZADO -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:#2dd4bf;margin:0;">✅ Checklist en Tarjetas Kanban</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2059,7 +2109,7 @@
         </div>
 
         <!-- HÁBITOS -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:#fb923c;margin:0;">🔁 Hábitos — Tracker diario</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2095,7 +2145,7 @@
         </div>
 
         <!-- WIKI DE PROYECTO -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:#2dd4bf;margin:0;">📖 Wiki de Proyecto</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2133,7 +2183,7 @@
         </div>
 
         <!-- PROYECTOS -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:#2dd4bf;margin:0;">🏗️ Proyectos — Gestión completa</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2151,7 +2201,7 @@
         </div>
 
         <!-- CONTACTOS & PROVEEDORES -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">👥 Contactos &amp; Proveedores</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2169,7 +2219,7 @@
         </div>
 
         <!-- BIO-FINANZAS -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:#4ade80;margin:0;">💰 Bio-Finanzas</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2192,7 +2242,7 @@
         </div>
 
         <!-- BÓVEDA NEURAL -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:#60a5fa;margin:0;">🧠 Bóveda Neural</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2210,7 +2260,7 @@
         </div>
 
         <!-- TIEMPO & CRÓNICA -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:#a78bfa;margin:0;">📅 Calendario &amp; Crónica</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2226,7 +2276,7 @@
         </div>
 
         <!-- IMPORTAR & EXPORTAR -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:#fb923c;margin:0;">📥 Importar &amp; Exportar</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2243,7 +2293,7 @@
         </div>
 
         <!-- INTELIGENCIA DE TAGS -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">🏷️ Inteligencia de Tags</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -2262,7 +2312,7 @@
         </div>
 
         <!-- ATAJOS DE TECLADO -->
-        <div class="settings-card" style="cursor:pointer;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
+        <div class="settings-card" style="cursor:pointer;padding:20px 24px;" onclick="this.querySelector('.ayuda-body').style.display=this.querySelector('.ayuda-body').style.display==='none'?'block':'none'">
           <div style="display:flex;align-items:center;justify-content:space-between;">
             <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin:0;">⌨️ Atajos de teclado</h2>
             <span style="color:var(--text-muted);font-size:18px;">›</span>
@@ -3014,7 +3064,7 @@
 </div>
 
 <!-- DETALLE DEL NODO (PRO TRELLO MODAL) -->
-<div id="card-modal" class="hidden">
+<div id="card-modal" class="hidden" onclick="if(event.target===this)closeCardModal()">
   <div class="trello-modal">
     <span class="trello-modal-close" onclick="closeCardModal()">✕</span>
     
@@ -3290,7 +3340,7 @@
 </div>
 
 <!-- MODAL: EDITAR NOTA -->
-<div id="note-edit-modal" class="modal-overlay hidden">
+<div id="note-edit-modal" class="modal-overlay hidden" onclick="if(event.target===this)window.closeNoteModal?.()">
   <div class="modal-box">
     <div class="modal-title" style="position:relative;">Editar Nota<button id="note-toggle-size" class="btn-ghost" style="position:absolute; top:4px; right:4px; font-size:14px;" onclick="toggleNoteSize()">🔲</button></div>
     <div class="modal-field">
@@ -3483,7 +3533,7 @@
 </div>
 
 <!-- MODAL: DETALLE DE TRANSACCIÓN -->
-<div id="finance-detail-modal" class="modal-overlay hidden">
+<div id="finance-detail-modal" class="modal-overlay hidden" onclick="if(event.target===this)window.closeFinanceDetail?.()">
   <div class="modal-box" style="max-width:620px; max-height:90vh; overflow-y:auto;">
     <div class="modal-title" id="fd-title">Detalle</div>
 
