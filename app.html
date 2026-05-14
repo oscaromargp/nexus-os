@@ -2872,6 +2872,27 @@
           <button onclick="saveCotAbono()" type="button" class="btn-primary" style="font-size:12px;flex:2;padding:8px;">Guardar pago</button>
         </div>
       </div>
+      <!-- EVIDENCIAS — fotos, videos, links de avance -->
+      <div style="margin-top:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <label class="modal-label" style="margin:0;">📎 Evidencias &amp; Adjuntos</label>
+          <label style="font-size:11px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);color:#60a5fa;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">
+            ⬆️ Imagen<input type="file" accept="image/*" style="display:none" onchange="uploadCotImage(this)" />
+          </label>
+        </div>
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px;">Pega imágenes con <kbd style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:3px;padding:1px 5px;font-family:monospace;">Ctrl+V</kbd> · Máx. 5 fotos · También puedes agregar links de Google Photos o YouTube</div>
+        <!-- Grid de miniaturas -->
+        <div id="cot-evidencias-grid" style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;min-height:40px;"></div>
+        <!-- Links de video / álbumes -->
+        <div id="cot-links-list" style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;"></div>
+        <!-- Input para agregar link -->
+        <div style="display:flex;gap:6px;">
+          <input type="url" id="cot-link-url" class="modal-input" style="flex:2;font-size:12px;" placeholder="https://photos.google.com/... o youtube.com/..." />
+          <input type="text" id="cot-link-label" class="modal-input" style="flex:1;font-size:12px;" placeholder="Etiqueta (opcional)" />
+          <button onclick="addCotLink()" type="button" style="font-size:11px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);color:#60a5fa;border-radius:6px;padding:6px 10px;cursor:pointer;white-space:nowrap;">+ Link</button>
+        </div>
+      </div>
+
       <div class="modal-actions">
         <button class="btn-ghost" onclick="closeCotizacionModal()">Cancelar</button>
         <button class="btn-danger" id="cot-delete" style="display:none;" onclick="deleteCotizacion()">Eliminar</button>
