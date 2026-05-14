@@ -1484,16 +1484,28 @@
 
         <!-- Suscripción / Pago fijo fields -->
         <div id="ag-fields-recurring" style="display:none;">
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
-              <label class="modal-label">Monto</label>
-              <input id="ag-amount" type="number" class="modal-input" placeholder="0.00" />
+              <label class="modal-label">Monto <span style="color:var(--text-muted);font-size:10px;">(opcional si es variable)</span></label>
+              <input id="ag-amount" type="number" class="modal-input" placeholder="Dejar vacío si varía" />
             </div>
             <div>
               <label class="modal-label">Moneda</label>
               <select id="ag-currency" class="modal-input">
                 <option value="MXN">MXN</option>
                 <option value="USD">USD</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div>
+              <label class="modal-label">Frecuencia</label>
+              <select id="ag-frequency" class="modal-input">
+                <option value="mensual">📅 Mensual</option>
+                <option value="bimestral">📅 Bimestral (cada 2 meses)</option>
+                <option value="trimestral">📅 Trimestral (cada 3 meses)</option>
+                <option value="semestral">📅 Semestral (cada 6 meses)</option>
+                <option value="anual">📅 Anual</option>
               </select>
             </div>
             <div>

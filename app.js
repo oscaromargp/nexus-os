@@ -3432,17 +3432,22 @@ function renderAgenda(nodes) {
         const billContact = m.contactId ? allNodes.find(n => n.id === m.contactId) : null
         const billContactName = billContact ? (billContact.metadata?.name || billContact.content) : ''
         const methodLabel = { transferencia:'🏦 Transferencia', tarjeta:'💳 Tarjeta', efectivo:'💵 Efectivo', cripto:'₿ Cripto', domiciliado:'🔄 Cargo domiciliado' }
+        const freqLabel = { mensual:'Mensual', bimestral:'Bimestral', trimestral:'Trimestral', semestral:'Semestral', anual:'Anual' }
+        const freqStr = m.frequency ? freqLabel[m.frequency] || m.frequency : 'Mensual'
+        const amountStr = m.amount != null ? fmt$(m.amount) : '<span style="font-size:10px;font-style:italic;color:var(--text-muted);">Variable</span>'
         return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${paid?'rgba(74,222,128,0.05)':clr+'14'};border:1px solid ${paid?'#4ade8033':clr+'33'};border-radius:12px;opacity:${paid?0.6:1};">
           <button onclick="toggleBillPaid('${b.id}')" style="background:${paid?'#4ade80':'transparent'};border:2px solid ${paid?'#4ade80':clr};width:20px;height:20px;border-radius:5px;cursor:pointer;flex-shrink:0;color:${paid?'#000':'transparent'};font-size:12px;display:flex;align-items:center;justify-content:center;">✓</button>
           <div style="flex:1;">
             <div style="font-size:12px;font-weight:600;color:#fff;${paid?'text-decoration:line-through;':''}">${esc(m.label||b.content)}</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:3px;">
               ${m.dueDate?`<span style="font-size:10px;color:var(--text-muted);">📅 ${m.dueDate}</span>`:''}
+              <span style="font-size:10px;color:${clr}88;">🔁 ${freqStr}</span>
               ${billContactName?`<span style="font-size:10px;color:var(--text-muted);">→ ${esc(billContactName)}</span>`:''}
               ${m.method?`<span style="font-size:10px;color:var(--text-muted);">${methodLabel[m.method]||m.method}</span>`:''}
             </div>
           </div>
-          <div style="font-size:13px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${fmt$(m.amount||0)}</div>
+          <div style="font-size:13px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${amountStr}</div>
+          <button onclick="editAgendaItem('${b.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Editar">✏️</button>
           <button onclick="deleteAgendaItem('${b.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Eliminar">✕</button>
         </div>`
       }).join('')
@@ -3473,6 +3478,7 @@ window.openAgendaModal = (type, prefillProjectTag = '') => {
   if (type !== 'card') {
     document.getElementById('ag-amount').value = ''
     document.getElementById('ag-day').value    = ''
+    if (document.getElementById('ag-frequency')) document.getElementById('ag-frequency').value = 'mensual'
   } else {
     document.getElementById('ag-last4').value       = ''
     document.getElementById('ag-limit').value       = ''
@@ -3559,10 +3565,14 @@ window.saveAgendaItem = async () => {
       currency:   document.getElementById('ag-card-currency')?.value || 'MXN'
     }
   } else {
+    const rawAmt = document.getElementById('ag-amount')?.value?.trim()
+    const frequency = document.getElementById('ag-frequency')?.value || 'mensual'
+    const freqMonths = { mensual:1, bimestral:2, trimestral:3, semestral:6, anual:12 }
     meta = { ...meta,
-      amount:     parseFloat(document.getElementById('ag-amount')?.value) || 0,
+      amount:     rawAmt !== '' ? (parseFloat(rawAmt) || 0) : null,
       currency:   document.getElementById('ag-currency')?.value || 'MXN',
       dayOfMonth: parseInt(document.getElementById('ag-day')?.value) || null,
+      frequency,
       category:   document.getElementById('ag-category')?.value || '',
       paid: false
     }
@@ -3572,7 +3582,9 @@ window.saveAgendaItem = async () => {
       meta.dueDate = (() => {
         const day = meta.dayOfMonth; if (!day) return ''
         const d = new Date(); d.setDate(day)
-        if (d < new Date()) d.setMonth(d.getMonth() + 1)
+        const months = freqMonths[frequency] || 1
+        // Avanzar al próximo vencimiento según frecuencia
+        while (d <= new Date()) d.setMonth(d.getMonth() + months)
         return d.toISOString().split('T')[0]
       })()
     }
@@ -3616,9 +3628,10 @@ window.editAgendaItem = (nodeId) => {
   document.getElementById('ag-category-wrap').style.display    = node.type === 'subscription' ? '' : 'none'
   document.getElementById('ag-bill-fields').style.display      = node.type === 'bill' ? '' : 'none'
   if (node.type !== 'card') {
-    document.getElementById('ag-amount').value = m.amount || ''
+    document.getElementById('ag-amount').value = m.amount != null ? m.amount : ''
     document.getElementById('ag-day').value    = m.dayOfMonth || ''
     if (document.getElementById('ag-currency')) document.getElementById('ag-currency').value = m.currency || 'MXN'
+    if (document.getElementById('ag-frequency')) document.getElementById('ag-frequency').value = m.frequency || 'mensual'
     if (node.type === 'subscription' && document.getElementById('ag-category')) document.getElementById('ag-category').value = m.category || ''
     if (node.type === 'bill') {
       if (document.getElementById('ag-bill-method')) document.getElementById('ag-bill-method').value = m.method || 'transferencia'
@@ -7500,10 +7513,13 @@ function _renderProjTab(tab, d) {
 
 // ── TAB: RESUMEN ─────────────────────────────────────────────────────────────
 function _renderProjResumen(d) {
-  const { p, m, budget, rCfg, tagStr, projSlug, milestonePct, tareas } = d
+  const { p, m, budget, rCfg, tagStr, projSlug, milestonePct, tareas,
+          cots, aceptadas, pendientes, comprometido, pagado, pendientePago,
+          sinComprometer, overBudget, disponible, pct, gaugeColor, provMap } = d
   const _s = (fn) => { try { return fn() } catch(e) { return '' } }
   const HCFG = { on_track:{emoji:'🟢',label:'En curso',color:'#4ade80'}, at_risk:{emoji:'🟡',label:'En riesgo',color:'#fbbf24'}, off_track:{emoji:'🔴',label:'Atrasado',color:'#f87171'}, on_hold:{emoji:'🔵',label:'Pausado',color:'#60a5fa'}, done:{emoji:'🟣',label:'Terminado',color:'#a78bfa'} }
   const STAGES = [{v:'planning',l:'📐 Planificación'},{v:'active',l:'🚀 En ejecución'},{v:'on_hold',l:'⏸️ Pausado'},{v:'done',l:'✅ Terminado'}]
+  const STATUS_CFG = { pendiente:{l:'Pendiente',c:'#94a3b8'}, aceptada:{l:'Aceptada',c:'#4ade80'}, rechazada:{l:'Rechazada',c:'#f87171'}, en_proceso:{l:'En proceso',c:'#60a5fa'}, pagada:{l:'Pagada',c:'#a78bfa'}, parcial:{l:'Parcial',c:'#fbbf24'} }
   const h   = m.health || {}
   const hc  = HCFG[h.status] || null
   const mils = m.milestones || []
@@ -7513,12 +7529,152 @@ function _renderProjResumen(d) {
   const pctSource  = h.progress != null ? 'manual' : (milestonePct != null ? 'hitos' : null)
   const barColor   = hc?.color || (displayPct >= 75 ? '#4ade80' : displayPct >= 40 ? '#fbbf24' : '#00f6ff')
   const members    = m.members || []
+  const fmtM = (n) => '$' + (n||0).toLocaleString('es-MX',{maximumFractionDigits:0})
 
-  return `
-    <!-- Descripción -->
-    ${m.desc ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);line-height:1.6;">${esc(m.desc)}</div>` : ''}
+  // ── Alertas ────────────────────────────────────────────────────────────────
+  const alerts = []
+  if (overBudget) alerts.push({ icon:'🔴', msg:`Presupuesto excedido en ${fmtM(comprometido - budget)}`, color:'#f87171' })
+  const overdueHitos = mils.filter(ms => !ms.is_reached && ms.deadline && ms.deadline < today)
+  if (overdueHitos.length > 0) alerts.push({ icon:'⚠️', msg:`${overdueHitos.length} hito${overdueHitos.length>1?'s':''} vencido${overdueHitos.length>1?'s':''}`, color:'#fbbf24' })
+  // Próximos pagos de cotizaciones (abonos sin fecha futura > 7 días)
+  const in7d = new Date(); in7d.setDate(in7d.getDate() + 7)
+  const in7str = in7d.toISOString().split('T')[0]
+  const upcomingPayments = aceptadas.flatMap(c => {
+    const abonos = c.metadata?.abonos||[]
+    const pendAbs = abonos.filter(a => a.due_date && a.due_date <= in7str && !a.paid_at)
+    return pendAbs.map(a => ({ cot:c, abono:a }))
+  })
+  if (upcomingPayments.length > 0) alerts.push({ icon:'📅', msg:`${upcomingPayments.length} pago${upcomingPayments.length>1?'s':''} próximo${upcomingPayments.length>1?'s':''} esta semana`, color:'#60a5fa' })
+  if (pendientePago > 0 && comprometido > 0) alerts.push({ icon:'💸', msg:`${fmtM(pendientePago)} pendiente de pago en cotizaciones activas`, color:'#fb923c' })
 
-    <!-- Salud -->
+  const alertsHTML = alerts.length ? `
+    <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:6px;">
+      ${alerts.map(a => `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${a.color}12;border:1px solid ${a.color}35;border-radius:10px;">
+        <span style="font-size:16px;flex-shrink:0;">${a.icon}</span>
+        <span style="font-size:12px;font-weight:600;color:${a.color};">${a.msg}</span>
+      </div>`).join('')}
+    </div>` : ''
+
+  // ── KPIs financieros ───────────────────────────────────────────────────────
+  const kpisHTML = budget > 0 || comprometido > 0 ? `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">💰 FINANCIERO</span>
+        <button onclick="switchProjTab('finanzas')" style="font-size:11px;color:#fb923c;background:none;border:1px solid rgba(251,146,60,0.3);border-radius:5px;padding:2px 8px;cursor:pointer;">Ver detalle →</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:14px;">
+        ${[
+          { label:'Presupuesto', val:budget, color:'#a78bfa', icon:'💼' },
+          { label:'Comprometido', val:comprometido, color:'#fb923c', icon:'📋' },
+          { label:'Pagado', val:pagado, color:'#4ade80', icon:'✅' },
+          { label:'Por pagar', val:pendientePago, color:'#f87171', icon:'⏳' },
+          ...(disponible != null ? [{ label:disponible>=0?'Disponible':'Sobregirado', val:Math.abs(disponible), color:disponible>=0?'#2dd4bf':'#f87171', icon:disponible>=0?'🏦':'🚨' }] : []),
+        ].map(k => `<div style="background:${k.color}10;border:1px solid ${k.color}28;border-radius:10px;padding:10px 8px;text-align:center;">
+          <div style="font-size:15px;margin-bottom:3px;">${k.icon}</div>
+          <div style="font-size:10px;color:var(--text-muted);font-weight:600;white-space:nowrap;">${k.label}</div>
+          <div style="font-size:12px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;margin-top:2px;">${fmtM(k.val)}</div>
+        </div>`).join('')}
+      </div>
+      ${budget > 0 ? `
+        <div style="margin-bottom:6px;">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;"><span>Comprometido vs Presupuesto</span><span style="font-weight:700;color:${gaugeColor};">${pct}%</span></div>
+          <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;position:relative;">
+            <div style="height:100%;width:${Math.min(pct,100)}%;background:${gaugeColor};border-radius:4px;transition:width .6s;"></div>
+          </div>
+        </div>
+        ${comprometido > 0 ? (() => {
+          const paidPct = Math.min(100, Math.round(pagado/comprometido*100))
+          return `<div>
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;"><span>Pagado vs Comprometido</span><span style="font-weight:700;color:#4ade80;">${paidPct}%</span></div>
+            <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+              <div style="height:100%;width:${paidPct}%;background:#4ade80;border-radius:4px;transition:width .6s;"></div>
+            </div>
+          </div>`
+        })() : ''}` : `<div style="font-size:12px;color:var(--text-dim);">Sin presupuesto definido — edita el proyecto para agregar presupuesto.</div>`}
+    </div>` : ''
+
+  // ── Cotizaciones activas ───────────────────────────────────────────────────
+  const activeCots = aceptadas.filter(c => !['pagada','rechazada'].includes(c.metadata?.status))
+  const cotsHTML = aceptadas.length > 0 ? `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">📋 COTIZACIONES</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(251,146,60,0.12);color:#fb923c;font-weight:700;">${aceptadas.length} activa${aceptadas.length>1?'s':''}</span>
+          ${pendientes.length > 0 ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(148,163,184,0.12);color:#94a3b8;font-weight:700;">${pendientes.length} pendiente${pendientes.length>1?'s':''}</span>` : ''}
+        </div>
+        <button onclick="switchProjTab('finanzas')" style="font-size:11px;color:#fb923c;background:none;border:none;cursor:pointer;">Ver todas →</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${aceptadas.slice(0,5).map(c => {
+          const cm = c.metadata||{}
+          const abonos = cm.abonos||[]
+          const cotTotal = +(cm.amount||0)
+          const cotPagado = abonos.reduce((s,a)=>s+(+a.amount||0),0)
+          const cotPct = cotTotal>0 ? Math.min(100,Math.round(cotPagado/cotTotal*100)) : 0
+          const stCfg = STATUS_CFG[cm.status||'pendiente']
+          const prov = cm.provider_id ? allNodes.find(n=>n.id===cm.provider_id) : null
+          const provName = prov ? (prov.metadata?.name||prov.content) : ''
+          return `<div style="padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-left:3px solid ${stCfg.c};border-radius:9px;cursor:pointer;" onclick="openCotizacionModal('${c.id}')">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <span style="flex:1;font-size:12px;font-weight:700;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(cm.label||c.content)}</span>
+              <span style="font-size:9px;padding:2px 7px;border-radius:4px;background:${stCfg.c}22;color:${stCfg.c};font-weight:700;white-space:nowrap;">${stCfg.l}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+                <div style="height:100%;width:${cotPct}%;background:${cotPct>=100?'#4ade80':cotPct>0?'#60a5fa':'#94a3b8'};border-radius:3px;"></div>
+              </div>
+              <span style="font-size:10px;font-weight:700;color:${cotPct>=100?'#4ade80':'#60a5fa'};font-family:monospace;white-space:nowrap;">${cotPct}%</span>
+              <span style="font-size:10px;color:var(--text-muted);font-family:monospace;white-space:nowrap;">${fmtM(cotPagado)}/${fmtM(cotTotal)}</span>
+            </div>
+            ${provName ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">👤 ${esc(provName)}</div>` : ''}
+          </div>`
+        }).join('')}
+        ${aceptadas.length > 5 ? `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:4px;">… y ${aceptadas.length-5} más</div>` : ''}
+      </div>
+    </div>` : ''
+
+  // ── Proveedores con saldo ──────────────────────────────────────────────────
+  const provEntries = Object.entries(provMap).filter(([,pd]) => {
+    const total = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+    const abonos = pd.cotizaciones.flatMap(c=>c.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
+    const direct = pd.pagos.reduce((s,e)=>s+(+e.metadata?.amount||0),0)
+    return total > 0 && (abonos+direct) < total
+  })
+  const provsHTML = provEntries.length > 0 ? `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;display:block;margin-bottom:12px;">👤 PROVEEDORES CON SALDO</span>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${provEntries.slice(0,4).map(([pid, pd]) => {
+          const pNode = allNodes.find(n=>n.id===pid)
+          const pName = pNode ? (pNode.metadata?.name||pNode.content) : pid
+          const total = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+          const abonos = pd.cotizaciones.flatMap(c=>c.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
+          const direct = pd.pagos.reduce((s,e)=>s+(+e.metadata?.amount||0),0)
+          const pagProv = abonos+direct
+          const saldo = Math.max(0, total - pagProv)
+          const pp = total>0 ? Math.min(100,Math.round(pagProv/total*100)) : 0
+          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.06);cursor:pointer;" ondblclick="showProveedorHistorial('${pid}','${projSlug}','${esc(pName)}')" title="Doble clic para ver historial">
+            <div style="width:30px;height:30px;border-radius:50%;background:rgba(251,146,60,0.12);color:#fb923c;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0;">${esc(pName.charAt(0).toUpperCase())}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;color:var(--text-primary);">${esc(pName)}</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
+                <div style="flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${pp}%;background:#60a5fa;border-radius:2px;"></div></div>
+                <span style="font-size:10px;color:#60a5fa;font-weight:700;">${pp}%</span>
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div style="font-size:12px;font-weight:800;color:#f87171;font-family:monospace;">${fmtM(saldo)}</div>
+              <div style="font-size:9px;color:var(--text-muted);">pendiente</div>
+            </div>
+          </div>`
+        }).join('')}
+        ${provEntries.length > 4 ? `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:4px;">… y ${provEntries.length-4} proveedor${provEntries.length-4>1?'es':''} más</div>` : ''}
+      </div>
+    </div>` : ''
+
+  // ── Salud + Stage ──────────────────────────────────────────────────────────
+  const saludHTML = `
     <div style="background:var(--surface);border:1px solid ${hc?hc.color+'44':'var(--border)'};border-radius:12px;padding:16px;margin-bottom:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:${displayPct!=null||h.note?'14px':'0'};">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -7543,11 +7699,12 @@ function _renderProjResumen(d) {
         </div>` : `<div style="font-size:12px;color:var(--text-dim);">Usa <strong style="color:#4ade80;">📊 Estado</strong> para registrar avance, o agrega hitos para cálculo automático.</div>`}
       ${h.note ? `<div style="font-size:12px;color:var(--text-muted);font-style:italic;margin-top:10px;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;border-left:3px solid ${hc?.color||'var(--border)'};">"${esc(h.note)}"</div>` : ''}
       ${h.updated_at ? `<div style="font-size:10px;color:var(--text-dim);margin-top:6px;">Última actualización: ${h.updated_at}</div>` : ''}
-    </div>
+    </div>`
 
-    <!-- Hitos -->
+  // ── Hitos (compacto) ───────────────────────────────────────────────────────
+  const hitosHTML = `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">🏁 HITOS</span>
           ${mils.length ? `<span style="font-size:11px;color:#2dd4bf;font-weight:700;">${milsDone}/${mils.length}</span>` : ''}
@@ -7558,62 +7715,73 @@ function _renderProjResumen(d) {
         mils.map((ms,i) => {
           const overdue = !ms.is_reached && ms.deadline && ms.deadline < today
           const clr = ms.is_reached ? '#4ade80' : overdue ? '#f87171' : '#2dd4bf'
-          return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <button onclick="toggleMilestone('${p.id}',${i})" style="width:22px;height:22px;border-radius:50%;border:2px solid ${clr};background:${ms.is_reached?clr:'transparent'};cursor:pointer;display:grid;place-items:center;font-size:12px;color:${ms.is_reached?'#000':'transparent'};flex-shrink:0;">✓</button>
+          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <button onclick="toggleMilestone('${p.id}',${i})" style="width:20px;height:20px;border-radius:50%;border:2px solid ${clr};background:${ms.is_reached?clr:'transparent'};cursor:pointer;display:grid;place-items:center;font-size:11px;color:${ms.is_reached?'#000':'transparent'};flex-shrink:0;">✓</button>
             <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.55;':''}">${esc(ms.name)}</div>
-              ${ms.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${esc(ms.desc)}</div>` : ''}
-              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:2px;">
-                ${ms.deadline ? `<div style="font-size:10px;color:${clr};">${overdue?'⚠️ Vencido':'📅 Límite'}: ${ms.deadline}</div>` : ''}
-                ${ms.responsible_name ? `<div style="font-size:10px;color:var(--text-muted);">👤 ${esc(ms.responsible_name)}</div>` : ''}
-              </div>
+              <div style="font-size:12px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.55;':''};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ms.name)}</div>
+              ${ms.deadline ? `<div style="font-size:10px;color:${clr};">${overdue?'⚠️ Vencido':'📅'} ${ms.deadline}</div>` : ''}
             </div>
-            <button onclick="openMilestoneModal('${p.id}',${i})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:2px 4px;" title="Editar">✏️</button>
-            <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:2px 4px;" title="Eliminar">✕</button>
+            <button onclick="openMilestoneModal('${p.id}',${i})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;padding:2px 4px;">✏️</button>
+            <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:2px 4px;">✕</button>
           </div>`
         }).join('')}
       ${mils.length > 0 ? `<div style="margin-top:10px;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${Math.round(milsDone/mils.length*100)}%;background:#2dd4bf;border-radius:3px;transition:width .6s;"></div></div>` : ''}
-    </div>
+    </div>`
 
-    <!-- Equipo -->
-    ${_s(() => {
-      if (!members.length) return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;"><span style="font-size:12px;font-weight:800;color:var(--text-muted);">👥 EQUIPO</span><button onclick="openMemberModal('${p.id}')" style="font-size:12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:4px 12px;cursor:pointer;">+ Añadir persona</button></div>`
-      const roleOrder = ['financiador','administrador','supervisor','ejecutor','colaborador']
-      const grouped = {}; members.forEach(mb => { const k=mb.role||'colaborador'; if(!grouped[k])grouped[k]=[]; grouped[k].push(mb) })
-      const roleCfg = { financiador:{label:'💰 Financiador',color:'#f59e0b'}, administrador:{label:'🗂️ Admin',color:'#60a5fa'}, ejecutor:{label:'🔧 Ejecutor',color:'#fb923c'}, supervisor:{label:'👁️ Supervisor',color:'#a78bfa'}, colaborador:{label:'🤝 Colaborador',color:'#4ade80'} }
-      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-          <div style="font-size:12px;font-weight:800;color:var(--text-muted);">👥 EQUIPO (${members.length})</div>
-          <button onclick="openMemberModal('${p.id}')" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
-        </div>
-        ${roleOrder.filter(r=>grouped[r]).map(role => {
-          const cfg = roleCfg[role] || {label:role,color:'#94a3b8'}
-          return `<div style="margin-bottom:12px;"><div style="font-size:10px;font-weight:700;color:${cfg.color};margin-bottom:8px;">${cfg.label}</div><div style="display:flex;flex-wrap:wrap;gap:8px;">${grouped[role].map(mb => {
-            const c = allNodes.find(n => n.id === mb.contact_id)
-            const name = c ? (c.metadata?.name||c.content) : 'Sin nombre'
-            const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
-            return `<div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:7px 12px;">
-              <div style="width:28px;height:28px;border-radius:50%;background:${cfg.color}20;color:${cfg.color};display:grid;place-items:center;font-size:11px;font-weight:800;flex-shrink:0;">${initials}</div>
-              <div><div style="font-size:12px;font-weight:600;color:var(--text-primary);">${esc(name)}</div>${mb.notes?`<div style="font-size:10px;color:var(--text-muted);">${esc(mb.notes)}</div>`:''}</div>
-              <button onclick="removeMember('${p.id}','${mb.contact_id}')" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:13px;padding:0 2px;margin-left:4px;">×</button>
-            </div>`}).join('')}</div></div>`
+  // ── Equipo ─────────────────────────────────────────────────────────────────
+  const teamHTML = _s(() => {
+    if (!members.length) return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;"><span style="font-size:12px;font-weight:800;color:var(--text-muted);">👥 EQUIPO</span><button onclick="openMemberModal('${p.id}')" style="font-size:12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:4px 12px;cursor:pointer;">+ Añadir persona</button></div>`
+    const roleOrder = ['financiador','administrador','supervisor','ejecutor','colaborador']
+    const grouped = {}; members.forEach(mb => { const k=mb.role||'colaborador'; if(!grouped[k])grouped[k]=[]; grouped[k].push(mb) })
+    const roleCfg = { financiador:{label:'💰 Financiador',color:'#f59e0b'}, administrador:{label:'🗂️ Admin',color:'#60a5fa'}, ejecutor:{label:'🔧 Ejecutor',color:'#fb923c'}, supervisor:{label:'👁️ Supervisor',color:'#a78bfa'}, colaborador:{label:'🤝 Colaborador',color:'#4ade80'} }
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:800;color:var(--text-muted);">👥 EQUIPO (${members.length})</div>
+        <button onclick="openMemberModal('${p.id}')" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${members.map(mb => {
+          const c = allNodes.find(n => n.id === mb.contact_id)
+          const name = c ? (c.metadata?.name||c.content) : 'Sin nombre'
+          const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
+          const cfg = roleCfg[mb.role||'colaborador'] || {label:'Colaborador',color:'#94a3b8'}
+          return `<div style="display:flex;align-items:center;gap:7px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:6px 10px;">
+            <div style="width:26px;height:26px;border-radius:50%;background:${cfg.color}20;color:${cfg.color};display:grid;place-items:center;font-size:10px;font-weight:800;flex-shrink:0;">${initials}</div>
+            <div><div style="font-size:12px;font-weight:600;color:var(--text-primary);">${esc(name)}</div><div style="font-size:9px;color:${cfg.color};">${cfg.label}</div></div>
+            <button onclick="removeMember('${p.id}','${mb.contact_id}')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:0 2px;margin-left:2px;">×</button>
+          </div>`
         }).join('')}
-      </div>`
-    })}
+      </div>
+    </div>`
+  })
 
-    <!-- Tareas (resumen) -->
-    ${tareas.length ? `
+  // ── Tareas ─────────────────────────────────────────────────────────────────
+  const tareasHTML = tareas.length ? `
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <span style="font-size:12px;font-weight:800;color:var(--text-muted);">✅ TAREAS (${tareas.length})</span>
-        <button onclick="switchProjTab('kanban')" style="font-size:11px;color:#60a5fa;background:none;border:none;cursor:pointer;">Ver todas →</button>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:12px;font-weight:800;color:var(--text-muted);">✅ TAREAS</span>
+          <span style="font-size:10px;font-weight:700;color:#60a5fa;">${tareas.filter(t=>t.metadata?.status==='done').length}/${tareas.length}</span>
+        </div>
+        <button onclick="switchProjTab('kanban')" style="font-size:11px;color:#60a5fa;background:none;border:none;cursor:pointer;">Ver Kanban →</button>
       </div>
-      ${tareas.slice(0,5).map(t=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-        <span style="font-size:13px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.metadata?.label||t.content)}</span>
-        ${t.metadata?.status?`<span style="font-size:10px;color:var(--text-muted);">${esc(t.metadata.status)}</span>`:''}
-      </div>`).join('')}
-    </div>` : ''}
-  `
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        ${tareas.slice(0,5).map(t => {
+          const ts = t.metadata?.status || 'todo'
+          const tc = ts==='done'?'#4ade80':ts==='in_progress'?'#60a5fa':'#94a3b8'
+          return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <div style="width:8px;height:8px;border-radius:50%;background:${tc};flex-shrink:0;"></div>
+            <span style="font-size:12px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.metadata?.label||t.content)}</span>
+          </div>`
+        }).join('')}
+        ${tareas.length > 5 ? `<div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px;">… y ${tareas.length-5} más</div>` : ''}
+      </div>
+    </div>` : ''
+
+  // ── Descripción ────────────────────────────────────────────────────────────
+  const descHTML = m.desc ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);line-height:1.6;">${esc(m.desc)}</div>` : ''
+
+  return descHTML + alertsHTML + kpisHTML + cotsHTML + provsHTML + saludHTML + hitosHTML + teamHTML + tareasHTML
 }
 
 // ── TAB: FINANZAS ────────────────────────────────────────────────────────────
@@ -9528,6 +9696,8 @@ window.showProveedorHistorial = (pid, projSlug, provName) => {
     modal.onclick = (ev) => { if (ev.target === modal) modal.style.display = 'none' }
     document.body.appendChild(modal)
   }
+  // Store data for print function
+  modal._printData = { pid, projSlug, provName, provCots, directExpenses, totalAcordado, totalPagado, saldoGlobal, pct }
   modal.style.display = 'flex'
   modal.innerHTML = `<div style="background:#0d1117;border:1px solid rgba(251,146,60,0.25);border-radius:16px;padding:24px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
@@ -9535,7 +9705,10 @@ window.showProveedorHistorial = (pid, projSlug, provName) => {
         <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;">Historial completo</div>
         <h3 style="margin:4px 0 0;font-size:18px;font-weight:800;color:#fb923c;">👤 ${esc(provName)}</h3>
       </div>
-      <button onclick="document.getElementById('prov-hist-modal').style.display='none'" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;">✕ Cerrar</button>
+      <div style="display:flex;gap:8px;">
+        <button onclick="printProveedorHistorial()" style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;">🖨️ Imprimir</button>
+        <button onclick="document.getElementById('prov-hist-modal').style.display='none'" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;">✕ Cerrar</button>
+      </div>
     </div>
 
     <!-- Resumen global -->
@@ -9557,6 +9730,110 @@ window.showProveedorHistorial = (pid, projSlug, provName) => {
   </div>`
 }
 
+// ── Imprimir historial del proveedor ─────────────────────────────────────────
+window.printProveedorHistorial = () => {
+  const modal = document.getElementById('prov-hist-modal')
+  const d = modal?._printData
+  if (!d) return
+  const { provName, provCots, directExpenses, totalAcordado, totalPagado, saldoGlobal, pct, projSlug } = d
+  const METHOD_LABEL = { transferencia:'Transferencia bancaria', efectivo:'Efectivo', tarjeta:'Tarjeta', cheque:'Cheque', cripto:'Cripto' }
+  const STATUS_LABEL = { pendiente:'Pendiente', aceptada:'Aceptada', en_proceso:'En proceso', parcial:'Pago parcial', pagada:'Pagada', rechazada:'Rechazada' }
+  const today = new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})
+
+  const cotsRows = provCots.map(c => {
+    const m = c.metadata || {}
+    const abonos = m.abonos || []
+    const cotTotal  = +(m.amount||0)
+    const cotPagado = abonos.reduce((s,a)=>s+(+a.amount||0),0)
+    const cotPct    = cotTotal>0 ? Math.min(100,Math.round(cotPagado/cotTotal*100)) : 0
+    return `
+      <tr style="background:#f8fafc;">
+        <td colspan="4" style="padding:8px 10px;font-weight:700;font-size:13px;border-bottom:1px solid #e2e8f0;">
+          📄 ${c.metadata?.label||c.content}
+          <span style="font-weight:400;color:#64748b;font-size:11px;margin-left:8px;">${STATUS_LABEL[m.status||'pendiente']}</span>
+        </td>
+      </tr>
+      ${abonos.map((a,i)=>`
+      <tr>
+        <td style="padding:5px 10px;font-size:12px;color:#475569;">Pago ${i+1}</td>
+        <td style="padding:5px 10px;font-size:12px;color:#475569;">${a.date||'—'}</td>
+        <td style="padding:5px 10px;font-size:12px;">${a.notes||METHOD_LABEL[a.method]||'Pago'}</td>
+        <td style="padding:5px 10px;font-size:12px;text-align:right;font-weight:700;color:#0f172a;font-family:monospace;">$${(+a.amount).toLocaleString('es-MX')}</td>
+      </tr>`).join('')}
+      <tr style="background:#fff7ed;">
+        <td colspan="3" style="padding:5px 10px;font-size:11px;color:#92400e;">Subtotal cotización (${cotPct}% completado)</td>
+        <td style="padding:5px 10px;font-size:12px;text-align:right;font-weight:700;color:#92400e;font-family:monospace;">$${cotPagado.toLocaleString('es-MX')} / $${cotTotal.toLocaleString('es-MX')}</td>
+      </tr>`
+  }).join('<tr style="height:8px;"></tr>')
+
+  const directRows = directExpenses.map(e=>`
+    <tr>
+      <td style="padding:5px 10px;font-size:12px;color:#475569;">Pago directo</td>
+      <td style="padding:5px 10px;font-size:12px;color:#475569;">${(e.metadata?.date||e.created_at||'').slice(0,10)}</td>
+      <td style="padding:5px 10px;font-size:12px;">${e.metadata?.notes||e.metadata?.label||'Pago'}</td>
+      <td style="padding:5px 10px;font-size:12px;text-align:right;font-weight:700;font-family:monospace;">$${(+e.metadata?.amount||0).toLocaleString('es-MX')}</td>
+    </tr>`).join('')
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>Historial — ${provName}</title>
+<style>
+  body{font-family:'Helvetica Neue',Arial,sans-serif;color:#0f172a;margin:0;padding:32px;background:#fff;font-size:13px;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #fb923c;}
+  h1{margin:0;font-size:22px;font-weight:900;color:#0f172a;}
+  .sub{font-size:12px;color:#64748b;margin-top:4px;}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}
+  .kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center;}
+  .kpi-val{font-size:18px;font-weight:900;font-family:monospace;}
+  .kpi-label{font-size:10px;color:#64748b;margin-top:2px;}
+  .prog-bg{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin:10px 0;}
+  .prog-bar{height:100%;border-radius:4px;background:#3b82f6;}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th{background:#0f172a;color:#fff;padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;}
+  tr:nth-child(even){background:#f8fafc;}
+  td{border-bottom:1px solid #f1f5f9;}
+  .footer{margin-top:24px;font-size:10px;color:#94a3b8;text-align:center;}
+  @media print{body{padding:20px;}}
+</style></head>
+<body>
+<div class="header">
+  <div>
+    <h1>👤 ${esc(provName)}</h1>
+    <div class="sub">Proyecto: ${esc(projSlug)} &nbsp;·&nbsp; Generado: ${today}</div>
+  </div>
+  <div style="text-align:right;font-size:11px;color:#64748b;">Nexus OS</div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><div class="kpi-val" style="color:#fb923c;">$${totalAcordado.toLocaleString('es-MX')}</div><div class="kpi-label">Total Acordado</div></div>
+  <div class="kpi"><div class="kpi-val" style="color:#16a34a;">$${totalPagado.toLocaleString('es-MX')}</div><div class="kpi-label">Total Pagado</div></div>
+  <div class="kpi"><div class="kpi-val" style="color:${saldoGlobal>0?'#dc2626':'#16a34a'};">$${saldoGlobal.toLocaleString('es-MX')}</div><div class="kpi-label">${saldoGlobal>0?'Saldo Pendiente':'✅ Saldado'}</div></div>
+  <div class="kpi"><div class="kpi-val" style="color:#2563eb;">${pct}%</div><div class="kpi-label">Completado</div></div>
+</div>
+<div class="prog-bg"><div class="prog-bar" style="width:${pct}%;background:${pct>=100?'#16a34a':pct>=50?'#2563eb':'#f59e0b'};"></div></div>
+
+<table>
+  <thead><tr><th>Concepto</th><th>Fecha</th><th>Descripción</th><th style="text-align:right;">Monto</th></tr></thead>
+  <tbody>
+    ${cotsRows}
+    ${directRows}
+    <tr style="height:6px;"></tr>
+    <tr style="background:#0f172a;color:#fff;">
+      <td colspan="3" style="padding:8px 10px;font-weight:800;font-size:12px;color:#fff;">TOTAL PAGADO</td>
+      <td style="padding:8px 10px;text-align:right;font-weight:900;font-size:14px;color:#4ade80;font-family:monospace;">$${totalPagado.toLocaleString('es-MX')}</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="footer">Nexus OS · Documento generado el ${today} · nexus-os.vercel.app</div>
+</body></html>`
+
+  const w = window.open('', '_blank', 'width=900,height=700')
+  w.document.write(html)
+  w.document.close()
+  setTimeout(() => w.print(), 500)
+}
+
 // ── Auto-sync cotización → Kanban del proyecto ────────────────────────────────
 async function syncCotizacionKanban(cotId, meta, projTag) {
   if (!projTag) return
@@ -9568,8 +9845,8 @@ async function syncCotizacionKanban(cotId, meta, projTag) {
   // Determinar estado Kanban según avance
   let kanbanStatus = 'todo'
   if (meta.status === 'pagada' || pct >= 100) kanbanStatus = 'done'
-  else if (abonos.length > 0 || meta.status === 'en_proceso' || meta.status === 'parcial') kanbanStatus = 'doing'
-  else if (meta.status === 'aceptada') kanbanStatus = 'doing'
+  else if (abonos.length > 0 || meta.status === 'en_proceso' || meta.status === 'parcial') kanbanStatus = 'in_progress'
+  else if (meta.status === 'aceptada') kanbanStatus = 'in_progress'
 
   // Solo crear/actualizar si hay actividad real (aceptada, en proceso, pagos)
   const hasActivity = ['aceptada','en_proceso','parcial','pagada'].includes(meta.status) || abonos.length > 0
@@ -9588,7 +9865,7 @@ async function syncCotizacionKanban(cotId, meta, projTag) {
     label,
     tags:        ['#' + projTag, '#cotizacion'],
     notes:       `Proveedor: ${provName||'Sin asignar'} | Pagado: ${pct}% ($${pagado.toLocaleString('es-MX')} de $${(+(meta.amount||0)).toLocaleString('es-MX')})`,
-    color:       kanbanStatus==='done' ? '#4ade80' : kanbanStatus==='doing' ? '#60a5fa' : '#94a3b8',
+    color:       kanbanStatus==='done' ? '#4ade80' : kanbanStatus==='in_progress' ? '#60a5fa' : '#94a3b8',
   }
 
   if (existing) {
