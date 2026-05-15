@@ -7792,227 +7792,359 @@ function _renderProjFinanzas(d) {
   const _s    = (fn) => { try { return fn() } catch(e) { return '' } }
   const fmtM  = (n) => '$' + Math.abs(n||0).toLocaleString('es-MX',{maximumFractionDigits:0})
 
-  // ── Dashboard financiero (rediseñado) ─────────────────────
+  // ── Dashboard financiero (profesional SVG redesign) ────────
   const dashHTML = _s(() => {
-    // ── Ring donut con stroke-dasharray ────────────────────
-    const R = 40, cx = 60, cy = 60, C = 2 * Math.PI * R
-    const refTotal = Math.max(budget, comprometido, 1)
-    const donutSegs = [
-      { val: pagado,              color: '#4ade80', label: 'Pagado'     },
-      { val: Math.max(0,pendientePago), color: '#f87171', label: 'Por pagar' },
-      { val: Math.max(0,disponible||0), color: '#2dd4bf', label: 'Disponible'},
-    ].filter(s => s.val > 0)
-    const donutTotal = donutSegs.reduce((a,s) => a+s.val, 0) || 1
-    let offset = 0
-    const rings = donutSegs.map(s => {
-      const len = (s.val / donutTotal) * C
-      const el = `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${s.color}" stroke-opacity="0.9"
-        stroke-width="11" stroke-dasharray="${len.toFixed(2)} ${C.toFixed(2)}"
-        stroke-dashoffset="${(-offset).toFixed(2)}" stroke-linecap="butt"
-        transform="rotate(-90 ${cx} ${cy})"/>`
-      offset += len
-      return el
-    }).join('')
+    // ─── SVG Feather icons ──────────────────────────────────
+    const ICON_BRIEFCASE   = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>`
+    const ICON_CLIPBOARD   = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>`
+    const ICON_CHECK       = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
+    const ICON_CLOCK       = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
+    const ICON_SHIELD      = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`
+    const ICON_ALERT       = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
 
-    const donutCenter = budget > 0
-      ? `<text x="${cx}" y="${cy-5}" text-anchor="middle" fill="#fff" font-size="11" font-weight="800" font-family="JetBrains Mono,monospace">${pct}%</text>
-         <text x="${cx}" y="${cy+9}" text-anchor="middle" fill="#94a3b8" font-size="7.5">uso budget</text>`
-      : `<text x="${cx}" y="${cy+4}" text-anchor="middle" fill="#94a3b8" font-size="8">sin budget</text>`
+    // ─── A) Semicircle gauge SVG ────────────────────────────
+    const SEMI_ARC = Math.PI * 85  // arc circumference ≈ 267
+    const gaugePct = Math.min(pct, 100)
+    const gaugeLen = (gaugePct / 100) * SEMI_ARC
+    const gaugeStroke = overBudget ? '#f87171' : pct > 80 ? '#fb923c' : pct > 50 ? '#fbbf24' : '#4ade80'
+    const gaugeSVG = budget > 0 ? `
+      <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px;position:relative;">
+        <svg viewBox="0 0 200 120" style="width:200px;height:120px;overflow:visible;">
+          <!-- background track -->
+          <path d="M15,100 A85,85,0,0,1,185,100" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="14" stroke-linecap="round"/>
+          <!-- colored fill -->
+          <path d="M15,100 A85,85,0,0,1,185,100" fill="none" stroke="${gaugeStroke}" stroke-width="14" stroke-linecap="round"
+            stroke-dasharray="${gaugeLen.toFixed(1)} ${SEMI_ARC.toFixed(1)}" style="transition:stroke-dasharray .7s;"/>
+          <!-- center label -->
+          <text x="100" y="85" text-anchor="middle" fill="#fff" font-size="22" font-weight="800" font-family="JetBrains Mono,monospace">${gaugePct}%</text>
+          <text x="100" y="101" text-anchor="middle" fill="#64748b" font-size="9" font-weight="600" letter-spacing="0.05em">DEL PRESUPUESTO</text>
+          ${overBudget ? `<text x="100" y="114" text-anchor="middle" fill="#f87171" font-size="8" font-weight="700">EXCEDIDO</text>` : ''}
+          <!-- min/max labels -->
+          <text x="12" y="114" text-anchor="middle" fill="#475569" font-size="8">$0</text>
+          <text x="188" y="114" text-anchor="end" fill="#475569" font-size="8">${fmtM(budget)}</text>
+        </svg>
+        ${budget > 0 ? `<div style="display:flex;gap:16px;margin-top:-4px;">
+          <div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted);">
+            <span style="width:8px;height:8px;border-radius:2px;background:#4ade80;display:inline-block;"></span>Pagado
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted);">
+            <span style="width:8px;height:8px;border-radius:2px;background:#f87171;display:inline-block;"></span>Por pagar
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-muted);">
+            <span style="width:8px;height:8px;border-radius:2px;background:#2dd4bf;display:inline-block;"></span>Disponible
+          </div>
+        </div>` : ''}
+      </div>` : ''
 
-    const donutSVG = `<svg viewBox="0 0 120 120" style="width:110px;height:110px;flex-shrink:0;">
-      <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="11"/>
-      ${rings}
-      ${donutCenter}
-    </svg>`
-
-    // ── Barra apilada de presupuesto ────────────────────────
+    // ─── Stacked budget bar with labeled sections ───────────
     const stackedBar = budget > 0 ? (() => {
-      const pagadoPct    = Math.min(Math.round(pagado/budget*100), 100)
-      const pendPct      = Math.min(Math.round(pendientePago/budget*100), Math.max(0,100-pagadoPct))
-      const dispPct      = Math.max(0, 100 - pagadoPct - pendPct)
-      const overPct      = comprometido > budget ? Math.min(Math.round((comprometido-budget)/budget*100), 30) : 0
-      return `<div style="margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:6px;">
-          <span>Distribución del presupuesto</span>
-          <span style="font-weight:700;color:${overBudget?'#f87171':gaugeColor};">${fmtM(budget)}${overBudget?' ⚠️ Excedido':''}</span>
+      const pagadoPct  = Math.min(Math.round(pagado / budget * 100), 100)
+      const pendPct    = Math.min(Math.round(pendientePago / budget * 100), Math.max(0, 100 - pagadoPct))
+      const dispPct    = Math.max(0, 100 - pagadoPct - pendPct)
+      const overPct    = comprometido > budget ? Math.min(Math.round((comprometido - budget) / budget * 100), 30) : 0
+      return `<div style="margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:6px;align-items:center;">
+          <span style="font-weight:700;letter-spacing:.05em;text-transform:uppercase;">Distribución del presupuesto</span>
+          <span style="font-weight:800;font-family:'JetBrains Mono',monospace;color:${overBudget?'#f87171':gaugeStroke};">${fmtM(budget)}${overBudget ? ' — Excedido' : ''}</span>
         </div>
-        <div style="height:10px;background:rgba(255,255,255,0.05);border-radius:5px;overflow:hidden;display:flex;">
+        <div style="height:12px;background:rgba(255,255,255,0.05);border-radius:6px;overflow:hidden;display:flex;position:relative;">
           <div style="width:${pagadoPct}%;background:#4ade80;transition:width .6s;" title="Pagado ${fmtM(pagado)}"></div>
           <div style="width:${pendPct}%;background:#f87171;transition:width .6s;" title="Por pagar ${fmtM(pendientePago)}"></div>
-          <div style="width:${dispPct}%;background:#2dd4bf;transition:width .6s;opacity:0.5;" title="Disponible ${fmtM(Math.max(0,disponible||0))}"></div>
-          ${overPct > 0 ? `<div style="width:${overPct}%;background:repeating-linear-gradient(45deg,#f87171,#f87171 3px,transparent 3px,transparent 6px);opacity:0.7;" title="Excedido"></div>` : ''}
+          <div style="width:${dispPct}%;background:#2dd4bf;opacity:0.45;transition:width .6s;" title="Disponible ${fmtM(Math.max(0,disponible||0))}"></div>
+          ${overPct > 0 ? `<div style="width:${overPct}%;background:repeating-linear-gradient(45deg,#f87171,#f87171 3px,transparent 3px,transparent 6px);opacity:0.75;" title="Excedido"></div>` : ''}
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:6px;">
-          ${[['#4ade80','Pagado',pagado],['#f87171','Por pagar',pendientePago],['#2dd4bf','Disponible',Math.max(0,disponible||0)]].filter(x=>x[2]>0).map(([c,l,v])=>`<div style="display:flex;align-items:center;gap:4px;font-size:10px;"><span style="width:8px;height:8px;border-radius:2px;background:${c};display:inline-block;flex-shrink:0;"></span><span style="color:var(--text-muted);">${l}:</span><span style="font-weight:700;color:${c};font-family:monospace;">${fmtM(v)}</span></div>`).join('')}
+        <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;">
+          ${[['#4ade80','Pagado',pagado],['#f87171','Por pagar',pendientePago],['#2dd4bf','Disponible',Math.max(0,disponible||0)]].filter(x => x[2] > 0).map(([c,l,v]) => {
+            const seg = `<div style="display:flex;align-items:center;gap:5px;font-size:10px;"><span style="width:8px;height:8px;border-radius:2px;background:${c};display:inline-block;flex-shrink:0;"></span><span style="color:var(--text-muted);">${l}:</span><span style="font-weight:800;color:${c};font-family:'JetBrains Mono',monospace;">${fmtM(v)}</span></div>`
+            return seg
+          }).join('')}
         </div>
       </div>`
     })() : ''
 
-    // ── KPI cards ───────────────────────────────────────────
+    // ─── B) KPI stat row with Feather SVG icons ─────────────
     const kpiData = [
-      { label:'Presupuesto', val:budget,       color:'#a78bfa', icon:'💼', show: budget>0     },
-      { label:'Comprometido',val:comprometido, color:'#fb923c', icon:'📋', show: true          },
-      { label:'Pagado',      val:pagado,       color:'#4ade80', icon:'✅', show: true          },
-      { label:'Por pagar',   val:pendientePago,color:pendientePago>0?'#f87171':'#94a3b8', icon:'⏳', show: true },
-      { label:disponible<0?'Excedido':'Disponible', val:Math.abs(disponible||0), color:disponible!=null&&disponible<0?'#f87171':'#2dd4bf', icon:disponible<0?'🚨':'🏦', show:budget>0 },
-    ].filter(k=>k.show)
-    const kpisHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(95px,1fr));gap:8px;margin-bottom:16px;">
-      ${kpiData.map(k => `
-      <div style="background:${k.color}0d;border:1px solid ${k.color}28;border-radius:12px;padding:12px 8px;text-align:center;position:relative;overflow:hidden;">
-        <div style="position:absolute;inset:0;background:linear-gradient(135deg,${k.color}08 0%,transparent 60%);pointer-events:none;"></div>
-        <div style="font-size:17px;margin-bottom:5px;">${k.icon}</div>
-        <div style="font-size:10px;color:var(--text-muted);font-weight:700;letter-spacing:.03em;margin-bottom:3px;">${k.label.toUpperCase()}</div>
-        <div style="font-size:13px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;">${fmtM(k.val)}</div>
-      </div>`).join('')}
+      { label:'PRESUPUESTO',  val:budget,            color:'#a78bfa', icon:ICON_BRIEFCASE, show: budget > 0,    note:'' },
+      { label:'COMPROMETIDO', val:comprometido,      color:'#fb923c', icon:ICON_CLIPBOARD, show: true,           note: cots.length ? cots.length + ' cots.' : '' },
+      { label:'PAGADO',       val:pagado,            color:'#4ade80', icon:ICON_CHECK,     show: true,           note: comprometido > 0 ? Math.round(pagado/Math.max(comprometido,1)*100) + '% de acordado' : '' },
+      { label:'POR PAGAR',    val:pendientePago,     color: pendientePago > 0 ? '#f87171' : '#94a3b8', icon:ICON_CLOCK, show: true, note: '' },
+      { label: disponible != null && disponible < 0 ? 'EXCEDIDO' : 'DISPONIBLE',
+        val: Math.abs(disponible || 0),
+        color: disponible != null && disponible < 0 ? '#f87171' : '#2dd4bf',
+        icon: disponible != null && disponible < 0 ? ICON_ALERT : ICON_SHIELD,
+        show: budget > 0, note: '' },
+    ].filter(k => k.show)
+
+    const kpisHTML = `<div style="display:flex;gap:0;margin-bottom:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;overflow:hidden;">
+      ${kpiData.map((k, i) => {
+        const sep = i > 0 ? 'border-left:1px solid rgba(255,255,255,0.06);' : ''
+        const kpiItem = `<div style="flex:1;padding:14px 12px;min-width:0;${sep}">
+          <div style="color:${k.color};margin-bottom:6px;opacity:0.85;">${k.icon}</div>
+          <div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--text-muted);margin-bottom:4px;">${k.label}</div>
+          <div style="font-size:14px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1.1;">${fmtM(k.val)}</div>
+          ${k.note ? `<div style="font-size:9px;color:var(--text-dim);margin-top:3px;">${k.note}</div>` : ''}
+        </div>`
+        return kpiItem
+      }).join('')}
     </div>`
 
-    // ── Desglose por categoría (barras horizontales) ────────
+    // ─── C) Category horizontal grouped bar chart ────────────
     const catMap = {}
     d.cots.forEach(c => {
       const cat = c.metadata?.category || 'Sin categoría'
-      if (!catMap[cat]) catMap[cat] = { comprometido:0, pagado:0, count:0 }
-      catMap[cat].comprometido += +(c.metadata?.amount||0)
-      catMap[cat].pagado += (c.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
+      if (!catMap[cat]) catMap[cat] = { comprometido: 0, pagado: 0, count: 0 }
+      catMap[cat].comprometido += +(c.metadata?.amount || 0)
+      catMap[cat].pagado += (c.metadata?.abonos || []).reduce((s, a) => s + (+a.amount || 0), 0)
       catMap[cat].count++
     })
-    const catEntries = Object.entries(catMap).sort((a,b)=>b[1].comprometido-a[1].comprometido)
-    const maxCat = catEntries.reduce((mx,[,v])=>Math.max(mx,v.comprometido),1)
+    const catEntries = Object.entries(catMap).sort((a, b) => b[1].comprometido - a[1].comprometido)
+    const maxCat = catEntries.reduce((mx, [, v]) => Math.max(mx, v.comprometido), 1)
     const catHTML = catEntries.length > 0 ? `
-      <div style="margin-bottom:16px;">
-        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;margin-bottom:10px;">📊 DESGLOSE POR CATEGORÍA</div>
-        <div style="display:flex;flex-direction:column;gap:9px;">
-          ${catEntries.map(([cat,v]) => {
-            const paidPct2 = v.comprometido>0 ? Math.round(v.pagado/v.comprometido*100) : 0
-            const widthPct  = Math.round(v.comprometido/maxCat*100)
+      <div style="margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;text-transform:uppercase;">Desglose por categoría</span>
+          <div style="display:flex;gap:10px;margin-left:auto;align-items:center;">
+            <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text-dim);">
+              <span style="display:inline-block;width:10px;height:6px;background:rgba(255,255,255,0.15);border-radius:1px;"></span>Comprometido
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text-dim);">
+              <span style="display:inline-block;width:10px;height:6px;background:#4ade80;border-radius:1px;"></span>Pagado
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          ${catEntries.map(([cat, v]) => {
+            const paidPct2   = v.comprometido > 0 ? Math.min(100, Math.round(v.pagado / v.comprometido * 100)) : 0
+            const barWidthPct = Math.round(v.comprometido / maxCat * 100)
             const icon2 = getCategoryIcon(cat)
-            return `<div>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-                <span style="font-size:11px;font-weight:600;color:var(--text-primary);">${icon2} ${esc(cat)}</span>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span style="font-size:10px;color:${paidPct2>=100?'#4ade80':'var(--text-muted)'};">${paidPct2}% pagado</span>
-                  <span style="font-size:10px;font-weight:700;font-family:monospace;color:#fb923c;">${fmtM(v.comprometido)}</span>
+            const catRow = `<div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:120px;flex-shrink:0;display:flex;align-items:center;gap:6px;overflow:hidden;">
+                <span style="font-size:13px;flex-shrink:0;">${icon2}</span>
+                <span style="font-size:11px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(cat)}</span>
+              </div>
+              <div style="flex:1;position:relative;">
+                <!-- full track -->
+                <div style="height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;width:${barWidthPct}%;">
+                  <!-- orange = comprometido layer (full bar) -->
+                  <div style="position:absolute;top:0;left:0;height:8px;width:${barWidthPct}%;background:rgba(251,146,60,0.35);border-radius:4px;"></div>
+                  <!-- green = pagado layer on top -->
+                  <div style="position:relative;height:8px;width:${paidPct2}%;background:linear-gradient(90deg,#4ade80,#2dd4bf);border-radius:4px;transition:width .5s;"></div>
                 </div>
               </div>
-              <div style="height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;width:${widthPct}%;">
-                <div style="height:100%;width:${paidPct2}%;background:linear-gradient(90deg,#4ade80,#2dd4bf);border-radius:3px;transition:width .5s;"></div>
+              <div style="text-align:right;flex-shrink:0;min-width:90px;">
+                <div style="font-size:11px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#fb923c;">${fmtM(v.comprometido)}</div>
+                <div style="font-size:9px;color:${paidPct2 >= 100 ? '#4ade80' : 'var(--text-dim)'};">${paidPct2}% pagado</div>
               </div>
             </div>`
+            return catRow
           }).join('')}
         </div>
       </div>` : ''
 
-    // ── Providers mini-chart ────────────────────────────────
+    // ─── D) Provider mini-ring chart ────────────────────────
     const provEntries2 = Object.entries(d.provMap)
-      .map(([pid,pv]) => {
-        const prov = allNodes.find(n=>n.id===pid)
-        const name = prov ? (prov.metadata?.name||prov.content) : '?'
-        const total3 = pv.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
-        const paid3  = pv.cotizaciones.flatMap(c=>c.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
-               + pv.pagos.reduce((s,e)=>s+(+e.metadata?.amount||0),0)
-        return { pid, name, total:total3, paid:paid3, saldo:Math.max(0,total3-paid3), pct:total3>0?Math.min(100,Math.round(paid3/total3*100)):0 }
+      .map(([pid, pv]) => {
+        const prov   = allNodes.find(n => n.id === pid)
+        const name   = prov ? (prov.metadata?.name || prov.content) : '?'
+        const total3 = pv.cotizaciones.reduce((s, c) => s + (+c.metadata?.amount || 0), 0)
+        const paid3  = pv.cotizaciones.flatMap(c => c.metadata?.abonos || []).reduce((s, a) => s + (+a.amount || 0), 0)
+                     + pv.pagos.reduce((s, e) => s + (+e.metadata?.amount || 0), 0)
+        const saldo3 = Math.max(0, total3 - paid3)
+        const pct3   = total3 > 0 ? Math.min(100, Math.round(paid3 / total3 * 100)) : 0
+        return { pid, name, total: total3, paid: paid3, saldo: saldo3, pct: pct3 }
       })
-      .sort((a,b)=>b.total-a.total).slice(0,6)
+      .sort((a, b) => b.total - a.total).slice(0, 6)
 
     const provChartHTML = provEntries2.length ? `
-      <div>
-        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;margin-bottom:10px;">🔧 PROVEEDORES</div>
-        <div style="display:flex;flex-direction:column;gap:7px;">
-          ${provEntries2.map(pv => `
-          <div style="display:flex;align-items:center;gap:10px;cursor:pointer;" ondblclick="showProveedorHistorial('${pv.pid}','${projSlug}','${esc(pv.name)}')" title="Doble clic → historial completo">
-            <div style="width:30px;height:30px;flex-shrink:0;position:relative;">
-              <svg viewBox="0 0 32 32" style="width:30px;height:30px;transform:rotate(-90deg);">
-                <circle cx="16" cy="16" r="12" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
-                <circle cx="16" cy="16" r="12" fill="none" stroke="${pv.pct>=100?'#4ade80':pv.pct>0?'#60a5fa':'#94a3b8'}"
-                  stroke-width="4" stroke-linecap="round"
-                  stroke-dasharray="${(pv.pct/100*75.4).toFixed(1)} 75.4"
-                  stroke-dashoffset="0"/>
-              </svg>
-              <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;">${pv.pct}%</span>
-            </div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:700;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pv.name)}</div>
-              <div style="font-size:10px;color:var(--text-muted);">${fmtM(pv.paid)} pagado de ${fmtM(pv.total)}</div>
-            </div>
-            ${pv.saldo > 0 ? `<span style="font-size:11px;font-weight:700;color:#f87171;font-family:monospace;flex-shrink:0;">${fmtM(pv.saldo)}</span>` : `<span style="font-size:11px;color:#4ade80;font-weight:700;flex-shrink:0;">✅</span>`}
-          </div>`).join('')}
+      <div style="margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;text-transform:uppercase;">Proveedores</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${provEntries2.map(pv => {
+            const ringC  = 2 * Math.PI * 12  // r=12 → C≈75.4
+            const ringLen = (pv.pct / 100 * ringC).toFixed(1)
+            const ringColor = pv.pct >= 100 ? '#4ade80' : pv.pct > 0 ? '#60a5fa' : '#94a3b8'
+            const provRow = `<div style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 8px;border-radius:8px;transition:background .15s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''" ondblclick="showProveedorHistorial('${pv.pid}','${projSlug}','${esc(pv.name)}')" title="Doble clic para historial">
+              <div style="width:30px;height:30px;flex-shrink:0;position:relative;">
+                <svg viewBox="0 0 32 32" width="30" height="30" style="transform:rotate(-90deg);">
+                  <circle cx="16" cy="16" r="12" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="4"/>
+                  <circle cx="16" cy="16" r="12" fill="none" stroke="${ringColor}" stroke-width="4" stroke-linecap="round"
+                    stroke-dasharray="${ringLen} ${ringC.toFixed(1)}" stroke-dashoffset="0"/>
+                </svg>
+                <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;pointer-events:none;">${pv.pct}%</span>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:700;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pv.name)}</div>
+                <div style="font-size:10px;color:var(--text-muted);">${fmtM(pv.paid)} <span style="color:var(--text-dim);">de</span> ${fmtM(pv.total)}</div>
+              </div>
+              ${pv.saldo > 0
+                ? `<span style="font-size:11px;font-weight:700;color:#f87171;font-family:'JetBrains Mono',monospace;flex-shrink:0;">${fmtM(pv.saldo)}</span>`
+                : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5" flex-shrink="0"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`}
+            </div>`
+            return provRow
+          }).join('')}
         </div>
       </div>` : ''
 
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;">💹 FINANCIERO</span>
-        ${budget === 0 ? `<button onclick="openProyectoModal('${p.id}')" style="font-size:11px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:3px 10px;cursor:pointer;">💼 Definir presupuesto</button>` : ''}
+    // ─── E) Payment timeline (last 6 payments) ──────────────
+    const recentPagos = [...pagos]
+      .sort((a, b) => (b.metadata?.date || b.created_at || '').localeCompare(a.metadata?.date || a.created_at || ''))
+      .slice(0, 6)
+    const timelineHTML = recentPagos.length > 0 ? (() => {
+      const METHOD_SVG = {
+        transferencia: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
+        efectivo:      `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>`,
+        cheque:        `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+        tarjeta:       `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`,
+      }
+      return `<div style="margin-bottom:4px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;text-transform:uppercase;">Actividad reciente de pagos</span>
+        </div>
+        <div style="position:relative;padding:0 8px;">
+          <div style="position:absolute;top:10px;left:20px;right:20px;height:1px;background:rgba(255,255,255,0.07);"></div>
+          <div style="display:flex;justify-content:space-around;position:relative;">
+            ${recentPagos.map(pg => {
+              const pgDate   = (pg.metadata?.date || pg.created_at || '').slice(0, 10)
+              const pgAmt    = +(pg.metadata?.amount || 0)
+              const pgMethod = pg.metadata?.method || ''
+              const pgLabel  = pg.metadata?.label || pg.metadata?.notes || pg.content || 'Pago'
+              const pgIcon   = METHOD_SVG[pgMethod] || `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>`
+              const dot = `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;flex:1;" title="${esc(pgLabel)} — ${fmtM(pgAmt)}">
+                <div style="width:20px;height:20px;border-radius:50%;background:#4ade8022;border:2px solid #4ade80;display:flex;align-items:center;justify-content:center;color:#4ade80;position:relative;z-index:1;flex-shrink:0;">${pgIcon}</div>
+                <div style="font-size:9px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#4ade80;white-space:nowrap;">${fmtM(pgAmt)}</div>
+                <div style="font-size:8px;color:var(--text-dim);white-space:nowrap;">${pgDate.slice(5)}</div>
+              </div>`
+              return dot
+            }).join('')}
+          </div>
+        </div>
+      </div>`
+    })() : ''
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;text-transform:uppercase;">Financiero</span>
+        </div>
+        ${budget === 0 ? `<button onclick="openProyectoModal('${p.id}')" style="display:flex;align-items:center;gap:6px;font-size:11px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:600;">${ICON_BRIEFCASE} Definir presupuesto</button>` : ''}
       </div>
+      ${gaugeSVG}
       ${kpisHTML}
       ${stackedBar}
-      ${(comprometido > 0 || pagado > 0) ? `<div style="display:flex;align-items:flex-start;gap:20px;margin-bottom:16px;">
-        ${donutSVG}
-        <div style="flex:1;display:flex;flex-direction:column;gap:7px;padding-top:8px;">
-          ${donutSegs.map(s=>`<div style="display:flex;align-items:center;gap:8px;font-size:12px;">
-            <div style="width:10px;height:10px;border-radius:2px;background:${s.color};flex-shrink:0;"></div>
-            <span style="color:var(--text-muted);flex:1;">${s.label}</span>
-            <span style="font-weight:800;color:${s.color};font-family:'JetBrains Mono',monospace;">${fmtM(s.val)}</span>
-          </div>`).join('')}
-        </div>
-      </div>` : ''}
       ${catHTML}
       ${provChartHTML}
+      ${timelineHTML}
     </div>`
   })
 
-  // ── Proveedores con historial de abonos ───────────────────
+  // ── Proveedores — tabla profesional ───────────────────────
   const provsHTML = _s(() => {
     if (!Object.keys(provMap).length) return ''
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;margin-bottom:14px;">⚙️ PROVEEDORES — HISTORIAL DE PAGOS</div>
-      ${Object.entries(provMap).map(([pid, pd]) => {
-        const prov = allNodes.find(n => n.id === pid)
-        const provName = prov?.metadata?.name || prov?.content || 'Proveedor'
-        const acordado   = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
-        // Abonos = expense nodes con contact_id = pid Y es_abono=true O project_tag = projSlug
-        const abonos = allNodes.filter(n =>
-          n.type==='expense' && n.metadata?.contact_id===pid &&
-          tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)
-        ).sort((a,b) => (a.metadata?.date||a.created_at||'').localeCompare(b.metadata?.date||b.created_at||''))
-        const pagadoProv = abonos.reduce((s,a)=>s+(+a.metadata?.amount||0),0)
-        const saldo      = Math.max(0, acordado - pagadoProv)
-        const excedente  = pagadoProv > acordado && acordado > 0
-        const pct2       = acordado > 0 ? Math.min(100, Math.round(pagadoProv/acordado*100)) : 0
-        // Abono inteligente: si hay cotizaciones → abre modal de historial para elegir cotización
-        // Si no hay cotizaciones → pago directo vía openAbonoModal
-        const provCotIds = pd.cotizaciones.map(c=>c.id)
-        const hasActiveCots = pd.cotizaciones.some(c => !['rechazada','pagada'].includes(c.metadata?.status))
-        const abonoAction = hasActiveCots
-          ? `showProveedorHistorial('${pid}','${projSlug}','${esc(provName)}')`
-          : `openAbonoModal('${pid}','${esc(provName)}','${projSlug}','${p.id}')`
-        const abonoLabel = hasActiveCots ? '📋 Ver / Pagar' : '💸 Abono'
 
-        return `<div style="padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.05);">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;cursor:pointer;" ondblclick="showProveedorHistorial('${pid}','${projSlug}','${esc(provName)}')" title="Doble clic para ver historial completo">
-            <div style="width:34px;height:34px;border-radius:50%;background:rgba(251,146,60,0.12);color:#fb923c;display:grid;place-items:center;font-size:14px;font-weight:800;flex-shrink:0;">${esc(provName.charAt(0).toUpperCase())}</div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${esc(provName)} <span style="font-size:10px;color:var(--text-dim);font-weight:400;">· doble clic para historial</span></div>
-              <div style="font-size:11px;color:var(--text-muted);">Acordado: <span style="color:#4ade80;font-family:monospace;">$${acordado.toLocaleString('es-MX')}</span> · Pagado: <span style="color:#60a5fa;font-family:monospace;">$${pagadoProv.toLocaleString('es-MX')}</span>${saldo>0?` · Saldo: <span style="color:#fb923c;font-family:monospace;">$${saldo.toLocaleString('es-MX')}</span>`:' · ✅ Liquidado'}${excedente?' <span style="color:#f87171;font-weight:700;">⚠️</span>':''}</div>
+    const provRows = Object.entries(provMap).map(([pid, pd], rowIdx) => {
+      const prov      = allNodes.find(n => n.id === pid)
+      const provName  = prov?.metadata?.name || prov?.content || 'Proveedor'
+      const inicial   = esc(provName.charAt(0).toUpperCase())
+      const acordado  = pd.cotizaciones.reduce((s, c) => s + (+c.metadata?.amount || 0), 0)
+      const abonos    = allNodes.filter(n =>
+        n.type === 'expense' && n.metadata?.contact_id === pid &&
+        tagStr.some(t => (n.metadata?.project_tag || '').toLowerCase() === t)
+      )
+      const pagadoProv = abonos.reduce((s, a) => s + (+a.metadata?.amount || 0), 0)
+      const saldo      = Math.max(0, acordado - pagadoProv)
+      const excedente  = pagadoProv > acordado && acordado > 0
+      const pct2       = acordado > 0 ? Math.min(100, Math.round(pagadoProv / acordado * 100)) : 0
+      const numCots    = pd.cotizaciones.length
+      const hasActiveCots = pd.cotizaciones.some(c => !['rechazada', 'pagada'].includes(c.metadata?.status))
+      const abonoAction = hasActiveCots
+        ? `showProveedorHistorial('${pid}','${projSlug}','${esc(provName)}')`
+        : `openAbonoModal('${pid}','${esc(provName)}','${projSlug}','${p.id}')`
+      const rowBg = rowIdx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.018)'
+
+      // progress bar cell
+      const barColor  = pct2 >= 100 ? '#4ade80' : pct2 > 50 ? '#60a5fa' : '#fb923c'
+      const barCell   = acordado > 0
+        ? `<div style="height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;min-width:60px;">
+             <div style="height:100%;width:${pct2}%;background:${barColor};border-radius:2px;transition:width .5s;"></div>
+           </div>
+           <div style="font-size:9px;color:${barColor};font-weight:700;margin-top:3px;">${pct2}%</div>`
+        : `<div style="font-size:9px;color:var(--text-dim);">—</div>`
+
+      // saldo cell
+      const saldoCell = saldo === 0 && acordado > 0
+        ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#4ade80;">
+             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+             Liquidado
+           </span>`
+        : `<span style="font-size:12px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${excedente?'#fbbf24':'#f87171'};">${fmtM(saldo)}${excedente?' <span style="font-size:9px;vertical-align:middle;">excedente</span>':''}</span>`
+
+      return `<tr style="background:${rowBg};transition:background .12s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='${rowBg}'">
+        <td style="padding:10px 12px;vertical-align:middle;">
+          <div style="display:flex;align-items:center;gap:9px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:rgba(251,146,60,0.14);color:#fb923c;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;cursor:pointer;" ondblclick="showProveedorHistorial('${pid}','${projSlug}','${esc(provName)}')" title="Ver historial">${inicial}</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--text-primary);cursor:pointer;" onclick="showProveedorHistorial('${pid}','${projSlug}','${esc(provName)}')">${esc(provName)}</div>
+              <div style="font-size:9px;color:var(--text-dim);margin-top:1px;">clic para historial</div>
             </div>
-            <button onclick="${abonoAction}" style="background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:7px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:600;flex-shrink:0;">${abonoLabel}</button>
           </div>
-          ${acordado > 0 ? `<div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-bottom:10px;"><div style="height:100%;width:${pct2}%;background:${pct2>=100?'#4ade80':'#60a5fa'};border-radius:2px;"></div></div>` : ''}
-          ${abonos.length > 0 ? `<div style="margin-left:8px;border-left:2px solid rgba(255,255,255,0.08);padding-left:12px;">
-            ${abonos.map(a => {
-              const METHOD_ICON = {transferencia:'🏦',efectivo:'💵',cheque:'📋',tarjeta:'💳',crypto:'₿'}
-              const icon = METHOD_ICON[a.metadata?.method] || '💸'
-              const dateStr = (a.metadata?.date||a.created_at||'').slice(0,10)
-              return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;">
-                <span style="color:var(--text-dim);flex-shrink:0;width:80px;">${dateStr}</span>
-                <span style="flex-shrink:0;">${icon}</span>
-                <span style="flex:1;color:var(--text-secondary);">${esc(a.metadata?.notes||a.metadata?.label||'Abono')}</span>
-                <span style="font-family:monospace;font-weight:700;color:#60a5fa;flex-shrink:0;">$${(+a.metadata?.amount||0).toLocaleString('es-MX')}</span>
-                <button onclick="deleteNode('${a.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;flex-shrink:0;" title="Eliminar">×</button>
-              </div>`
-            }).join('')}
-          </div>` : `<div style="font-size:11px;color:var(--text-dim);margin-left:8px;">Sin abonos registrados aún</div>`}
-        </div>`
-      }).join('')}
+        </td>
+        <td style="padding:10px 12px;vertical-align:middle;text-align:center;">
+          <span style="font-size:12px;font-weight:700;color:var(--text-muted);">${numCots}</span>
+          <div style="font-size:9px;color:var(--text-dim);">cot${numCots !== 1 ? 's' : ''}.</div>
+        </td>
+        <td style="padding:10px 12px;vertical-align:middle;text-align:right;">
+          <span style="font-size:13px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#fb923c;">${fmtM(acordado)}</span>
+        </td>
+        <td style="padding:10px 12px;vertical-align:middle;text-align:right;">
+          <span style="font-size:13px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#4ade80;">${fmtM(pagadoProv)}</span>
+        </td>
+        <td style="padding:10px 12px;vertical-align:middle;text-align:right;">
+          ${saldoCell}
+        </td>
+        <td style="padding:10px 12px;vertical-align:middle;min-width:80px;">
+          ${barCell}
+        </td>
+        <td style="padding:10px 12px;vertical-align:middle;text-align:right;">
+          <div style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:nowrap;">
+            <button onclick="showProveedorHistorial('${pid}','${projSlug}','${esc(provName)}')" style="font-size:10px;font-weight:600;padding:4px 9px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;cursor:pointer;white-space:nowrap;">Historial</button>
+            <button onclick="${abonoAction}" style="font-size:10px;font-weight:600;padding:4px 9px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;white-space:nowrap;">Pagar</button>
+          </div>
+        </td>
+      </tr>`
+    }).join('')
+
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px 0;margin-bottom:4px;flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase;">Proveedores</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(251,146,60,0.12);color:#fb923c;font-weight:700;">${Object.keys(provMap).length}</span>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+              <th style="padding:8px 12px;text-align:left;font-size:9px;font-weight:800;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">Proveedor</th>
+              <th style="padding:8px 12px;text-align:center;font-size:9px;font-weight:800;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">Cots.</th>
+              <th style="padding:8px 12px;text-align:right;font-size:9px;font-weight:800;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">Acordado</th>
+              <th style="padding:8px 12px;text-align:right;font-size:9px;font-weight:800;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">Pagado</th>
+              <th style="padding:8px 12px;text-align:right;font-size:9px;font-weight:800;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">Saldo</th>
+              <th style="padding:8px 12px;text-align:left;font-size:9px;font-weight:800;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">Avance</th>
+              <th style="padding:8px 12px;text-align:right;font-size:9px;font-weight:800;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${provRows}
+          </tbody>
+        </table>
+      </div>
     </div>`
   })
 
