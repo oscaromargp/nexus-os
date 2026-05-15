@@ -357,6 +357,35 @@ function renderKanban(nodes) {
   const root = document.getElementById('kanban-root')
   if (!root) return
 
+  // ── KPI strip ─────────────────────────────────────────────
+  const kpiRoot = document.getElementById('kanban-kpi-root')
+  if (kpiRoot) {
+    const today0 = new Date().toISOString().slice(0,10)
+    const kNodes  = allNodes.filter(n=>n.type==='kanban')
+    const kTodo   = kNodes.filter(n=>(n.metadata?.status||'todo')==='todo').length
+    const kProg   = kNodes.filter(n=>n.metadata?.status==='in_progress').length
+    const kDone   = kNodes.filter(n=>n.metadata?.status==='done'&&(n.metadata?.done_at||'')===today0).length
+    const kOver   = kNodes.filter(n=>{const d=n.metadata?.date_deadline||n.metadata?.due_date;return d&&d<today0&&n.metadata?.status!=='done'}).length
+    const kpis = [
+      { label:'PENDIENTES', val:kTodo,  color:'#94a3b8', icon:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>` },
+      { label:'EN PROGRESO',val:kProg,  color:'#fbbf24', icon:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>` },
+      { label:'CERRADAS HOY',val:kDone, color:'#4ade80', icon:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>` },
+      { label:'VENCIDAS',   val:kOver,  color: kOver>0?'#f87171':'#94a3b8', icon:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${kOver>0?'#f87171':'#94a3b8'}" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
+    ]
+    kpiRoot.innerHTML = `<div style="display:flex;gap:0;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;overflow:hidden;">
+      ${kpis.map((k,i)=>`<div style="flex:1;padding:12px 14px;${i>0?'border-left:1px solid rgba(255,255,255,0.06);':''}display:flex;align-items:center;gap:10px;">
+        ${k.icon}
+        <div>
+          <div style="font-size:18px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1;">${k.val}</div>
+          <div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--text-muted);text-transform:uppercase;margin-top:2px;">${k.label}</div>
+        </div>
+      </div>`).join('')}
+      <div style="flex:1;padding:12px 14px;border-left:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:flex-end;">
+        <button onclick="openQuickCreate('kanban')" style="font-size:11px;font-weight:700;padding:5px 14px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:8px;cursor:pointer;">+ Nueva tarea</button>
+      </div>
+    </div>`
+  }
+
   const today = new Date().toISOString().split('T')[0]
   // Linear.app-style: flex row, thin borders, minimal cards
   root.style.cssText = 'display:flex; gap:16px; overflow-x:auto; padding-bottom:8px;'
@@ -1383,9 +1412,205 @@ function getFilteredNodes() {
 window.setTypeFilter = (type) => { activeTypeFilter = activeTypeFilter === type ? null : type; renderAll() }
 window.toggleFeedGroup = () => { feedGrouped = !feedGrouped; renderAll() }
 
+// ═══════════════════════════════════════════════════════════
+// PANEL DE COMANDOS — Dashboard General
+// ═══════════════════════════════════════════════════════════
+function renderPanelDashboard() {
+  const root = document.getElementById('panel-dashboard-root')
+  if (!root) return
+
+  const esc = (s='') => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  const fmtM = (n) => '$' + Math.abs(n||0).toLocaleString('es-MX',{maximumFractionDigits:0})
+
+  const today    = new Date()
+  const todayStr = today.toISOString().slice(0,10)
+  const monthNow = todayStr.slice(0,7)
+
+  // ── Design tokens ─────────────────────────────────────────
+  const NX_CARD  = 'background:var(--surface,rgba(255,255,255,0.03));border:1px solid var(--border,rgba(255,255,255,0.08));border-radius:14px;padding:16px;'
+  const NX_HEAD  = 'font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;'
+
+  // ── A) Global KPIs ────────────────────────────────────────
+  const allTxs = allNodes.filter(n => n.type==='income' || n.type==='expense')
+  const accounts = allNodes.filter(n => n.type==='account')
+  const initBals = accounts.reduce((s,a)=>s+(a.metadata?.balance||0),0)
+  const totalInc = allTxs.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const totalExp = allTxs.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const netTotal = initBals + totalInc - totalExp
+  const netClr   = netTotal >= 0 ? '#2dd4bf' : '#f87171'
+
+  const monthTxs = allTxs.filter(n => (n.metadata?.date||'').startsWith(monthNow))
+  const monthInc = monthTxs.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const monthExp = monthTxs.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+
+  const tareasActivas  = allNodes.filter(n=>n.type==='kanban'&&n.metadata?.status!=='done').length
+  const proyectosCount = allNodes.filter(n=>n.type==='proyecto').length
+
+  const ISVG = {
+    net:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>`,
+    inc:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+    exp:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>`,
+    tasks: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>`,
+    proj:  `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`,
+    clock: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+    users: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`,
+    card:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
+    grid:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`,
+  }
+
+  const kpiData = [
+    { icon:ISVG.net,   label:'NETO TOTAL',    val:fmtM(netTotal),    color:netClr,    note:netTotal>=0?'flujo positivo':'déficit' },
+    { icon:ISVG.inc,   label:'INGRESOS MES',  val:'+'+fmtM(monthInc),color:'#4ade80', note:monthTxs.filter(n=>n.type==='income').length+' movimientos' },
+    { icon:ISVG.exp,   label:'GASTOS MES',    val:'-'+fmtM(monthExp),color:'#f87171', note:monthTxs.filter(n=>n.type==='expense').length+' movimientos' },
+    { icon:ISVG.tasks, label:'TAREAS ACTIVAS',val:tareasActivas,     color:'#60a5fa', note:'en progreso' },
+    { icon:ISVG.proj,  label:'PROYECTOS',     val:proyectosCount,    color:'#a78bfa', note:'registrados' },
+  ]
+
+  const kpiStrip = `<div style="display:flex;gap:0;margin-bottom:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden;overflow-x:auto;">
+    ${kpiData.map((k,i) => `<div style="flex:1;min-width:100px;padding:14px 12px;${i>0?'border-left:1px solid rgba(255,255,255,0.06);':''}">
+      <div style="color:${k.color};margin-bottom:6px;opacity:0.9;">${k.icon}</div>
+      <div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--text-muted,#64748b);margin-bottom:4px;text-transform:uppercase;">${k.label}</div>
+      <div style="font-size:15px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1.1;">${k.val}</div>
+      <div style="font-size:9px;color:var(--text-dim,#475569);margin-top:3px;">${k.note}</div>
+    </div>`).join('')}
+  </div>`
+
+  // ── B) Próximos pagos fijos ───────────────────────────────
+  const bills = allNodes
+    .filter(n => (n.type==='bill'||n.type==='subscription') && !n.metadata?.paid)
+    .map(n => {
+      const day = n.metadata?.dayOfMonth
+      const freq = n.metadata?.frequency || 'mensual'
+      const mos  = {mensual:1,bimestral:2,trimestral:3,semestral:6,anual:12}[freq]||1
+      if (!day) return null
+      let next = new Date(today.getFullYear(), today.getMonth(), day)
+      while (next <= today) next.setMonth(next.getMonth()+mos)
+      return { n, daysLeft: Math.ceil((next-today)/86400000) }
+    })
+    .filter(Boolean)
+    .sort((a,b)=>a.daysLeft-b.daysLeft)
+    .slice(0,5)
+
+  const billsHTML = bills.length ? bills.map(({n,daysLeft}) => {
+    const amt = n.metadata?.amount
+    const clr = daysLeft<=3?'#f87171':daysLeft<=7?'#fb923c':'#94a3b8'
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+      <div style="min-width:36px;text-align:center;flex-shrink:0;">
+        <div style="font-size:15px;font-weight:900;color:${clr};font-family:'JetBrains Mono',monospace;line-height:1;">${daysLeft}</div>
+        <div style="font-size:8px;color:${clr};font-weight:700;text-transform:uppercase;">${daysLeft===1?'día':'días'}</div>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.label||n.content)}</div>
+        <div style="font-size:10px;color:var(--text-dim,#475569);">${n.metadata?.frequency||'mensual'}</div>
+      </div>
+      <div style="font-size:12px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;flex-shrink:0;">${amt!=null?fmtM(amt):'Variable'}</div>
+    </div>`
+  }).join('') : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin pagos próximos</div>`
+
+  // ── C) Proyectos activos ──────────────────────────────────
+  const proyectos = allNodes.filter(n=>n.type==='proyecto').slice(0,4)
+  const projHTML = proyectos.length ? proyectos.map(p => {
+    const m = p.metadata||{}
+    const label = m.label||p.content
+    const budget = +(m.budget||0)
+    const slug   = m.project_slug||''
+    const tags   = [(m.label||'').toLowerCase(), slug.toLowerCase()].filter(Boolean)
+    const cots   = allNodes.filter(n=>n.type==='cotizacion'&&tags.some(t=>(n.metadata?.project_tag||'').toLowerCase()===t))
+    const comp   = cots.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+    const pct    = budget>0 ? Math.min(100,Math.round(comp/budget*100)) : 0
+    const barClr = pct>90?'#f87171':pct>60?'#fb923c':'#4ade80'
+    const miles  = allNodes.filter(n=>n.type==='milestone'&&tags.some(t=>(n.metadata?.project_tag||'').toLowerCase()===t))
+    const mDone  = miles.filter(n=>n.metadata?.done).length
+    return `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="openProjectView('${p.id}')">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+        <div style="flex:1;font-size:12px;font-weight:700;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(label)}</div>
+        ${budget>0?`<span style="font-size:10px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${barClr};flex-shrink:0;">${pct}%</span>`:''}
+        ${miles.length>0?`<span style="font-size:10px;color:var(--text-dim,#475569);flex-shrink:0;">${mDone}/${miles.length}</span>`:''}
+      </div>
+      <div style="height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;">
+        ${budget>0?`<div style="height:100%;width:${pct}%;background:${barClr};border-radius:2px;transition:width .5s;"></div>`:
+          `<div style="height:100%;width:100%;background:rgba(255,255,255,0.05);border-radius:2px;"></div>`}
+      </div>
+    </div>`
+  }).join('') : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin proyectos registrados</div>`
+
+  // ── D) Cuentas ────────────────────────────────────────────
+  const accHTML = accounts.length ? accounts.map(a => {
+    const inc = allTxs.filter(n=>n.type==='income' &&n.metadata?.account_id===a.id).reduce((s,n)=>s+(n.metadata?.amount||0),0)
+    const exp = allTxs.filter(n=>n.type==='expense'&&n.metadata?.account_id===a.id).reduce((s,n)=>s+(n.metadata?.amount||0),0)
+    const bal = (a.metadata?.balance||0)+inc-exp
+    const clr = a.metadata?.color||'#4ade80'
+    const neg = bal<0
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="switchView('finance');setTimeout(()=>setActiveAccount('${a.id}'),200)">
+      <span style="width:8px;height:8px;border-radius:50%;background:${neg?'#f87171':clr};flex-shrink:0;"></span>
+      <span style="flex:1;font-size:12px;font-weight:600;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.metadata?.label||a.content)}</span>
+      <span style="font-size:12px;font-weight:900;font-family:'JetBrains Mono',monospace;color:${neg?'#f87171':clr};flex-shrink:0;">${neg?'-':''}${fmtM(Math.abs(bal))}</span>
+    </div>`
+  }).join('') : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin cuentas — crea una en Bio-Finanzas</div>`
+
+  // ── E) Deudas a proveedores ───────────────────────────────
+  const debtMap = {}
+  allNodes.filter(n=>n.type==='cotizacion'&&!['rechazada','pagada'].includes(n.metadata?.status||'')).forEach(cot => {
+    const pid = cot.metadata?.provider_id; if(!pid) return
+    const prov = allNodes.find(n=>n.id===pid); if(!prov) return
+    const saldo = Math.max(0, (+cot.metadata?.amount||0) - (cot.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0))
+    if(saldo<=0) return
+    if(!debtMap[pid]) debtMap[pid] = { name: prov.metadata?.name||prov.content||'?', saldo:0 }
+    debtMap[pid].saldo += saldo
+  })
+  const debts = Object.values(debtMap).sort((a,b)=>b.saldo-a.saldo).slice(0,4)
+  const debtHTML = debts.length ? debts.map(d => `
+    <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+      <div style="width:28px;height:28px;border-radius:50%;background:rgba(251,146,60,0.14);color:#fb923c;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${esc(d.name.charAt(0).toUpperCase())}</div>
+      <span style="flex:1;font-size:12px;font-weight:600;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(d.name)}</span>
+      <span style="font-size:12px;font-weight:900;font-family:'JetBrains Mono',monospace;color:#f87171;flex-shrink:0;">${fmtM(d.saldo)}</span>
+    </div>`).join('')
+  : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin saldos pendientes 🎉</div>`
+
+  // ── Render ────────────────────────────────────────────────
+  root.innerHTML = `
+    ${kpiStrip}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="${NX_CARD}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          ${ISVG.clock.replace('stroke="currentColor"','stroke="#fb923c"')}
+          <span style="${NX_HEAD}color:#fb923c;">Próximos pagos</span>
+          ${bills.length?`<span style="margin-left:auto;font-size:10px;color:#fb923c;font-weight:700;background:rgba(251,146,60,0.1);border-radius:8px;padding:1px 7px;">${bills.length}</span>`:''}
+        </div>
+        ${billsHTML}
+      </div>
+      <div style="${NX_CARD}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          ${ISVG.grid.replace('stroke="currentColor"','stroke="#a78bfa"')}
+          <span style="${NX_HEAD}color:#a78bfa;">Proyectos activos</span>
+          ${proyectos.length?`<span style="margin-left:auto;font-size:10px;color:#a78bfa;font-weight:700;background:rgba(167,139,250,0.1);border-radius:8px;padding:1px 7px;">${proyectos.length}</span>`:''}
+          <button onclick="switchView('proyectos')" style="font-size:10px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;margin-left:auto;">Ver todos</button>
+        </div>
+        ${projHTML}
+      </div>
+      <div style="${NX_CARD}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          ${ISVG.card.replace('stroke="currentColor"','stroke="#2dd4bf"')}
+          <span style="${NX_HEAD}color:#2dd4bf;">Cuentas</span>
+          <button onclick="switchView('finance')" style="margin-left:auto;font-size:10px;color:#2dd4bf;background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;">Bio-Finanzas</button>
+        </div>
+        ${accHTML}
+      </div>
+      <div style="${NX_CARD}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          ${ISVG.users.replace('stroke="currentColor"','stroke="#f87171"')}
+          <span style="${NX_HEAD}color:#f87171;">A quién se debe</span>
+          ${debts.length?`<span style="margin-left:auto;font-size:10px;color:#f87171;font-weight:700;background:rgba(248,113,113,0.1);border-radius:8px;padding:1px 7px;">${debts.length}</span>`:''}
+        </div>
+        ${debtHTML}
+      </div>
+    </div>`
+}
+window.renderPanelDashboard = renderPanelDashboard
+
 // ── Mapa de renders por vista — lazy render (Phase C) ───────────────────────────
 const VIEW_RENDER_MAP = {
-  feed:      (nodes) => { renderFeed(nodes); renderFilterBar(); renderSemaforoCuentas(); renderPulsoSemanal() },
+  feed:      (nodes) => { renderPanelDashboard(); renderFeed(nodes); renderFilterBar() },
   kanban:    (nodes) => renderKanban(nodes),
   notes:     (nodes) => renderNotes(nodes),
   finance:   (nodes) => renderFinance(nodes),
@@ -1454,31 +1679,39 @@ function feedItemHtml(n) {
     ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:${tc.color};flex-shrink:0;">${n.type==='income'?'+':'-'}$${n.metadata.amount.toLocaleString()}</span>` : ''
   const timeStr = n.created_at ? `${new Date(n.created_at).getHours().toString().padStart(2,'0')}:${new Date(n.created_at).getMinutes().toString().padStart(2,'0')}` : '--:--'
   const newPulse = n._optimistic ? ' nexus-new-pulse' : ''
+  // ── inline SVG micro-icons for feed actions ───────────────────────────────
+  const _svgEdit  = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`
+  const _svgFolder= `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`
+  const _svgCheck = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
+  const _svgX     = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+  const _badgeBg  = tc.border.replace('0.4','0.10').replace('0.3','0.10')
   return `
     <div class="feed-item${newPulse}" data-node-id="${n.id}" style="border-left:3px solid ${tc.border};background:${tc.bg};" onclick="openCardModal('${n.id}')">
       <span class="feed-time">${timeStr}</span>
-      <span style="font-size:9px;font-weight:800;color:${tc.color};background:${tc.border.replace('0.4','0.12').replace('0.3','0.12')};padding:2px 8px;border-radius:4px;flex-shrink:0;">${tc.label}</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:${tc.color};background:${_badgeBg};padding:2px 8px;border-radius:4px;flex-shrink:0;">
+        <span style="width:5px;height:5px;border-radius:50%;background:${tc.color};flex-shrink:0;"></span>${tc.label}
+      </span>
       <div style="flex:1;min-width:0;">
         <div style="font-size:14px;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.label || n.content)}</div>
         <div style="margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;">
-          ${(n.metadata?.tags||[]).filter(t=>t.toLowerCase()!==`#${n.type.toLowerCase()}`).map(t=>`<span style="background:${tc.border.replace('0.4','0.1').replace('0.3','0.1')};color:${tc.color};font-size:9px;padding:1px 5px;border-radius:3px;cursor:pointer;" onclick="event.stopPropagation();setFilter('${t}')">${t}</span>`).join('')}
+          ${(n.metadata?.tags||[]).filter(t=>t.toLowerCase()!==`#${n.type.toLowerCase()}`).map(t=>`<span style="background:${_badgeBg};color:${tc.color};font-size:9px;padding:1px 5px;border-radius:3px;cursor:pointer;" onclick="event.stopPropagation();setFilter('${t}')">${t}</span>`).join('')}
         </div>
       </div>
       ${amount}
       ${n.type==='proyecto' ? `
-        <span onclick="event.stopPropagation();openProyectoModal('${n.id}')" title="Editar proyecto" style="color:#2dd4bf;cursor:pointer;padding:4px;flex-shrink:0;font-size:13px;" title="Editar presupuesto/rol">✏️</span>
-        <span onclick="event.stopPropagation();openProjectView('${n.id}')" title="Vista de Proyecto" style="color:#60a5fa;cursor:pointer;padding:4px;flex-shrink:0;font-size:13px;">📁</span>
+        <span onclick="event.stopPropagation();openProyectoModal('${n.id}')" title="Editar proyecto" style="display:inline-flex;align-items:center;justify-content:center;color:#2dd4bf;cursor:pointer;padding:5px;flex-shrink:0;width:24px;height:24px;border-radius:6px;background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.18);">${_svgEdit}</span>
+        <span onclick="event.stopPropagation();openProjectView('${n.id}')" title="Vista de Proyecto" style="display:inline-flex;align-items:center;justify-content:center;color:#60a5fa;cursor:pointer;padding:5px;flex-shrink:0;width:24px;height:24px;border-radius:6px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.18);">${_svgFolder}</span>
       ` : ''}
       ${n.type==='cotizacion' ? (() => {
         const st = n.metadata?.status || 'pendiente'
         const stCfg = COT_STATUS[st] || COT_STATUS.pendiente
         const amt = n.metadata?.amount ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:#fb923c;flex-shrink:0;font-size:12px;">$${(+n.metadata.amount).toLocaleString('es-MX')}</span>` : ''
-        const statusBadge = `<span style="font-size:9px;padding:2px 7px;border-radius:4px;background:${stCfg.color}22;color:${stCfg.color};font-weight:700;flex-shrink:0;">${stCfg.label}</span>`
-        const quickBtns = st !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${n.id}','aceptada')" title="Aceptar" style="color:#4ade80;cursor:pointer;padding:4px;flex-shrink:0;font-size:14px;">✅</span>` : ''
-        const editBtn = `<span onclick="event.stopPropagation();openCotizacionModal('${n.id}')" title="Editar" style="color:#fb923c;cursor:pointer;padding:4px;flex-shrink:0;font-size:13px;">✏️</span>`
+        const statusBadge = `<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:4px;background:${stCfg.color}1a;color:${stCfg.color};flex-shrink:0;"><span style="width:4px;height:4px;border-radius:50%;background:${stCfg.color};"></span>${stCfg.label}</span>`
+        const quickBtns = st !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${n.id}','aceptada')" title="Aceptar" style="display:inline-flex;align-items:center;justify-content:center;color:#4ade80;cursor:pointer;width:24px;height:24px;border-radius:6px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.18);flex-shrink:0;">${_svgCheck}</span>` : ''
+        const editBtn = `<span onclick="event.stopPropagation();openCotizacionModal('${n.id}')" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;color:#fb923c;cursor:pointer;width:24px;height:24px;border-radius:6px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.18);flex-shrink:0;">${_svgEdit}</span>`
         return amt + statusBadge + quickBtns + editBtn
       })() : ''}
-      <span onclick="event.stopPropagation();if(confirm('¿Eliminar?')){deleteNode('${n.id}')}" style="color:var(--text-dim);cursor:pointer;padding:4px;flex-shrink:0;">✕</span>
+      <span onclick="event.stopPropagation();if(confirm('¿Eliminar?')){deleteNode('${n.id}')}" title="Eliminar" style="display:inline-flex;align-items:center;justify-content:center;color:var(--text-dim);cursor:pointer;width:22px;height:22px;border-radius:5px;flex-shrink:0;opacity:0.5;transition:opacity 0.15s;" onmouseenter="this.style.opacity=1;this.style.color='#f87171'" onmouseleave="this.style.opacity=0.5;this.style.color='var(--text-dim)'">${_svgX}</span>
     </div>`
 }
 
@@ -1598,14 +1831,16 @@ function renderNotes(nodes) {
     const color = n.metadata?.color || ''
     const colorStyle = NOTE_COLORS[color] || ''
     const isPinned = n.metadata?.pinned
+    const ntc = TYPE_CONFIG[n.type] || { color:'var(--accent-cyan)', label:`#${n.type.toUpperCase()}` }
+    const _svgPin = `<svg width="11" height="11" viewBox="0 0 24 24" fill="${isPinned?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z"/></svg>`
     return `
     <div class="note-keep" style="${colorStyle}" ondblclick="openNoteEdit('${n.id}')" title="Doble clic para editar">
       <div class="note-keep-inner">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
-          <div style="font-size:9px; font-weight:800; color:var(--accent-cyan);">#${n.type.toUpperCase()}</div>
+          <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:${ntc.color};background:${ntc.color}18;padding:2px 7px;border-radius:4px;"><span style="width:4px;height:4px;border-radius:50%;background:${ntc.color};flex-shrink:0;"></span>${ntc.label}</span>
           <span title="${isPinned ? 'Desfijar' : 'Fijar'}"
                 onclick="event.stopPropagation(); togglePin('${n.id}')"
-                style="cursor:pointer; font-size:12px; opacity:${isPinned ? '1' : '0.3'};">📌</span>
+                style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:${isPinned?'#fb923c':'var(--text-dim)'};opacity:${isPinned?'1':'0.35'};width:22px;height:22px;border-radius:5px;${isPinned?'background:rgba(251,146,60,0.1);':''}">${_svgPin}</span>
         </div>
         <div class="note-keep-title">${esc(n.metadata?.label || n.content)}</div>
         <div class="note-keep-body">${esc(n.content)}</div>
@@ -1972,66 +2207,96 @@ function renderFinance(nodes) {
     const consolidatedNet = consolidatedInc - consolidatedExp
     const cNetClr = consolidatedNet >= 0 ? '#00f6ff' : '#fb923c'
 
+    // ── SVG icons para Bio-Finanzas ───────────────────────────
+    const FI = {
+      inc:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+      exp:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>`,
+      net:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>`,
+      card: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
+      tag:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`,
+      list: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`,
+      move: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="7" height="7"/><rect x="1" y="14" width="7" height="7"/><line x1="21" y1="6" x2="9" y2="6"/><line x1="21" y1="17" x2="9" y2="17"/></svg>`,
+    }
+    const NX_KPI = (color) => `background:${color}0d;border:1px solid ${color}28;border-radius:14px;padding:16px;`
+    const NX_LBL = (color) => `font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:${color};margin-bottom:6px;display:flex;align-items:center;gap:6px;`
+    const NX_VAL = (color) => `font-size:20px;font-weight:900;color:${color};font-family:'JetBrains Mono',monospace;line-height:1.1;`
+
     statsHtml = `
-    <div style="margin-bottom:28px;">
-      <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1.5px;margin-bottom:12px;">💼 BALANCE POR CUENTA — clic para ver detalle</div>
+    <div style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Balance por cuenta</span>
+        <span style="font-size:10px;color:var(--text-dim);margin-left:4px;">— clic para ver detalle</span>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px;">
         ${accountCards}
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
-        <div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:14px;padding:16px;">
-          <div style="font-size:10px;color:#6ee7b7;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">↑ TOTAL INGRESOS</div>
-          <div id="fin-kpi-income" style="font-size:22px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${consolidatedInc.toLocaleString()}</div>
+      <div style="display:flex;gap:0;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden;">
+        <div style="flex:1;padding:16px 14px;border-right:1px solid rgba(255,255,255,0.06);">
+          <div style="${NX_LBL('#4ade80')}"><span style="color:#4ade80;">${FI.inc}</span>Total ingresos</div>
+          <div id="fin-kpi-income" style="${NX_VAL('#4ade80')}">+$${consolidatedInc.toLocaleString()}</div>
           <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${allTxs.filter(n=>n.type==='income').length} transacciones</div>
         </div>
-        <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:14px;padding:16px;">
-          <div style="font-size:10px;color:#fca5a5;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">↓ TOTAL GASTOS</div>
-          <div id="fin-kpi-expense" style="font-size:22px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${consolidatedExp.toLocaleString()}</div>
+        <div style="flex:1;padding:16px 14px;border-right:1px solid rgba(255,255,255,0.06);">
+          <div style="${NX_LBL('#f87171')}"><span style="color:#f87171;">${FI.exp}</span>Total gastos</div>
+          <div id="fin-kpi-expense" style="${NX_VAL('#f87171')}">-$${consolidatedExp.toLocaleString()}</div>
           <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${allTxs.filter(n=>n.type==='expense').length} transacciones</div>
         </div>
-        <div style="background:${consolidatedNet>=0?'rgba(0,246,255,0.06)':'rgba(251,146,60,0.06)'};border:1px solid ${consolidatedNet>=0?'rgba(0,246,255,0.2)':'rgba(251,146,60,0.2)'};border-radius:14px;padding:16px;">
-          <div style="font-size:10px;color:${cNetClr};font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">⚖ NETO CONSOLIDADO</div>
-          <div id="fin-kpi-net" style="font-size:22px;font-weight:800;color:${cNetClr};font-family:'JetBrains Mono',monospace;">${consolidatedNet>=0?'+':''}\$${consolidatedNet.toLocaleString()}</div>
-          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${consolidatedNet>=0?'✅ Flujo positivo':'⚠️ Déficit acumulado'}</div>
+        <div style="flex:1;padding:16px 14px;">
+          <div style="${NX_LBL(consolidatedNet>=0?'#2dd4bf':'#fb923c')}"><span style="color:${consolidatedNet>=0?'#2dd4bf':'#fb923c'};">${FI.net}</span>Neto consolidado</div>
+          <div id="fin-kpi-net" style="${NX_VAL(consolidatedNet>=0?'#2dd4bf':'#fb923c')}">${consolidatedNet>=0?'+':''}\$${consolidatedNet.toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${consolidatedNet>=0?'Flujo positivo':'Déficit acumulado'}</div>
         </div>
       </div>
-      ${topTags.length > 0 ? `<div style="margin-top:16px;background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:12px;padding:14px 16px;">
-        <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:10px;">🏷 TOP CATEGORÍAS DE GASTO</div>
+      ${topTags.length > 0 ? `<div style="margin-top:14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px 16px;">
+        <div style="display:flex;align-items:center;gap:6px;font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          Top categorías de gasto
+        </div>
         ${topTagsHtml}
       </div>` : ''}
     </div>`
 
   } else {
     // ── DASHBOARD CUENTA ESPECÍFICA ────────────────────────────────
-    const aClr = activeAcc?.metadata?.color || '#00f6ff'
+    const aClr = activeAcc?.metadata?.color || '#60a5fa'
     const txCount = txs.length
     const avgExp  = txs.filter(n=>n.type==='expense').length > 0
       ? expense / txs.filter(n=>n.type==='expense').length : 0
     const maxTx   = [...txs].sort((a,b)=>(b.metadata?.amount||0)-(a.metadata?.amount||0))[0]
-    const balClr  = accBalance >= 0 ? aClr : '#fb923c'
-    const balBg   = accBalance >= 0 ? `${aClr}0d` : 'rgba(251,146,60,0.06)'
-    const balBdr  = accBalance >= 0 ? `${aClr}30` : 'rgba(251,146,60,0.25)'
+    const balClr  = accBalance >= 0 ? aClr : '#f87171'
+    const balBg   = accBalance >= 0 ? `${aClr}0d` : 'rgba(248,113,113,0.06)'
+    const balBdr  = accBalance >= 0 ? `${aClr}30` : 'rgba(248,113,113,0.25)'
+
+    const FI2 = {
+      inc:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
+      exp:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="1.5" stroke-linecap="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>`,
+      card: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${balClr}" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
+      move: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-linecap="round"><rect x="1" y="3" width="7" height="7"/><rect x="1" y="14" width="7" height="7"/><line x1="21" y1="6" x2="9" y2="6"/><line x1="21" y1="17" x2="9" y2="17"/></svg>`,
+    }
+    const NX_LBL2 = (c) => `font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:${c};margin-bottom:6px;display:flex;align-items:center;gap:6px;`
+    const NX_VAL2 = (c) => `font-size:20px;font-weight:900;color:${c};font-family:'JetBrains Mono',monospace;line-height:1.1;`
 
     statsHtml = `
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:28px;">
-      <div style="background:${balBg};border:1px solid ${balBdr};border-radius:14px;padding:18px;grid-column:span 1;">
-        <div style="font-size:9px;color:${balClr};font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">💳 SALDO ACTUAL</div>
-        <div id="fin-kpi-net" style="font-size:22px;font-weight:800;color:${balClr};font-family:'JetBrains Mono',monospace;">${accBalance>=0?'+':''}\$${accBalance.toLocaleString()}</div>
+    <div style="display:flex;gap:0;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden;margin-bottom:24px;">
+      <div style="flex:1.2;padding:18px 16px;border-right:1px solid rgba(255,255,255,0.06);">
+        <div style="${NX_LBL2(balClr)}">${FI2.card} Saldo actual</div>
+        <div id="fin-kpi-net" style="${NX_VAL2(balClr)}">${accBalance>=0?'+':''}\$${accBalance.toLocaleString()}</div>
         <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">Inicial: $${initBalance.toLocaleString()}</div>
       </div>
-      <div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:14px;padding:18px;">
-        <div style="font-size:9px;color:#6ee7b7;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">↑ INGRESOS</div>
-        <div id="fin-kpi-income" style="font-size:22px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${income.toLocaleString()}</div>
+      <div style="flex:1;padding:18px 16px;border-right:1px solid rgba(255,255,255,0.06);">
+        <div style="${NX_LBL2('#4ade80')}">${FI2.inc} Ingresos</div>
+        <div id="fin-kpi-income" style="${NX_VAL2('#4ade80')}">+$${income.toLocaleString()}</div>
         <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${txs.filter(n=>n.type==='income').length} mov.</div>
       </div>
-      <div style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);border-radius:14px;padding:18px;">
-        <div style="font-size:9px;color:#fca5a5;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">↓ GASTOS</div>
-        <div id="fin-kpi-expense" style="font-size:22px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${expense.toLocaleString()}</div>
+      <div style="flex:1;padding:18px 16px;border-right:1px solid rgba(255,255,255,0.06);">
+        <div style="${NX_LBL2('#f87171')}">${FI2.exp} Gastos</div>
+        <div id="fin-kpi-expense" style="${NX_VAL2('#f87171')}">-$${expense.toLocaleString()}</div>
         <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">Prom: $${Math.round(avgExp).toLocaleString()}</div>
       </div>
-      <div style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:14px;padding:18px;">
-        <div style="font-size:9px;color:#c4b5fd;font-weight:800;letter-spacing:1.5px;margin-bottom:8px;">📊 MOVIMIENTOS</div>
-        <div style="font-size:22px;font-weight:800;color:#a78bfa;font-family:'JetBrains Mono',monospace;">${txCount}</div>
+      <div style="flex:1;padding:18px 16px;">
+        <div style="${NX_LBL2('#a78bfa')}">${FI2.move} Movimientos</div>
+        <div style="${NX_VAL2('#a78bfa')}">${txCount}</div>
         ${maxTx ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="Mayor: ${esc(maxTx.metadata?.label||maxTx.content)}">Mayor: $${(maxTx.metadata?.amount||0).toLocaleString()}</div>` : ''}
       </div>
     </div>`
@@ -2050,7 +2315,10 @@ function renderFinance(nodes) {
 
   const txTableHtml = `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-    <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;">📋 MOVIMIENTOS (${txsWithBalance.length})</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Movimientos (${txsWithBalance.length})</span>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button onclick="window.printFinanceReport()" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🖨 Imprimir reporte</button>
       <button onclick="openTransactionModal()" style="font-size:11px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:var(--accent-cyan);border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Movimiento</button>
@@ -7995,10 +8263,10 @@ function _renderProjFinanzas(d) {
       .slice(0, 6)
     const timelineHTML = recentPagos.length > 0 ? (() => {
       const METHOD_SVG = {
-        transferencia: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
-        efectivo:      `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>`,
-        cheque:        `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
-        tarjeta:       `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`,
+        transferencia: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
+        efectivo:      `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>`,
+        cheque:        `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+        tarjeta:       `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>`,
       }
       return `<div style="margin-bottom:4px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
@@ -8013,9 +8281,9 @@ function _renderProjFinanzas(d) {
               const pgAmt    = +(pg.metadata?.amount || 0)
               const pgMethod = pg.metadata?.method || ''
               const pgLabel  = pg.metadata?.label || pg.metadata?.notes || pg.content || 'Pago'
-              const pgIcon   = METHOD_SVG[pgMethod] || `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>`
+              const pgIcon   = METHOD_SVG[pgMethod] || `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>`
               const dot = `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0;flex:1;" title="${esc(pgLabel)} — ${fmtM(pgAmt)}">
-                <div style="width:20px;height:20px;border-radius:50%;background:#4ade8022;border:2px solid #4ade80;display:flex;align-items:center;justify-content:center;color:#4ade80;position:relative;z-index:1;flex-shrink:0;">${pgIcon}</div>
+                <div style="width:26px;height:26px;border-radius:50%;background:#4ade8022;border:2px solid #4ade80;display:flex;align-items:center;justify-content:center;color:#4ade80;position:relative;z-index:1;flex-shrink:0;">${pgIcon}</div>
                 <div style="font-size:9px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#4ade80;white-space:nowrap;">${fmtM(pgAmt)}</div>
                 <div style="font-size:8px;color:var(--text-dim);white-space:nowrap;">${pgDate.slice(5)}</div>
               </div>`

@@ -1108,22 +1108,35 @@
   <div id="offline-bar" style="display:none;" class="offline-bar"></div>
     <!-- PANEL DE COMANDOS -->
     <div id="view-feed" class="view-section active">
-      <div class="view-header"><h1 class="view-title">Historial de Operaciones</h1></div>
-      <!-- Semáforo de cuentas -->
-      <div id="semaforo-cuentas" style="margin-bottom:16px;"></div>
+      <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;">
+        <h1 class="view-title">Panel de Comandos</h1>
+        <div style="display:flex;gap:8px;">
+          <button onclick="openQuickCreate('expense')" class="qc-ctx-btn" style="color:#f87171;border-color:rgba(248,113,113,0.25);background:rgba(248,113,113,0.06);">- Gasto</button>
+          <button onclick="openQuickCreate('income')" class="qc-ctx-btn" style="color:#4ade80;border-color:rgba(74,222,128,0.25);background:rgba(74,222,128,0.06);">+ Ingreso</button>
+          <button onclick="openQuickCreate('kanban')" class="qc-ctx-btn">+ Tarea</button>
+        </div>
+      </div>
+      <!-- Dashboard general -->
+      <div id="panel-dashboard-root" style="margin-bottom:16px;"></div>
       <!-- Alertas de hábitos -->
       <div id="habit-alerts" style="display:none; margin-bottom:16px;"></div>
-      <!-- Pulso Semanal (colapsable) -->
-      <div id="pulso-semanal" style="margin-bottom:20px; display:none;"></div>
+      <!-- Feed: Actividad reciente -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Actividad reciente</span>
+      </div>
+      <div id="semaforo-cuentas" style="display:none;"></div>
+      <div id="pulso-semanal" style="display:none;"></div>
       <div id="feed-root" class="feed-container"></div>
     </div>
 
     <!-- MURO TÁCTICO (TRELLO RECONSTRUCTION) -->
     <div id="view-kanban" class="view-section">
       <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;">
-        <h1 class="view-title">Planificación Operativa</h1>
+        <h1 class="view-title">Muro Táctico</h1>
         <button onclick="openQuickCreate('kanban')" class="qc-ctx-btn">+ Nueva tarea</button>
       </div>
+      <div id="kanban-kpi-root" style="margin-bottom:16px;"></div>
       <div id="kanban-root" class="kanban-board">
         <!-- Generado por JS -->
       </div>
