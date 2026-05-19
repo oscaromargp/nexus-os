@@ -1161,8 +1161,37 @@
 
     <!-- BÓVEDA NEURAL -->
     <div id="view-notes" class="view-section">
-      <div class="view-header"><h1 class="view-title">Memorias & CRM</h1></div>
+      <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <h1 class="view-title">Memorias & CRM</h1>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <!-- Barra de acciones multi-selección (oculta por defecto) -->
+          <div id="notes-selection-bar" style="display:none;align-items:center;gap:6px;background:rgba(0,0,0,0.3);border:1px solid var(--glass-border);border-radius:10px;padding:4px 10px;">
+            <span id="notes-selection-count" style="font-size:11px;color:var(--text-muted);font-weight:700;min-width:60px;"></span>
+            <button onclick="actionSelectedNotes('archive')" class="btn-ghost" style="font-size:11px;padding:3px 8px;" title="Archivar selección">📦 Archivar</button>
+            <button onclick="actionSelectedNotes('color')" class="btn-ghost" style="font-size:11px;padding:3px 8px;" title="Cambiar color">🎨 Color</button>
+            <button onclick="actionSelectedNotes('delete')" class="btn-ghost" style="font-size:11px;padding:3px 8px;color:#f87171;" title="Eliminar selección">🗑 Eliminar</button>
+          </div>
+          <!-- Toggle modo selección -->
+          <button id="notes-select-toggle" onclick="toggleNoteSelectionMode()" class="btn-ghost" style="font-size:11px;padding:5px 12px;display:flex;align-items:center;gap:5px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            Seleccionar
+          </button>
+          <!-- Mostrar archivadas -->
+          <button id="notes-archive-toggle" onclick="toggleArchivedNotes()" class="btn-ghost" style="font-size:11px;padding:5px 12px;display:flex;align-items:center;gap:5px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            Archivo
+          </button>
+        </div>
+      </div>
       <div id="notes-root" class="notes-grid"></div>
+      <!-- Sección de archivadas (colapsada por defecto) -->
+      <div id="notes-archived-section" style="display:none;margin-top:24px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.06);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text-dim)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+          <span style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);">Archivadas</span>
+        </div>
+        <div id="notes-archived-root" class="notes-grid"></div>
+      </div>
     </div>
 
     <!-- LÍNEA DE TIEMPO -->
@@ -3492,6 +3521,18 @@
       <label class="modal-label">Etiquetas (con #)</label>
       <input type="text" id="ne-tags" class="modal-input" placeholder="#idea #proyecto #importante" />
     </div>
+    <!-- Recordatorio -->
+    <div class="modal-field">
+      <label class="modal-label" style="display:flex;align-items:center;gap:6px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Recordatorio (opcional)
+        <button onclick="clearNoteReminder()" id="ne-reminder-clear" style="display:none;margin-left:auto;font-size:10px;color:var(--text-dim);background:none;border:none;cursor:pointer;padding:0 4px;">✕ Quitar</button>
+      </label>
+      <div style="display:flex;gap:8px;">
+        <input type="date" id="ne-reminder-date" class="modal-input" style="flex:1;" />
+        <input type="time" id="ne-reminder-time" class="modal-input" style="width:110px;" value="09:00" />
+      </div>
+    </div>
     <div style="margin-top:16px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.06);">
       <label class="modal-label">Transformar en</label>
       <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
@@ -3523,10 +3564,53 @@
         </div>
       </div>
     </div>
+    <!-- Acciones extra: archivar / exportar -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;padding:10px 0 4px;border-top:1px solid rgba(255,255,255,0.06);margin-top:10px;">
+      <button onclick="archiveNote()" class="btn-ghost" style="font-size:11px;display:flex;align-items:center;gap:5px;padding:5px 10px;" title="Archivar nota (ocultar sin eliminar)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+        Archivar
+      </button>
+      <button onclick="exportNote('print')" class="btn-ghost" style="font-size:11px;display:flex;align-items:center;gap:5px;padding:5px 10px;" title="Imprimir nota">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Imprimir
+      </button>
+      <button onclick="exportNote('markdown')" class="btn-ghost" style="font-size:11px;display:flex;align-items:center;gap:5px;padding:5px 10px;" title="Copiar como Markdown">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copiar MD
+      </button>
+    </div>
     <div class="modal-actions">
       <button class="btn-ghost" onclick="closeNoteModal()">Cancelar</button>
       <button class="btn-danger" id="ne-delete">Eliminar</button>
       <button class="btn-primary" id="ne-save">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: PROYECTO DELETE CONFIRM -->
+<div id="project-delete-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeProjectDeleteModal()">
+  <div class="modal-box" style="max-width:440px;">
+    <div class="modal-title" style="color:#f87171;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Eliminar Proyecto
+    </div>
+    <div id="pdm-body" style="font-size:13px;line-height:1.7;color:var(--text-muted);margin:12px 0;"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px;">
+      <button onclick="executeProjectDelete('archive')" class="btn-ghost" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:12px;border:1px solid rgba(255,255,255,0.08);">
+        <strong style="color:var(--text-main);display:block;">📦 Archivar proyecto</strong>
+        <span style="font-size:11px;color:var(--text-dim);">Ocultarlo sin borrar nada — lo puedes recuperar después.</span>
+      </button>
+      <button onclick="executeProjectDelete('project-only')" class="btn-ghost" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:12px;border:1px solid rgba(255,165,0,0.25);">
+        <strong style="color:#fb923c;display:block;">🗂 Solo eliminar el proyecto</strong>
+        <span style="font-size:11px;color:var(--text-dim);">Las tareas, gastos y notas vinculadas quedan sin proyecto.</span>
+      </button>
+      <button onclick="executeProjectDelete('all')" class="btn-danger" style="text-align:left;padding:10px 14px;border-radius:10px;font-size:12px;">
+        <strong style="display:block;">🗑 Eliminar proyecto y todo lo vinculado</strong>
+        <span style="font-size:11px;opacity:0.7;">Esta acción es permanente e irreversible.</span>
+      </button>
+    </div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn-ghost" onclick="closeProjectDeleteModal()">Cancelar</button>
     </div>
   </div>
 </div>

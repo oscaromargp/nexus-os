@@ -1788,20 +1788,99 @@ function renderFeed(nodes) {
 window.deleteNode = async (id) => {
   const node = allNodes.find(n => n.id === id)
   if (!node) return
-  // Proyectos require typed confirmation — prevent accidental cascade delete
   if (node.type === 'proyecto') {
-    const projectName = (node.metadata?.label || node.content || '').trim()
-    const typed = window.prompt(`⚠️ Esto eliminará el proyecto "${projectName}" de forma permanente.\n\nEscribe el nombre exacto del proyecto para confirmar:`)
-    if (typed?.trim() !== projectName) { showToast('❌ Nombre incorrecto — operación cancelada.'); return }
-  } else {
-    if (!confirm('¿Eliminar este elemento?')) return
+    openDeleteProjectModal(id)
+    return
   }
+  if (!confirm('¿Eliminar este elemento?')) return
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
     allNodes = allNodes.filter(n => n.id !== id)
   } else {
     await supabase.from('nodes').delete().eq('id', id)
     allNodes = allNodes.filter(n => n.id !== id)
   }
+  renderAll()
+}
+
+let _deletingProjectId = null
+
+window.openDeleteProjectModal = (id) => {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  _deletingProjectId = id
+  const slug = node.metadata?.project_slug || (node.metadata?.label || node.content).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')
+  const projectName = node.metadata?.label || node.content || 'Proyecto'
+
+  // Count linked nodes
+  const linked = allNodes.filter(n => n.id !== id && (
+    n.metadata?.project_tag === slug ||
+    (n.metadata?.tags || []).includes('#' + slug)
+  ))
+  const counts = { kanban: 0, expense: 0, income: 0, note: 0, cotizacion: 0, other: 0 }
+  linked.forEach(n => {
+    if (counts[n.type] !== undefined) counts[n.type]++
+    else counts.other++
+  })
+  const parts = []
+  if (counts.kanban)    parts.push(`<strong>${counts.kanban}</strong> tarea${counts.kanban>1?'s':''}`)
+  if (counts.expense)   parts.push(`<strong>${counts.expense}</strong> gasto${counts.expense>1?'s':''}`)
+  if (counts.income)    parts.push(`<strong>${counts.income}</strong> ingreso${counts.income>1?'s':''}`)
+  if (counts.cotizacion)parts.push(`<strong>${counts.cotizacion}</strong> cotización${counts.cotizacion>1?'es':''}`)
+  if (counts.note)      parts.push(`<strong>${counts.note}</strong> nota${counts.note>1?'s':''}`)
+  if (counts.other)     parts.push(`<strong>${counts.other}</strong> elemento${counts.other>1?'s':''}`)
+
+  const impactHtml = parts.length
+    ? `<div style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:8px;padding:10px 14px;margin:10px 0;font-size:12px;color:var(--text-muted);">
+        Tiene ${parts.join(', ')} vinculados.
+       </div>`
+    : `<div style="font-size:12px;color:var(--text-dim);margin:8px 0;">No hay elementos vinculados a este proyecto.</div>`
+
+  document.getElementById('pdm-body').innerHTML = `
+    <span>¿Qué deseas hacer con el proyecto <strong style="color:var(--text-main);">${esc(projectName)}</strong>?</span>
+    ${impactHtml}
+  `
+  document.getElementById('project-delete-modal').classList.remove('hidden')
+}
+
+window.closeProjectDeleteModal = () => {
+  document.getElementById('project-delete-modal').classList.add('hidden')
+  _deletingProjectId = null
+}
+
+window.executeProjectDelete = async (mode) => {
+  const id = _deletingProjectId
+  if (!id) return
+  const node = allNodes.find(n => n.id === id)
+  if (!node) { closeProjectDeleteModal(); return }
+  const slug = node.metadata?.project_slug || (node.metadata?.label || node.content).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')
+  const isDemo = localStorage.getItem('nexus_admin_bypass') === 'true'
+  const linked = allNodes.filter(n => n.id !== id && (
+    n.metadata?.project_tag === slug ||
+    (n.metadata?.tags || []).includes('#' + slug)
+  ))
+
+  if (mode === 'archive') {
+    // Archive — set archived flag, keep data
+    node.metadata = { ...(node.metadata || {}), archived: true }
+    if (!isDemo) await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
+    showToast('📦 Proyecto archivado.')
+  } else if (mode === 'project-only') {
+    // Delete only the project node
+    if (!isDemo) await supabase.from('nodes').delete().eq('id', id)
+    allNodes = allNodes.filter(n => n.id !== id)
+    showToast('🗂 Proyecto eliminado. Los elementos vinculados permanecen.')
+  } else if (mode === 'all') {
+    // Delete project + all linked nodes
+    const idsToDelete = [id, ...linked.map(n => n.id)]
+    if (!isDemo) {
+      for (const did of idsToDelete) {
+        await supabase.from('nodes').delete().eq('id', did)
+      }
+    }
+    allNodes = allNodes.filter(n => !idsToDelete.includes(n.id))
+    showToast(`🗑 Proyecto y ${linked.length} elemento${linked.length!==1?'s':''} eliminados.`)
+  }
+  closeProjectDeleteModal()
   renderAll()
 }
 
@@ -1821,8 +1900,9 @@ function renderNotes(nodes) {
   if (!root) return
   const notes = nodes
     .filter(n => {
-      if (n.type !== 'note' && n.type !== 'persona') return false
-      if (n.type === 'note' && n.metadata?.project_tag) return false
+      if (n.type !== 'note') return false
+      if (n.metadata?.project_tag) return false
+      if (n.metadata?.archived) return false
       return true
     })
     .sort((a, b) => (b.metadata?.pinned ? 1 : 0) - (a.metadata?.pinned ? 1 : 0))
@@ -1831,31 +1911,45 @@ function renderNotes(nodes) {
     const color = n.metadata?.color || ''
     const colorStyle = NOTE_COLORS[color] || ''
     const isPinned = n.metadata?.pinned
+    const hasReminder = !!n.metadata?.reminder
     const ntc = TYPE_CONFIG[n.type] || { color:'var(--accent-cyan)', label:`#${n.type.toUpperCase()}` }
     const _svgPin = `<svg width="11" height="11" viewBox="0 0 24 24" fill="${isPinned?'currentColor':'none'}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z"/></svg>`
+    const isSelected = _selectedNoteIds.has(n.id)
+    const selectCb = _noteSelectionMode ? `
+      <span class="note-select-cb" onclick="event.stopPropagation();toggleNoteSelect('${n.id}')"
+        style="position:absolute;top:8px;right:8px;width:18px;height:18px;border-radius:50%;border:2px solid var(--accent-cyan);background:${isSelected?'var(--accent-cyan)':'transparent'};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;z-index:2;">
+        ${isSelected?'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>':''}
+      </span>` : ''
+    const reminderBadge = hasReminder ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:#fb923c;background:rgba(251,146,60,0.1);padding:1px 6px;border-radius:4px;"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>${n.metadata.reminder.replace('T',' ').slice(0,16)}</span>` : ''
     return `
-    <div class="note-keep" style="${colorStyle}" ondblclick="openNoteEdit('${n.id}')" title="Doble clic para editar">
+    <div class="note-keep" data-nid="${n.id}" style="${colorStyle};position:relative;${isSelected?'outline:2px solid var(--accent-cyan);':''}"
+         onclick="${_noteSelectionMode?`toggleNoteSelect('${n.id}')`:`openNoteEdit('${n.id}')`}"
+         title="${_noteSelectionMode?'Clic para seleccionar':'Clic para editar'}">
+      ${selectCb}
       <div class="note-keep-inner">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-shrink:0;">
           <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:${ntc.color};background:${ntc.color}18;padding:2px 7px;border-radius:4px;"><span style="width:4px;height:4px;border-radius:50%;background:${ntc.color};flex-shrink:0;"></span>${ntc.label}</span>
-          <span title="${isPinned ? 'Desfijar' : 'Fijar'}"
+          ${_noteSelectionMode ? '' : `<span title="${isPinned ? 'Desfijar' : 'Fijar'}"
                 onclick="event.stopPropagation(); togglePin('${n.id}')"
-                style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:${isPinned?'#fb923c':'var(--text-dim)'};opacity:${isPinned?'1':'0.35'};width:22px;height:22px;border-radius:5px;${isPinned?'background:rgba(251,146,60,0.1);':''}">${_svgPin}</span>
+                style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:${isPinned?'#fb923c':'var(--text-dim)'};opacity:${isPinned?'1':'0.35'};width:22px;height:22px;border-radius:5px;${isPinned?'background:rgba(251,146,60,0.1);':''}">${_svgPin}</span>`}
         </div>
         <div class="note-keep-title">${esc(n.metadata?.label || n.content)}</div>
         <div class="note-keep-body">${esc(n.content)}</div>
+        ${reminderBadge ? `<div style="margin-top:4px;">${reminderBadge}</div>` : ''}
         <div style="display:flex; gap:4px; flex-wrap:wrap; flex-shrink:0;">
           ${(n.metadata?.tags || []).map(t => `<span class="tag-pill" onclick="event.stopPropagation(); setFilter('${t}')" style="background:var(--accent-cyan-dim); color:var(--accent-cyan); font-size:9px; padding:1px 5px; border-radius:4px; cursor:pointer;">${t}</span>`).join('')}
         </div>
-        <div class="note-color-bar" onclick="event.stopPropagation()">
+        ${_noteSelectionMode ? '' : `<div class="note-color-bar" onclick="event.stopPropagation()">
           ${Object.keys(NOTE_COLORS).filter(c=>c).map(c=>`
             <div title="${c}" onclick="setNoteColor('${n.id}','${c}')" style="${NOTE_COLORS[c]} width:14px; height:14px; border-radius:50%; border:2px solid ${color===c?'white':'transparent'}; cursor:pointer; display:inline-block; box-sizing:border-box;"></div>
           `).join('')}
           <div title="Sin color" onclick="setNoteColor('${n.id}','')" style="width:14px; height:14px; border-radius:50%; border:2px solid ${color===''?'white':'rgba(255,255,255,0.2)'}; cursor:pointer; display:inline-block; background:transparent;"></div>
-        </div>
+        </div>`}
       </div>
     </div>
   `}).join('')
+  // Re-render archived if visible
+  if (_showArchivedNotes) _renderArchivedNotes()
 }
 
 window.togglePin = async (id) => {
@@ -1976,6 +2070,22 @@ window.openNoteEdit = (id) => {
   document.getElementById('ne-body').value = node.content
   const tagsEl = document.getElementById('ne-tags')
   if (tagsEl) tagsEl.value = (m.tags || []).join(' ')
+  // Populate reminder fields
+  const rdEl = document.getElementById('ne-reminder-date')
+  const rtEl = document.getElementById('ne-reminder-time')
+  const rcBtn = document.getElementById('ne-reminder-clear')
+  if (rdEl && rtEl) {
+    if (m.reminder) {
+      const [rDate, rTime] = m.reminder.split('T')
+      rdEl.value = rDate || ''
+      rtEl.value = rTime ? rTime.slice(0,5) : '09:00'
+      if (rcBtn) rcBtn.style.display = 'inline'
+    } else {
+      rdEl.value = ''
+      rtEl.value = '09:00'
+      if (rcBtn) rcBtn.style.display = 'none'
+    }
+  }
   renderAttachments(node.metadata.images || [], 'note')
   const noteOverlay = document.getElementById('note-edit-modal')
   noteOverlay.classList.remove('hidden')
@@ -2021,6 +2131,191 @@ function toggleNoteSize() {
 }
 window.toggleNoteSize = toggleNoteSize;
 
+// ── Note: clear reminder ──────────────────────────────────────────────────────
+window.clearNoteReminder = () => {
+  const rdEl = document.getElementById('ne-reminder-date')
+  const rtEl = document.getElementById('ne-reminder-time')
+  const rcBtn = document.getElementById('ne-reminder-clear')
+  if (rdEl) rdEl.value = ''
+  if (rtEl) rtEl.value = '09:00'
+  if (rcBtn) rcBtn.style.display = 'none'
+}
+
+// ── Note: archive ─────────────────────────────────────────────────────────────
+window.archiveNote = async () => {
+  const id = editingNoteId
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  node.metadata = { ...(node.metadata || {}), archived: true }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
+  }
+  closeNoteModal()
+  showToast('📦 Nota archivada.')
+  renderAll()
+}
+
+// ── Note: unarchive ───────────────────────────────────────────────────────────
+window.unarchiveNote = async (id) => {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  node.metadata = { ...(node.metadata || {}), archived: false }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
+  }
+  showToast('📤 Nota restaurada.')
+  renderAll()
+}
+
+// ── Note: export (print / markdown) ──────────────────────────────────────────
+window.exportNote = (mode) => {
+  const node = allNodes.find(n => n.id === editingNoteId)
+  if (!node) return
+  const title = document.getElementById('ne-title')?.value || node.metadata?.label || node.content
+  const body  = document.getElementById('ne-body')?.value  || node.content
+
+  if (mode === 'print') {
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head><title>${esc(title)}</title>
+      <style>
+        body{font-family:system-ui,sans-serif;max-width:640px;margin:48px auto;color:#111;line-height:1.7;}
+        h1{font-size:22px;margin-bottom:8px;}
+        pre{white-space:pre-wrap;font-family:inherit;}
+        .meta{font-size:12px;color:#888;margin-bottom:24px;}
+        @media print{body{margin:24px;}}
+      </style></head><body>
+      <h1>${esc(title)}</h1>
+      <div class="meta">Nexus OS — ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}</div>
+      <pre>${esc(body)}</pre>
+    </body></html>`)
+    w.document.close()
+    w.focus()
+    setTimeout(() => w.print(), 400)
+  } else if (mode === 'markdown') {
+    const md = `# ${title}\n\n${body}`
+    navigator.clipboard.writeText(md).then(() => {
+      showToast('✅ Copiado como Markdown')
+    }).catch(() => {
+      // fallback
+      const ta = document.createElement('textarea')
+      ta.value = md
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      showToast('✅ Copiado como Markdown')
+    })
+  }
+}
+
+// ── Note multi-select state ───────────────────────────────────────────────────
+let _noteSelectionMode = false
+let _selectedNoteIds = new Set()
+let _showArchivedNotes = false
+
+window.toggleNoteSelectionMode = () => {
+  _noteSelectionMode = !_noteSelectionMode
+  _selectedNoteIds.clear()
+  const bar = document.getElementById('notes-selection-bar')
+  const btn = document.getElementById('notes-select-toggle')
+  if (_noteSelectionMode) {
+    if (bar) bar.style.display = 'flex'
+    if (btn) { btn.style.background = 'rgba(99,102,241,0.2)'; btn.style.color = 'var(--accent-cyan)' }
+  } else {
+    if (bar) bar.style.display = 'none'
+    if (btn) { btn.style.background = ''; btn.style.color = '' }
+  }
+  renderAll()
+}
+
+window.toggleArchivedNotes = () => {
+  _showArchivedNotes = !_showArchivedNotes
+  const sec = document.getElementById('notes-archived-section')
+  const btn = document.getElementById('notes-archive-toggle')
+  if (sec) sec.style.display = _showArchivedNotes ? 'block' : 'none'
+  if (btn) { btn.style.background = _showArchivedNotes ? 'rgba(99,102,241,0.15)' : ''; btn.style.color = _showArchivedNotes ? 'var(--accent-cyan)' : '' }
+  if (_showArchivedNotes) _renderArchivedNotes()
+}
+
+function _renderArchivedNotes() {
+  const root = document.getElementById('notes-archived-root')
+  if (!root) return
+  const archived = allNodes.filter(n => n.type === 'note' && n.metadata?.archived)
+  if (!archived.length) { root.innerHTML = '<p style="font-size:12px;color:var(--text-dim);padding:12px 0;">No hay notas archivadas.</p>'; return }
+  root.innerHTML = archived.map(n => {
+    const color = n.metadata?.color || ''
+    const colorStyle = NOTE_COLORS[color] || ''
+    return `
+    <div class="note-keep" style="${colorStyle};opacity:0.65;" title="Nota archivada">
+      <div class="note-keep-inner">
+        <div class="note-keep-title" style="margin-bottom:6px;">${esc(n.metadata?.label || n.content)}</div>
+        <div class="note-keep-body">${esc(n.content)}</div>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button onclick="unarchiveNote('${n.id}')" class="btn-ghost" style="font-size:10px;padding:3px 8px;">📤 Restaurar</button>
+          <button onclick="openNoteEdit('${n.id}')" class="btn-ghost" style="font-size:10px;padding:3px 8px;">✏️ Editar</button>
+        </div>
+      </div>
+    </div>`
+  }).join('')
+}
+
+window.toggleNoteSelect = (id) => {
+  if (!_noteSelectionMode) return
+  if (_selectedNoteIds.has(id)) _selectedNoteIds.delete(id)
+  else _selectedNoteIds.add(id)
+  // Update count badge
+  const countEl = document.getElementById('notes-selection-count')
+  if (countEl) countEl.textContent = `${_selectedNoteIds.size} seleccionada${_selectedNoteIds.size!==1?'s':''}`
+  // Refresh cards UI without full re-render
+  document.querySelectorAll('.note-keep[data-nid]').forEach(el => {
+    const nid = el.getAttribute('data-nid')
+    const cb = el.querySelector('.note-select-cb')
+    const isSelected = _selectedNoteIds.has(nid)
+    if (cb) cb.style.opacity = isSelected ? '1' : ''
+    el.style.outline = isSelected ? '2px solid var(--accent-cyan)' : ''
+  })
+}
+
+window.actionSelectedNotes = async (action) => {
+  if (!_selectedNoteIds.size) { showToast('Selecciona al menos una nota.'); return }
+  const ids = [..._selectedNoteIds]
+  const isDemo = localStorage.getItem('nexus_admin_bypass') === 'true'
+
+  if (action === 'delete') {
+    if (!confirm(`¿Eliminar ${ids.length} nota${ids.length>1?'s':''}? Esta acción es irreversible.`)) return
+    for (const id of ids) {
+      if (!isDemo) await supabase.from('nodes').delete().eq('id', id)
+      allNodes = allNodes.filter(n => n.id !== id)
+    }
+    showToast(`🗑 ${ids.length} nota${ids.length>1?'s':''} eliminada${ids.length>1?'s':''}.`)
+  } else if (action === 'archive') {
+    for (const id of ids) {
+      const node = allNodes.find(n => n.id === id)
+      if (!node) continue
+      node.metadata = { ...(node.metadata || {}), archived: true }
+      if (!isDemo) await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
+    }
+    showToast(`📦 ${ids.length} nota${ids.length>1?'s':''} archivada${ids.length>1?'s':''}.`)
+  } else if (action === 'color') {
+    const colors = Object.keys(NOTE_COLORS).filter(c => c)
+    const color = colors[Math.floor(Math.random() * colors.length)]
+    for (const id of ids) {
+      const node = allNodes.find(n => n.id === id)
+      if (!node) continue
+      node.metadata = { ...(node.metadata || {}), color }
+      if (!isDemo) await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
+    }
+    showToast(`🎨 Color aplicado a ${ids.length} nota${ids.length>1?'s':''}.`)
+  }
+  _selectedNoteIds.clear()
+  _noteSelectionMode = false
+  const bar = document.getElementById('notes-selection-bar')
+  const btn = document.getElementById('notes-select-toggle')
+  if (bar) bar.style.display = 'none'
+  if (btn) { btn.style.background = ''; btn.style.color = '' }
+  renderAll()
+}
+
 
 document.getElementById('ne-save')?.addEventListener('click', async () => {
   const node = allNodes.find(n => n.id === editingNoteId)
@@ -2029,8 +2324,14 @@ document.getElementById('ne-save')?.addEventListener('click', async () => {
   const body  = document.getElementById('ne-body').value.trim()
   const tagsRaw = document.getElementById('ne-tags')?.value || ''
   const tags = tagsRaw.split(/\s+/).filter(t => t.startsWith('#'))
+  // Reminder
+  const rdVal = document.getElementById('ne-reminder-date')?.value || ''
+  const rtVal = document.getElementById('ne-reminder-time')?.value || '09:00'
+  const reminder = rdVal ? `${rdVal}T${rtVal}` : null
   node.content = body
   node.metadata = { ...(node.metadata||{}), label: title, tags }
+  if (reminder) node.metadata.reminder = reminder
+  else delete node.metadata.reminder
   if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
     await supabase.from('nodes').update({ content: body, metadata: node.metadata }).eq('id', editingNoteId)
   }
@@ -2041,14 +2342,12 @@ document.getElementById('ne-save')?.addEventListener('click', async () => {
 document.getElementById('ne-delete')?.addEventListener('click', async () => {
   const node = allNodes.find(n => n.id === editingNoteId)
   if (!node) return
-  // Proyectos require typed confirmation to prevent accidental cascade delete
   if (node.type === 'proyecto') {
-    const projectName = (node.metadata?.label || node.content || '').trim()
-    const typed = window.prompt(`⚠️ Esto eliminará el proyecto "${projectName}" de forma permanente.\n\nEscribe el nombre exacto del proyecto para confirmar:`)
-    if (typed?.trim() !== projectName) { showToast('❌ Nombre incorrecto — operación cancelada.'); return }
-  } else {
-    if (!confirm('¿Eliminar esta nota?')) return
+    closeNoteModal()
+    openDeleteProjectModal(node.id)
+    return
   }
+  if (!confirm('¿Eliminar esta nota?')) return
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
     allNodes = allNodes.filter(n => n.id !== editingNoteId)
   } else {
