@@ -3159,9 +3159,15 @@
           Gastos: <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:4px;">-$5000 pintura @efectivo #tulum</code>
         </div>
       </div>
-      <div class="modal-actions">
-        <button class="btn-ghost" onclick="closeProyectoModal()">Cancelar</button>
-        <button class="btn-primary" onclick="saveProyecto()">Guardar</button>
+      <div class="modal-actions" style="justify-content:space-between;">
+        <button class="btn-danger" onclick="confirmDeleteProyecto()" style="font-size:12px;padding:7px 14px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          Eliminar proyecto
+        </button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-ghost" onclick="closeProyectoModal()">Cancelar</button>
+          <button class="btn-primary" onclick="saveProyecto()">Guardar</button>
+        </div>
       </div>
     </div>
   </div>
@@ -3507,7 +3513,13 @@
 <!-- MODAL: EDITAR NOTA -->
 <div id="note-edit-modal" class="modal-overlay hidden" onclick="if(event.target===this)window.closeNoteModal?.()">
   <div class="modal-box">
-    <div class="modal-title" style="position:relative;">Editar Nota<button id="note-toggle-size" class="btn-ghost" style="position:absolute; top:4px; right:4px; font-size:14px;" onclick="toggleNoteSize()">🔲</button></div>
+    <div class="modal-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <span>Editar Nota</span>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <button id="note-toggle-size" class="btn-ghost" style="width:28px;height:28px;display:grid;place-items:center;font-size:13px;padding:0;" onclick="toggleNoteSize()" title="Expandir / contraer">⤢</button>
+        <button onclick="closeNoteModal()" class="btn-ghost" style="width:28px;height:28px;display:grid;place-items:center;font-size:16px;padding:0;color:var(--text-dim);" title="Cerrar">✕</button>
+      </div>
+    </div>
     <div class="modal-field">
       <label class="modal-label">Título</label>
       <input type="text" id="ne-title" class="modal-input" placeholder="Título de la nota" />

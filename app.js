@@ -1975,6 +1975,256 @@ window.setNoteColor = async (id, color) => {
 // ── Rich text editor builder ─────────────────────────────────────────────────
 const _richEditors = {}
 
+// ── Gutenberg-style block editor for notes ────────────────────────────────────
+function buildNoteBlockEditor(textareaId, toolbarContainerId) {
+  const textarea = document.getElementById(textareaId)
+  if (!textarea || _richEditors[textareaId]) return
+  const toolbarEl = document.getElementById(toolbarContainerId)
+  if (!toolbarEl) return
+
+  // ── Inject document styles once ──────────────────────────
+  if (!document.getElementById('nexus-block-editor-style')) {
+    const style = document.createElement('style')
+    style.id = 'nexus-block-editor-style'
+    style.textContent = `
+      .nbe-wrap { border:1px solid var(--glass-border); border-top:none; border-radius:0 0 10px 10px; background:rgba(255,255,255,0.02); overflow-y:auto; flex:1; min-height:260px; display:flex; flex-direction:column; }
+      .nbe { flex:1; outline:none; padding:28px 40px; font-family:'Georgia','Times New Roman',serif; font-size:15px; line-height:1.85; color:var(--text-primary); caret-color:var(--accent-cyan); min-height:220px; }
+      .nbe:empty::before { content:attr(data-placeholder); color:rgba(255,255,255,0.18); pointer-events:none; font-style:italic; }
+      .nbe h1 { font-size:2em; font-weight:700; margin:.5em 0 .15em; line-height:1.2; color:var(--text-main); font-family:inherit; }
+      .nbe h2 { font-size:1.5em; font-weight:700; margin:.4em 0 .15em; line-height:1.3; color:var(--text-main); font-family:inherit; }
+      .nbe h3 { font-size:1.15em; font-weight:700; margin:.3em 0 .1em; line-height:1.4; color:var(--text-main); font-family:inherit; }
+      .nbe p  { margin:.15em 0; min-height:1.85em; }
+      .nbe blockquote { border-left:3px solid var(--accent-cyan); padding:6px 0 6px 16px; margin:.5em 0; color:var(--text-muted); font-style:italic; }
+      .nbe ul, .nbe ol { padding-left:22px; margin:.3em 0; }
+      .nbe li { margin:.1em 0; }
+      .nbe hr { border:none; border-top:1px solid rgba(255,255,255,0.1); margin:1.2em 0; }
+      .nbe a  { color:var(--accent-cyan); text-decoration:underline; }
+      .nbe code { font-family:'JetBrains Mono',monospace; font-size:0.88em; background:rgba(255,255,255,0.08); padding:1px 5px; border-radius:4px; }
+      .nbe-toolbar { display:flex; align-items:center; gap:2px; flex-wrap:wrap; padding:5px 8px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-bottom:1px solid rgba(255,255,255,0.04); border-radius:8px 8px 0 0; }
+      .nbe-btn { min-width:26px; height:26px; padding:0 5px; border-radius:5px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.09); color:var(--text-muted); cursor:pointer; font-size:11px; font-family:inherit; display:inline-flex; align-items:center; justify-content:center; gap:2px; white-space:nowrap; transition:background .15s; }
+      .nbe-btn:hover { background:rgba(0,246,255,0.1); color:var(--accent-cyan); border-color:rgba(0,246,255,0.25); }
+      .nbe-btn.active { background:rgba(0,246,255,0.15); color:var(--accent-cyan); border-color:rgba(0,246,255,0.3); }
+      .nbe-sep { width:1px; height:18px; background:rgba(255,255,255,0.1); margin:0 3px; flex-shrink:0; }
+      .nbe-slash-menu { display:none; position:fixed; z-index:9999; background:#1a1e2e; border:1px solid rgba(0,246,255,0.25); border-radius:10px; padding:6px; min-width:230px; box-shadow:0 10px 40px rgba(0,0,0,0.6); }
+      .nbe-slash-item { display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:7px; cursor:pointer; transition:background .12s; }
+      .nbe-slash-item:hover, .nbe-slash-item.selected { background:rgba(0,246,255,0.09); }
+      .nbe-slash-icon { width:30px; height:30px; border-radius:7px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); display:grid; place-items:center; font-size:11px; font-weight:700; color:var(--text-muted); flex-shrink:0; }
+      .nbe-sel-toolbar { display:none; position:fixed; z-index:9999; background:#1a1e2e; border:1px solid rgba(0,246,255,0.2); border-radius:8px; padding:4px 5px; gap:2px; box-shadow:0 4px 20px rgba(0,0,0,0.5); align-items:center; }
+      .nbe-sel-btn { width:24px; height:24px; border-radius:4px; background:rgba(255,255,255,0.05); border:none; color:var(--text-muted); cursor:pointer; font-size:11px; font-family:inherit; display:grid; place-items:center; }
+      .nbe-sel-btn:hover { background:rgba(0,246,255,0.12); color:var(--accent-cyan); }
+    `
+    document.head.appendChild(style)
+  }
+
+  // ── Toolbar ───────────────────────────────────────────────
+  toolbarEl.className = 'nbe-toolbar'
+  toolbarEl.innerHTML = ''
+
+  const BLOCK_OPTS = [
+    { val:'p',          txt:'¶ Párrafo' },
+    { val:'h1',         txt:'H1 — Título grande' },
+    { val:'h2',         txt:'H2 — Título mediano' },
+    { val:'h3',         txt:'H3 — Título pequeño' },
+    { val:'blockquote', txt:'" Cita' },
+  ]
+  const blockSel = document.createElement('select')
+  blockSel.className = 'nbe-btn'
+  blockSel.style.cssText = 'padding:0 6px;font-size:11px;cursor:pointer;border-radius:5px;height:26px;min-width:auto;width:auto;'
+  BLOCK_OPTS.forEach(o => {
+    const opt = document.createElement('option')
+    opt.value = o.val; opt.textContent = o.txt
+    blockSel.appendChild(opt)
+  })
+  blockSel.addEventListener('change', () => {
+    editor.focus()
+    document.execCommand('formatBlock', false, blockSel.value)
+    syncBlockTypeSelect()
+  })
+  toolbarEl.appendChild(blockSel)
+
+  const sep0 = document.createElement('div'); sep0.className = 'nbe-sep'; toolbarEl.appendChild(sep0)
+
+  const INLINE = [
+    { cmd:'bold',              html:'<b>B</b>',        title:'Negrita (Ctrl+B)' },
+    { cmd:'italic',            html:'<i>I</i>',        title:'Cursiva (Ctrl+I)' },
+    { cmd:'underline',         html:'<u>U</u>',        title:'Subrayado (Ctrl+U)' },
+    { cmd:'strikeThrough',     html:'<s>S</s>',        title:'Tachado' },
+    { sep: true },
+    { cmd:'insertUnorderedList', html:'• ≡',           title:'Lista de viñetas' },
+    { cmd:'insertOrderedList',   html:'1. ≡',          title:'Lista numerada' },
+    { sep: true },
+    { cmd:'insertHorizontalRule', html:'— —',          title:'Separador horizontal' },
+    { sep: true },
+    { cmd:'createLink',        html:'🔗',              title:'Hipervínculo', prompt:'URL del enlace:' },
+  ]
+  INLINE.forEach(t => {
+    if (t.sep) { const s = document.createElement('div'); s.className = 'nbe-sep'; toolbarEl.appendChild(s); return }
+    const btn = document.createElement('button')
+    btn.type = 'button'; btn.className = 'nbe-btn'; btn.title = t.title; btn.innerHTML = t.html
+    btn.addEventListener('mousedown', e => {
+      e.preventDefault(); editor.focus()
+      if (t.prompt) { const v = prompt(t.prompt); if (v) document.execCommand(t.cmd, false, v) }
+      else document.execCommand(t.cmd, false, null)
+    })
+    toolbarEl.appendChild(btn)
+  })
+
+  function syncBlockTypeSelect() {
+    try {
+      const tag = document.queryCommandValue('formatBlock').toLowerCase()
+      const match = BLOCK_OPTS.find(o => o.val === tag)
+      if (match) blockSel.value = tag
+      else blockSel.value = 'p'
+    } catch(e) {}
+  }
+
+  // ── Editor container ──────────────────────────────────────
+  const wrap = document.createElement('div'); wrap.className = 'nbe-wrap'
+  const editor = document.createElement('div')
+  editor.className = 'nbe'; editor.contentEditable = 'true'
+  editor.setAttribute('data-placeholder', 'Escribe algo... o usa / para insertar un bloque')
+  editor.innerHTML = textarea.value || ''
+  wrap.appendChild(editor)
+
+  textarea.style.display = 'none'
+  textarea.parentNode.insertBefore(toolbarEl, textarea)
+  textarea.parentNode.insertBefore(wrap, textarea.nextSibling)
+  _richEditors[textareaId] = editor
+
+  // ── Slash command menu ────────────────────────────────────
+  const slashMenu = document.createElement('div'); slashMenu.className = 'nbe-slash-menu'
+  const SLASH_ITEMS = [
+    { type:'p',           icon:'¶',   label:'Párrafo',         desc:'Texto normal' },
+    { type:'h1',          icon:'H1',  label:'Título 1',        desc:'Encabezado grande' },
+    { type:'h2',          icon:'H2',  label:'Título 2',        desc:'Encabezado mediano' },
+    { type:'h3',          icon:'H3',  label:'Título 3',        desc:'Encabezado pequeño' },
+    { type:'blockquote',  icon:'"',   label:'Cita',            desc:'Texto destacado en bloque' },
+    { type:'ul',          icon:'•',   label:'Lista viñetas',   desc:'Lista con puntos' },
+    { type:'ol',          icon:'1.',  label:'Lista numerada',  desc:'Lista con números' },
+    { type:'hr',          icon:'—',   label:'Separador',       desc:'Línea horizontal divisoria' },
+  ]
+  let slashActive = false
+  SLASH_ITEMS.forEach((item, i) => {
+    const row = document.createElement('div'); row.className = 'nbe-slash-item'; row.dataset.idx = i
+    row.innerHTML = `<div class="nbe-slash-icon">${item.icon}</div><div><div style="font-size:13px;color:var(--text-main);font-weight:600;">${item.label}</div><div style="font-size:11px;color:var(--text-dim);">${item.desc}</div></div>`
+    row.addEventListener('mousedown', e => {
+      e.preventDefault()
+      applySlashType(item.type)
+    })
+    slashMenu.appendChild(row)
+  })
+  document.body.appendChild(slashMenu)
+
+  function showSlashMenu() {
+    const sel = window.getSelection()
+    if (!sel?.rangeCount) return
+    const rect = sel.getRangeAt(0).getBoundingClientRect()
+    slashMenu.style.display = 'block'
+    const menuH = 280
+    const spaceBelow = window.innerHeight - rect.bottom - 10
+    slashMenu.style.top = spaceBelow > menuH ? (rect.bottom + 4) + 'px' : (rect.top - menuH - 4) + 'px'
+    slashMenu.style.left = Math.min(rect.left, window.innerWidth - 250) + 'px'
+    slashActive = true
+  }
+  function hideSlashMenu() { slashMenu.style.display = 'none'; slashActive = false }
+
+  function applySlashType(type) {
+    hideSlashMenu()
+    editor.focus()
+    // Remove the '/' that triggered the menu
+    const sel = window.getSelection()
+    if (sel?.rangeCount) {
+      const range = sel.getRangeAt(0)
+      const node = range.startContainer
+      if (node.nodeType === Node.TEXT_NODE && node.textContent.startsWith('/')) {
+        node.textContent = node.textContent.slice(1)
+        range.setStart(node, 0); range.collapse(true)
+        sel.removeAllRanges(); sel.addRange(range)
+      }
+    }
+    if (type === 'ul') document.execCommand('insertUnorderedList', false, null)
+    else if (type === 'ol') document.execCommand('insertOrderedList', false, null)
+    else if (type === 'hr') document.execCommand('insertHorizontalRule', false, null)
+    else document.execCommand('formatBlock', false, type)
+    textarea.value = editor.innerHTML
+    syncBlockTypeSelect()
+  }
+
+  // ── Floating selection toolbar ────────────────────────────
+  const selBar = document.createElement('div'); selBar.className = 'nbe-sel-toolbar'
+  const SEL_BTNS = [
+    { cmd:'bold',      html:'<b>B</b>' },
+    { cmd:'italic',    html:'<i>I</i>' },
+    { cmd:'underline', html:'<u>U</u>' },
+    { cmd:'strikeThrough', html:'<s>S</s>' },
+    { sep:true },
+    { cmd:'createLink', html:'🔗', prompt:'URL:' },
+    { cmd:'unlink',     html:'<span style="font-size:10px;">✕🔗</span>', title:'Quitar enlace' },
+  ]
+  SEL_BTNS.forEach(t => {
+    if (t.sep) { const s = document.createElement('div'); s.className='nbe-sep'; selBar.appendChild(s); return }
+    const btn = document.createElement('button'); btn.type='button'; btn.className='nbe-sel-btn'; btn.innerHTML=t.html; if(t.title) btn.title=t.title
+    btn.addEventListener('mousedown', e => {
+      e.preventDefault()
+      if (t.prompt) { const v = prompt(t.prompt); if (v) document.execCommand(t.cmd, false, v) }
+      else document.execCommand(t.cmd, false, null)
+    })
+    selBar.appendChild(btn)
+  })
+  document.body.appendChild(selBar)
+
+  let _selTimer
+  function updateSelBar() {
+    clearTimeout(_selTimer)
+    _selTimer = setTimeout(() => {
+      const sel = window.getSelection()
+      if (sel && !sel.isCollapsed && sel.toString().trim().length && editor.contains(sel.anchorNode)) {
+        const rect = sel.getRangeAt(0).getBoundingClientRect()
+        selBar.style.display = 'flex'
+        selBar.style.left = rect.left + 'px'
+        selBar.style.top  = (rect.top - 42) + 'px'
+      } else {
+        selBar.style.display = 'none'
+      }
+    }, 60)
+  }
+
+  editor.addEventListener('mouseup', updateSelBar)
+  editor.addEventListener('keyup',   updateSelBar)
+
+  document.addEventListener('selectionchange', () => {
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed || !editor.contains(sel.anchorNode)) {
+      clearTimeout(_selTimer); _selTimer = setTimeout(() => { selBar.style.display = 'none' }, 200)
+    }
+  })
+
+  // ── Input & keyboard handlers ─────────────────────────────
+  editor.addEventListener('input', () => {
+    textarea.value = editor.innerHTML
+    syncBlockTypeSelect()
+    // Slash detection
+    const sel = window.getSelection()
+    if (!sel?.rangeCount) return
+    const node = sel.getRangeAt(0).startContainer
+    if (node.nodeType === Node.TEXT_NODE && node.textContent === '/') showSlashMenu()
+    else if (slashActive && !node.textContent?.startsWith('/')) hideSlashMenu()
+  })
+
+  editor.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && slashActive) { hideSlashMenu(); e.preventDefault(); return }
+    textarea.value = editor.innerHTML
+    syncBlockTypeSelect()
+  })
+
+  editor.addEventListener('focus', () => syncBlockTypeSelect())
+  editor.addEventListener('blur',  () => { textarea.value = editor.innerHTML; hideSlashMenu(); selBar.style.display = 'none' })
+
+  // Store refs for cleanup
+  editor._slashMenu = slashMenu
+  editor._selBar = selBar
+}
+
 function buildRichEditor(textareaId, toolbarContainerId) {
   const textarea = document.getElementById(textareaId)
   if (!textarea || _richEditors[textareaId]) return
@@ -2089,16 +2339,12 @@ window.openNoteEdit = (id) => {
   renderAttachments(node.metadata.images || [], 'note')
   const noteOverlay = document.getElementById('note-edit-modal')
   noteOverlay.classList.remove('hidden')
-  // Initialize rich editor (idempotent)
-  buildRichEditor('ne-body', 'ne-toolbar')
+  // Initialize block editor (idempotent — only created once)
+  buildNoteBlockEditor('ne-body', 'ne-toolbar')
   syncRichEditor('ne-body')
-  // Open fullscreen by default for comfortable editing
-  const modalBox = noteOverlay.querySelector('.modal-box')
-  if (modalBox && !modalBox.classList.contains('fullscreen')) {
-    modalBox.classList.add('fullscreen')
-    const btn = document.getElementById('note-toggle-size')
-    if (btn) btn.textContent = '🗗'
-  }
+  // Ensure toggle button shows correct state
+  const fsBtn = document.getElementById('note-toggle-size')
+  if (fsBtn) fsBtn.textContent = '⤢'
 }
 
 window.closeNoteModal = () => {
@@ -2106,7 +2352,7 @@ window.closeNoteModal = () => {
   const modalBox = document.querySelector('#note-edit-modal .modal-box')
   if (modalBox) modalBox.classList.remove('fullscreen')
   const fsBtn = document.getElementById('note-toggle-size')
-  if (fsBtn) fsBtn.textContent = '🔲'
+  if (fsBtn) fsBtn.textContent = '⤢'
   document.getElementById('note-edit-modal').classList.add('hidden')
   const panel = document.getElementById('transform-panel')
   if (panel) panel.style.display = 'none'
@@ -2120,11 +2366,8 @@ function toggleNoteSize() {
   if (!modalBox) return
   const isFs = modalBox.classList.toggle('fullscreen')
   const btn = document.getElementById('note-toggle-size')
-  if (btn) btn.textContent = isFs ? '🗗' : '🔲'
-  // Reset inline styles when exiting fullscreen so CSS takes over cleanly
+  if (btn) btn.textContent = isFs ? '⤡' : '⤢'
   if (!isFs) {
-    const body = document.getElementById('ne-body')
-    if (body) { body.style.flex = ''; body.style.height = ''; body.style.minHeight = ''; body.style.resize = '' }
     modalBox.style.display = ''
     modalBox.style.flexDirection = ''
   }
@@ -2175,22 +2418,38 @@ window.exportNote = (mode) => {
   const body  = document.getElementById('ne-body')?.value  || node.content
 
   if (mode === 'print') {
+    // Get the rich HTML from the block editor if available, else fall back to textarea
+    const editorEl = _richEditors['ne-body']
+    const richHtml = editorEl ? editorEl.innerHTML : body.replace(/\n/g, '<br>')
     const w = window.open('', '_blank')
     w.document.write(`<!DOCTYPE html><html><head><title>${esc(title)}</title>
       <style>
-        body{font-family:system-ui,sans-serif;max-width:640px;margin:48px auto;color:#111;line-height:1.7;}
-        h1{font-size:22px;margin-bottom:8px;}
-        pre{white-space:pre-wrap;font-family:inherit;}
-        .meta{font-size:12px;color:#888;margin-bottom:24px;}
-        @media print{body{margin:24px;}}
-      </style></head><body>
-      <h1>${esc(title)}</h1>
-      <div class="meta">Nexus OS — ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}</div>
-      <pre>${esc(body)}</pre>
+        *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+        body { font-family:'Georgia','Times New Roman',serif; max-width:680px; margin:48px auto; color:#111; line-height:1.8; font-size:15px; background:#fff; }
+        .doc-title { font-size:26px; font-weight:700; margin-bottom:4px; color:#000; }
+        .doc-meta { font-size:12px; color:#888; margin-bottom:32px; padding-bottom:16px; border-bottom:1px solid #e5e5e5; }
+        .doc-body h1 { font-size:2em; font-weight:700; margin:.6em 0 .2em; line-height:1.2; }
+        .doc-body h2 { font-size:1.45em; font-weight:700; margin:.5em 0 .2em; line-height:1.3; }
+        .doc-body h3 { font-size:1.15em; font-weight:700; margin:.4em 0 .15em; line-height:1.4; }
+        .doc-body p  { margin:.3em 0; min-height:1.4em; }
+        .doc-body blockquote { border-left:3px solid #888; padding-left:16px; margin:.6em 0; color:#555; font-style:italic; }
+        .doc-body ul, .doc-body ol { padding-left:22px; margin:.4em 0; }
+        .doc-body li { margin:.15em 0; }
+        .doc-body hr { border:none; border-top:1px solid #ddd; margin:1.4em 0; }
+        .doc-body a  { color:#0066cc; text-decoration:underline; }
+        .doc-body code { font-family:'Courier New',monospace; font-size:0.88em; background:#f5f5f5; padding:1px 5px; border-radius:3px; }
+        .doc-body b, .doc-body strong { font-weight:700; }
+        .doc-body i, .doc-body em { font-style:italic; }
+        @media print { body { margin:24px; } }
+      </style>
+    </head><body>
+      <div class="doc-title">${esc(title)}</div>
+      <div class="doc-meta">Nexus OS · ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}</div>
+      <div class="doc-body">${richHtml}</div>
     </body></html>`)
     w.document.close()
     w.focus()
-    setTimeout(() => w.print(), 400)
+    setTimeout(() => w.print(), 500)
   } else if (mode === 'markdown') {
     const md = `# ${title}\n\n${body}`
     navigator.clipboard.writeText(md).then(() => {
@@ -11098,6 +11357,21 @@ function _loadCoverFile(file) {
 }
 
 window.closeProyectoModal = () => document.getElementById('proyecto-modal').classList.add('hidden')
+
+window.confirmDeleteProyecto = () => {
+  const id = currentProyectoId
+  if (!id) return
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  const projectName = (node.metadata?.label || node.content || '').trim()
+  const typed = window.prompt(`Para eliminar, escribe exactamente el nombre del proyecto:\n\n"${projectName}"`)
+  if (typed?.trim() !== projectName) {
+    if (typed !== null) showToast('❌ Nombre incorrecto — operación cancelada.')
+    return
+  }
+  closeProyectoModal()
+  openDeleteProjectModal(id)
+}
 
 window.saveProyecto = async () => {
   if (!currentProyectoId) return
