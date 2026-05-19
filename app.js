@@ -8525,273 +8525,429 @@ function _renderProjTab(tab, d) {
 function _renderProjResumen(d) {
   const { p, m, budget, rCfg, tagStr, projSlug, milestonePct, tareas,
           cots, aceptadas, pendientes, comprometido, pagado, pendientePago,
-          sinComprometer, overBudget, disponible, pct, gaugeColor, provMap } = d
+          sinComprometer, overBudget, disponible, pct, gaugeColor, provMap, pagos } = d
   const _s = (fn) => { try { return fn() } catch(e) { return '' } }
-  const HCFG = { on_track:{emoji:'🟢',label:'En curso',color:'#4ade80'}, at_risk:{emoji:'🟡',label:'En riesgo',color:'#fbbf24'}, off_track:{emoji:'🔴',label:'Atrasado',color:'#f87171'}, on_hold:{emoji:'🔵',label:'Pausado',color:'#60a5fa'}, done:{emoji:'🟣',label:'Terminado',color:'#a78bfa'} }
-  const STAGES = [{v:'planning',l:'📐 Planificación'},{v:'active',l:'🚀 En ejecución'},{v:'on_hold',l:'⏸️ Pausado'},{v:'done',l:'✅ Terminado'}]
   const STATUS_CFG = { pendiente:{l:'Pendiente',c:'#94a3b8'}, aceptada:{l:'Aceptada',c:'#4ade80'}, rechazada:{l:'Rechazada',c:'#f87171'}, en_proceso:{l:'En proceso',c:'#60a5fa'}, pagada:{l:'Pagada',c:'#a78bfa'}, parcial:{l:'Parcial',c:'#fbbf24'} }
   const h   = m.health || {}
   const hc  = HCFG[h.status] || null
   const mils = m.milestones || []
   const milsDone = mils.filter(ms => ms.is_reached).length
   const today = new Date().toISOString().split('T')[0]
-  const displayPct = h.progress != null ? h.progress : milestonePct
-  const pctSource  = h.progress != null ? 'manual' : (milestonePct != null ? 'hitos' : null)
-  const barColor   = hc?.color || (displayPct >= 75 ? '#4ade80' : displayPct >= 40 ? '#fbbf24' : '#00f6ff')
-  const members    = m.members || []
+  const members = m.members || []
   const fmtM = (n) => '$' + (n||0).toLocaleString('es-MX',{maximumFractionDigits:0})
+
+  // ── SVG icons ──────────────────────────────────────────────────────────────
+  const _svgClock   = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`
+  const _svgDollar  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>`
+  const _svgTarget  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`
+  const _svgActiv   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`
+  const _svgAlert2  = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+  const _svgFile    = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`
+  const _svgUsers2  = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`
+  const _svgCheck2  = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
+  const _svgBriefcase=`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>`
+  const _svgBoard   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`
 
   // ── Alertas ────────────────────────────────────────────────────────────────
   const alerts = []
-  if (overBudget) alerts.push({ icon:'🔴', msg:`Presupuesto excedido en ${fmtM(comprometido - budget)}`, color:'#f87171' })
+  if (overBudget) alerts.push({ svg:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`, msg:`Presupuesto excedido en ${fmtM(comprometido - budget)}`, color:'#f87171' })
   const overdueHitos = mils.filter(ms => !ms.is_reached && ms.deadline && ms.deadline < today)
-  if (overdueHitos.length > 0) alerts.push({ icon:'⚠️', msg:`${overdueHitos.length} hito${overdueHitos.length>1?'s':''} vencido${overdueHitos.length>1?'s':''}`, color:'#fbbf24' })
-  // Próximos pagos de cotizaciones (abonos sin fecha futura > 7 días)
+  if (overdueHitos.length > 0) alerts.push({ svg:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`, msg:`${overdueHitos.length} hito${overdueHitos.length>1?'s':''} vencido${overdueHitos.length>1?'s':''}`, color:'#fbbf24' })
   const in7d = new Date(); in7d.setDate(in7d.getDate() + 7)
   const in7str = in7d.toISOString().split('T')[0]
   const upcomingPayments = aceptadas.flatMap(c => {
     const abonos = c.metadata?.abonos||[]
-    const pendAbs = abonos.filter(a => a.due_date && a.due_date <= in7str && !a.paid_at)
-    return pendAbs.map(a => ({ cot:c, abono:a }))
+    return abonos.filter(a => a.due_date && a.due_date <= in7str && !a.paid_at).map(a => ({ cot:c, abono:a }))
   })
-  if (upcomingPayments.length > 0) alerts.push({ icon:'📅', msg:`${upcomingPayments.length} pago${upcomingPayments.length>1?'s':''} próximo${upcomingPayments.length>1?'s':''} esta semana`, color:'#60a5fa' })
-  if (pendientePago > 0 && comprometido > 0) alerts.push({ icon:'💸', msg:`${fmtM(pendientePago)} pendiente de pago en cotizaciones activas`, color:'#fb923c' })
+  if (upcomingPayments.length > 0) alerts.push({ svg:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`, msg:`${upcomingPayments.length} pago${upcomingPayments.length>1?'s':''} próximo${upcomingPayments.length>1?'s':''} esta semana`, color:'#60a5fa' })
+  if (pendientePago > 0 && comprometido > 0) alerts.push({ svg:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>`, msg:`${fmtM(pendientePago)} pendiente en cotizaciones activas`, color:'#fb923c' })
 
   const alertsHTML = alerts.length ? `
     <div style="margin-bottom:16px;display:flex;flex-direction:column;gap:6px;">
-      ${alerts.map(a => `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${a.color}12;border:1px solid ${a.color}35;border-radius:10px;">
-        <span style="font-size:16px;flex-shrink:0;">${a.icon}</span>
+      ${alerts.map(a => `<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:${a.color}12;border:1px solid ${a.color}35;border-radius:10px;">
+        <span style="color:${a.color};display:flex;flex-shrink:0;">${a.svg}</span>
         <span style="font-size:12px;font-weight:600;color:${a.color};">${a.msg}</span>
       </div>`).join('')}
     </div>` : ''
 
-  // ── KPIs financieros ───────────────────────────────────────────────────────
-  const kpisHTML = budget > 0 || comprometido > 0 ? `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">💰 FINANCIERO</span>
-        <button onclick="switchProjTab('finanzas')" style="font-size:11px;color:#fb923c;background:none;border:1px solid rgba(251,146,60,0.3);border-radius:5px;padding:2px 8px;cursor:pointer;">Ver detalle →</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:14px;">
-        ${[
-          { label:'Presupuesto', val:budget, color:'#a78bfa', icon:'💼' },
-          { label:'Comprometido', val:comprometido, color:'#fb923c', icon:'📋' },
-          { label:'Pagado', val:pagado, color:'#4ade80', icon:'✅' },
-          { label:'Por pagar', val:pendientePago, color:'#f87171', icon:'⏳' },
-          ...(disponible != null ? [{ label:disponible>=0?'Disponible':'Sobregirado', val:Math.abs(disponible), color:disponible>=0?'#2dd4bf':'#f87171', icon:disponible>=0?'🏦':'🚨' }] : []),
-        ].map(k => `<div style="background:${k.color}10;border:1px solid ${k.color}28;border-radius:10px;padding:10px 8px;text-align:center;">
-          <div style="font-size:15px;margin-bottom:3px;">${k.icon}</div>
-          <div style="font-size:10px;color:var(--text-muted);font-weight:600;white-space:nowrap;">${k.label}</div>
-          <div style="font-size:12px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;margin-top:2px;">${fmtM(k.val)}</div>
+  // ── HERO ROW: Pipeline de Hitos + Semáforo de Salud ───────────────────────
+  const heroHTML = _s(() => {
+    // ─ Milestone Pipeline (left) ─────────────────────────────────────────────
+    const milC = 2 * Math.PI * 40  // r=40, C≈251
+    const milPct2 = mils.length > 0 ? Math.round(milsDone / mils.length * 100) : 0
+    const milLen  = (milPct2 / 100 * milC).toFixed(1)
+    const milColor = milPct2 >= 75 ? '#4ade80' : milPct2 >= 40 ? '#fbbf24' : milPct2 > 0 ? '#00f6ff' : '#64748b'
+    const nextMil  = mils.find(ms => !ms.is_reached)
+
+    const ringHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div style="position:relative;width:100px;height:100px;">
+          <svg viewBox="0 0 100 100" width="100" height="100">
+            <circle cx="50" cy="50" r="40" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10"/>
+            <circle cx="50" cy="50" r="40" fill="none" stroke="${milColor}" stroke-width="10" stroke-linecap="round"
+              stroke-dasharray="${milLen} ${milC.toFixed(1)}" transform="rotate(-90 50 50)" style="transition:stroke-dasharray .7s;"/>
+            <text x="50" y="44" text-anchor="middle" fill="#fff" font-size="18" font-weight="800" font-family="JetBrains Mono,monospace">${milsDone}</text>
+            <text x="50" y="57" text-anchor="middle" fill="#64748b" font-size="9" font-weight="600">de ${mils.length}</text>
+            <text x="50" y="68" text-anchor="middle" fill="${milColor}" font-size="8" font-weight="700">HITOS</text>
+          </svg>
+        </div>
+        ${nextMil ? `<div style="font-size:10px;color:var(--text-dim);text-align:center;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(nextMil.name)}">→ ${esc(nextMil.name)}</div>` : mils.length > 0 ? `<div style="font-size:10px;color:#4ade80;font-weight:700;">✓ Todos completos</div>` : ''}
+      </div>`
+
+    const dotsHTML = mils.length > 0 ? `
+      <div style="display:flex;align-items:center;gap:0;overflow-x:auto;padding:4px 0;flex:1;min-width:0;">
+        ${mils.map((ms, i) => {
+          const isNext = !ms.is_reached && mils.slice(0,i).every(x=>x.is_reached)
+          const isOverdue = !ms.is_reached && ms.deadline && ms.deadline < today
+          const dotC = ms.is_reached ? '#4ade80' : isOverdue ? '#f87171' : isNext ? '#00f6ff' : '#334155'
+          const dotBg = ms.is_reached ? '#4ade80' : 'transparent'
+          const line = i < mils.length-1 ? `<div style="flex:1;height:2px;background:${ms.is_reached?'#4ade8055':'rgba(255,255,255,0.07)'};min-width:8px;max-width:32px;"></div>` : ''
+          return `<div style="display:flex;align-items:center;gap:0;flex-shrink:0;">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:3px;" title="${esc(ms.name)}${ms.deadline?' — '+ms.deadline:''}">
+              <div style="width:14px;height:14px;border-radius:50%;border:2px solid ${dotC};background:${dotBg};display:grid;place-items:center;flex-shrink:0;">
+                ${ms.is_reached ? `<svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="4"><polyline points="20 6 9 17 4 12"/></svg>` : ''}
+              </div>
+              ${ms.deadline ? `<div style="font-size:7px;color:${dotC};white-space:nowrap;">${ms.deadline.slice(5)}</div>` : ''}
+            </div>
+            ${line}
+          </div>`
+        }).join('')}
+      </div>` : `<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--text-dim);font-size:12px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="21 16 21 8 12 2 3 8 3 16 12 22 21 16"/></svg>
+        Sin hitos definidos
+      </div>`
+
+    const pipelineCard = `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;flex:1.4;min-width:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2dd4bf" stroke-width="2" stroke-linecap="round"><polygon points="21 16 21 8 12 2 3 8 3 16 12 22 21 16"/></svg>
+            <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Pipeline de Hitos</span>
+            ${mils.length ? `<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:${milColor}18;color:${milColor};font-weight:700;">${milPct2}%</span>` : ''}
+          </div>
+          <button onclick="openMilestoneForm('${p.id}')" style="font-size:10px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:6px;padding:2px 8px;cursor:pointer;font-weight:600;">+ Hito</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;">
+          ${ringHTML}
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;">
+            ${dotsHTML}
+            ${mils.length > 0 ? `
+              <div style="display:flex;gap:8px;margin-top:4px;">
+                <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text-dim);"><div style="width:8px;height:8px;border-radius:50%;background:#4ade80;"></div>Completado</div>
+                <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text-dim);"><div style="width:8px;height:8px;border-radius:50%;background:#00f6ff;"></div>Siguiente</div>
+                <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text-dim);"><div style="width:8px;height:8px;border-radius:50%;background:#f87171;"></div>Vencido</div>
+              </div>` : ''}
+          </div>
+        </div>
+      </div>`
+
+    // ─ Semáforo de Salud (right) ─────────────────────────────────────────────
+    // 1. TIEMPO
+    let tColor = '#64748b', tLabel = 'Sin fecha'
+    if (m.deadline) {
+      const daysLeft = Math.ceil((new Date(m.deadline) - new Date(today)) / 86400000)
+      if (daysLeft < 0)        { tColor = '#f87171'; tLabel = `Venció hace ${Math.abs(daysLeft)}d` }
+      else if (daysLeft <= 30) { tColor = '#fbbf24'; tLabel = `${daysLeft} días restantes` }
+      else                      { tColor = '#4ade80'; tLabel = `${daysLeft} días restantes` }
+    } else if (h.status === 'off_track') { tColor = '#f87171'; tLabel = 'Atrasado' }
+    else if (h.status === 'at_risk')    { tColor = '#fbbf24'; tLabel = 'En riesgo' }
+    else if (h.status === 'on_track')   { tColor = '#4ade80'; tLabel = 'En plazo' }
+
+    // 2. PRESUPUESTO
+    let bColor = '#64748b', bLabel = 'Sin presupuesto'
+    if (budget > 0) {
+      if (overBudget)       { bColor = '#f87171'; bLabel = `${pct}% — Excedido` }
+      else if (pct >= 80)   { bColor = '#fbbf24'; bLabel = `${pct}% comprometido` }
+      else                  { bColor = '#4ade80'; bLabel = `${pct}% comprometido` }
+    }
+
+    // 3. ALCANCE
+    let aColor = '#64748b', aLabel = 'Sin hitos'
+    if (mils.length > 0) {
+      if (milPct2 >= 60)     { aColor = '#4ade80'; aLabel = `${milsDone}/${mils.length} completados` }
+      else if (milPct2 >= 25){ aColor = '#fbbf24'; aLabel = `${milsDone}/${mils.length} completados` }
+      else                   { aColor = '#f87171'; aLabel = `${milsDone}/${mils.length} completados` }
+    } else if (h.status) {
+      const hColors = { on_track:'#4ade80', at_risk:'#fbbf24', off_track:'#f87171', on_hold:'#60a5fa', done:'#a78bfa' }
+      const hLabels = { on_track:'En curso', at_risk:'En riesgo', off_track:'Atrasado', on_hold:'Pausado', done:'Terminado' }
+      aColor = hColors[h.status] || '#64748b'
+      aLabel = hLabels[h.status] || 'Sin datos'
+    }
+
+    const _indicator = (icon, label, title, color, detail) => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${color}09;border:1px solid ${color}22;border-radius:10px;">
+        <div style="color:${color};display:flex;flex-shrink:0;">${icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1px;">${title}</div>
+          <div style="font-size:12px;font-weight:700;color:${color};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${detail}</div>
+        </div>
+        <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;box-shadow:0 0 6px ${color}88;"></div>
+      </div>`
+
+    const healthNote = h.note ? `<div style="font-size:11px;color:var(--text-muted);font-style:italic;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:8px;border-left:2px solid rgba(255,255,255,0.1);margin-top:4px;">"${esc(h.note)}"</div>` : ''
+
+    const saludCard = `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;flex:1;min-width:180px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:7px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Salud del Proyecto</span>
+          </div>
+          <button onclick="openHealthModal('${p.id}')" style="font-size:10px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;padding:2px 8px;cursor:pointer;font-weight:600;">Editar</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          ${_indicator(_svgClock,  'clock',  'Tiempo',      tColor, tLabel)}
+          ${_indicator(_svgDollar, 'dollar', 'Presupuesto', bColor, bLabel)}
+          ${_indicator(_svgTarget, 'target', 'Alcance',     aColor, aLabel)}
+        </div>
+        ${healthNote}
+      </div>`
+
+    return `<div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;">${pipelineCard}${saludCard}</div>`
+  })
+
+  // ── KPI Financial Strip ────────────────────────────────────────────────────
+  const kpiStripHTML = _s(() => {
+    if (budget === 0 && comprometido === 0) return ''
+    const kpis = [
+      { icon: _svgBriefcase, label:'Presupuesto', val:budget,        color:'#a78bfa', show: budget > 0 },
+      { icon: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>`,
+                 label:'Comprometido', val:comprometido, color:'#fb923c', show: true },
+      { icon: _svgCheck2, label:'Pagado',        val:pagado,         color:'#4ade80', show: true },
+      { icon: _svgClock,  label:'Por Pagar',     val:pendientePago,  color: pendientePago > 0 ? '#f87171' : '#64748b', show: true },
+    ].filter(k => k.show)
+    return `<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+      ${kpis.map(k => `
+        <div style="flex:1;min-width:110px;background:var(--surface);border:1px solid ${k.color}28;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;">
+          <div style="color:${k.color};flex-shrink:0;">${k.icon}</div>
+          <div style="min-width:0;">
+            <div style="font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);">${k.label}</div>
+            <div style="font-size:14px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;margin-top:1px;">${fmtM(k.val)}</div>
+          </div>
         </div>`).join('')}
-      </div>
-      ${budget > 0 ? `
-        <div style="margin-bottom:6px;">
-          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;"><span>Comprometido vs Presupuesto</span><span style="font-weight:700;color:${gaugeColor};">${pct}%</span></div>
-          <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;position:relative;">
-            <div style="height:100%;width:${Math.min(pct,100)}%;background:${gaugeColor};border-radius:4px;transition:width .6s;"></div>
-          </div>
-        </div>
-        ${comprometido > 0 ? (() => {
-          const paidPct = Math.min(100, Math.round(pagado/comprometido*100))
-          return `<div>
-            <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:4px;"><span>Pagado vs Comprometido</span><span style="font-weight:700;color:#4ade80;">${paidPct}%</span></div>
-            <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
-              <div style="height:100%;width:${paidPct}%;background:#4ade80;border-radius:4px;transition:width .6s;"></div>
-            </div>
-          </div>`
-        })() : ''}` : `<div style="font-size:12px;color:var(--text-dim);">Sin presupuesto definido — edita el proyecto para agregar presupuesto.</div>`}
-    </div>` : ''
-
-  // ── Cotizaciones activas ───────────────────────────────────────────────────
-  const activeCots = aceptadas.filter(c => !['pagada','rechazada'].includes(c.metadata?.status))
-  const cotsHTML = aceptadas.length > 0 ? `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">📋 COTIZACIONES</span>
-          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(251,146,60,0.12);color:#fb923c;font-weight:700;">${aceptadas.length} activa${aceptadas.length>1?'s':''}</span>
-          ${pendientes.length > 0 ? `<span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(148,163,184,0.12);color:#94a3b8;font-weight:700;">${pendientes.length} pendiente${pendientes.length>1?'s':''}</span>` : ''}
-        </div>
-        <button onclick="switchProjTab('finanzas')" style="font-size:11px;color:#fb923c;background:none;border:none;cursor:pointer;">Ver todas →</button>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        ${aceptadas.slice(0,5).map(c => {
-          const cm = c.metadata||{}
-          const abonos = cm.abonos||[]
-          const cotTotal = +(cm.amount||0)
-          const cotPagado = abonos.reduce((s,a)=>s+(+a.amount||0),0)
-          const cotPct = cotTotal>0 ? Math.min(100,Math.round(cotPagado/cotTotal*100)) : 0
-          const stCfg = STATUS_CFG[cm.status||'pendiente']
-          const prov = cm.provider_id ? allNodes.find(n=>n.id===cm.provider_id) : null
-          const provName = prov ? (prov.metadata?.name||prov.content) : ''
-          return `<div style="padding:10px 12px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-left:3px solid ${stCfg.c};border-radius:9px;cursor:pointer;" onclick="openCotizacionModal('${c.id}')">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-              <span style="flex:1;font-size:12px;font-weight:700;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(cm.label||c.content)}</span>
-              <span style="font-size:9px;padding:2px 7px;border-radius:4px;background:${stCfg.c}22;color:${stCfg.c};font-weight:700;white-space:nowrap;">${stCfg.l}</span>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <div style="flex:1;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
-                <div style="height:100%;width:${cotPct}%;background:${cotPct>=100?'#4ade80':cotPct>0?'#60a5fa':'#94a3b8'};border-radius:3px;"></div>
-              </div>
-              <span style="font-size:10px;font-weight:700;color:${cotPct>=100?'#4ade80':'#60a5fa'};font-family:monospace;white-space:nowrap;">${cotPct}%</span>
-              <span style="font-size:10px;color:var(--text-muted);font-family:monospace;white-space:nowrap;">${fmtM(cotPagado)}/${fmtM(cotTotal)}</span>
-            </div>
-            ${provName ? `<div style="font-size:10px;color:var(--text-muted);margin-top:4px;">👤 ${esc(provName)}</div>` : ''}
-          </div>`
-        }).join('')}
-        ${aceptadas.length > 5 ? `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:4px;">… y ${aceptadas.length-5} más</div>` : ''}
-      </div>
-    </div>` : ''
-
-  // ── Proveedores con saldo ──────────────────────────────────────────────────
-  const provEntries = Object.entries(provMap).filter(([,pd]) => {
-    const total = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
-    const abonos = pd.cotizaciones.flatMap(c=>c.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
-    const direct = pd.pagos.reduce((s,e)=>s+(+e.metadata?.amount||0),0)
-    return total > 0 && (abonos+direct) < total
-  })
-  const provsHTML = provEntries.length > 0 ? `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;display:block;margin-bottom:12px;">👤 PROVEEDORES CON SALDO</span>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        ${provEntries.slice(0,4).map(([pid, pd]) => {
-          const pNode = allNodes.find(n=>n.id===pid)
-          const pName = pNode ? (pNode.metadata?.name||pNode.content) : pid
-          const total = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
-          const abonos = pd.cotizaciones.flatMap(c=>c.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
-          const direct = pd.pagos.reduce((s,e)=>s+(+e.metadata?.amount||0),0)
-          const pagProv = abonos+direct
-          const saldo = Math.max(0, total - pagProv)
-          const pp = total>0 ? Math.min(100,Math.round(pagProv/total*100)) : 0
-          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.06);cursor:pointer;" ondblclick="showProveedorHistorial('${pid}','${projSlug}','${esc(pName)}')" title="Doble clic para ver historial">
-            <div style="width:30px;height:30px;border-radius:50%;background:rgba(251,146,60,0.12);color:#fb923c;display:grid;place-items:center;font-size:13px;font-weight:800;flex-shrink:0;">${esc(pName.charAt(0).toUpperCase())}</div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:700;color:var(--text-primary);">${esc(pName)}</div>
-              <div style="display:flex;align-items:center;gap:6px;margin-top:4px;">
-                <div style="flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${pp}%;background:#60a5fa;border-radius:2px;"></div></div>
-                <span style="font-size:10px;color:#60a5fa;font-weight:700;">${pp}%</span>
-              </div>
-            </div>
-            <div style="text-align:right;flex-shrink:0;">
-              <div style="font-size:12px;font-weight:800;color:#f87171;font-family:monospace;">${fmtM(saldo)}</div>
-              <div style="font-size:9px;color:var(--text-muted);">pendiente</div>
-            </div>
-          </div>`
-        }).join('')}
-        ${provEntries.length > 4 ? `<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:4px;">… y ${provEntries.length-4} proveedor${provEntries.length-4>1?'es':''} más</div>` : ''}
-      </div>
-    </div>` : ''
-
-  // ── Salud + Stage ──────────────────────────────────────────────────────────
-  const saludHTML = `
-    <div style="background:var(--surface);border:1px solid ${hc?hc.color+'44':'var(--border)'};border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:${displayPct!=null||h.note?'14px':'0'};">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">SALUD</span>
-          ${hc ? `<span style="font-size:12px;font-weight:700;background:${hc.color}18;color:${hc.color};border-radius:6px;padding:3px 10px;">${hc.emoji} ${hc.label}</span>` : '<span style="font-size:12px;color:var(--text-dim);">Sin estado</span>'}
-          <select onchange="projSetStage('${p.id}',this.value)" onclick="event.stopPropagation()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;padding:3px 8px;color:var(--text-secondary);font-size:11px;font-family:inherit;">
-            ${STAGES.map(s=>`<option value="${s.v}" ${m.stage===s.v?'selected':''}>${s.l}</option>`).join('')}
-          </select>
-        </div>
-        <button onclick="openHealthModal('${p.id}')" style="font-size:11px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">✏️ Editar</button>
-      </div>
-      ${displayPct != null ? `
-        <div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-            <span style="font-size:11px;color:var(--text-muted);">Avance ${pctSource==='hitos'?'<span style="color:#2dd4bf;font-size:10px;">(auto)</span>':''}</span>
-            <span style="font-size:13px;font-weight:800;color:${barColor};">${displayPct}%</span>
-          </div>
-          <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
-            <div style="height:100%;width:${displayPct}%;background:${barColor};border-radius:4px;transition:width .6s;"></div>
-          </div>
-          ${pctSource==='hitos' ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${milsDone}/${mils.length} hitos completados</div>` : ''}
-        </div>` : `<div style="font-size:12px;color:var(--text-dim);">Usa <strong style="color:#4ade80;">📊 Estado</strong> para registrar avance, o agrega hitos para cálculo automático.</div>`}
-      ${h.note ? `<div style="font-size:12px;color:var(--text-muted);font-style:italic;margin-top:10px;background:rgba(255,255,255,0.03);padding:8px 12px;border-radius:8px;border-left:3px solid ${hc?.color||'var(--border)'};">"${esc(h.note)}"</div>` : ''}
-      ${h.updated_at ? `<div style="font-size:10px;color:var(--text-dim);margin-top:6px;">Última actualización: ${h.updated_at}</div>` : ''}
-    </div>`
-
-  // ── Hitos (compacto) ───────────────────────────────────────────────────────
-  const hitosHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">🏁 HITOS</span>
-          ${mils.length ? `<span style="font-size:11px;color:#2dd4bf;font-weight:700;">${milsDone}/${mils.length}</span>` : ''}
-        </div>
-        <button onclick="openMilestoneForm('${p.id}')" style="font-size:11px;background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.25);color:#2dd4bf;border-radius:6px;padding:3px 10px;cursor:pointer;font-weight:600;">+ Agregar</button>
-      </div>
-      ${mils.length === 0 ? `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px;">Sin hitos — defínelos para calcular avance automáticamente</div>` :
-        mils.map((ms,i) => {
-          const overdue = !ms.is_reached && ms.deadline && ms.deadline < today
-          const clr = ms.is_reached ? '#4ade80' : overdue ? '#f87171' : '#2dd4bf'
-          return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <button onclick="toggleMilestone('${p.id}',${i})" style="width:20px;height:20px;border-radius:50%;border:2px solid ${clr};background:${ms.is_reached?clr:'transparent'};cursor:pointer;display:grid;place-items:center;font-size:11px;color:${ms.is_reached?'#000':'transparent'};flex-shrink:0;">✓</button>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:12px;font-weight:600;color:var(--text-primary);${ms.is_reached?'text-decoration:line-through;opacity:.55;':''};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ms.name)}</div>
-              ${ms.deadline ? `<div style="font-size:10px;color:${clr};">${overdue?'⚠️ Vencido':'📅'} ${ms.deadline}</div>` : ''}
-            </div>
-            <button onclick="openMilestoneModal('${p.id}',${i})" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;padding:2px 4px;">✏️</button>
-            <button onclick="deleteMilestone('${p.id}',${i})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:2px 4px;">✕</button>
-          </div>`
-        }).join('')}
-      ${mils.length > 0 ? `<div style="margin-top:10px;height:5px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${Math.round(milsDone/mils.length*100)}%;background:#2dd4bf;border-radius:3px;transition:width .6s;"></div></div>` : ''}
-    </div>`
-
-  // ── Equipo ─────────────────────────────────────────────────────────────────
-  const teamHTML = _s(() => {
-    if (!members.length) return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:14px;"><span style="font-size:12px;font-weight:800;color:var(--text-muted);">👥 EQUIPO</span><button onclick="openMemberModal('${p.id}')" style="font-size:12px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:4px 12px;cursor:pointer;">+ Añadir persona</button></div>`
-    const roleOrder = ['financiador','administrador','supervisor','ejecutor','colaborador']
-    const grouped = {}; members.forEach(mb => { const k=mb.role||'colaborador'; if(!grouped[k])grouped[k]=[]; grouped[k].push(mb) })
-    const roleCfg = { financiador:{label:'💰 Financiador',color:'#f59e0b'}, administrador:{label:'🗂️ Admin',color:'#60a5fa'}, ejecutor:{label:'🔧 Ejecutor',color:'#fb923c'}, supervisor:{label:'👁️ Supervisor',color:'#a78bfa'}, colaborador:{label:'🤝 Colaborador',color:'#4ade80'} }
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-        <div style="font-size:12px;font-weight:800;color:var(--text-muted);">👥 EQUIPO (${members.length})</div>
-        <button onclick="openMemberModal('${p.id}')" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;padding:3px 10px;cursor:pointer;">+ Añadir</button>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${members.map(mb => {
-          const c = allNodes.find(n => n.id === mb.contact_id)
-          const name = c ? (c.metadata?.name||c.content) : 'Sin nombre'
-          const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
-          const cfg = roleCfg[mb.role||'colaborador'] || {label:'Colaborador',color:'#94a3b8'}
-          return `<div style="display:flex;align-items:center;gap:7px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:6px 10px;">
-            <div style="width:26px;height:26px;border-radius:50%;background:${cfg.color}20;color:${cfg.color};display:grid;place-items:center;font-size:10px;font-weight:800;flex-shrink:0;">${initials}</div>
-            <div><div style="font-size:12px;font-weight:600;color:var(--text-primary);">${esc(name)}</div><div style="font-size:9px;color:${cfg.color};">${cfg.label}</div></div>
-            <button onclick="removeMember('${p.id}','${mb.contact_id}')" style="background:transparent;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;padding:0 2px;margin-left:2px;">×</button>
-          </div>`
-        }).join('')}
-      </div>
+      <button onclick="switchProjTab('finanzas')" style="flex-shrink:0;align-self:center;font-size:11px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:10px;padding:10px 14px;cursor:pointer;font-weight:700;white-space:nowrap;">
+        Ver Finanzas →
+      </button>
     </div>`
   })
 
-  // ── Tareas ─────────────────────────────────────────────────────────────────
-  const tareasHTML = tareas.length ? `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;">
+  // ── Activity Grid 2x2 ─────────────────────────────────────────────────────
+  const gridHTML = _s(() => {
+    // Card 1: Pagos recientes
+    const recentPagos2 = (d.pagos || [])
+      .sort((a,b) => (b.metadata?.date || b.created_at || '').localeCompare(a.metadata?.date || a.created_at || ''))
+      .slice(0, 4)
+    const card1 = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px;">
+        <span style="color:#60a5fa;">${_svgActiv}</span>
+        <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Pagos Recientes</span>
+      </div>
+      ${recentPagos2.length === 0
+        ? `<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px 0;display:flex;flex-direction:column;align-items:center;gap:6px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Sin movimientos</div>`
+        : recentPagos2.map(g => {
+            const gDate  = (g.metadata?.date || g.created_at || '').slice(0,10)
+            const gAmt   = +(g.metadata?.amount || 0)
+            const gLabel = esc(g.metadata?.label || g.content || 'Pago').slice(0,28)
+            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+              <div style="font-size:9px;color:var(--text-dim);font-family:'JetBrains Mono',monospace;flex-shrink:0;background:rgba(255,255,255,0.04);padding:2px 5px;border-radius:4px;">${gDate.slice(5)}</div>
+              <div style="flex:1;font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${gLabel}</div>
+              <div style="font-size:11px;font-weight:700;color:#f87171;font-family:'JetBrains Mono',monospace;flex-shrink:0;">-${fmtM(gAmt)}</div>
+            </div>`
+          }).join('')}
+    </div>`
+
+    // Card 2: Pendientes urgentes
+    const urgentMils = mils.filter(ms => !ms.is_reached && ms.deadline && ms.deadline < today).slice(0,3)
+    const urgentTasks = tareas.filter(t => t.metadata?.status !== 'done' && t.metadata?.due_date && t.metadata.due_date < today).slice(0,3)
+    const urgentItems = [
+      ...urgentMils.map(ms => ({ label: ms.name, type: 'hito', color: '#f87171' })),
+      ...urgentTasks.map(t  => ({ label: t.metadata?.label || t.content, type: 'tarea', color: '#fb923c' })),
+    ].slice(0,5)
+    const card2 = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px;">
+        <span style="color:#f87171;">${_svgAlert2}</span>
+        <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Pendientes Urgentes</span>
+        ${urgentItems.length ? `<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(248,113,113,0.15);color:#f87171;font-weight:700;">${urgentItems.length}</span>` : ''}
+      </div>
+      ${urgentItems.length === 0
+        ? `<div style="font-size:11px;color:#4ade80;text-align:center;padding:12px 0;display:flex;flex-direction:column;align-items:center;gap:6px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Todo en orden</div>`
+        : urgentItems.map(item => `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <div style="width:6px;height:6px;border-radius:50%;background:${item.color};flex-shrink:0;box-shadow:0 0 4px ${item.color}88;"></div>
+            <div style="flex:1;font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(item.label)}</div>
+            <div style="font-size:9px;color:${item.color};flex-shrink:0;font-weight:700;">${item.type}</div>
+          </div>`).join('')}
+    </div>`
+
+    // Card 3: Nota del proyecto
+    const projNotes = allNodes.filter(n => n.type === 'note' && !n.metadata?.archived &&
+      (n.metadata?.tags||[]).some(t => t.replace('#','').toLowerCase() === projSlug))
+      .sort((a,b) => (b.metadata?.pinned?1:0)-(a.metadata?.pinned?1:0) || (b.created_at||'').localeCompare(a.created_at||''))
+    const topNote = projNotes[0]
+    const card3 = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:12px;font-weight:800;color:var(--text-muted);">✅ TAREAS</span>
-          <span style="font-size:10px;font-weight:700;color:#60a5fa;">${tareas.filter(t=>t.metadata?.status==='done').length}/${tareas.length}</span>
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="color:#a78bfa;">${_svgFile}</span>
+          <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Nota del Proyecto</span>
         </div>
-        <button onclick="switchProjTab('kanban')" style="font-size:11px;color:#60a5fa;background:none;border:none;cursor:pointer;">Ver Kanban →</button>
+        ${projNotes.length > 1 ? `<span style="font-size:9px;color:var(--text-dim);">+${projNotes.length-1} más</span>` : ''}
+      </div>
+      ${!topNote
+        ? `<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px 0;display:flex;flex-direction:column;align-items:center;gap:6px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Sin notas vinculadas</div>`
+        : `<div onclick="openNoteEdit('${topNote.id}')" style="cursor:pointer;">
+            ${topNote.metadata?.pinned ? `<div style="font-size:9px;color:#fb923c;font-weight:700;margin-bottom:4px;display:flex;align-items:center;gap:4px;"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>Anclada</div>` : ''}
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(topNote.metadata?.label || topNote.content)}</div>
+            <div style="font-size:11px;color:var(--text-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.5;">${esc(topNote.content)}</div>
+           </div>`}
+    </div>`
+
+    // Card 4: Proveedores con saldo
+    const provBal = Object.entries(provMap).map(([pid, pd]) => {
+      const pNode = allNodes.find(n => n.id === pid)
+      const pName = pNode ? (pNode.metadata?.name||pNode.content) : '?'
+      const total2 = pd.cotizaciones.reduce((s,c)=>s+(+c.metadata?.amount||0),0)
+      const abn    = pd.cotizaciones.flatMap(c=>c.metadata?.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
+      const dir    = pd.pagos.reduce((s,e)=>s+(+e.metadata?.amount||0),0)
+      const saldo2 = Math.max(0, total2 - abn - dir)
+      const pp2    = total2 > 0 ? Math.min(100, Math.round((abn+dir)/total2*100)) : 0
+      return { pid, pName, total: total2, saldo: saldo2, pp: pp2 }
+    }).filter(x => x.saldo > 0).slice(0,4)
+    const card4 = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px;">
+        <span style="color:#fb923c;">${_svgUsers2}</span>
+        <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Saldo Proveedores</span>
+      </div>
+      ${provBal.length === 0
+        ? `<div style="font-size:11px;color:#4ade80;text-align:center;padding:12px 0;display:flex;flex-direction:column;align-items:center;gap:6px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Proveedores al día</div>`
+        : provBal.map(pv => {
+            const rC = 2*Math.PI*9
+            const rL = (pv.pp/100*rC).toFixed(1)
+            const rCol = pv.pp>=100?'#4ade80':pv.pp>50?'#60a5fa':'#fb923c'
+            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);" onclick="showProveedorHistorial('${pv.pid}','${projSlug}','${esc(pv.pName)}')" title="Ver historial" style="cursor:pointer;">
+              <div style="width:24px;height:24px;border-radius:50%;background:rgba(251,146,60,0.12);color:#fb923c;display:grid;place-items:center;font-size:10px;font-weight:800;flex-shrink:0;">${esc(pv.pName.charAt(0).toUpperCase())}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:11px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pv.pName)}</div>
+              </div>
+              <div style="position:relative;width:22px;height:22px;flex-shrink:0;">
+                <svg viewBox="0 0 24 24" width="22" height="22" style="transform:rotate(-90deg);">
+                  <circle cx="12" cy="12" r="9" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="3"/>
+                  <circle cx="12" cy="12" r="9" fill="none" stroke="${rCol}" stroke-width="3" stroke-linecap="round" stroke-dasharray="${rL} ${rC.toFixed(1)}"/>
+                </svg>
+                <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:6px;font-weight:800;color:#fff;">${pv.pp}%</span>
+              </div>
+              <div style="font-size:11px;font-weight:700;color:#f87171;font-family:'JetBrains Mono',monospace;flex-shrink:0;">${fmtM(pv.saldo)}</div>
+            </div>`
+          }).join('')}
+    </div>`
+
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+      ${card1}${card2}${card3}${card4}
+    </div>`
+  })
+
+  // ── Cotizaciones compactas ─────────────────────────────────────────────────
+  const cotsCompactHTML = _s(() => {
+    if (!cots.length) return ''
+    const allCots = [...aceptadas, ...pendientes].slice(0,6)
+    if (!allCots.length) return ''
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2" stroke-linecap="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+          <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Cotizaciones</span>
+          <span style="font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(251,146,60,0.12);color:#fb923c;font-weight:700;">${cots.length}</span>
+        </div>
+        <button onclick="switchProjTab('finanzas')" style="font-size:10px;color:#fb923c;background:none;border:1px solid rgba(251,146,60,0.25);border-radius:5px;padding:2px 8px;cursor:pointer;">Ver todas →</button>
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;">
+        ${allCots.map(c => {
+          const cm  = c.metadata||{}
+          const stC = STATUS_CFG[cm.status||'pendiente']
+          const tot = +(cm.amount||0)
+          const pag = (cm.abonos||[]).reduce((s,a)=>s+(+a.amount||0),0)
+          const cp  = tot>0 ? Math.min(100,Math.round(pag/tot*100)) : 0
+          const prov= cm.provider_id ? allNodes.find(n=>n.id===cm.provider_id) : null
+          const pN  = prov ? (prov.metadata?.name||prov.content).slice(0,18) : ''
+          const bC  = cp>=100?'#4ade80':cp>0?'#60a5fa':'#94a3b8'
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-left:3px solid ${stC.c};background:rgba(255,255,255,0.02);border-radius:0 8px 8px 0;cursor:pointer;transition:background .15s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'" onclick="openCotizacionModal('${c.id}')">
+            <div style="width:7px;height:7px;border-radius:50%;background:${stC.c};flex-shrink:0;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:11px;font-weight:700;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(cm.label||c.content)}</div>
+              ${pN ? `<div style="font-size:9px;color:var(--text-dim);">${esc(pN)}</div>` : ''}
+            </div>
+            <div style="width:60px;flex-shrink:0;">
+              <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${cp}%;background:${bC};border-radius:2px;"></div></div>
+              <div style="font-size:8px;color:${bC};font-weight:700;margin-top:1px;text-align:right;">${cp}%</div>
+            </div>
+            <div style="font-size:11px;font-weight:800;color:#fb923c;font-family:'JetBrains Mono',monospace;flex-shrink:0;min-width:64px;text-align:right;">${fmtM(tot)}</div>
+          </div>`
+        }).join('')}
+        ${cots.length > 6 ? `<div style="font-size:10px;color:var(--text-dim);text-align:center;padding:4px;cursor:pointer;" onclick="switchProjTab('finanzas')">… y ${cots.length-6} más →</div>` : ''}
+      </div>
+    </div>`
+  })
+
+  // ── Equipo compact ─────────────────────────────────────────────────────────
+  const teamHTML = _s(() => {
+    const roleCfg = { financiador:{color:'#f59e0b'}, administrador:{color:'#60a5fa'}, ejecutor:{color:'#fb923c'}, supervisor:{color:'#a78bfa'}, colaborador:{color:'#4ade80'} }
+    if (!members.length) return ''
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          ${_svgUsers2}
+          <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Equipo (${members.length})</span>
+        </div>
+        <button onclick="openMemberModal('${p.id}')" style="font-size:10px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;padding:2px 8px;cursor:pointer;">+ Añadir</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${members.map(mb => {
+          const c2 = allNodes.find(n => n.id === mb.contact_id)
+          const nm2 = c2 ? (c2.metadata?.name||c2.content) : '?'
+          const ini = nm2.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
+          const cfg = roleCfg[mb.role||'colaborador'] || {color:'#94a3b8'}
+          return `<div title="${esc(nm2)}" style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,0.03);border:1px solid ${cfg.color}22;border-radius:8px;padding:4px 8px;cursor:default;">
+            <div style="width:22px;height:22px;border-radius:50%;background:${cfg.color}22;color:${cfg.color};display:grid;place-items:center;font-size:9px;font-weight:800;flex-shrink:0;">${ini}</div>
+            <span style="font-size:11px;color:var(--text-primary);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(nm2.split(' ')[0])}</span>
+          </div>`
+        }).join('')}
+      </div>
+    </div>`
+  })
+
+  // ── Tareas compact ─────────────────────────────────────────────────────────
+  const tareasHTML = _s(() => {
+    if (!tareas.length) return ''
+    const done = tareas.filter(t=>t.metadata?.status==='done').length
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          ${_svgBoard}
+          <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Tareas</span>
+          <span style="font-size:9px;color:#60a5fa;font-weight:700;">${done}/${tareas.length}</span>
+        </div>
+        <button onclick="switchProjTab('kanban')" style="font-size:10px;color:#60a5fa;background:none;border:1px solid rgba(96,165,250,0.25);border-radius:5px;padding:2px 8px;cursor:pointer;">Kanban →</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:3px;">
         ${tareas.slice(0,5).map(t => {
           const ts = t.metadata?.status || 'todo'
           const tc = ts==='done'?'#4ade80':ts==='in_progress'?'#60a5fa':'#94a3b8'
-          return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <div style="width:8px;height:8px;border-radius:50%;background:${tc};flex-shrink:0;"></div>
-            <span style="font-size:12px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(t.metadata?.label||t.content)}</span>
+          return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <div style="width:7px;height:7px;border-radius:50%;background:${tc};flex-shrink:0;${ts==='done'?'box-shadow:0 0 4px #4ade8088;':''}"></div>
+            <span style="font-size:11px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${ts==='done'?'opacity:.5;text-decoration:line-through;':''}">${esc(t.metadata?.label||t.content)}</span>
           </div>`
         }).join('')}
-        ${tareas.length > 5 ? `<div style="font-size:11px;color:var(--text-muted);text-align:center;margin-top:4px;">… y ${tareas.length-5} más</div>` : ''}
+        ${tareas.length > 5 ? `<div style="font-size:10px;color:var(--text-dim);text-align:center;margin-top:4px;cursor:pointer;" onclick="switchProjTab('kanban')">… y ${tareas.length-5} más</div>` : ''}
       </div>
-    </div>` : ''
+      ${tareas.length > 0 ? (() => {
+        const bp = Math.round(done/tareas.length*100)
+        return `<div style="margin-top:10px;height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;"><div style="height:100%;width:${bp}%;background:#60a5fa;border-radius:2px;transition:width .6s;"></div></div>`
+      })() : ''}
+    </div>`
+  })
 
   // ── Descripción ────────────────────────────────────────────────────────────
-  const descHTML = m.desc ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px;font-size:13px;color:var(--text-secondary);line-height:1.6;">${esc(m.desc)}</div>` : ''
+  const descHTML = m.desc ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--text-secondary);line-height:1.6;border-left:3px solid rgba(255,255,255,0.1);">${esc(m.desc)}</div>` : ''
 
-  return descHTML + alertsHTML + kpisHTML + cotsHTML + provsHTML + saludHTML + hitosHTML + teamHTML + tareasHTML
+  return descHTML + alertsHTML + heroHTML + kpiStripHTML + gridHTML + cotsCompactHTML + teamHTML + tareasHTML
 }
 
 // ── TAB: FINANZAS ────────────────────────────────────────────────────────────
@@ -8872,33 +9028,57 @@ function _renderProjFinanzas(d) {
       </div>`
     })() : ''
 
-    // ─── B) KPI stat row with Feather SVG icons ─────────────
+    // ─── B) KPI cards with SVG donut rings ─────────────────────
+    const _mkDonut = (pct, clr) => {
+      const r = 14, cc = 2 * Math.PI * r
+      const fl = (Math.min(pct, 100) / 100 * cc).toFixed(1)
+      return `<svg width="36" height="36" viewBox="0 0 36 36" style="transform:rotate(-90deg);">
+        <circle cx="18" cy="18" r="${r}" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+        <circle cx="18" cy="18" r="${r}" fill="none" stroke="${clr}" stroke-width="4"
+          stroke-dasharray="${fl} ${cc.toFixed(1)}" stroke-linecap="round" style="transition:stroke-dasharray .6s;"/>
+      </svg>`
+    }
     const kpiData = [
-      { label:'PRESUPUESTO',  val:budget,            color:'#a78bfa', icon:ICON_BRIEFCASE, show: budget > 0,    note:'' },
-      { label:'COMPROMETIDO', val:comprometido,      color:'#fb923c', icon:ICON_CLIPBOARD, show: true,           note: cots.length ? cots.length + ' cots.' : '' },
-      { label:'PAGADO',       val:pagado,            color:'#4ade80', icon:ICON_CHECK,     show: true,           note: comprometido > 0 ? Math.round(pagado/Math.max(comprometido,1)*100) + '% de acordado' : '' },
-      { label:'POR PAGAR',    val:pendientePago,     color: pendientePago > 0 ? '#f87171' : '#94a3b8', icon:ICON_CLOCK, show: true, note: '' },
+      { label:'PRESUPUESTO',  val:budget,
+        color:'#a78bfa',
+        pct: budget > 0 ? 100 : 0,
+        show: budget > 0, note:'' },
+      { label:'COMPROMETIDO', val:comprometido,
+        color:'#fb923c',
+        pct: budget > 0 ? Math.min(100, Math.round(comprometido / budget * 100)) : (comprometido > 0 ? 100 : 0),
+        show: true, note: cots.length ? cots.length + ' cots.' : '' },
+      { label:'PAGADO',       val:pagado,
+        color:'#4ade80',
+        pct: comprometido > 0 ? Math.min(100, Math.round(pagado / comprometido * 100)) : (pagado > 0 ? 100 : 0),
+        show: true, note: comprometido > 0 ? Math.round(pagado/Math.max(comprometido,1)*100) + '% de acordado' : '' },
+      { label:'POR PAGAR',    val:pendientePago,
+        color: pendientePago > 0 ? '#f87171' : '#94a3b8',
+        pct: comprometido > 0 ? Math.min(100, Math.round(pendientePago / comprometido * 100)) : 0,
+        show: true, note: '' },
       { label: disponible != null && disponible < 0 ? 'EXCEDIDO' : 'DISPONIBLE',
         val: Math.abs(disponible || 0),
         color: disponible != null && disponible < 0 ? '#f87171' : '#2dd4bf',
-        icon: disponible != null && disponible < 0 ? ICON_ALERT : ICON_SHIELD,
+        pct: budget > 0 ? Math.min(100, Math.max(0, Math.round(Math.max(0, disponible || 0) / budget * 100))) : 0,
         show: budget > 0, note: '' },
     ].filter(k => k.show)
 
     const kpisHTML = `<div style="display:flex;gap:0;margin-bottom:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;overflow:hidden;">
       ${kpiData.map((k, i) => {
         const sep = i > 0 ? 'border-left:1px solid rgba(255,255,255,0.06);' : ''
-        const kpiItem = `<div style="flex:1;padding:14px 12px;min-width:0;${sep}">
-          <div style="color:${k.color};margin-bottom:6px;opacity:0.85;">${k.icon}</div>
-          <div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--text-muted);margin-bottom:4px;">${k.label}</div>
-          <div style="font-size:14px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1.1;">${fmtM(k.val)}</div>
-          ${k.note ? `<div style="font-size:9px;color:var(--text-dim);margin-top:3px;">${k.note}</div>` : ''}
+        return `<div style="flex:1;padding:12px 6px 10px;min-width:0;${sep};display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;">
+          <div style="position:relative;display:inline-flex;align-items:center;justify-content:center;margin-bottom:2px;">
+            ${_mkDonut(k.pct, k.color)}
+            <span style="position:absolute;font-size:7px;font-weight:800;color:${k.color};">${k.pct}%</span>
+          </div>
+          <div style="font-size:9px;font-weight:800;letter-spacing:.05em;color:var(--text-muted);text-transform:uppercase;">${k.label}</div>
+          <div style="font-size:13px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1.1;">${fmtM(k.val)}</div>
+          ${k.note ? `<div style="font-size:9px;color:var(--text-dim);">${k.note}</div>` : ''}
         </div>`
-        return kpiItem
       }).join('')}
     </div>`
 
-    // ─── C) Category horizontal grouped bar chart ────────────
+    // ─── C) True stacked bar by category ─────────────────────
+    const CAT_PALETTE = ['#60a5fa','#a78bfa','#34d399','#fb923c','#f472b6','#fbbf24','#2dd4bf','#94a3b8']
     const catMap = {}
     d.cots.forEach(c => {
       const cat = c.metadata?.category || 'Sin categoría'
@@ -8908,49 +9088,38 @@ function _renderProjFinanzas(d) {
       catMap[cat].count++
     })
     const catEntries = Object.entries(catMap).sort((a, b) => b[1].comprometido - a[1].comprometido)
-    const maxCat = catEntries.reduce((mx, [, v]) => Math.max(mx, v.comprometido), 1)
-    const catHTML = catEntries.length > 0 ? `
-      <div style="margin-bottom:20px;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+    const catTotal2  = catEntries.reduce((s, [, v]) => s + v.comprometido, 1)
+    const catHTML = catEntries.length > 0 ? (() => {
+      const segs = catEntries.map(([cat, v], i) => {
+        const pct2 = Math.round(v.comprometido / catTotal2 * 1000) / 10
+        const clr2 = CAT_PALETTE[i % CAT_PALETTE.length]
+        return { cat, v, pct2, clr2, icon2: getCategoryIcon(cat) }
+      })
+      const barSegs = segs.map(s =>
+        `<div style="width:${s.pct2}%;background:${s.clr2};height:100%;transition:width .6s;" title="${esc(s.cat)}: ${fmtM(s.v.comprometido)} (${s.pct2}%)"></div>`
+      ).join('')
+      const legend = segs.map(s =>
+        `<div style="display:flex;align-items:center;gap:5px;font-size:10px;white-space:nowrap;">
+          <span style="width:8px;height:8px;border-radius:2px;background:${s.clr2};flex-shrink:0;display:inline-block;"></span>
+          <span style="color:var(--text-muted);">${s.icon2} ${esc(s.cat)}</span>
+          <span style="font-weight:800;color:${s.clr2};font-family:'JetBrains Mono',monospace;">${fmtM(s.v.comprometido)}</span>
+          <span style="color:var(--text-dim);font-size:9px;">${s.pct2}%</span>
+        </div>`
+      ).join('')
+      return `<div style="margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-          <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;text-transform:uppercase;">Desglose por categoría</span>
-          <div style="display:flex;gap:10px;margin-left:auto;align-items:center;">
-            <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text-dim);">
-              <span style="display:inline-block;width:10px;height:6px;background:rgba(255,255,255,0.15);border-radius:1px;"></span>Comprometido
-            </div>
-            <div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--text-dim);">
-              <span style="display:inline-block;width:10px;height:6px;background:#4ade80;border-radius:1px;"></span>Pagado
-            </div>
-          </div>
+          <span style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;text-transform:uppercase;">Distribución por categoría</span>
+          <span style="font-size:10px;color:var(--text-dim);margin-left:auto;">${fmtM(catTotal2)} total</span>
         </div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          ${catEntries.map(([cat, v]) => {
-            const paidPct2   = v.comprometido > 0 ? Math.min(100, Math.round(v.pagado / v.comprometido * 100)) : 0
-            const barWidthPct = Math.round(v.comprometido / maxCat * 100)
-            const icon2 = getCategoryIcon(cat)
-            const catRow = `<div style="display:flex;align-items:center;gap:10px;">
-              <div style="width:120px;flex-shrink:0;display:flex;align-items:center;gap:6px;overflow:hidden;">
-                <span style="font-size:13px;flex-shrink:0;">${icon2}</span>
-                <span style="font-size:11px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(cat)}</span>
-              </div>
-              <div style="flex:1;position:relative;">
-                <!-- full track -->
-                <div style="height:8px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;width:${barWidthPct}%;">
-                  <!-- orange = comprometido layer (full bar) -->
-                  <div style="position:absolute;top:0;left:0;height:8px;width:${barWidthPct}%;background:rgba(251,146,60,0.35);border-radius:4px;"></div>
-                  <!-- green = pagado layer on top -->
-                  <div style="position:relative;height:8px;width:${paidPct2}%;background:linear-gradient(90deg,#4ade80,#2dd4bf);border-radius:4px;transition:width .5s;"></div>
-                </div>
-              </div>
-              <div style="text-align:right;flex-shrink:0;min-width:90px;">
-                <div style="font-size:11px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#fb923c;">${fmtM(v.comprometido)}</div>
-                <div style="font-size:9px;color:${paidPct2 >= 100 ? '#4ade80' : 'var(--text-dim)'};">${paidPct2}% pagado</div>
-              </div>
-            </div>`
-            return catRow
-          }).join('')}
+        <div style="height:16px;border-radius:8px;overflow:hidden;display:flex;margin-bottom:12px;background:rgba(255,255,255,0.05);">
+          ${barSegs}
         </div>
-      </div>` : ''
+        <div style="display:flex;flex-wrap:wrap;gap:8px 18px;">
+          ${legend}
+        </div>
+      </div>`
+    })() : ''
 
     // ─── D) Provider mini-ring chart ────────────────────────
     const provEntries2 = Object.entries(d.provMap)
@@ -9276,119 +9445,90 @@ function _renderProjFinanzas(d) {
     </div>`
 
     const STATUS_CFG = {
-      pendiente:  { label:'⏳ Pendiente',   color:'#94a3b8', bg:'rgba(148,163,184,0.08)' },
-      aceptada:   { label:'✅ Aceptada',     color:'#4ade80', bg:'rgba(74,222,128,0.08)'  },
-      rechazada:  { label:'❌ Rechazada',    color:'#f87171', bg:'rgba(248,113,113,0.08)' },
-      en_proceso: { label:'🔄 En proceso',   color:'#60a5fa', bg:'rgba(96,165,250,0.08)'  },
-      pagada:     { label:'💰 Pagada',       color:'#a78bfa', bg:'rgba(167,139,250,0.08)' },
-      parcial:    { label:'🔶 Pago parcial', color:'#fbbf24', bg:'rgba(251,191,36,0.08)'  },
+      pendiente:  { label:'Pendiente',   color:'#94a3b8', bg:'rgba(148,163,184,0.08)' },
+      aceptada:   { label:'Aceptada',    color:'#4ade80', bg:'rgba(74,222,128,0.08)'  },
+      rechazada:  { label:'Rechazada',   color:'#f87171', bg:'rgba(248,113,113,0.08)' },
+      en_proceso: { label:'En proceso',  color:'#60a5fa', bg:'rgba(96,165,250,0.08)'  },
+      pagada:     { label:'Pagada',      color:'#a78bfa', bg:'rgba(167,139,250,0.08)' },
+      parcial:    { label:'Pago parcial',color:'#fbbf24', bg:'rgba(251,191,36,0.08)'  },
     }
-    const METHOD_ICON = { transferencia:'🏦', efectivo:'💵', tarjeta:'💳', cheque:'📄' }
 
-    const buildCotCard = (c) => {
-      const m       = c.metadata || {}
-      const stCfg   = STATUS_CFG[m.status] || STATUS_CFG.pendiente
-      const prov    = m.provider_id ? allNodes.find(n=>n.id===m.provider_id) : null
-      const provName= prov ? esc(prov.metadata?.name || prov.content) : null
-      const total   = +(m.amount || 0)
-      const abonos  = m.abonos || []
-      const pagado  = abonos.reduce((s,a) => s+(+a.amount||0), 0)
-      const saldo   = Math.max(0, total - pagado)
-      const pct     = total > 0 ? Math.min(100, Math.round(pagado/total*100)) : (pagado>0?100:0)
-      const isFullyPaid = pct >= 100
+    // ── Compact row + accordion ─────────────────────────────
+    const buildCotRow = (c) => {
+      const cm      = c.metadata || {}
+      const stCfg   = STATUS_CFG[cm.status] || STATUS_CFG.pendiente
+      const prov    = cm.provider_id ? allNodes.find(n => n.id === cm.provider_id) : null
+      const provName= prov ? (prov.metadata?.name || prov.content) : '—'
+      const total   = +(cm.amount || 0)
+      const abonos  = cm.abonos || []
+      const cotPaid = abonos.reduce((s, a) => s + (+a.amount || 0), 0)
+      const cotSaldo= Math.max(0, total - cotPaid)
+      const cotPct  = total > 0 ? Math.min(100, Math.round(cotPaid / total * 100)) : 0
+      const dotClr  = stCfg.color
+      const barClr  = cotPct >= 100 ? '#4ade80' : cotPct > 50 ? '#60a5fa' : '#fbbf24'
+      const catIcon2= getCategoryIcon(cm.category || '')
+      const label2  = esc(cm.label || cm.description || c.content || 'Sin título')
+      const accId   = `cot-acc-${c.id}`
 
-      // Barra de color según avance
-      const barColor = pct === 0 ? '#94a3b8' : pct < 50 ? '#fbbf24' : pct < 100 ? '#60a5fa' : '#4ade80'
+      const abonosRows = abonos.length > 0
+        ? abonos.map((a, ai) => `
+          <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span style="font-size:10px;color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.notes || a.method || 'Pago ' + (ai+1))}</span>
+            <span style="font-size:9px;color:var(--text-dim);flex-shrink:0;">${(a.date || '').slice(0,10)}</span>
+            ${a.receipt_url ? `<a href="${esc(a.receipt_url)}" target="_blank" onclick="event.stopPropagation()" style="color:#60a5fa;font-size:10px;text-decoration:none;flex-shrink:0;">🔗</a>` : ''}
+            <span style="font-size:11px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;flex-shrink:0;">${fmtM(+a.amount||0)}</span>
+          </div>`).join('')
+        : `<div style="font-size:11px;color:var(--text-dim);font-style:italic;padding:4px 0;">Sin pagos registrados</div>`
 
-      // Historial de pagos (máx 5 visibles + "ver más")
-      const abonosHTML = abonos.length === 0
-        ? `<div style="font-size:11px;color:var(--text-dim);font-style:italic;">Sin pagos registrados</div>`
-        : abonos.map((a,i) => `
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:4px;">
-              <span style="font-size:13px;flex-shrink:0;">${METHOD_ICON[a.method]||'💸'}</span>
-              <span style="font-size:11px;color:#4ade80;font-weight:700;font-family:monospace;flex-shrink:0;">Pago ${i+1}</span>
-              <span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">${a.date||''}</span>
-              <span style="flex:1;font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.notes||a.method||'')}</span>
-              ${a.receipt_url ? `<a href="${esc(a.receipt_url)}" target="_blank" onclick="event.stopPropagation()" title="Ver comprobante" style="color:#60a5fa;font-size:12px;flex-shrink:0;text-decoration:none;">🔗 Comprobante</a>` : ''}
-              <span style="font-size:11px;font-weight:800;color:#4ade80;font-family:monospace;flex-shrink:0;">$${(+a.amount).toLocaleString('es-MX')}</span>
-            </div>`).join('')
-
-      // Kanban status chip (si tiene tarea vinculada)
-      const kanbanNode = allNodes.find(n => n.type==='kanban' && n.metadata?.cot_id===c.id)
-      const kanbanChip = kanbanNode ? (() => {
-        const kStatus = kanbanNode.metadata?.status || 'todo'
-        const kLabels = { todo:'Pendiente', in_progress:'En progreso', doing:'En progreso', done:'Completado' }
-        const kColors = { todo:'#94a3b8', in_progress:'#60a5fa', doing:'#60a5fa', done:'#4ade80' }
-        return `<span style="font-size:9px;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,0.06);color:${kColors[kStatus]||'#94a3b8'};font-weight:700;border:1px solid ${kColors[kStatus]||'#94a3b8'}33;">🗊 ${kLabels[kStatus]||kStatus}</span>`
-      })() : ''
-
-      return `<div style="background:var(--bg-panel);border:1px solid ${stCfg.color}33;border-left:3px solid ${stCfg.color};border-radius:12px;padding:16px;margin-bottom:12px;transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 4px 24px rgba(0,0,0,0.3)'" onmouseout="this.style.boxShadow=''">
-        <!-- Header -->
-        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;">
+      return `<div style="border:1px solid rgba(255,255,255,0.07);border-left:3px solid ${dotClr};border-radius:8px;margin-bottom:6px;overflow:hidden;transition:box-shadow .15s;" onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.25)'" onmouseout="this.style.boxShadow=''">
+        <!-- Compact row header (click to expand) -->
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;min-height:44px;" onclick="toggleCotAccordion('${c.id}')">
+          <span style="width:7px;height:7px;border-radius:50%;background:${dotClr};flex-shrink:0;"></span>
+          <span style="font-size:13px;flex-shrink:0;">${catIcon2}</span>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;font-weight:700;color:var(--text-primary);margin-bottom:4px;cursor:pointer;" onclick="openCotizacionModal('${c.id}')">${esc(m.label||c.content)}</div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span style="font-size:11px;padding:2px 8px;border-radius:5px;background:${stCfg.bg};color:${stCfg.color};font-weight:700;">${stCfg.label}</span>
-              ${m.category ? `<span style="font-size:10px;color:var(--text-muted);background:rgba(255,255,255,0.04);padding:2px 6px;border-radius:4px;">${esc(m.category)}</span>` : ''}
-              ${kanbanChip}
-            </div>
+            <div style="font-size:12px;font-weight:700;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${label2}</div>
+            <div style="font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(provName)} · <span style="color:${dotClr};">${stCfg.label}</span></div>
           </div>
-          <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;color:#fb923c;">$${total.toLocaleString('es-MX')}</div>
-            ${provName ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px;">👤 ${provName}</div>` : ''}
+          <div style="flex-shrink:0;text-align:right;min-width:88px;">
+            <div style="font-size:12px;font-weight:800;color:#fb923c;font-family:'JetBrains Mono',monospace;">${fmtM(total)}</div>
+            ${total > 0 ? `<div style="height:3px;background:rgba(255,255,255,0.07);border-radius:2px;margin-top:3px;overflow:hidden;"><div style="height:100%;width:${cotPct}%;background:${barClr};transition:width .5s;"></div></div>
+            <div style="font-size:9px;color:${barClr};margin-top:1px;">${cotPct}% pagado</div>` : ''}
           </div>
+          <svg id="cot-chev-${c.id}" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2.5" style="flex-shrink:0;transition:transform .2s;"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
-
-        <!-- Barra de progreso de pagos -->
-        ${total > 0 || abonos.length > 0 ? `
-        <div style="margin-bottom:12px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
-            <span style="font-size:11px;color:var(--text-muted);">💸 Pagos: <b style="color:${barColor};">${abonos.length} registro${abonos.length!==1?'s':''}</b></span>
-            <span style="font-size:11px;font-weight:800;color:${barColor};">${pct}% pagado</span>
+        <!-- Accordion body -->
+        <div id="${accId}" style="display:none;border-top:1px solid rgba(255,255,255,0.06);padding:10px 12px;background:rgba(0,0,0,0.15);">
+          <div style="font-size:9px;font-weight:800;color:var(--text-dim);letter-spacing:.07em;text-transform:uppercase;margin-bottom:6px;">Historial de pagos (${abonos.length})</div>
+          ${abonosRows}
+          ${cotSaldo > 0
+            ? `<div style="display:flex;justify-content:flex-end;gap:4px;margin-top:6px;font-size:10px;color:var(--text-muted);">Saldo: <span style="color:#f87171;font-weight:800;font-family:'JetBrains Mono',monospace;">${fmtM(cotSaldo)}</span></div>`
+            : total > 0 ? `<div style="font-size:10px;color:#4ade80;text-align:right;margin-top:6px;font-weight:700;">✓ Liquidada</div>` : ''}
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);">
+            <button onclick="openCotizacionModal('${c.id}','${projSlug}')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;cursor:pointer;">✏️ Editar</button>
+            ${cm.provider_id && cotSaldo > 0 ? `<button onclick="openAbonoModal('${cm.provider_id}','${esc(provName)}','${projSlug}','${p.id}','${c.id}')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;">+ Abono</button>` : ''}
+            ${cm.status === 'pendiente' ? `<button onclick="changeCotizacionStatus('${c.id}','aceptada')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;">✅ Aceptar</button>` : ''}
+            <button onclick="printCotizacion('${c.id}')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:6px;cursor:pointer;">🖨️</button>
+            <div style="flex:1;"></div>
+            <span style="font-size:9px;color:var(--text-dim);align-self:center;">${(c.created_at||'').slice(0,10)}</span>
           </div>
-          <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
-            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px;transition:width 0.5s;"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;margin-top:5px;">
-            <span style="font-size:10px;color:#4ade80;">Pagado: <b>$${pagado.toLocaleString('es-MX')}</b></span>
-            ${saldo > 0 ? `<span style="font-size:10px;color:#f87171;">Saldo: <b>$${saldo.toLocaleString('es-MX')}</b></span>` : `<span style="font-size:10px;color:#4ade80;font-weight:700;">✅ Saldado</span>`}
-          </div>
-        </div>` : ''}
-
-        <!-- Historial de pagos (expandible) -->
-        ${abonos.length > 0 ? `
-        <details style="margin-bottom:10px;">
-          <summary style="font-size:11px;font-weight:700;color:var(--text-muted);cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;padding:4px 0;user-select:none;">
-            <span>▶</span><span>📋 Historial de pagos (${abonos.length})</span>
-          </summary>
-          <div style="margin-top:8px;">
-            ${abonosHTML}
-          </div>
-        </details>` : ''}
-
-        ${m.notes ? `<div style="font-size:11px;color:var(--text-muted);background:rgba(255,255,255,0.03);border-radius:6px;padding:6px 10px;margin-bottom:10px;border-left:2px solid rgba(255,255,255,0.1);">📝 ${esc(m.notes)}</div>` : ''}
-
-        <!-- Acciones -->
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <button onclick="openCotizacionModal('${c.id}')" style="font-size:11px;padding:5px 12px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;cursor:pointer;font-weight:600;">✏️ Editar</button>
-          ${!isFullyPaid && m.status !== 'rechazada' ? `<button onclick="openCotizacionModal('${c.id}');setTimeout(()=>addCotAbono(),200)" style="font-size:11px;padding:5px 12px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;font-weight:600;">+ Registrar pago</button>` : ''}
-          ${m.status === 'pendiente' ? `<button onclick="changeCotizacionStatus('${c.id}','aceptada')" style="font-size:11px;padding:5px 12px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;">✅ Aceptar</button>` : ''}
-          <button onclick="printCotizacion('${c.id}')" style="font-size:11px;padding:5px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:6px;cursor:pointer;">🖨️ Imprimir</button>
-          <div style="flex:1;"></div>
-          <span style="font-size:10px;color:var(--text-dim);">${(c.created_at||'').slice(0,10)}</span>
         </div>
       </div>`
     }
 
     return `<div style="margin-bottom:16px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;">📄 COTIZACIONES (${cots.length})</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase;">Cotizaciones</span>
+          <span style="font-size:10px;padding:2px 8px;border-radius:10px;background:rgba(251,146,60,0.12);color:#fb923c;font-weight:700;">${cots.length}</span>
+        </div>
         <button onclick="openCotizacionModal(null,'${projSlug}')" style="font-size:11px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:600;">+ Nueva</button>
       </div>
-      ${Object.entries(d.cotsByCat).map(([cat,cs]) => `
+      ${Object.entries(d.cotsByCat).map(([cat, cs]) => `
         <div style="margin-bottom:4px;">
-          ${cs.length > 0 && Object.keys(d.cotsByCat).length > 1 ? `<div style="font-size:10px;font-weight:700;color:var(--text-muted);margin-bottom:6px;margin-top:4px;text-transform:uppercase;letter-spacing:.08em;padding-left:2px;">${esc(cat)}</div>` : ''}
-          ${cs.map(buildCotCard).join('')}
+          ${cs.length > 0 && Object.keys(d.cotsByCat).length > 1 ? `<div style="font-size:9px;font-weight:800;color:var(--text-dim);margin-bottom:4px;margin-top:6px;text-transform:uppercase;letter-spacing:.08em;padding-left:4px;">${esc(cat)}</div>` : ''}
+          ${cs.map(buildCotRow).join('')}
         </div>`).join('')}
     </div>`
   })
@@ -11232,6 +11372,15 @@ window.deleteCotizacion = async () => {
     await supabase.from('nodes').delete().eq('id', currentCotizacionId)
   closeCotizacionModal()
   renderAll()
+}
+
+window.toggleCotAccordion = (id) => {
+  const body = document.getElementById(`cot-acc-${id}`)
+  const chev = document.getElementById(`cot-chev-${id}`)
+  if (!body) return
+  const isOpen = body.style.display !== 'none'
+  body.style.display = isOpen ? 'none' : 'block'
+  if (chev) chev.style.transform = isOpen ? '' : 'rotate(180deg)'
 }
 
 window.changeCotizacionStatus = async (id, status) => {
