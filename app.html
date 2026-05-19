@@ -1497,35 +1497,77 @@
 
         <!-- Suscripción / Pago fijo fields -->
         <div id="ag-fields-recurring" style="display:none;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+
+          <!-- Monto + Moneda -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
             <div>
-              <label class="modal-label">Monto <span style="color:var(--text-muted);font-size:10px;">(opcional si es variable)</span></label>
-              <input id="ag-amount" type="number" class="modal-input" placeholder="Dejar vacío si varía" />
+              <label class="modal-label">Monto <span style="color:var(--text-muted);font-size:10px;">(vacío si es variable)</span></label>
+              <input id="ag-amount" type="number" class="modal-input" placeholder="0.00" />
             </div>
             <div>
               <label class="modal-label">Moneda</label>
               <select id="ag-currency" class="modal-input">
-                <option value="MXN">MXN</option>
-                <option value="USD">USD</option>
+                <option value="MXN">MXN — Peso mexicano</option>
+                <option value="USD">USD — Dólar</option>
               </select>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-            <div>
-              <label class="modal-label">Frecuencia</label>
-              <select id="ag-frequency" class="modal-input">
-                <option value="mensual">📅 Mensual</option>
-                <option value="bimestral">📅 Bimestral (cada 2 meses)</option>
-                <option value="trimestral">📅 Trimestral (cada 3 meses)</option>
-                <option value="semestral">📅 Semestral (cada 6 meses)</option>
-                <option value="anual">📅 Anual</option>
-              </select>
+
+          <!-- ── FRECUENCIA — chips visuales ── -->
+          <div style="margin-bottom:14px;">
+            <label class="modal-label" style="margin-bottom:8px;">Frecuencia</label>
+            <div id="ag-freq-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+              <button type="button" class="freq-chip active" data-freq="mensual"      onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(96,165,250,0.4);background:rgba(96,165,250,0.15);color:#60a5fa;cursor:pointer;">📅 Mensual</button>
+              <button type="button" class="freq-chip"        data-freq="quincenal"    onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">🔄 Quincenal</button>
+              <button type="button" class="freq-chip"        data-freq="semanal"      onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">📆 Semanal</button>
+              <button type="button" class="freq-chip"        data-freq="diario"       onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">⏱ Diario</button>
+              <button type="button" class="freq-chip"        data-freq="bimestral"    onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">📅 Bimestral</button>
+              <button type="button" class="freq-chip"        data-freq="trimestral"   onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">📅 Trimestral</button>
+              <button type="button" class="freq-chip"        data-freq="semestral"    onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">📅 Semestral</button>
+              <button type="button" class="freq-chip"        data-freq="anual"        onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">🗓 Anual</button>
+              <button type="button" class="freq-chip"        data-freq="personalizado" onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">✏️ Cada X días</button>
             </div>
-            <div>
-              <label class="modal-label">Día del mes</label>
-              <input id="ag-day" type="number" min="1" max="31" class="modal-input" placeholder="1" />
+            <!-- input oculto que guarda el valor real -->
+            <input type="hidden" id="ag-frequency" value="mensual" />
+
+            <!-- Sub-campos condicionales según frecuencia -->
+            <!-- Día del mes (mensual, bimestral, trimestral, semestral, anual) -->
+            <div id="ag-freq-day-month" style="margin-top:4px;">
+              <label class="modal-label" style="font-size:10px;">¿Qué día del mes?</label>
+              <input id="ag-day" type="number" min="1" max="31" class="modal-input" placeholder="Ej: 5" style="max-width:120px;" />
+            </div>
+
+            <!-- Quincenal: días 1 y 15 automático -->
+            <div id="ag-freq-quincenal" style="display:none;margin-top:4px;padding:8px 12px;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.2);border-radius:8px;">
+              <span style="font-size:11px;color:#60a5fa;">🔄 Se programarán los días <b>1 y 15</b> de cada mes automáticamente.</span>
+            </div>
+
+            <!-- Semanal: selector de día de la semana -->
+            <div id="ag-freq-weekday" style="display:none;margin-top:6px;">
+              <label class="modal-label" style="font-size:10px;">¿Qué día de la semana?</label>
+              <div style="display:flex;gap:5px;margin-top:4px;" id="ag-weekday-btns">
+                <button type="button" class="weekday-btn active" data-day="1" onclick="agWeekdaySelect(this)" style="font-size:10px;font-weight:700;padding:4px 8px;border-radius:6px;border:1px solid rgba(96,165,250,0.4);background:rgba(96,165,250,0.15);color:#60a5fa;cursor:pointer;min-width:36px;">Lun</button>
+                <button type="button" class="weekday-btn" data-day="2" onclick="agWeekdaySelect(this)" style="font-size:10px;font-weight:700;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;min-width:36px;">Mar</button>
+                <button type="button" class="weekday-btn" data-day="3" onclick="agWeekdaySelect(this)" style="font-size:10px;font-weight:700;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;min-width:36px;">Mié</button>
+                <button type="button" class="weekday-btn" data-day="4" onclick="agWeekdaySelect(this)" style="font-size:10px;font-weight:700;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;min-width:36px;">Jue</button>
+                <button type="button" class="weekday-btn" data-day="5" onclick="agWeekdaySelect(this)" style="font-size:10px;font-weight:700;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;min-width:36px;">Vie</button>
+                <button type="button" class="weekday-btn" data-day="6" onclick="agWeekdaySelect(this)" style="font-size:10px;font-weight:700;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;min-width:36px;">Sáb</button>
+                <button type="button" class="weekday-btn" data-day="0" onclick="agWeekdaySelect(this)" style="font-size:10px;font-weight:700;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;min-width:36px;">Dom</button>
+              </div>
+              <input type="hidden" id="ag-weekday" value="1" />
+            </div>
+
+            <!-- Personalizado: cada X días -->
+            <div id="ag-freq-custom" style="display:none;margin-top:6px;">
+              <label class="modal-label" style="font-size:10px;">¿Cada cuántos días?</label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+                <input id="ag-custom-days" type="number" min="1" class="modal-input" placeholder="Ej: 10" style="max-width:100px;" />
+                <span style="font-size:11px;color:var(--text-muted);">días</span>
+              </div>
             </div>
           </div>
+
+          <!-- Categoría (solo suscripciones) -->
           <div class="modal-field" id="ag-category-wrap">
             <label class="modal-label">Categoría</label>
             <select id="ag-category" class="modal-input">
@@ -1543,29 +1585,77 @@
               <option value="🔧 Otros">🔧 Otros</option>
             </select>
           </div>
-          <!-- Bill-specific fields -->
+
+          <!-- ── CAMPOS EXCLUSIVOS DE PAGO FIJO (bill) ── -->
           <div id="ag-bill-fields" style="display:none;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+
+            <!-- Separador visual -->
+            <div style="display:flex;align-items:center;gap:8px;margin:14px 0 12px;">
+              <div style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></div>
+              <span style="font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--text-muted);">A QUIÉN SE PAGA</span>
+              <div style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></div>
+            </div>
+
+            <!-- Contacto beneficiario -->
+            <div style="margin-bottom:10px;">
+              <label class="modal-label">Contacto beneficiario</label>
+              <select id="ag-bill-contact" class="modal-input">
+                <option value="">— Sin contacto —</option>
+              </select>
+            </div>
+
+            <!-- Info rápida del contacto -->
+            <div id="ag-bill-contact-info" style="display:none;background:rgba(251,146,60,0.07);border:1px solid rgba(251,146,60,0.2);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:var(--text-muted);line-height:1.6;"></div>
+
+            <!-- Cuenta destino (cascada desde contacto) -->
+            <div id="ag-bill-account-wrap" style="display:none;margin-bottom:10px;">
+              <label class="modal-label">Cuenta destino <span style="color:#fb923c;font-size:10px;">● selecciona a cuál cuenta</span></label>
+              <select id="ag-bill-account" class="modal-input" style="border-color:rgba(251,146,60,0.4);">
+                <option value="">— Elige la cuenta —</option>
+              </select>
+            </div>
+
+            <!-- Método de pago -->
+            <div style="margin-bottom:10px;">
+              <label class="modal-label">Método de pago</label>
+              <select id="ag-bill-method" class="modal-input">
+                <option value="transferencia">🏦 Transferencia bancaria</option>
+                <option value="tarjeta">💳 Tarjeta de crédito/débito</option>
+                <option value="efectivo">💵 Efectivo</option>
+                <option value="cripto">₿ Criptomoneda</option>
+                <option value="domiciliado">🔄 Cargo domiciliado / débito automático</option>
+                <option value="oxxo">🏪 OXXO Pay</option>
+                <option value="spei">⚡ SPEI</option>
+              </select>
+            </div>
+
+            <!-- Separador: Datos del servicio -->
+            <div style="display:flex;align-items:center;gap:8px;margin:14px 0 12px;">
+              <div style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></div>
+              <span style="font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--text-muted);">DATOS DEL SERVICIO</span>
+              <div style="flex:1;height:1px;background:rgba(255,255,255,0.06);"></div>
+            </div>
+
+            <!-- Nº contrato + Referencia -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
               <div>
-                <label class="modal-label">Contacto beneficiario</label>
-                <select id="ag-bill-contact" class="modal-input">
-                  <option value="">— Sin contacto —</option>
-                </select>
+                <label class="modal-label">Nº cliente / contrato</label>
+                <input id="ag-contract-num" type="text" class="modal-input" placeholder="Ej: 4500123456" />
               </div>
               <div>
-                <label class="modal-label">Método de pago</label>
-                <select id="ag-bill-method" class="modal-input">
-                  <option value="transferencia">🏦 Transferencia</option>
-                  <option value="tarjeta">💳 Tarjeta</option>
-                  <option value="efectivo">💵 Efectivo</option>
-                  <option value="cripto">₿ Cripto</option>
-                  <option value="domiciliado">🔄 Cargo domiciliado</option>
-                </select>
+                <label class="modal-label">Referencia de pago</label>
+                <input id="ag-pay-ref" type="text" class="modal-input" placeholder="Ej: 5551234" />
               </div>
             </div>
-            <div id="ag-bill-contact-info" style="display:none;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.25);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:var(--text-muted);"></div>
-          </div>
-        </div>
+
+            <!-- Notas -->
+            <div style="margin-bottom:4px;">
+              <label class="modal-label">Notas / instrucciones</label>
+              <input id="ag-bill-notes" type="text" class="modal-input" placeholder="Ej: Pagar antes del día 10 para evitar recargo" />
+            </div>
+
+          </div><!-- /ag-bill-fields -->
+        </div><!-- /ag-fields-recurring -->
 
         <!-- Color -->
         <div style="margin-bottom:16px;">

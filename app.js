@@ -3692,31 +3692,64 @@ function renderAgenda(nodes) {
   // ── PAGOS FIJOS ───────────────────────────────────────────────
   const billsEl = document.getElementById('agenda-bills')
   if (billsEl) billsEl.innerHTML = bills.length === 0
-    ? `<div style="color:var(--text-muted);font-size:12px;">Sin pagos fijos registrados.</div>`
+    ? `<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Sin pagos fijos registrados.</div>`
     : bills.map(b => {
         const m = b.metadata || {}
-        const clr = m.color || '#fb923c'
+        const clr  = m.color || '#fb923c'
         const paid = m.paid || false
-        const billContact = m.contactId ? allNodes.find(n => n.id === m.contactId) : null
+        const billContact     = m.contactId ? allNodes.find(n => n.id === m.contactId) : null
         const billContactName = billContact ? (billContact.metadata?.name || billContact.content) : ''
-        const methodLabel = { transferencia:'🏦 Transferencia', tarjeta:'💳 Tarjeta', efectivo:'💵 Efectivo', cripto:'₿ Cripto', domiciliado:'🔄 Cargo domiciliado' }
-        const freqLabel = { mensual:'Mensual', bimestral:'Bimestral', trimestral:'Trimestral', semestral:'Semestral', anual:'Anual' }
-        const freqStr = m.frequency ? freqLabel[m.frequency] || m.frequency : 'Mensual'
-        const amountStr = m.amount != null ? fmt$(m.amount) : '<span style="font-size:10px;font-style:italic;color:var(--text-muted);">Variable</span>'
-        return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${paid?'rgba(74,222,128,0.05)':clr+'14'};border:1px solid ${paid?'#4ade8033':clr+'33'};border-radius:12px;opacity:${paid?0.6:1};">
-          <button onclick="toggleBillPaid('${b.id}')" style="background:${paid?'#4ade80':'transparent'};border:2px solid ${paid?'#4ade80':clr};width:20px;height:20px;border-radius:5px;cursor:pointer;flex-shrink:0;color:${paid?'#000':'transparent'};font-size:12px;display:flex;align-items:center;justify-content:center;">✓</button>
-          <div style="flex:1;">
-            <div style="font-size:12px;font-weight:600;color:#fff;${paid?'text-decoration:line-through;':''}">${esc(m.label||b.content)}</div>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:3px;">
-              ${m.dueDate?`<span style="font-size:10px;color:var(--text-muted);">📅 ${m.dueDate}</span>`:''}
-              <span style="font-size:10px;color:${clr}88;">🔁 ${freqStr}</span>
-              ${billContactName?`<span style="font-size:10px;color:var(--text-muted);">→ ${esc(billContactName)}</span>`:''}
-              ${m.method?`<span style="font-size:10px;color:var(--text-muted);">${methodLabel[m.method]||m.method}</span>`:''}
+        const methodLabel = { transferencia:'🏦 Transf.', tarjeta:'💳 Tarjeta', efectivo:'💵 Efectivo', cripto:'₿ Cripto', domiciliado:'🔄 Domiciliado', oxxo:'🏪 OXXO', spei:'⚡ SPEI' }
+        const freqLabel   = { diario:'Diario', semanal:'Semanal', quincenal:'Quincenal', mensual:'Mensual', bimestral:'Bimestral', trimestral:'Trimestral', semestral:'Semestral', anual:'Anual', personalizado:`Cada ${m.customDays||'?'} días` }
+        const freqStr     = m.frequency ? (freqLabel[m.frequency] || m.frequency) : 'Mensual'
+        const weekdays    = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+        const weekdayStr  = m.frequency === 'semanal' && m.weekday != null ? ` (${weekdays[parseInt(m.weekday)]})` : ''
+        const amountStr   = m.amount != null ? fmt$(m.amount) : '<span style="font-size:10px;font-style:italic;color:var(--text-muted);">Variable</span>'
+        // Cuenta destino formateada
+        const tAcc = m.targetAccount
+        const targetAccStr = tAcc ? (() => {
+          const last4 = tAcc.clabe ? `····${tAcc.clabe.slice(-4)}` : tAcc.account ? `····${String(tAcc.account).slice(-4)}` : ''
+          return [tAcc.bank || tAcc.bank_name, last4].filter(Boolean).join(' ')
+        })() : ''
+        // Días vencimiento
+        const due = m.dueDate
+        const dueIsClose = due && (new Date(due) - new Date()) / 86400000 <= 5
+        return `
+        <div style="display:flex;flex-direction:column;gap:0;padding:14px 16px;background:${paid?'rgba(74,222,128,0.04)':clr+'12'};border:1px solid ${paid?'#4ade8030':clr+'30'};border-radius:12px;opacity:${paid?0.55:1};transition:opacity 0.2s;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <button onclick="toggleBillPaid('${b.id}')" title="${paid?'Marcar pendiente':'Marcar pagado'}"
+              style="width:22px;height:22px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:800;
+                     background:${paid?'#4ade80':'transparent'};border:2px solid ${paid?'#4ade80':clr};color:${paid?'#000':'transparent'};">✓</button>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:700;color:${paid?'var(--text-muted)':'#f0f6fc'};${paid?'text-decoration:line-through;':''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.label||b.content)}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;align-items:center;">
+                <span style="font-size:10px;font-weight:700;color:${clr};background:${clr}18;padding:1px 7px;border-radius:10px;">🔁 ${freqStr}${weekdayStr}</span>
+                ${due?`<span style="font-size:10px;color:${dueIsClose?'#f87171':'var(--text-muted)'};font-weight:${dueIsClose?700:400};">📅 ${due}${dueIsClose?' ⚠️':''}</span>`:''}
+                ${billContactName?`<span style="font-size:10px;color:var(--text-muted);">→ ${esc(billContactName)}</span>`:''}
+                ${targetAccStr?`<span style="font-size:10px;color:#60a5fa;background:rgba(96,165,250,0.1);padding:1px 6px;border-radius:8px;">🏦 ${esc(targetAccStr)}</span>`:''}
+                ${m.method?`<span style="font-size:10px;color:var(--text-muted);">${methodLabel[m.method]||m.method}</span>`:''}
+              </div>
+              ${(m.contractNum||m.payRef||m.billNotes)?`
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.04);">
+                ${m.contractNum?`<span style="font-size:10px;color:var(--text-muted);">📋 Contrato: <b style="color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${esc(m.contractNum)}</b></span>`:''}
+                ${m.payRef?`<span style="font-size:10px;color:var(--text-muted);">🔑 Ref: <b style="color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${esc(m.payRef)}</b></span>`:''}
+                ${m.billNotes?`<span style="font-size:10px;color:var(--text-muted);font-style:italic;">${esc(m.billNotes)}</span>`:''}
+              </div>`:''}
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+              <div style="font-size:15px;font-weight:900;color:${clr};font-family:'JetBrains Mono',monospace;">${amountStr}</div>
+              <div style="display:flex;gap:4px;">
+                <button onclick="editAgendaItem('${b.id}')" title="Editar"
+                  style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);cursor:pointer;font-size:11px;">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+                <button onclick="deleteAgendaItem('${b.id}')" title="Eliminar"
+                  style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);cursor:pointer;font-size:11px;">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
             </div>
           </div>
-          <div style="font-size:13px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${amountStr}</div>
-          <button onclick="editAgendaItem('${b.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Editar">✏️</button>
-          <button onclick="deleteAgendaItem('${b.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Eliminar">✕</button>
         </div>`
       }).join('')
 
@@ -3727,6 +3760,130 @@ function renderAgenda(nodes) {
 function fmt$(n) {
   if (typeof n !== 'number') return '$0'
   return '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+// ── FRECUENCIA — chips y selector de día de semana ───────────────────────────
+window.agFreqSelect = (chip) => {
+  document.querySelectorAll('#ag-freq-chips .freq-chip').forEach(c => {
+    c.style.background = 'transparent'
+    c.style.borderColor = 'rgba(255,255,255,0.1)'
+    c.style.color = 'var(--text-muted)'
+    c.classList.remove('active')
+  })
+  chip.style.background  = 'rgba(96,165,250,0.15)'
+  chip.style.borderColor = 'rgba(96,165,250,0.4)'
+  chip.style.color       = '#60a5fa'
+  chip.classList.add('active')
+  const freq = chip.dataset.freq
+  document.getElementById('ag-frequency').value = freq
+  // Sub-campos condicionales
+  const showMonthDay  = ['mensual','bimestral','trimestral','semestral','anual'].includes(freq)
+  document.getElementById('ag-freq-day-month').style.display  = showMonthDay   ? '' : 'none'
+  document.getElementById('ag-freq-weekday').style.display    = freq === 'semanal'      ? '' : 'none'
+  document.getElementById('ag-freq-quincenal').style.display  = freq === 'quincenal'    ? '' : 'none'
+  document.getElementById('ag-freq-custom').style.display     = freq === 'personalizado'? '' : 'none'
+}
+
+window.agWeekdaySelect = (btn) => {
+  document.querySelectorAll('#ag-weekday-btns .weekday-btn').forEach(b => {
+    b.style.background  = 'transparent'
+    b.style.borderColor = 'rgba(255,255,255,0.1)'
+    b.style.color       = 'var(--text-muted)'
+    b.classList.remove('active')
+  })
+  btn.style.background  = 'rgba(96,165,250,0.15)'
+  btn.style.borderColor = 'rgba(96,165,250,0.4)'
+  btn.style.color       = '#60a5fa'
+  btn.classList.add('active')
+  document.getElementById('ag-weekday').value = btn.dataset.day
+}
+
+// ── Calcula próximo vencimiento para CUALQUIER frecuencia ────────────────────
+function calcNextDueDate(frequency, dayOfMonth, weekday, customDays) {
+  const today = new Date(); today.setHours(0,0,0,0)
+  if (frequency === 'diario') {
+    const d = new Date(today); d.setDate(d.getDate() + 1)
+    return d.toISOString().split('T')[0]
+  }
+  if (frequency === 'semanal') {
+    const target = parseInt(weekday ?? 1)
+    const d = new Date(today)
+    let diff = target - d.getDay()
+    if (diff <= 0) diff += 7
+    d.setDate(d.getDate() + diff)
+    return d.toISOString().split('T')[0]
+  }
+  if (frequency === 'quincenal') {
+    const d = new Date(today)
+    const day = d.getDate()
+    if (day < 15) { d.setDate(15) }
+    else { d.setMonth(d.getMonth() + 1); d.setDate(1) }
+    return d.toISOString().split('T')[0]
+  }
+  if (frequency === 'personalizado' && customDays > 0) {
+    const d = new Date(today); d.setDate(d.getDate() + customDays)
+    return d.toISOString().split('T')[0]
+  }
+  // mensual, bimestral, trimestral, semestral, anual
+  const freqMonths = { mensual:1, bimestral:2, trimestral:3, semestral:6, anual:12 }
+  const months = freqMonths[frequency] || 1
+  const dom = dayOfMonth || 1
+  const d = new Date(today.getFullYear(), today.getMonth(), dom)
+  while (d <= today) d.setMonth(d.getMonth() + months)
+  return d.toISOString().split('T')[0]
+}
+
+// ── Helper para inicializar chips al abrir el modal ──────────────────────────
+function _agInitFreqChips(freq = 'mensual') {
+  document.querySelectorAll('#ag-freq-chips .freq-chip').forEach(c => {
+    const active = c.dataset.freq === freq
+    c.style.background  = active ? 'rgba(96,165,250,0.15)' : 'transparent'
+    c.style.borderColor = active ? 'rgba(96,165,250,0.4)'  : 'rgba(255,255,255,0.1)'
+    c.style.color       = active ? '#60a5fa'               : 'var(--text-muted)'
+    if (active) c.classList.add('active'); else c.classList.remove('active')
+  })
+  document.getElementById('ag-frequency').value = freq
+  const showMonthDay = ['mensual','bimestral','trimestral','semestral','anual'].includes(freq)
+  document.getElementById('ag-freq-day-month').style.display  = showMonthDay        ? '' : 'none'
+  document.getElementById('ag-freq-weekday').style.display    = freq === 'semanal'       ? '' : 'none'
+  document.getElementById('ag-freq-quincenal').style.display  = freq === 'quincenal'     ? '' : 'none'
+  document.getElementById('ag-freq-custom').style.display     = freq === 'personalizado' ? '' : 'none'
+}
+
+// ── Helper para inicializar cuenta destino en cascada ────────────────────────
+function _agInitContactAccounts(contactId, savedAccountIdx = null) {
+  const accountWrap = document.getElementById('ag-bill-account-wrap')
+  const accountSel  = document.getElementById('ag-bill-account')
+  const infoEl      = document.getElementById('ag-bill-contact-info')
+  if (!contactId) {
+    if (accountWrap) accountWrap.style.display = 'none'
+    if (infoEl) infoEl.style.display = 'none'
+    return
+  }
+  const contact = allNodes.find(n => n.id === contactId)
+  if (!contact) { if (accountWrap) accountWrap.style.display = 'none'; return }
+  const m = contact.metadata || {}
+  // Info básica
+  const parts = []
+  if (m.bank_name || m.bank) parts.push(`🏦 ${m.bank_name || m.bank}`)
+  if (m.clabe)   parts.push(`CLABE: ${m.clabe}`)
+  if (m.account) parts.push(`Cta: ${m.account}`)
+  if (m.phone)   parts.push(`📞 ${m.phone}`)
+  if (infoEl) { infoEl.innerHTML = parts.join(' &nbsp;·&nbsp; ') || ''; infoEl.style.display = parts.length ? '' : 'none' }
+  // Cuentas registradas del contacto
+  const accounts = m.contact_accounts || []
+  if (accounts.length > 0 && accountSel && accountWrap) {
+    accountSel.innerHTML = '<option value="">— Elige la cuenta destino —</option>' +
+      accounts.map((acc, i) => {
+        const last4 = acc.clabe ? `····${acc.clabe.slice(-4)}` : acc.account ? `····${String(acc.account).slice(-4)}` : ''
+        const label = [acc.bank || acc.bank_name, acc.type, last4].filter(Boolean).join(' ')
+        const sel   = savedAccountIdx !== null && parseInt(savedAccountIdx) === i ? 'selected' : ''
+        return `<option value="${i}" ${sel}>${esc(label || `Cuenta ${i+1}`)}</option>`
+      }).join('')
+    accountWrap.style.display = ''
+  } else if (accountWrap) {
+    accountWrap.style.display = 'none'
+  }
 }
 
 // ── AGENDA MODAL ──────────────────────────────────────────────────────────────
@@ -3746,7 +3903,16 @@ window.openAgendaModal = (type, prefillProjectTag = '') => {
   if (type !== 'card') {
     document.getElementById('ag-amount').value = ''
     document.getElementById('ag-day').value    = ''
-    if (document.getElementById('ag-frequency')) document.getElementById('ag-frequency').value = 'mensual'
+    document.getElementById('ag-custom-days') && (document.getElementById('ag-custom-days').value = '')
+    _agInitFreqChips('mensual')
+    // Reset weekday chips to Lunes
+    document.querySelectorAll('#ag-weekday-btns .weekday-btn').forEach(b => {
+      const active = b.dataset.day === '1'
+      b.style.background = active ? 'rgba(96,165,250,0.15)' : 'transparent'
+      b.style.borderColor = active ? 'rgba(96,165,250,0.4)' : 'rgba(255,255,255,0.1)'
+      b.style.color = active ? '#60a5fa' : 'var(--text-muted)'
+    })
+    document.getElementById('ag-weekday') && (document.getElementById('ag-weekday').value = '1')
   } else {
     document.getElementById('ag-last4').value       = ''
     document.getElementById('ag-limit').value       = ''
@@ -3771,22 +3937,8 @@ window.openAgendaModal = (type, prefillProjectTag = '') => {
           return `<option value="${c.id}">${esc(name)}</option>`
         }).join('')
       if (infoEl) infoEl.style.display = 'none'
-      sel.onchange = () => {
-        const cId = sel.value
-        if (!cId || !infoEl) { infoEl && (infoEl.style.display='none'); return }
-        const contact = allNodes.find(n => n.id === cId)
-        if (!contact) { infoEl.style.display='none'; return }
-        const m = contact.metadata || {}
-        const parts = []
-        if (m.bank_name || m.bank) parts.push(`🏦 ${m.bank_name || m.bank}`)
-        if (m.clabe)               parts.push(`CLABE: ${m.clabe}`)
-        if (m.account)             parts.push(`Cta: ${m.account}`)
-        if (m.phone)               parts.push(`📞 ${m.phone}`)
-        if (m.email)               parts.push(`✉ ${m.email}`)
-        if (m.address?.wallet)     parts.push(`₿ ${m.address.wallet}`)
-        if (parts.length) { infoEl.innerHTML = parts.join(' &nbsp;·&nbsp; '); infoEl.style.display = '' }
-        else infoEl.style.display = 'none'
-      }
+      document.getElementById('ag-bill-account-wrap') && (document.getElementById('ag-bill-account-wrap').style.display = 'none')
+      sel.onchange = () => _agInitContactAccounts(sel.value)
     }
   }
   // Reset color swatches
@@ -3833,28 +3985,40 @@ window.saveAgendaItem = async () => {
       currency:   document.getElementById('ag-card-currency')?.value || 'MXN'
     }
   } else {
-    const rawAmt = document.getElementById('ag-amount')?.value?.trim()
-    const frequency = document.getElementById('ag-frequency')?.value || 'mensual'
-    const freqMonths = { mensual:1, bimestral:2, trimestral:3, semestral:6, anual:12 }
+    const rawAmt     = document.getElementById('ag-amount')?.value?.trim()
+    const frequency  = document.getElementById('ag-frequency')?.value || 'mensual'
+    const dayOfMonth = parseInt(document.getElementById('ag-day')?.value) || null
+    const weekday    = document.getElementById('ag-weekday')?.value || '1'
+    const customDays = parseInt(document.getElementById('ag-custom-days')?.value) || null
     meta = { ...meta,
       amount:     rawAmt !== '' ? (parseFloat(rawAmt) || 0) : null,
       currency:   document.getElementById('ag-currency')?.value || 'MXN',
-      dayOfMonth: parseInt(document.getElementById('ag-day')?.value) || null,
+      dayOfMonth,
+      weekday:    frequency === 'semanal' ? weekday : null,
+      customDays: frequency === 'personalizado' ? customDays : null,
       frequency,
       category:   document.getElementById('ag-category')?.value || '',
       paid: false
     }
     if (agendaItemType === 'bill') {
-      meta.contactId = document.getElementById('ag-bill-contact')?.value || ''
-      meta.method    = document.getElementById('ag-bill-method')?.value || 'transferencia'
-      meta.dueDate = (() => {
-        const day = meta.dayOfMonth; if (!day) return ''
-        const d = new Date(); d.setDate(day)
-        const months = freqMonths[frequency] || 1
-        // Avanzar al próximo vencimiento según frecuencia
-        while (d <= new Date()) d.setMonth(d.getMonth() + months)
-        return d.toISOString().split('T')[0]
-      })()
+      const contactId = document.getElementById('ag-bill-contact')?.value || ''
+      const accountIdx = document.getElementById('ag-bill-account')?.value ?? ''
+      meta.contactId   = contactId
+      meta.method      = document.getElementById('ag-bill-method')?.value || 'transferencia'
+      meta.contractNum = document.getElementById('ag-contract-num')?.value?.trim() || ''
+      meta.payRef      = document.getElementById('ag-pay-ref')?.value?.trim()      || ''
+      meta.billNotes   = document.getElementById('ag-bill-notes')?.value?.trim()   || ''
+      // Guardar qué cuenta destino se seleccionó
+      if (accountIdx !== '' && contactId) {
+        const contact  = allNodes.find(n => n.id === contactId)
+        const accounts = contact?.metadata?.contact_accounts || []
+        meta.targetAccount = accounts[parseInt(accountIdx)] || null
+        meta.targetAccountIdx = accountIdx
+      } else {
+        meta.targetAccount = null
+        meta.targetAccountIdx = ''
+      }
+      meta.dueDate = calcNextDueDate(frequency, dayOfMonth, weekday, customDays)
     }
     // Pre-fill project tag if opened from project dashboard
     if (window._agendaPrefillProject) {
@@ -3899,11 +4063,29 @@ window.editAgendaItem = (nodeId) => {
     document.getElementById('ag-amount').value = m.amount != null ? m.amount : ''
     document.getElementById('ag-day').value    = m.dayOfMonth || ''
     if (document.getElementById('ag-currency')) document.getElementById('ag-currency').value = m.currency || 'MXN'
-    if (document.getElementById('ag-frequency')) document.getElementById('ag-frequency').value = m.frequency || 'mensual'
-    if (node.type === 'subscription' && document.getElementById('ag-category')) document.getElementById('ag-category').value = m.category || ''
+    if (document.getElementById('ag-category') && node.type === 'subscription') document.getElementById('ag-category').value = m.category || ''
+    // Restaurar chips de frecuencia
+    _agInitFreqChips(m.frequency || 'mensual')
+    // Restaurar día de semana
+    if (m.frequency === 'semanal' && m.weekday) {
+      document.getElementById('ag-weekday') && (document.getElementById('ag-weekday').value = m.weekday)
+      document.querySelectorAll('#ag-weekday-btns .weekday-btn').forEach(b => {
+        const active = b.dataset.day === String(m.weekday)
+        b.style.background  = active ? 'rgba(96,165,250,0.15)' : 'transparent'
+        b.style.borderColor = active ? 'rgba(96,165,250,0.4)'  : 'rgba(255,255,255,0.1)'
+        b.style.color       = active ? '#60a5fa'               : 'var(--text-muted)'
+      })
+    }
+    // Restaurar cada X días
+    if (m.frequency === 'personalizado' && m.customDays) {
+      document.getElementById('ag-custom-days') && (document.getElementById('ag-custom-days').value = m.customDays)
+    }
     if (node.type === 'bill') {
       if (document.getElementById('ag-bill-method')) document.getElementById('ag-bill-method').value = m.method || 'transferencia'
-      // Populate & set contact
+      if (document.getElementById('ag-contract-num')) document.getElementById('ag-contract-num').value = m.contractNum || ''
+      if (document.getElementById('ag-pay-ref'))      document.getElementById('ag-pay-ref').value      = m.payRef      || ''
+      if (document.getElementById('ag-bill-notes'))   document.getElementById('ag-bill-notes').value   = m.billNotes   || ''
+      // Populate & set contact + cascade de cuentas
       const sel = document.getElementById('ag-bill-contact')
       if (sel) {
         const contacts = getContacts()
@@ -3911,6 +4093,8 @@ window.editAgendaItem = (nodeId) => {
           const name = c.metadata?.name || c.content
           return `<option value="${c.id}" ${m.contactId===c.id?'selected':''}>${esc(name)}</option>`
         }).join('')
+        sel.onchange = () => _agInitContactAccounts(sel.value)
+        if (m.contactId) _agInitContactAccounts(m.contactId, m.targetAccountIdx ?? null)
       }
     }
   }
