@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.6.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-1.7.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -67,9 +67,12 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 📤 **Print / Export CSV** | Exporta transacciones y movimientos financieros en un clic |
 | 📱 **PWA-ready** | Diseño responsivo, usable en móvil y tablet |
 | 🎨 **Editor rico** | Bóveda Neural con colores de texto, resaltado, tamaños y formato completo |
+| 📝 **Bóveda Neural full-page** | Editor de notas a página completa (igual que Contactos/Proyectos) con retorno a grilla |
 | 👤 **Ficha de contacto** | Perfil de página completa con tabs (Info/Docs/Pagos/Proyectos), upload de foto, preview docs e impresión |
 | 🖼️ **Upload de foto** | Sube fotos directamente (compresión automática + Supabase Storage) o pega URLs de Drive |
 | 👁️ **Preview de documentos** | Lightbox con iframe para ver documentos Drive, PDFs e imágenes sin salir de la app |
+| 🧾 **CEP interno** | Comprobante Electrónico de Pago con detalle completo, adjuntos y link oficial Banxico |
+| 📥 **CSV masivo** | Importación masiva de contactos con 48 columnas y detección de duplicados por nombre (fuzzy) |
 | 💎 **Portafolio Crypto** | Seguimiento multi-moneda con edición de compras y precio actual |
 
 ---
@@ -83,7 +86,7 @@ Nexus OS tiene **8 vistas** accesibles desde la barra lateral:
 | 🖥️ **Panel de Comandos** | Dashboard ejecutivo con KPI strip, próximos pagos, proyectos y widget de cumpleaños/aniversarios (30 días) |
 | 🗂️ **Muro Táctico** | Kanban drag & drop por columnas (Pendiente / En Progreso / Hecho). Modal de detalle por tarjeta |
 | 💰 **Bio-Finanzas** | Registro financiero multi-cuenta. Vista de cuentas con saldo disponible, modal de detalle y portafolio crypto |
-| 🧠 **Bóveda Neural** | Notas estilo Google Keep con colores, etiquetas, pin, editor rico (tamaños, colores de texto, resaltado, negritas) |
+| 🧠 **Bóveda Neural** | Notas estilo Google Keep con vista de página completa, editor rico, colores, etiquetas, pin y recordatorios |
 | 📅 **Calendario** | Línea de tiempo con vistas mes / semana / día. Sincronizado con tareas y eventos del parser |
 | 📜 **Crónica** | Histórico diario en 3 columnas: lo que pasó, decisiones tomadas, pendientes |
 | 👥 **Contactos** | Directorio con ficha completa: foto, teléfonos múltiples, documentos Drive, WhatsApp, historial de pagos |
@@ -157,9 +160,17 @@ Seguimiento de inversiones en criptomonedas sin depender de APIs externas:
 
 ---
 
-## 🧠 Bóveda Neural — Editor Rico
+## 🧠 Bóveda Neural — Editor de Notas
 
-El editor de notas tiene capacidades de formato completo:
+Las notas se visualizan como tarjetas estilo Google Keep en una grilla. Al hacer clic en cualquier nota se abre un **editor de página completa** (igual que Contactos y Proyectos) con botón de retorno a la grilla.
+
+### Vista de página completa
+- **Header**: título editable, botón fijar/archivar, etiquetas, selector de color, recordatorio
+- **Editor rico**: toolbar completa con formato de texto profesional
+- **Adjuntos**: imágenes, PDFs y links — igual que en finanzas
+- **Acciones**: guardar, eliminar, imprimir, copiar como Markdown
+
+### Toolbar del editor
 
 | Control | Función |
 |---|---|
@@ -172,7 +183,6 @@ El editor de notas tiene capacidades de formato completo:
 | 🔗 | Insertar hipervínculo |
 | `H1` / `H2` / `H3` / `¶` | Encabezados y párrafo (selector de bloque) |
 | `/` en el editor | Menú de bloques estilo Notion |
-| ⤢ | Maximizar a pantalla completa |
 
 ---
 
@@ -251,7 +261,7 @@ npm install
 
 ```sql
 -- ============================================================
--- NEXUS OS — Schema v1.5
+-- NEXUS OS — Schema v1.7
 -- Ejecutar en: Supabase > SQL Editor
 -- ============================================================
 
@@ -315,10 +325,17 @@ Abre [http://localhost:5173](http://localhost:5173) — crea tu cuenta y empieza
 
 ```
 nexus-os/
-├── app.js              # Lógica principal — parser, render engine, todas las vistas (~13,000 líneas)
+├── app.js              # Lógica principal — parser, render engine, todas las vistas
 ├── app.html            # Shell HTML — estructura de vistas y modales
 ├── main.js             # Entry point Vite — Supabase init, auth, router
 ├── style.css           # Design tokens y clases base (complementa Tailwind)
+├── index.html          # Landing / login page
+├── reset-password.html # Flujo de recuperación de contraseña
+├── src/
+│   ├── parser.js       # Parser semántico v2 — detecta tipos, fechas, montos
+│   ├── finance-engine.js # Motor financiero — balances, running balance, periodos
+│   ├── logic.js        # Lógica auxiliar compartida
+│   └── __tests__/      # Tests unitarios (Vitest)
 ├── vite.config.js      # Config Vite
 ├── tailwind.config.js  # Config Tailwind CSS
 ├── vercel.json         # Config deploy Vercel (SPA routing)
@@ -326,8 +343,8 @@ nexus-os/
 │   └── database_schema.md   # Esquema SQL completo documentado
 ├── scripts/
 │   └── take-screenshots.mjs # Utilidad para generar screenshots
-├── assets/             # Imágenes y recursos estáticos
-├── public/             # Archivos públicos (favicon, manifest)
+├── assets/             # Banner, screenshots por vista
+├── public/             # manifest.json, service worker
 └── .env.example        # Plantilla de variables de entorno
 ```
 
@@ -339,13 +356,16 @@ nexus-os/
 | `renderKanban()` | Muro Táctico — board Kanban |
 | `renderFinance()` | Bio-Finanzas — cuentas y transacciones |
 | `renderCryptoPortfolio()` | Portafolio Crypto (dentro de Bio-Finanzas) |
-| `renderNotes()` | Bóveda Neural — notas tipo Keep |
+| `renderNotes()` | Bóveda Neural — grilla o editor full-page |
 | `renderCalendar()` | Calendario / Línea de Tiempo |
 | `renderCronica()` | Crónica — histórico diario |
 | `renderProyectos()` | Proyectos — dashboard + finanzas |
 | `renderContacts()` | Contactos — tarjetas del directorio |
 | `openContactProfile(id)` | Ficha completa de contacto |
+| `openNoteFullPage(id)` | Editor full-page de nota |
 | `buildNoteBlockEditor()` | Editor rico con colores/tamaños |
+| `printFinanceCEP()` | Comprobante Electrónico de Pago |
+| `importContactsCSV()` | Importación masiva CSV con detección de duplicados |
 
 ---
 

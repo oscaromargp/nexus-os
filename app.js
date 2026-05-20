@@ -25,6 +25,8 @@ let activeTypeFilter = null   // null = todos los tipos
 let feedGrouped = false       // agrupar por tipo en el feed
 let activeAccount = 'all'
 let editingNoteId = null
+let _notesMode = 'grid'  // 'grid' | 'editor'
+let _noteProfileId = null
 let editingAccountId = null
 let calView = 'month'
 let selectedEventColor = '#00f0ff'
@@ -1947,9 +1949,273 @@ window.changeNodeType = async (id, newType) => {
   }
 }
 
+// ── Full-page note editor builder ─────────────────────────────────────────────
+function _buildNoteEditorHTML(id) {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return '<p style="color:var(--text-dim);">Nota no encontrada</p>'
+  const m = node.metadata || {}
+  const title = m.label || node.content.replace(/<[^>]+>/g,' ').trim()
+  const color = m.color || ''
+  const colorStyle = NOTE_COLORS[color] || ''
+  const isPinned = m.pinned
+  const tags = (m.tags || [])
+  const hasReminder = !!m.reminder
+
+  return `
+  <div style="max-width:900px;margin:0 auto;animation:fadeIn .25s;">
+    <!-- Back button -->
+    <button onclick="closeNoteEditor()" style="display:inline-flex;align-items:center;gap:6px;background:none;border:none;color:var(--accent-cyan);cursor:pointer;font-size:13px;font-weight:700;padding:8px 0;margin-bottom:16px;letter-spacing:.03em;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+      Volver a Bóveda Neural
+    </button>
+
+    <!-- Header card -->
+    <div style="${colorStyle};background:${colorStyle ? '' : 'rgba(255,255,255,0.02)'};border:1px solid var(--glass-border);border-radius:16px;padding:24px 28px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;flex:1;">
+          <span style="font-size:24px;">📝</span>
+          <input type="text" id="nfp-title" value="${esc(title)}" placeholder="Título de la nota"
+            style="flex:1;background:none;border:none;color:var(--text-main);font-size:20px;font-weight:800;outline:none;font-family:inherit;letter-spacing:-.02em;" />
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <button onclick="toggleNotePin_fp('${id}')" class="btn-ghost" style="font-size:12px;padding:5px 10px;" title="${isPinned ? 'Desfijar' : 'Fijar'}">
+            ${isPinned ? '📌 Fijada' : '📌 Fijar'}
+          </button>
+          <button onclick="archiveNote_fp('${id}')" class="btn-ghost" style="font-size:12px;padding:5px 10px;" title="Archivar">📦 Archivar</button>
+        </div>
+      </div>
+
+      <!-- Tags -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <label style="font-size:11px;color:var(--text-dim);font-weight:700;letter-spacing:.05em;">ETIQUETAS</label>
+        <input type="text" id="nfp-tags" value="${esc(tags.join(' '))}" placeholder="#idea #proyecto #importante"
+          style="flex:1;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:8px;padding:5px 10px;color:var(--text-primary);font-size:12px;outline:none;" />
+      </div>
+
+      <!-- Color -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <label style="font-size:11px;color:var(--text-dim);font-weight:700;letter-spacing:.05em;">COLOR</label>
+        <div style="display:flex;gap:4px;">
+          ${Object.keys(NOTE_COLORS).filter(c => c).map(c => `
+            <div onclick="setNoteColor_fp('${id}','${c}')" style="${NOTE_COLORS[c]} width:20px;height:20px;border-radius:50%;border:2px solid ${color===c?'white':'transparent'};cursor:pointer;display:inline-block;box-sizing:border-box;transition:border-color .15s;"></div>
+          `).join('')}
+          <div onclick="setNoteColor_fp('${id}','')" style="width:20px;height:20px;border-radius:50%;border:2px solid ${color===''?'white':'rgba(255,255,255,0.2)'};cursor:pointer;display:inline-block;background:transparent;"></div>
+        </div>
+      </div>
+
+      <!-- Reminder -->
+      <div style="display:flex;align-items:center;gap:8px;">
+        <label style="font-size:11px;color:var(--text-dim);font-weight:700;letter-spacing:.05em;">🔔 RECORDATORIO</label>
+        <input type="date" id="nfp-reminder-date" value="${m.reminder ? m.reminder.split('T')[0] : ''}"
+          style="background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:8px;padding:5px 10px;color:var(--text-primary);font-size:12px;outline:none;" />
+        <input type="time" id="nfp-reminder-time" value="${m.reminder ? (m.reminder.split('T')[1]||'').slice(0,5) : '09:00'}"
+          style="background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:8px;padding:5px 10px;color:var(--text-primary);font-size:12px;outline:none;width:100px;" />
+        ${hasReminder ? `<button onclick="document.getElementById('nfp-reminder-date').value='';document.getElementById('nfp-reminder-time').value='09:00'" class="btn-ghost" style="font-size:10px;padding:3px 8px;">✕ Quitar</button>` : ''}
+      </div>
+    </div>
+
+    <!-- Editor area -->
+    <div style="background:rgba(255,255,255,0.02);border:1px solid var(--glass-border);border-radius:16px;overflow:hidden;margin-bottom:20px;display:flex;flex-direction:column;min-height:400px;">
+      <div id="nfp-toolbar"></div>
+      <textarea id="nfp-body" style="display:none;">${node.content || ''}</textarea>
+    </div>
+
+    <!-- Attachments -->
+    <div style="background:rgba(255,255,255,0.02);border:1px solid var(--glass-border);border-radius:16px;padding:20px 24px;margin-bottom:20px;">
+      <label style="font-size:11px;color:var(--text-dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">📎 Adjuntos</label>
+      <div id="nfp-attachments" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <label style="cursor:pointer;background:rgba(255,255,255,0.05);border:1px dashed var(--glass-border);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--text-muted);display:inline-block;">
+          📎 Imagen / PDF
+          <input type="file" accept="image/*,.pdf,application/pdf" style="display:none;" onchange="attachImageFromFile(this, 'nfp')" />
+        </label>
+        <button onclick="addAttachmentUrl('nfp')" style="background:rgba(255,255,255,0.05);border:1px dashed var(--glass-border);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--text-muted);cursor:pointer;">🔗 Agregar link</button>
+      </div>
+    </div>
+
+    <!-- Actions bar -->
+    <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;padding:16px 0;">
+      <div style="display:flex;gap:8px;">
+        <button onclick="exportNote_fp('print')" class="btn-ghost" style="font-size:12px;padding:7px 14px;display:flex;align-items:center;gap:5px;">🖨️ Imprimir</button>
+        <button onclick="exportNote_fp('markdown')" class="btn-ghost" style="font-size:12px;padding:7px 14px;display:flex;align-items:center;gap:5px;">📋 Copiar MD</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="deleteNote_fp('${id}')" class="btn-danger" style="font-size:12px;padding:7px 18px;">🗑 Eliminar</button>
+        <button onclick="saveNote_fp('${id}')" class="btn-primary" style="font-size:13px;padding:9px 28px;font-weight:800;">💾 Guardar</button>
+      </div>
+    </div>
+  </div>`
+}
+
+// ── Full-page note actions ──────────────────────────────────────────────────
+window.openNoteFullPage = function(id) {
+  _noteProfileId = id
+  _notesMode = 'editor'
+  editingNoteId = id
+  renderNotes(allNodes)
+}
+
+window.closeNoteEditor = function() {
+  // Clean up nfp-body editor
+  if (_richEditors['nfp-body']) {
+    const ed = _richEditors['nfp-body']
+    if (ed._slashMenu) ed._slashMenu.remove()
+    if (ed._selBar) ed._selBar.remove()
+    delete _richEditors['nfp-body']
+  }
+  _notesMode = 'grid'
+  _noteProfileId = null
+  editingNoteId = null
+  renderNotes(allNodes)
+  document.getElementById('notes-root')?.scrollIntoView({ behavior:'smooth', block:'start' })
+}
+
+window.saveNote_fp = async function(id) {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  const title = (document.getElementById('nfp-title')?.value || '').trim()
+  const richEditor = _richEditors['nfp-body']
+  const body = richEditor ? richEditor.innerHTML : (document.getElementById('nfp-body')?.value || '').trim()
+  const tagsRaw = document.getElementById('nfp-tags')?.value || ''
+  const tags = tagsRaw.split(/\s+/).filter(t => t.startsWith('#'))
+  const rdVal = document.getElementById('nfp-reminder-date')?.value || ''
+  const rtVal = document.getElementById('nfp-reminder-time')?.value || '09:00'
+  const reminder = rdVal ? `${rdVal}T${rtVal}` : null
+
+  node.content = body
+  node.metadata = { ...(node.metadata||{}), label: title, tags }
+  if (reminder) node.metadata.reminder = reminder
+  else delete node.metadata.reminder
+
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ content: body, metadata: node.metadata }).eq('id', id)
+  }
+  showToast('✅ Nota guardada')
+  // Re-render the editor with updated data
+  renderNotes(allNodes)
+}
+
+window.deleteNote_fp = async function(id) {
+  if (!confirm('¿Eliminar esta nota? Esta acción es irreversible.')) return
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').delete().eq('id', id)
+  }
+  allNodes = allNodes.filter(n => n.id !== id)
+  showToast('🗑 Nota eliminada')
+  closeNoteEditor()
+  renderAll()
+}
+
+window.archiveNote_fp = async function(id) {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  node.metadata = { ...(node.metadata || {}), archived: true }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
+  }
+  showToast('📦 Nota archivada')
+  closeNoteEditor()
+  renderAll()
+}
+
+window.toggleNotePin_fp = async function(id) {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  node.metadata = { ...(node.metadata || {}), pinned: !node.metadata?.pinned }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
+  }
+  showToast(node.metadata.pinned ? '📌 Nota fijada' : '📌 Nota desfijada')
+  renderNotes(allNodes)
+}
+
+window.setNoteColor_fp = async function(id, color) {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  node.metadata = { ...(node.metadata || {}), color }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
+  }
+  renderNotes(allNodes)
+}
+
+window.exportNote_fp = function(mode) {
+  const node = allNodes.find(n => n.id === _noteProfileId)
+  if (!node) return
+  const title = document.getElementById('nfp-title')?.value || node.metadata?.label || node.content
+  const richEditor = _richEditors['nfp-body']
+  const body = richEditor ? richEditor.innerHTML : (document.getElementById('nfp-body')?.value || '')
+
+  if (mode === 'print') {
+    const w = window.open('', '_blank')
+    w.document.write(`<!DOCTYPE html><html><head><title>${esc(title)}</title>
+      <style>
+        *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
+        body { font-family:'Georgia','Times New Roman',serif; max-width:680px; margin:48px auto; color:#111; line-height:1.8; font-size:15px; background:#fff; }
+        .doc-title { font-size:26px; font-weight:700; margin-bottom:4px; color:#000; }
+        .doc-meta { font-size:12px; color:#888; margin-bottom:32px; padding-bottom:16px; border-bottom:1px solid #e5e5e5; }
+        .doc-body h1 { font-size:2em; font-weight:700; margin:.6em 0 .2em; line-height:1.2; }
+        .doc-body h2 { font-size:1.45em; font-weight:700; margin:.5em 0 .2em; line-height:1.3; }
+        .doc-body h3 { font-size:1.15em; font-weight:700; margin:.4em 0 .15em; line-height:1.4; }
+        .doc-body p  { margin:.3em 0; min-height:1.4em; }
+        .doc-body blockquote { border-left:3px solid #888; padding-left:16px; margin:.6em 0; color:#555; font-style:italic; }
+        .doc-body ul, .doc-body ol { padding-left:22px; margin:.4em 0; }
+        .doc-body li { margin:.15em 0; }
+        .doc-body hr { border:none; border-top:1px solid #ddd; margin:1.4em 0; }
+        .doc-body a  { color:#0066cc; text-decoration:underline; }
+        .doc-body code { font-family:'Courier New',monospace; font-size:0.88em; background:#f5f5f5; padding:1px 5px; border-radius:3px; }
+        @media print { body { margin:24px; } }
+      </style>
+    </head><body>
+      <div class="doc-title">${esc(title)}</div>
+      <div class="doc-meta">Nexus OS · ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}</div>
+      <div class="doc-body">${body}</div>
+    </body></html>`)
+    w.document.close()
+    w.focus()
+    setTimeout(() => w.print(), 500)
+  } else if (mode === 'markdown') {
+    const md = `# ${title}\n\n${body.replace(/<[^>]+>/g,'')}`
+    navigator.clipboard.writeText(md).then(() => showToast('✅ Copiado como Markdown')).catch(() => showToast('✅ Copiado'))
+  }
+}
+
 function renderNotes(nodes) {
   const root = document.getElementById('notes-root')
   if (!root) return
+
+  // ── Full-page editor mode ──────────────────────────────
+  if (_notesMode === 'editor' && _noteProfileId) {
+    root.style.display = 'block'
+    root.className = ''
+    root.innerHTML = _buildNoteEditorHTML(_noteProfileId)
+    // Initialize rich editor after DOM is ready
+    setTimeout(() => {
+      const node = allNodes.find(n => n.id === _noteProfileId)
+      if (!node) return
+      // Destroy old nfp-body editor if exists
+      if (_richEditors['nfp-body']) {
+        const old = _richEditors['nfp-body']
+        if (old._slashMenu) old._slashMenu.remove()
+        if (old._selBar) old._selBar.remove()
+        old.parentElement?.remove()
+        delete _richEditors['nfp-body']
+      }
+      buildNoteBlockEditor('nfp-body', 'nfp-toolbar')
+      syncRichEditor('nfp-body')
+      // Render attachments
+      renderAttachments(node.metadata?.images || [], 'nfp')
+    }, 50)
+    // Hide archived section when in editor mode
+    const archSec = document.getElementById('notes-archived-section')
+    if (archSec) archSec.style.display = 'none'
+    return
+  }
+
+  // ── Grid mode (default) ────────────────────────────────
+  root.style.display = ''
+  root.className = 'notes-grid'
+
   const notes = nodes
     .filter(n => {
       if (n.type !== 'note') return false
@@ -1985,8 +2251,8 @@ function renderNotes(nodes) {
                 onclick="event.stopPropagation(); togglePin('${n.id}')"
                 style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:${isPinned?'#fb923c':'var(--text-dim)'};opacity:${isPinned?'1':'0.35'};width:22px;height:22px;border-radius:5px;${isPinned?'background:rgba(251,146,60,0.1);':''}">${_svgPin}</span>`}
         </div>
-        <div class="note-keep-title">${esc(n.metadata?.label || n.content)}</div>
-        <div class="note-keep-body">${esc(n.content)}</div>
+        <div class="note-keep-title">${esc(n.metadata?.label || n.content.replace(/<[^>]+>/g,' ').trim())}</div>
+        <div class="note-keep-body">${esc(n.content.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim())}</div>
         ${reminderBadge ? `<div style="margin-top:4px;">${reminderBadge}</div>` : ''}
         <div style="display:flex; gap:4px; flex-wrap:wrap; flex-shrink:0;">
           ${(n.metadata?.tags || []).map(t => `<span class="tag-pill" onclick="event.stopPropagation(); setFilter('${t}')" style="background:var(--accent-cyan-dim); color:var(--accent-cyan); font-size:9px; padding:1px 5px; border-radius:4px; cursor:pointer;">${t}</span>`).join('')}
@@ -2447,37 +2713,8 @@ window.openNoteEdit = (id) => {
   const node = allNodes.find(n => n.id === id)
   if (!node) return
   if (node.type === 'kanban') { openCardModal(id); return }
-  editingNoteId = id
-  const m = node.metadata || {}
-  document.getElementById('ne-title').value = m.label || node.content
-  document.getElementById('ne-body').value = node.content
-  const tagsEl = document.getElementById('ne-tags')
-  if (tagsEl) tagsEl.value = (m.tags || []).join(' ')
-  // Populate reminder fields
-  const rdEl = document.getElementById('ne-reminder-date')
-  const rtEl = document.getElementById('ne-reminder-time')
-  const rcBtn = document.getElementById('ne-reminder-clear')
-  if (rdEl && rtEl) {
-    if (m.reminder) {
-      const [rDate, rTime] = m.reminder.split('T')
-      rdEl.value = rDate || ''
-      rtEl.value = rTime ? rTime.slice(0,5) : '09:00'
-      if (rcBtn) rcBtn.style.display = 'inline'
-    } else {
-      rdEl.value = ''
-      rtEl.value = '09:00'
-      if (rcBtn) rcBtn.style.display = 'none'
-    }
-  }
-  renderAttachments(node.metadata.images || [], 'note')
-  const noteOverlay = document.getElementById('note-edit-modal')
-  noteOverlay.classList.remove('hidden')
-  // Initialize block editor (idempotent — only created once)
-  buildNoteBlockEditor('ne-body', 'ne-toolbar')
-  syncRichEditor('ne-body')
-  // Ensure toggle button shows correct state
-  const fsBtn = document.getElementById('note-toggle-size')
-  if (fsBtn) fsBtn.textContent = '⤢'
+  // Open full-page editor instead of modal
+  openNoteFullPage(id)
 }
 
 window.closeNoteModal = () => {
@@ -2640,8 +2877,8 @@ function _renderArchivedNotes() {
     return `
     <div class="note-keep" style="${colorStyle};opacity:0.65;" title="Nota archivada">
       <div class="note-keep-inner">
-        <div class="note-keep-title" style="margin-bottom:6px;">${esc(n.metadata?.label || n.content)}</div>
-        <div class="note-keep-body">${esc(n.content)}</div>
+        <div class="note-keep-title" style="margin-bottom:6px;">${esc(n.metadata?.label || n.content.replace(/<[^>]+>/g,' ').trim())}</div>
+        <div class="note-keep-body">${esc(n.content.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim())}</div>
         <div style="display:flex;gap:6px;margin-top:8px;">
           <button onclick="unarchiveNote('${n.id}')" class="btn-ghost" style="font-size:10px;padding:3px 8px;">📤 Restaurar</button>
           <button onclick="openNoteEdit('${n.id}')" class="btn-ghost" style="font-size:10px;padding:3px 8px;">✏️ Editar</button>
@@ -6133,7 +6370,7 @@ window.attachImageFromFile = (input, context) => {
 }
 
 async function addAttachment(base64, context) {
-  const id = context === 'card' ? editingCardId : context === 'note' ? editingNoteId : editingFinanceId
+  const id = context === 'card' ? editingCardId : context === 'nfp' ? _noteProfileId : context === 'note' ? editingNoteId : editingFinanceId
   if (!id) return
   const node = allNodes.find(n => n.id === id)
   if (!node) return
@@ -6154,7 +6391,7 @@ window.addAttachmentUrl = async function(context) {
 }
 
 function renderAttachments(images, context) {
-  const containerId = context === 'card' ? 'tm-attachments' : context === 'note' ? 'ne-attachments' : 'fd-attachments'
+  const containerId = context === 'card' ? 'tm-attachments' : context === 'nfp' ? 'nfp-attachments' : context === 'note' ? 'ne-attachments' : 'fd-attachments'
   const container = document.getElementById(containerId)
   if (!container) return
   container.innerHTML = (images || []).map((src, i) => {
@@ -6211,7 +6448,7 @@ window.viewImage = (src) => {
 }
 
 window.removeAttachment = async (idx, context) => {
-  const id = context === 'card' ? editingCardId : context === 'note' ? editingNoteId : editingFinanceId
+  const id = context === 'card' ? editingCardId : context === 'nfp' ? _noteProfileId : context === 'note' ? editingNoteId : editingFinanceId
   const node = allNodes.find(n => n.id === id)
   if (!node) return
   node.metadata.images.splice(idx, 1)
@@ -7894,23 +8131,29 @@ function renderContacts() {
 // ── Bulk import / export contacts (CSV) ───────────────────────────────────────
 window.downloadContactCSVTemplate = function() {
   const headers = [
-    'nombre','rol','telefono_1','tel_1_etiqueta','telefono_2','tel_2_etiqueta',
-    'email_1','email_1_etiqueta','email_2','email_2_etiqueta',
-    'ciudad','estado','pais','calle','codigo_postal',
-    'rfc','cumpleanos','aniversario',
+    'nombre','rol','empresa','puesto','departamento',
+    'telefono_1','tel_1_etiqueta','telefono_2','tel_2_etiqueta','telefono_3','tel_3_etiqueta',
+    'email_1','email_1_etiqueta','email_2','email_2_etiqueta','email_3','email_3_etiqueta',
+    'ciudad','estado','pais','calle','colonia','codigo_postal',
+    'rfc','curp','cumpleanos','aniversario',
+    'website','linkedin','instagram','facebook',
     'especialidad_1','especialidad_2','especialidad_3',
-    'color','rating','notas',
+    'color','rating','notas','foto_url',
     'cuenta_1_tipo','cuenta_1_banco','cuenta_1_clabe','cuenta_1_etiqueta',
-    'cuenta_2_tipo','cuenta_2_banco','cuenta_2_clabe','cuenta_2_etiqueta'
+    'cuenta_2_tipo','cuenta_2_banco','cuenta_2_clabe','cuenta_2_etiqueta',
+    'cuenta_3_tipo','cuenta_3_banco','cuenta_3_clabe','cuenta_3_etiqueta'
   ]
   const example = [
-    'Juan Pérez García','proveedor','9981234567','Personal','9989876543','Trabajo',
-    'juan@email.com','Personal','juan.oficina@empresa.com','Trabajo',
-    'Cancún','Quintana Roo','México','Av. Tulum 123 SM 4','77500',
-    'PEGJ850101ABC','1985-01-01','2010-06-15',
-    'Albañilería','Plomería','',
-    '#f97316','4','Proveedor de confianza desde 2018',
+    'Juan Pérez García','proveedor','Constructora MX','Gerente General','Operaciones',
+    '9981234567','Personal','9989876543','Trabajo','9985551234','WhatsApp',
+    'juan@email.com','Personal','juan.oficina@empresa.com','Trabajo','juan@gmail.com','Otro',
+    'Cancún','Quintana Roo','México','Av. Tulum 123 SM 4','Centro','77500',
+    'PEGJ850101ABC','PEGJ850101HQRRRC09','1985-01-01','2010-06-15',
+    'https://constructoramx.com','https://linkedin.com/in/juanperez','@juanperez','juanperez',
+    'Albañilería','Plomería','Electricidad',
+    '#f97316','4','Proveedor de confianza desde 2018','https://example.com/foto.jpg',
     'bank','BBVA','012345678901234567','Cuenta nómina',
+    'bank','Banorte','072345678901234567','Cuenta empresarial',
     'crypto','BTC','bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh','Bitcoin wallet'
   ]
   const csv = [headers.join(','), example.map(v => `"${(v||'').replace(/"/g,'""')}"`).join(',')].join('\n')
@@ -7920,6 +8163,27 @@ window.downloadContactCSVTemplate = function() {
   a.download = 'nexus-os-contactos-plantilla.csv'
   a.click()
   showToast('📥 Plantilla CSV descargada — ábrela en Excel o Google Sheets')
+}
+
+// ── Fuzzy name similarity (for duplicate detection) ────────────────────────
+function _nameSimilarity(a, b) {
+  a = a.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim()
+  b = b.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim()
+  if (a === b) return 1
+  // Levenshtein distance
+  const la = a.length, lb = b.length
+  if (!la || !lb) return 0
+  const mx = Array.from({length:la+1}, (_,i) => {
+    const row = new Array(lb+1)
+    row[0] = i
+    return row
+  })
+  for (let j = 1; j <= lb; j++) mx[0][j] = j
+  for (let i = 1; i <= la; i++)
+    for (let j = 1; j <= lb; j++)
+      mx[i][j] = Math.min(mx[i-1][j]+1, mx[i][j-1]+1, mx[i-1][j-1]+(a[i-1]!==b[j-1]?1:0))
+  const dist = mx[la][lb]
+  return 1 - dist / Math.max(la, lb)
 }
 
 window.importContactsCSV = async function(input) {
@@ -7940,9 +8204,20 @@ window.importContactsCSV = async function(input) {
   const rows = lines.slice(1).map(line => _parseCSVRow(line))
   const contacts = []
 
+  // Existing contact names for duplicate detection
+  const existingNames = allNodes.filter(n => ['persona','proveedor','cliente','colaborador'].includes(n.type)).map(n => (n.metadata?.name || n.content || '').trim()).filter(Boolean)
+
+  const duplicates = []
+
   for (const row of rows) {
     const name = (row[h('nombre')] || '').trim()
     if (!name) continue
+
+    // Duplicate detection — fuzzy match against existing contacts
+    const match = existingNames.find(en => _nameSimilarity(en, name) >= 0.82)
+    if (match) {
+      duplicates.push({ csv: name, existing: match, similarity: Math.round(_nameSimilarity(match, name) * 100) })
+    }
 
     const roles = []
     const rawRol = (row[h('rol')] || '').toLowerCase().trim()
@@ -7953,29 +8228,40 @@ window.importContactsCSV = async function(input) {
     }
     if (!roles.length) roles.push('persona')
 
-    // Phones
+    // Phones (up to 3)
     const phones = []
-    const p1 = (row[h('telefono_1')] || '').trim()
-    if (p1) phones.push({ label: row[h('tel_1_etiqueta')] || 'Personal', number: p1 })
-    const p2 = (row[h('telefono_2')] || '').trim()
-    if (p2) phones.push({ label: row[h('tel_2_etiqueta')] || 'Trabajo', number: p2 })
+    for (const idx of ['1','2','3']) {
+      const p = (row[h(`telefono_${idx}`)] || '').trim()
+      if (p) phones.push({ label: row[h(`tel_${idx}_etiqueta`)] || (idx==='1'?'Personal':idx==='2'?'Trabajo':'Otro'), number: p })
+    }
 
-    // Emails
+    // Emails (up to 3)
     const emails = []
-    const e1 = (row[h('email_1')] || '').trim()
-    if (e1) emails.push({ label: row[h('email_1_etiqueta')] || 'Personal', address: e1 })
-    const e2 = (row[h('email_2')] || '').trim()
-    if (e2) emails.push({ label: row[h('email_2_etiqueta')] || 'Trabajo', address: e2 })
+    for (const idx of ['1','2','3']) {
+      const e = (row[h(`email_${idx}`)] || '').trim()
+      if (e) emails.push({ label: row[h(`email_${idx}_etiqueta`)] || (idx==='1'?'Personal':idx==='2'?'Trabajo':'Otro'), address: e })
+    }
 
     // Specialties
     const specialties = [row[h('especialidad_1')], row[h('especialidad_2')], row[h('especialidad_3')]].map(s=>(s||'').trim()).filter(Boolean)
 
-    // Accounts
+    // Accounts (up to 3)
     const accts = []
-    const a1Type = (row[h('cuenta_1_tipo')] || '').trim().toLowerCase()
-    if (a1Type) accts.push({ type: a1Type, bank: row[h('cuenta_1_banco')]||'', clabe: row[h('cuenta_1_clabe')]||'', label: row[h('cuenta_1_etiqueta')]||'' })
-    const a2Type = (row[h('cuenta_2_tipo')] || '').trim().toLowerCase()
-    if (a2Type) accts.push({ type: a2Type, bank: row[h('cuenta_2_banco')]||'', clabe: row[h('cuenta_2_clabe')]||'', label: row[h('cuenta_2_etiqueta')]||'' })
+    for (const idx of ['1','2','3']) {
+      const aType = (row[h(`cuenta_${idx}_tipo`)] || '').trim().toLowerCase()
+      if (aType) accts.push({ type: aType, bank: row[h(`cuenta_${idx}_banco`)]||'', clabe: row[h(`cuenta_${idx}_clabe`)]||'', label: row[h(`cuenta_${idx}_etiqueta`)]||'' })
+    }
+
+    // Social links
+    const links = {}
+    const website = (row[h('website')] || '').trim()
+    const linkedin = (row[h('linkedin')] || '').trim()
+    const instagram = (row[h('instagram')] || '').trim()
+    const facebook = (row[h('facebook')] || '').trim()
+    if (website) links.website = website
+    if (linkedin) links.linkedin = linkedin
+    if (instagram) links.instagram = instagram
+    if (facebook) links.facebook = facebook
 
     const meta = {
       name,
@@ -7990,15 +8276,22 @@ window.importContactsCSV = async function(input) {
       address_state: (row[h('estado')] || '').trim() || undefined,
       address_country: (row[h('pais')] || '').trim() || undefined,
       address_street: (row[h('calle')] || '').trim() || undefined,
+      address_neighborhood: (row[h('colonia')] || '').trim() || undefined,
       address_postal: (row[h('codigo_postal')] || '').trim() || undefined,
       rfc: (row[h('rfc')] || '').trim().toUpperCase() || undefined,
+      curp: (row[h('curp')] || '').trim().toUpperCase() || undefined,
       birthday: (row[h('cumpleanos')] || '').trim() || undefined,
       anniversary: (row[h('aniversario')] || '').trim() || undefined,
+      company: (row[h('empresa')] || '').trim() || undefined,
+      job_title: (row[h('puesto')] || '').trim() || undefined,
+      department: (row[h('departamento')] || '').trim() || undefined,
       specialties: specialties.length ? specialties : undefined,
       specialty: specialties[0] || undefined,
       rating: parseInt(row[h('rating')]) || undefined,
       contact_accounts: accts.length ? accts : undefined,
       notes: (row[h('notas')] || '').trim() || undefined,
+      photo: (row[h('foto_url')] || '').trim() || undefined,
+      links: Object.keys(links).length ? links : undefined,
     }
     // Clean undefined
     Object.keys(meta).forEach(k => meta[k] === undefined && delete meta[k])
@@ -8007,11 +8300,26 @@ window.importContactsCSV = async function(input) {
 
   if (!contacts.length) { showToast('⚠️ No se encontraron contactos válidos en el CSV'); return }
 
-  if (!confirm(`Se importarán ${contacts.length} contacto${contacts.length>1?'s':''}. ¿Continuar?`)) return
+  // Show duplicate warning if found
+  let skipDuplicates = false
+  if (duplicates.length) {
+    const dupList = duplicates.slice(0, 10).map(d => `• "${d.csv}" ≈ "${d.existing}" (${d.similarity}%)`).join('\n')
+    const extra = duplicates.length > 10 ? `\n... y ${duplicates.length - 10} más` : ''
+    const choice = confirm(`⚠️ Se detectaron ${duplicates.length} posible${duplicates.length>1?'s':''} duplicado${duplicates.length>1?'s':''}:\n\n${dupList}${extra}\n\n¿Importar de todos modos? (OK = importar todos, Cancelar = omitir duplicados)`)
+    if (!choice) skipDuplicates = true
+  }
 
-  showToast(`⏳ Importando ${contacts.length} contactos...`)
+  const toImport = skipDuplicates
+    ? contacts.filter(c => !duplicates.some(d => d.csv === c.content))
+    : contacts
+
+  if (!toImport.length) { showToast('ℹ️ Todos los contactos eran duplicados — no se importó nada'); return }
+
+  if (!confirm(`Se importarán ${toImport.length} contacto${toImport.length>1?'s':''}${skipDuplicates ? ` (${duplicates.length} duplicado${duplicates.length>1?'s':''} omitido${duplicates.length>1?'s':''})` : ''}. ¿Continuar?`)) return
+
+  showToast(`⏳ Importando ${toImport.length} contactos...`)
   let created = 0
-  for (const c of contacts) {
+  for (const c of toImport) {
     const nodeData = {
       type: c.type,
       content: c.content,
@@ -8019,7 +8327,6 @@ window.importContactsCSV = async function(input) {
       user_id: (await supabase.auth.getUser()).data?.user?.id
     }
     if (localStorage.getItem('nexus_admin_bypass') === 'true') {
-      // Offline mode: generate local ID
       nodeData.id = uid()
       nodeData.created_at = new Date().toISOString()
       allNodes.push(nodeData)
@@ -8030,7 +8337,8 @@ window.importContactsCSV = async function(input) {
     }
   }
   renderContacts()
-  showToast(`✅ ${created} contacto${created>1?'s':''} importado${created>1?'s':''} correctamente`)
+  const dupMsg = skipDuplicates && duplicates.length ? ` (${duplicates.length} duplicado${duplicates.length>1?'s':''} omitido${duplicates.length>1?'s':''})` : ''
+  showToast(`✅ ${created} contacto${created>1?'s':''} importado${created>1?'s':''}${dupMsg}`)
 }
 
 function _parseCSVRow(line) {
