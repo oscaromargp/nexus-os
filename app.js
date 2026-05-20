@@ -5742,28 +5742,186 @@ window.openFinanceDetail = (id) => {
   if (cSel) {
     cSel.innerHTML = '<option value="">— Sin contacto —</option>' + contacts.map(c => {
       const name = c.metadata?.name || c.content
-      const icon = c.metadata?.cType==='bank'?'🏦':c.metadata?.cType==='crypto'?'₿':'👤'
+      const roles = c.metadata?.roles || (c.metadata?.cType ? [c.metadata.cType] : ['persona'])
+      const icon = roles.includes('proveedor')?'🔧':roles.includes('cliente')?'💼':'👤'
       return `<option value="${c.id}" ${m.contact_id===c.id?'selected':''}>${icon} ${esc(name)}</option>`
     }).join('')
-    // Auto-fill CLABE when contact changes
-    cSel.onchange = () => {
-      const selContact = contacts.find(c => c.id === cSel.value)
-      const clabeEl = document.getElementById('fd-clabe')
-      const bancoEl = document.getElementById('fd-banco')
-      if (selContact?.metadata?.cType === 'bank') {
-        if (clabeEl) clabeEl.value = selContact.metadata?.clabe || ''
-        if (bancoEl) bancoEl.value = selContact.metadata?.bank_name || ''
-      }
-    }
+    // When contact changes → populate destination accounts + auto-fill
+    cSel.onchange = () => _fdPopulateDestAccounts(cSel.value, null)
   }
+
   // CLABE y Banco
   const clabeEl = document.getElementById('fd-clabe')
   if (clabeEl) clabeEl.value = m.clabe || ''
   const bancoEl = document.getElementById('fd-banco')
   if (bancoEl) bancoEl.value = m.banco || ''
+
+  // Populate destination account for pre-selected contact
+  _fdPopulateDestAccounts(m.contact_id || '', m.dest_account_idx ?? null)
+
+  // CEP URL
+  const cepEl = document.getElementById('fd-cep-url')
+  if (cepEl) cepEl.value = m.cep_url || ''
+
   renderFinanceComments(m.comments || [])
   renderAttachments(m.images || [], 'finance')
   document.getElementById('finance-detail-modal').classList.remove('hidden')
+}
+
+// ── Destination account (contact's registered accounts) ───────────────────
+function _fdPopulateDestAccounts(contactId, savedIdx) {
+  const row = document.getElementById('fd-dest-account-row')
+  const sel = document.getElementById('fd-dest-account')
+  const hint = document.getElementById('fd-dest-account-hint')
+  if (!row || !sel) return
+
+  if (!contactId) {
+    row.style.display = 'none'
+    sel.innerHTML = ''
+    return
+  }
+
+  const c = allNodes.find(n => n.id === contactId)
+  const accounts = c?.metadata?.contact_accounts || []
+  if (!accounts.length) {
+    row.style.display = 'none'
+    sel.innerHTML = ''
+    if (hint) hint.textContent = ''
+    return
+  }
+
+  const accIcons = { bank:'🏦', crypto:'₿', cash:'💵' }
+  sel.innerHTML = '<option value="">— Seleccionar cuenta —</option>' + accounts.map((a, i) => {
+    const icon = accIcons[a.type] || '💳'
+    const label = a.label || a.bank || a.network || 'Cuenta'
+    const detail = a.clabe ? ` · ${a.clabe.slice(-4)}` : a.wallet ? ` · ${a.wallet.slice(0,8)}…` : ''
+    return `<option value="${i}" ${savedIdx===i?'selected':''}>${icon} ${esc(label)}${detail}</option>`
+  }).join('')
+
+  if (hint) hint.textContent = `(${accounts.length} cuenta${accounts.length>1?'s':''} registrada${accounts.length>1?'s':''})`
+  row.style.display = 'block'
+
+  // If saved index, auto-fill fields
+  if (savedIdx !== null && savedIdx !== undefined && savedIdx !== '' && accounts[savedIdx]) {
+    _fdApplyDestAccount(accounts[savedIdx])
+  }
+}
+
+window._fdOnDestAccountChange = function() {
+  const sel = document.getElementById('fd-dest-account')
+  const contactId = document.getElementById('fd-contact')?.value
+  if (!sel || !contactId) return
+  const c = allNodes.find(n => n.id === contactId)
+  const accounts = c?.metadata?.contact_accounts || []
+  const idx = parseInt(sel.value)
+  if (!isNaN(idx) && accounts[idx]) {
+    _fdApplyDestAccount(accounts[idx])
+  }
+}
+
+function _fdApplyDestAccount(a) {
+  const bancoEl = document.getElementById('fd-banco')
+  const clabeEl = document.getElementById('fd-clabe')
+  if (a.type === 'bank') {
+    if (bancoEl) bancoEl.value = a.bank || ''
+    if (clabeEl) clabeEl.value = a.clabe || ''
+  } else if (a.type === 'crypto') {
+    if (bancoEl) bancoEl.value = a.network || ''
+    if (clabeEl) clabeEl.value = a.wallet || ''
+  } else {
+    if (bancoEl) bancoEl.value = a.label || 'Efectivo'
+    if (clabeEl) clabeEl.value = ''
+  }
+}
+
+// ── Print Finance CEP (Comprobante Electrónico de Pago interno) ───────────
+window.printFinanceCEP = function() {
+  const node = allNodes.find(n => n.id === editingFinanceId)
+  if (!node) return
+  const m = node.metadata || {}
+  const isInc = node.type === 'income'
+  const label = m.label || node.content || ''
+  const amount = m.amount || 0
+  const moneda = m.moneda || 'MXN'
+  const fecha = m.fecha || node.created_at?.split('T')[0] || ''
+  const fmtDate = d => { if(!d) return ''; const [y,mo,dy]=d.split('-'); return `${dy}/${mo}/${y}` }
+
+  // Contact info
+  const contact = m.contact_id ? allNodes.find(n => n.id === m.contact_id) : null
+  const contactName = contact ? (contact.metadata?.name || contact.content) : m.contact_name || m.ordenante || ''
+  const contactRFC = contact?.metadata?.rfc || ''
+
+  // Account info
+  const myAccount = m.account_id ? allNodes.find(n => n.id === m.account_id) : null
+  const myAccLabel = myAccount ? (myAccount.metadata?.label || myAccount.content) : 'General'
+
+  // IVA calculation
+  const ivaRate = m.iva ? parseFloat(m.iva) : 0
+  const subtotal = ivaRate ? (amount / (1 + ivaRate/100)) : amount
+  const ivaAmount = ivaRate ? (amount - subtotal) : 0
+
+  // TC
+  const tc = m.tc ? parseFloat(m.tc) : 0
+  const amountAlt = tc ? (amount / tc) : 0
+
+  const w = window.open('', '_blank')
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>CEP — ${label}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,sans-serif;color:#1a1a1a;padding:0;background:#fff}
+    .cep{max-width:600px;margin:20px auto;border:2px solid #1a1a1a;border-radius:8px;overflow:hidden}
+    .cep-header{background:#1a2332;color:#fff;padding:18px 24px;display:flex;align-items:center;justify-content:space-between}
+    .cep-header h1{font-size:16px;font-weight:800;letter-spacing:.05em}
+    .cep-header .type{font-size:12px;padding:3px 12px;border-radius:4px;font-weight:700;text-transform:uppercase}
+    .cep-body{padding:20px 24px}
+    .cep-row{display:flex;border-bottom:1px solid #e5e5e5;padding:10px 0}
+    .cep-row:last-child{border-bottom:none}
+    .cep-key{font-size:11px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:.06em;width:160px;flex-shrink:0}
+    .cep-val{font-size:13px;color:#1a1a1a;font-weight:500;flex:1}
+    .cep-val.mono{font-family:'JetBrains Mono',Consolas,monospace;font-size:12px}
+    .cep-amount{text-align:center;padding:20px;background:#f8f8f8;border-top:1px solid #e5e5e5}
+    .cep-amount .big{font-size:32px;font-weight:900;font-family:'JetBrains Mono',monospace}
+    .cep-amount .label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+    .cep-footer{padding:12px 24px;background:#f0f0f0;font-size:10px;color:#888;display:flex;justify-content:space-between}
+    .inc{color:#16a34a}.exp{color:#dc2626}
+    @media print{body{padding:0}.no-print{display:none !important}}
+  </style></head><body>
+  <div class="cep">
+    <div class="cep-header">
+      <h1>NEXUS OS — COMPROBANTE DE PAGO</h1>
+      <span class="type" style="background:${isInc?'#16a34a':'#dc2626'}">${isInc?'INGRESO':'EGRESO'}</span>
+    </div>
+    <div class="cep-amount">
+      <div class="label">Monto total</div>
+      <div class="big ${isInc?'inc':'exp'}">${isInc?'+':''}$${amount.toLocaleString('es-MX',{minimumFractionDigits:2})} ${moneda}</div>
+      ${tc && moneda!=='MXN' ? `<div style="font-size:12px;color:#666;margin-top:4px;">≈ $${amountAlt.toLocaleString('es-MX',{minimumFractionDigits:2})} USD · T.C. ${tc}</div>` : ''}
+      ${ivaRate ? `<div style="font-size:11px;color:#888;margin-top:4px;">Subtotal: $${subtotal.toLocaleString('es-MX',{minimumFractionDigits:2})} + IVA ${ivaRate}%: $${ivaAmount.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>` : ''}
+    </div>
+    <div class="cep-body">
+      <div class="cep-row"><div class="cep-key">Descripción</div><div class="cep-val">${label}</div></div>
+      <div class="cep-row"><div class="cep-key">Fecha</div><div class="cep-val mono">${fmtDate(fecha)}</div></div>
+      ${contactName ? `<div class="cep-row"><div class="cep-key">${isInc?'Ordenante':'Beneficiario'}</div><div class="cep-val">${contactName}${contactRFC?' · RFC: '+contactRFC:''}</div></div>` : ''}
+      ${m.ordenante && m.ordenante !== contactName ? `<div class="cep-row"><div class="cep-key">Ordenante</div><div class="cep-val">${m.ordenante}</div></div>` : ''}
+      <div class="cep-row"><div class="cep-key">Cuenta origen</div><div class="cep-val">${myAccLabel}</div></div>
+      ${m.banco ? `<div class="cep-row"><div class="cep-key">Banco destino</div><div class="cep-val">${m.banco}</div></div>` : ''}
+      ${m.clabe ? `<div class="cep-row"><div class="cep-key">CLABE / Wallet</div><div class="cep-val mono">${m.clabe}</div></div>` : ''}
+      ${m.referencia ? `<div class="cep-row"><div class="cep-key">Referencia</div><div class="cep-val mono">${m.referencia}</div></div>` : ''}
+      ${m.project_tag ? `<div class="cep-row"><div class="cep-key">Proyecto</div><div class="cep-val">${m.project_tag}</div></div>` : ''}
+      ${m.cep_url ? `<div class="cep-row"><div class="cep-key">CEP oficial</div><div class="cep-val"><a href="${m.cep_url}" style="color:#2563eb;text-decoration:underline;">${m.cep_url.length>50?m.cep_url.substring(0,50)+'…':m.cep_url}</a></div></div>` : ''}
+      ${(m.comments||[]).length ? `<div class="cep-row"><div class="cep-key">Comentarios</div><div class="cep-val">${m.comments.map(c=>c.text).join(' | ')}</div></div>` : ''}
+    </div>
+    <div class="cep-footer">
+      <span>ID: ${editingFinanceId?.substring(0,8) || '—'}</span>
+      <span>Generado: ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})} · Nexus OS</span>
+    </div>
+  </div>
+  <div class="no-print" style="text-align:center;margin:16px;">
+    <button onclick="window.print()" style="padding:10px 24px;font-size:14px;font-weight:700;background:#1a2332;color:#fff;border:none;border-radius:8px;cursor:pointer;">🖨️ Imprimir</button>
+  </div>
+  </body></html>`)
+  w.document.close()
+  w.focus()
+  setTimeout(() => w.print(), 600)
 }
 
 window.closeFinanceDetail = () => {
@@ -5816,6 +5974,12 @@ window.saveFinanceDetail = async () => {
   } else {
     node.metadata.contact_name = undefined
   }
+  // Destination account index
+  const destIdx = document.getElementById('fd-dest-account')?.value
+  node.metadata.dest_account_idx = destIdx !== '' && destIdx !== undefined ? parseInt(destIdx) : undefined
+  if (isNaN(node.metadata.dest_account_idx)) node.metadata.dest_account_idx = undefined
+  // CEP URL
+  node.metadata.cep_url = document.getElementById('fd-cep-url')?.value.trim() || undefined
   node.content = node.metadata.label
   if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
     await supabase.from('nodes').update({ content: node.content, metadata: node.metadata }).eq('id', editingFinanceId)

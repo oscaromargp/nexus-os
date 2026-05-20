@@ -3821,10 +3821,10 @@
       <div style="font-size:11px; color:var(--text-dim); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:12px;">Partes involucradas</div>
     </div>
 
-    <!-- Fila 4: Cuenta + Contacto -->
+    <!-- Fila 4: Cuenta origen + Contacto -->
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
       <div class="modal-field" style="margin-bottom:0;">
-        <label class="modal-label">Cuenta propia</label>
+        <label class="modal-label">Cuenta propia (origen)</label>
         <select id="fd-account" class="modal-input"></select>
       </div>
       <div class="modal-field" style="margin-bottom:0;">
@@ -3833,19 +3833,41 @@
       </div>
     </div>
 
-    <!-- Fila 5: Ordenante + Banco + CLABE -->
+    <!-- Fila 5: Cuenta destino del contacto (dinámica) -->
+    <div id="fd-dest-account-row" style="margin-top:14px; display:none;">
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label" style="display:flex;align-items:center;gap:6px;">
+          Cuenta destino del contacto
+          <span id="fd-dest-account-hint" style="font-size:10px;font-weight:400;color:var(--text-dim);"></span>
+        </label>
+        <select id="fd-dest-account" class="modal-input" onchange="window._fdOnDestAccountChange?.()"></select>
+      </div>
+    </div>
+
+    <!-- Fila 6: Ordenante + Banco + CLABE -->
     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-top:14px;">
       <div class="modal-field" style="margin-bottom:0;">
         <label class="modal-label">Ordenante / De quién</label>
         <input type="text" id="fd-ordenante" class="modal-input" placeholder="Nombre del ordenante..." />
       </div>
       <div class="modal-field" style="margin-bottom:0;">
-        <label class="modal-label">Banco</label>
+        <label class="modal-label">Banco / Red</label>
         <input type="text" id="fd-banco" class="modal-input" placeholder="BBVA, HSBC, Banamex..." />
       </div>
       <div class="modal-field" style="margin-bottom:0;">
-        <label class="modal-label">CLABE / Cuenta</label>
-        <input type="text" id="fd-clabe" class="modal-input" placeholder="18 dígitos" style="font-family:monospace; font-size:12px;" />
+        <label class="modal-label">CLABE / Wallet</label>
+        <input type="text" id="fd-clabe" class="modal-input" placeholder="18 dígitos o wallet" style="font-family:monospace; font-size:12px;" />
+      </div>
+    </div>
+
+    <!-- Fila 7: CEP / Comprobante oficial -->
+    <div style="margin-top:14px;">
+      <div class="modal-field" style="margin-bottom:0;">
+        <label class="modal-label">CEP / Comprobante electrónico de pago</label>
+        <div style="display:flex; gap:8px;">
+          <input type="url" id="fd-cep-url" class="modal-input" placeholder="Link al CEP de Banxico, PDF, captura de pantalla..." style="flex:1;" />
+          <button onclick="openDocPreview(document.getElementById('fd-cep-url').value, 'CEP — Comprobante')" type="button" title="Previsualizar CEP" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.25);border-radius:7px;padding:5px 10px;color:#fb923c;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">👁 Ver</button>
+        </div>
       </div>
     </div>
 
@@ -3869,6 +3891,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn-danger" onclick="deleteFinanceNode()" style="margin-right:auto;">🗑 Eliminar</button>
+      <button onclick="printFinanceCEP()" type="button" style="background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:10px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;">🖨️ CEP</button>
       <button class="btn-ghost" onclick="closeFinanceDetail()">Cancelar</button>
       <button class="btn-primary" id="fd-save" onclick="saveFinanceDetail()">Guardar</button>
     </div>
