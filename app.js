@@ -1548,7 +1548,48 @@ function renderPanelDashboard() {
     </div>`
   }).join('') : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin cuentas — crea una en Bio-Finanzas</div>`
 
-  // ── E) Deudas a proveedores ───────────────────────────────
+  // ── E) Próximos eventos de contactos (cumpleaños / aniversarios) ──────────
+  const DAYS_AHEAD = 30
+  const upcomingEvents = []
+  const todayMD = `${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+  const personas = allNodes.filter(n => n.type==='persona'||n.type==='contact')
+  personas.forEach(c => {
+    const m = c.metadata || {}
+    const name = m.name || c.content || '?'
+    ;[
+      { date: m.birthday,    emoji: '🎂', label: 'Cumpleaños de' },
+      { date: m.anniversary, emoji: '💑', label: 'Aniversario de' },
+    ].forEach(ev => {
+      if (!ev.date) return
+      const [year, month, day] = ev.date.split('-').map(Number)
+      if (!month || !day) return
+      // Calculate next occurrence (this year or next)
+      let evDate = new Date(today.getFullYear(), month-1, day)
+      if (evDate < today) evDate = new Date(today.getFullYear()+1, month-1, day)
+      const daysLeft = Math.ceil((evDate - today) / 86400000)
+      if (daysLeft <= DAYS_AHEAD) {
+        upcomingEvents.push({ daysLeft, emoji: ev.emoji, label: `${ev.label} ${name}`, name, contactId: c.id })
+      }
+    })
+  })
+  upcomingEvents.sort((a,b) => a.daysLeft - b.daysLeft)
+
+  const eventsHTML = upcomingEvents.length
+    ? upcomingEvents.slice(0,5).map(ev => {
+        const clr = ev.daysLeft === 0 ? '#f472b6' : ev.daysLeft <= 3 ? '#fb923c' : ev.daysLeft <= 7 ? '#fbbf24' : '#94a3b8'
+        const dayTxt = ev.daysLeft === 0 ? '¡HOY!' : `${ev.daysLeft}d`
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <div style="min-width:36px;text-align:center;flex-shrink:0;">
+            <div style="font-size:15px;font-weight:900;color:${clr};font-family:'JetBrains Mono',monospace;line-height:1;">${dayTxt}</div>
+            ${ev.daysLeft > 0 ? `<div style="font-size:8px;color:${clr};font-weight:700;text-transform:uppercase;">días</div>` : ''}
+          </div>
+          <div style="font-size:18px;flex-shrink:0;">${ev.emoji}</div>
+          <div style="flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ev.label)}</div>
+        </div>`
+      }).join('')
+    : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin eventos en los próximos 30 días 🎉</div>`
+
+  // ── F) Deudas a proveedores ───────────────────────────────
   const debtMap = {}
   allNodes.filter(n=>n.type==='cotizacion'&&!['rechazada','pagada'].includes(n.metadata?.status||'')).forEach(cot => {
     const pid = cot.metadata?.provider_id; if(!pid) return
@@ -1603,6 +1644,17 @@ function renderPanelDashboard() {
           ${debts.length?`<span style="margin-left:auto;font-size:10px;color:#f87171;font-weight:700;background:rgba(248,113,113,0.1);border-radius:8px;padding:1px 7px;">${debts.length}</span>`:''}
         </div>
         ${debtHTML}
+      </div>
+      <div style="${NX_CARD}grid-column:1/-1;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="2" stroke-linecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span style="${NX_HEAD}color:#f472b6;">Eventos próximos — cumpleaños &amp; aniversarios (30 días)</span>
+          ${upcomingEvents.length?`<span style="margin-left:auto;font-size:10px;color:#f472b6;font-weight:700;background:rgba(244,114,182,0.1);border-radius:8px;padding:1px 7px;">${upcomingEvents.length}</span>`:''}
+          <button onclick="switchView('contacts')" style="margin-left:${upcomingEvents.length?'4px':'auto'};font-size:10px;color:#f472b6;background:rgba(244,114,182,0.08);border:1px solid rgba(244,114,182,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;">Ver contactos</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:0;">
+          ${eventsHTML}
+        </div>
       </div>
     </div>`
 }
@@ -2043,6 +2095,87 @@ function buildNoteBlockEditor(textareaId, toolbarContainerId) {
   toolbarEl.appendChild(blockSel)
 
   const sep0 = document.createElement('div'); sep0.className = 'nbe-sep'; toolbarEl.appendChild(sep0)
+
+  // ── Font size select ─────────────────────────────────────
+  const FONT_SIZES = [
+    { val:'1', label:'XS' },
+    { val:'2', label:'Sm' },
+    { val:'3', label:'Md' },
+    { val:'4', label:'Lg' },
+    { val:'5', label:'XL' },
+    { val:'6', label:'2X' },
+    { val:'7', label:'3X' },
+  ]
+  const sizeSel = document.createElement('select')
+  sizeSel.className = 'nbe-btn'
+  sizeSel.title = 'Tamaño de texto'
+  sizeSel.style.cssText = 'padding:0 5px;font-size:11px;cursor:pointer;height:26px;min-width:auto;width:auto;border-radius:5px;'
+  FONT_SIZES.forEach(o => {
+    const opt = document.createElement('option')
+    opt.value = o.val; opt.textContent = o.label
+    if (o.val === '3') opt.selected = true
+    sizeSel.appendChild(opt)
+  })
+  sizeSel.addEventListener('change', () => {
+    editor.focus()
+    document.execCommand('styleWithCSS', false, false)
+    document.execCommand('fontSize', false, sizeSel.value)
+  })
+  toolbarEl.appendChild(sizeSel)
+
+  const sepSz = document.createElement('div'); sepSz.className = 'nbe-sep'; toolbarEl.appendChild(sepSz)
+
+  // ── Text color picker ────────────────────────────────────
+  const colorPicker = document.createElement('input')
+  colorPicker.type = 'color'
+  colorPicker.value = '#00f0ff'
+  colorPicker.title = 'Color de texto'
+  colorPicker.style.cssText = 'width:26px;height:26px;padding:1px;border-radius:5px;border:1px solid rgba(255,255,255,0.09);background:rgba(255,255,255,0.05);cursor:pointer;'
+  colorPicker.addEventListener('input', () => {
+    editor.focus()
+    document.execCommand('foreColor', false, colorPicker.value)
+  })
+  // Wrap in button-like div
+  const colorWrap = document.createElement('div')
+  colorWrap.title = 'Color de texto'
+  colorWrap.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;position:relative;cursor:pointer;'
+  colorWrap.innerHTML = `<span style="font-size:11px;position:absolute;bottom:0;left:50%;transform:translateX(-50%);line-height:1;pointer-events:none;">A</span>`
+  colorWrap.appendChild(colorPicker)
+  colorPicker.style.cssText = 'width:26px;height:26px;opacity:0;position:absolute;inset:0;cursor:pointer;'
+  const colorDisp = document.createElement('div')
+  colorDisp.style.cssText = 'width:26px;height:26px;border-radius:5px;border:1px solid rgba(255,255,255,0.09);background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;font-weight:700;color:#fff;position:relative;overflow:hidden;'
+  colorDisp.title = 'Color de texto'
+  colorDisp.innerHTML = `<span style="font-size:11px;font-weight:900;color:${colorPicker.value}">A</span>`
+  colorPicker.addEventListener('input', () => {
+    colorDisp.querySelector('span').style.color = colorPicker.value
+  })
+  colorPicker.addEventListener('change', () => {
+    editor.focus()
+    document.execCommand('foreColor', false, colorPicker.value)
+    colorDisp.querySelector('span').style.color = colorPicker.value
+  })
+  colorDisp.appendChild(colorPicker)
+  toolbarEl.appendChild(colorDisp)
+
+  // ── Highlight/background color picker ────────────────────
+  const hlPicker = document.createElement('input')
+  hlPicker.type = 'color'
+  hlPicker.value = '#fbbf24'
+  hlPicker.title = 'Resaltar texto'
+  const hlDisp = document.createElement('div')
+  hlDisp.title = 'Resaltar texto'
+  hlDisp.style.cssText = 'width:26px;height:26px;border-radius:5px;border:1px solid rgba(255,255,255,0.09);background:rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;font-weight:700;position:relative;overflow:hidden;'
+  hlDisp.innerHTML = `<span style="font-size:11px;font-weight:900;background:${hlPicker.value};padding:0 2px;border-radius:2px;">M</span>`
+  hlPicker.style.cssText = 'width:26px;height:26px;opacity:0;position:absolute;inset:0;cursor:pointer;'
+  hlPicker.addEventListener('change', () => {
+    editor.focus()
+    document.execCommand('hiliteColor', false, hlPicker.value)
+    hlDisp.querySelector('span').style.background = hlPicker.value
+  })
+  hlDisp.appendChild(hlPicker)
+  toolbarEl.appendChild(hlDisp)
+
+  const sepColor = document.createElement('div'); sepColor.className = 'nbe-sep'; toolbarEl.appendChild(sepColor)
 
   const INLINE = [
     { cmd:'bold',              html:'<b>B</b>',        title:'Negrita (Ctrl+B)' },
@@ -2580,7 +2713,9 @@ document.getElementById('ne-save')?.addEventListener('click', async () => {
   const node = allNodes.find(n => n.id === editingNoteId)
   if (!node) return
   const title = document.getElementById('ne-title').value.trim()
-  const body  = document.getElementById('ne-body').value.trim()
+  // Use rich editor HTML if available, otherwise fall back to textarea
+  const richEditor = _richEditors['ne-body']
+  const body = richEditor ? richEditor.innerHTML : (document.getElementById('ne-body')?.value || '').trim()
   const tagsRaw = document.getElementById('ne-tags')?.value || ''
   const tags = tagsRaw.split(/\s+/).filter(t => t.startsWith('#'))
   // Reminder
@@ -6017,6 +6152,8 @@ window.handleContactHistoryClick = (id, type) => {
 let _cmRating = 0
 let _cmSpecialties = []
 let _cmAccounts = []  // [{id, label, type, bank, clabe, wallet, network, specialty, notes}]
+let _cmPhones = []    // [{id, label, number}]
+let _cmEmails = []    // [{id, label, address}]
 let _currentContactId = null
 
 function uid() {
@@ -6030,18 +6167,44 @@ window.openContactModal = (id = null) => {
   _cmRating = 0
   _cmSpecialties = []
   _cmAccounts = []
+  _cmPhones = []
+  _cmEmails = []
 
   const c = id ? allNodes.find(n => n.id === id) : null
   const m = c?.metadata || {}
 
   document.getElementById('contact-modal-title').textContent = c ? 'Editar Contacto' : 'Nuevo Contacto'
   document.getElementById('cm-name').value  = m.name || c?.content || ''
-  document.getElementById('cm-phone').value = m.phone || ''
-  document.getElementById('cm-email').value = m.email || ''
   document.getElementById('cm-city').value  = m.city || m.zone || ''
   document.getElementById('cm-rfc').value   = (m.rfc || '').toUpperCase()
   document.getElementById('cm-notes').value = m.notes || ''
   document.getElementById('cm-color').value = m.color || '#00f0ff'
+
+  // Load phones — support migration from single phone field
+  if (m.phones?.length) {
+    _cmPhones = m.phones.map(p => ({ id: uid(), ...p }))
+  } else if (m.phone) {
+    _cmPhones = [{ id: uid(), label: 'Personal', number: m.phone }]
+  }
+  renderCmPhones()
+
+  // Load emails — support migration from single email field
+  if (m.emails?.length) {
+    _cmEmails = m.emails.map(e => ({ id: uid(), ...e }))
+  } else if (m.email) {
+    _cmEmails = [{ id: uid(), label: 'Personal', address: m.email }]
+  }
+  renderCmEmails()
+
+  // Address fields
+  document.getElementById('cm-address-street').value  = m.address_street || ''
+  document.getElementById('cm-address-postal').value  = m.address_postal || ''
+  document.getElementById('cm-address-state').value   = m.address_state  || ''
+  document.getElementById('cm-address-country').value = m.address_country || ''
+
+  // Special dates
+  document.getElementById('cm-birthday').value    = m.birthday    || ''
+  document.getElementById('cm-anniversary').value = m.anniversary || ''
 
   // Roles
   const roles = m.roles || (m.cType ? [m.cType] : ['persona'])
@@ -6222,6 +6385,68 @@ window.removeCatalogSpecialty = (s) => {
   renderConfigSpecCatalog()
 }
 
+// ── Phones ───────────────────────────────────────────────────────────────────
+window.addCmPhone = function() {
+  _cmPhones.push({ id: uid(), label: 'Personal', number: '' })
+  renderCmPhones()
+}
+window.removeCmPhone = function(id) {
+  _cmPhones = _cmPhones.filter(p => p.id !== id)
+  renderCmPhones()
+}
+window.updateCmPhone = function(id, field, value) {
+  const ph = _cmPhones.find(p => p.id === id)
+  if (ph) ph[field] = value
+}
+function renderCmPhones() {
+  const el = document.getElementById('cm-phones-list')
+  if (!el) return
+  if (!_cmPhones.length) {
+    el.innerHTML = `<div style="font-size:12px;color:var(--text-dim);padding:6px 8px;text-align:center;">Sin teléfonos. Pulsa "+ Teléfono" para agregar.</div>`
+    return
+  }
+  const PHONE_LABELS = ['Personal','Trabajo','Whatsapp','Casa','Otro']
+  el.innerHTML = _cmPhones.map(p => `
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select class="modal-input" style="width:110px;font-size:12px;" onchange="updateCmPhone('${p.id}','label',this.value)">
+        ${PHONE_LABELS.map(l => `<option value="${l}" ${p.label===l?'selected':''}>${l}</option>`).join('')}
+      </select>
+      <input type="tel" value="${esc(p.number)}" placeholder="612-555-1234" class="modal-input" style="flex:1;font-family:'JetBrains Mono',monospace;" onchange="updateCmPhone('${p.id}','number',this.value)"/>
+      <button onclick="removeCmPhone('${p.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:4px;" title="Eliminar">✕</button>
+    </div>`).join('')
+}
+
+// ── Emails ────────────────────────────────────────────────────────────────────
+window.addCmEmail = function() {
+  _cmEmails.push({ id: uid(), label: 'Personal', address: '' })
+  renderCmEmails()
+}
+window.removeCmEmail = function(id) {
+  _cmEmails = _cmEmails.filter(e => e.id !== id)
+  renderCmEmails()
+}
+window.updateCmEmail = function(id, field, value) {
+  const em = _cmEmails.find(e => e.id === id)
+  if (em) em[field] = value
+}
+function renderCmEmails() {
+  const el = document.getElementById('cm-emails-list')
+  if (!el) return
+  if (!_cmEmails.length) {
+    el.innerHTML = `<div style="font-size:12px;color:var(--text-dim);padding:6px 8px;text-align:center;">Sin correos. Pulsa "+ Email" para agregar.</div>`
+    return
+  }
+  const EMAIL_LABELS = ['Personal','Trabajo','Facturación','Otro']
+  el.innerHTML = _cmEmails.map(e => `
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select class="modal-input" style="width:110px;font-size:12px;" onchange="updateCmEmail('${e.id}','label',this.value)">
+        ${EMAIL_LABELS.map(l => `<option value="${l}" ${e.label===l?'selected':''}>${l}</option>`).join('')}
+      </select>
+      <input type="email" value="${esc(e.address)}" placeholder="correo@ejemplo.com" class="modal-input" style="flex:1;" onchange="updateCmEmail('${e.id}','address',this.value)"/>
+      <button onclick="removeCmEmail('${e.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:4px;" title="Eliminar">✕</button>
+    </div>`).join('')
+}
+
 // ── Accounts ─────────────────────────────────────────────────────────────────
 window.addCmAccount = function() {
   _cmAccounts.push({ id: uid(), label: '', type: 'bank', bank: '', clabe: '', wallet: '', network: '', specialty: '', notes: '' })
@@ -6288,15 +6513,38 @@ window.saveContact = async () => {
     a.clabe = (a.clabe || '').replace(/\s/g, '')
   })
 
+  // Build backwards-compat phone/email from first entry
+  const firstPhone = _cmPhones[0]?.number?.trim() || undefined
+  const firstEmail = _cmEmails[0]?.address?.trim() || undefined
+
+  const birthday    = document.getElementById('cm-birthday')?.value    || undefined
+  const anniversary = document.getElementById('cm-anniversary')?.value || undefined
+  const addrStreet  = document.getElementById('cm-address-street')?.value.trim() || undefined
+  const addrPostal  = document.getElementById('cm-address-postal')?.value.trim() || undefined
+  const addrState   = document.getElementById('cm-address-state')?.value.trim()  || undefined
+  const addrCountry = document.getElementById('cm-address-country')?.value.trim()|| undefined
+
   const meta = {
     name,
     roles,
     cType: roles[0], // backwards compat
     color:      document.getElementById('cm-color')?.value || '#00f0ff',
-    phone:      document.getElementById('cm-phone')?.value.trim() || undefined,
-    email:      document.getElementById('cm-email')?.value.trim() || undefined,
+    // Multi-phone/email arrays
+    phones:     _cmPhones.length  ? _cmPhones.map(({id: _id, ...rest}) => rest)  : undefined,
+    emails:     _cmEmails.length  ? _cmEmails.map(({id: _id, ...rest}) => rest)  : undefined,
+    // Backwards compat single fields
+    phone:      firstPhone,
+    email:      firstEmail,
     city:       document.getElementById('cm-city')?.value.trim() || undefined,
     rfc:        document.getElementById('cm-rfc')?.value.trim().toUpperCase() || undefined,
+    // Address
+    address_street:  addrStreet,
+    address_postal:  addrPostal,
+    address_state:   addrState,
+    address_country: addrCountry,
+    // Special dates
+    birthday,
+    anniversary,
     rating:     _cmRating || undefined,
     specialties: _cmSpecialties.length ? _cmSpecialties : undefined,
     specialty:  _cmSpecialties[0] || undefined, // backwards compat
@@ -12266,7 +12514,8 @@ window.renderCryptoPortfolio = function() {
               <span style="color:#4ade80;">${fmtCrypto(p.pesos)}</span> → <span style="color:#e2e8f0;">${fmtCoins(p.coins)} ${esc(p.coin)}</span>
               ${p.price ? `<span style="color:var(--text-muted);font-size:10px;"> @ ${fmtCrypto(p.price)}/u</span>` : ''}
             </div>
-            <button onclick="deleteCryptoPurchase(${realIdx})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:11px;" title="Eliminar compra">✕</button>
+            <button onclick="editCryptoPurchase(${realIdx})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;" title="Editar compra" onmouseover="this.style.color='#a78bfa'" onmouseout="this.style.color='var(--text-dim)'">✏️</button>
+            <button onclick="deleteCryptoPurchase(${realIdx})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:11px;" title="Eliminar compra" onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='var(--text-dim)'">✕</button>
           </div>`
         }).join('')
   }
@@ -12275,16 +12524,57 @@ window.renderCryptoPortfolio = function() {
 // ── Modals ─────────────────────────────────────────────────────
 
 window.openCryptoPurchaseModal = function() {
+  _editCryptoIdx = -1
   const modal = document.getElementById('crypto-purchase-modal')
   if (!modal) return
   modal.classList.remove('hidden')
   modal.style.display = 'flex'
+  // Reset fields for new entry
+  const coinSel = document.getElementById('cp-coin')
+  if (coinSel) coinSel.value = 'XRP'
+  document.getElementById('cp-coin-custom-wrap').style.display = 'none'
   const dateInput = document.getElementById('cp-date')
   if (dateInput) dateInput.value = new Date().toISOString().split('T')[0]
+  document.getElementById('cp-pesos').value = ''
+  document.getElementById('cp-coins').value = ''
+  document.getElementById('cp-price').value = ''
+  const titleEl = document.querySelector('#crypto-purchase-modal .modal-title')
+  if (titleEl) titleEl.textContent = '💎 Registrar compra crypto'
+  document.getElementById('cp-pesos')?.focus()
+}
+
+window.editCryptoPurchase = function(idx) {
+  const portfolio = loadCryptoPortfolio()
+  const p = portfolio.purchases[idx]
+  if (!p) return
+  _editCryptoIdx = idx
+  const modal = document.getElementById('crypto-purchase-modal')
+  if (!modal) return
+  modal.classList.remove('hidden')
+  modal.style.display = 'flex'
+  // Fill in coin
+  const knownCoins = ['XRP','BTC','ETH','USDT','SOL','MANA','ADA']
+  const coinSel = document.getElementById('cp-coin')
+  if (knownCoins.includes(p.coin)) {
+    coinSel.value = p.coin
+    document.getElementById('cp-coin-custom-wrap').style.display = 'none'
+  } else {
+    coinSel.value = 'OTRO'
+    document.getElementById('cp-coin-custom-wrap').style.display = 'block'
+    const customInput = document.getElementById('cp-coin-custom')
+    if (customInput) customInput.value = p.coin
+  }
+  document.getElementById('cp-date').value  = p.date  || ''
+  document.getElementById('cp-pesos').value = p.pesos || ''
+  document.getElementById('cp-coins').value = p.coins || ''
+  document.getElementById('cp-price').value = p.price || ''
+  const titleEl = document.querySelector('#crypto-purchase-modal .modal-title')
+  if (titleEl) titleEl.textContent = '✏️ Editar compra crypto'
   document.getElementById('cp-pesos')?.focus()
 }
 
 window.closeCryptoPurchaseModal = function() {
+  _editCryptoIdx = -1
   const modal = document.getElementById('crypto-purchase-modal')
   if (modal) { modal.classList.add('hidden'); modal.style.display = 'none' }
   // Reset custom coin
@@ -12336,17 +12626,27 @@ window.saveCryptoPurchase = function() {
   if (!coins || coins <= 0) { showToast('⚠️ Ingresa las monedas recibidas'); return }
 
   const portfolio = loadCryptoPortfolio()
-  portfolio.purchases.push({ coin, date, pesos, coins, price })
-  saveCryptoPortfolio(portfolio)
-
-  closeCryptoPurchaseModal()
-  renderCryptoPortfolio()
-  showToast(`✅ Compra de ${coins} ${coin} registrada`)
+  if (_editCryptoIdx >= 0) {
+    // Update existing
+    portfolio.purchases[_editCryptoIdx] = { coin, date, pesos, coins, price }
+    saveCryptoPortfolio(portfolio)
+    closeCryptoPurchaseModal()
+    renderCryptoPortfolio()
+    showToast(`✅ Compra actualizada: ${fmtCoins(coins)} ${coin}`)
+  } else {
+    // Add new
+    portfolio.purchases.push({ coin, date, pesos, coins, price })
+    saveCryptoPortfolio(portfolio)
+    closeCryptoPurchaseModal()
+    renderCryptoPortfolio()
+    showToast(`✅ Compra de ${fmtCoins(coins)} ${coin} registrada`)
+  }
 }
 
 // ── Update price ─────────────────────────────────────────────
 
 let _cpPriceCoin = null
+let _editCryptoIdx = -1   // -1 = adding new; ≥0 = editing existing purchase
 
 window.openCryptoPriceModal = function(coin) {
   _cpPriceCoin = coin
