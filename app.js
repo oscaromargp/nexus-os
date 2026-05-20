@@ -6154,7 +6154,9 @@ let _cmSpecialties = []
 let _cmAccounts = []  // [{id, label, type, bank, clabe, wallet, network, specialty, notes}]
 let _cmPhones = []    // [{id, label, number}]
 let _cmEmails = []    // [{id, label, address}]
+let _cmDocs   = []    // [{id, docType, name, url, notes}]
 let _currentContactId = null
+let _profileContactId = null  // contact currently open in profile modal
 
 function uid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -6169,6 +6171,7 @@ window.openContactModal = (id = null) => {
   _cmAccounts = []
   _cmPhones = []
   _cmEmails = []
+  _cmDocs   = []
 
   const c = id ? allNodes.find(n => n.id === id) : null
   const m = c?.metadata || {}
@@ -6179,6 +6182,16 @@ window.openContactModal = (id = null) => {
   document.getElementById('cm-rfc').value   = (m.rfc || '').toUpperCase()
   document.getElementById('cm-notes').value = m.notes || ''
   document.getElementById('cm-color').value = m.color || '#00f0ff'
+
+  // Photo URL
+  const photoInput = document.getElementById('cm-photo-url')
+  if (photoInput) photoInput.value = m.photo_url || ''
+
+  // Documents
+  if (m.documents?.length) {
+    _cmDocs = m.documents.map(d => ({ id: uid(), ...d }))
+  }
+  renderCmDocs()
 
   // Load phones — support migration from single phone field
   if (m.phones?.length) {
@@ -6250,13 +6263,21 @@ window.closeContactModal = () => {
 window.updateAvatarPreview = function() {
   const name = document.getElementById('cm-name')?.value || ''
   const color = document.getElementById('cm-color')?.value || '#00f0ff'
+  const photoUrl = document.getElementById('cm-photo-url')?.value?.trim() || ''
   const el = document.getElementById('cm-avatar-preview')
   if (!el) return
-  const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase() || '?'
-  el.textContent = initials
-  el.style.background = color + '22'
-  el.style.color = color
-  el.style.borderColor = color + '66'
+  if (photoUrl) {
+    el.innerHTML = `<img src="${photoUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.parentElement.innerHTML='<span style=\\'font-size:24px;font-weight:900;\\'>${(name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase()||'?')}</span>'; this.parentElement.style.background='${color}22';"/>`
+    el.style.background = 'transparent'
+    el.style.color = color
+    el.style.borderColor = color + '66'
+  } else {
+    const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase() || '?'
+    el.innerHTML = `<span style="font-size:24px;font-weight:900;">${initials}</span>`
+    el.style.background = color + '22'
+    el.style.color = color
+    el.style.borderColor = color + '66'
+  }
 }
 
 window.updateRoleLabel = function(role) {
@@ -6447,6 +6468,53 @@ function renderCmEmails() {
     </div>`).join('')
 }
 
+// ── Documents ─────────────────────────────────────────────────────────────────
+const DOC_TYPES = [
+  { val:'ine',       label:'🪪 INE / Credencial' },
+  { val:'curp',      label:'📋 CURP' },
+  { val:'acta',      label:'📜 Acta de Nacimiento' },
+  { val:'pasaporte', label:'🛂 Pasaporte' },
+  { val:'rfc',       label:'🧾 RFC / SAT' },
+  { val:'contrato',  label:'📝 Contrato' },
+  { val:'firma',     label:'✍️ Firma' },
+  { val:'poder',     label:'⚖️ Poder Notarial' },
+  { val:'domicilio', label:'🏠 Comprobante Dom.' },
+  { val:'foto',      label:'📷 Fotografía' },
+  { val:'otro',      label:'📎 Otro' },
+]
+const DOC_ICONS = Object.fromEntries(DOC_TYPES.map(d => [d.val, d.label.split(' ')[0]]))
+
+window.addCmDoc = function() {
+  _cmDocs.push({ id: uid(), docType: 'otro', name: '', url: '', notes: '' })
+  renderCmDocs()
+}
+window.removeCmDoc = function(id) {
+  _cmDocs = _cmDocs.filter(d => d.id !== id)
+  renderCmDocs()
+}
+window.updateCmDoc = function(id, field, value) {
+  const doc = _cmDocs.find(d => d.id === id)
+  if (doc) doc[field] = value
+}
+function renderCmDocs() {
+  const el = document.getElementById('cm-docs-list')
+  if (!el) return
+  if (!_cmDocs.length) {
+    el.innerHTML = `<div style="font-size:12px;color:var(--text-dim);padding:8px;text-align:center;border:1px dashed rgba(251,146,60,0.2);border-radius:8px;">Sin documentos. Pulsa "+ Documento" para vincular un archivo de Google Drive, Dropbox, etc.</div>`
+    return
+  }
+  el.innerHTML = _cmDocs.map(d => `
+    <div style="display:flex;gap:8px;align-items:center;background:rgba(251,146,60,0.04);border:1px solid rgba(251,146,60,0.15);border-radius:10px;padding:8px 10px;">
+      <select class="modal-input" style="width:160px;font-size:12px;" onchange="updateCmDoc('${d.id}','docType',this.value)">
+        ${DOC_TYPES.map(t => `<option value="${t.val}" ${d.docType===t.val?'selected':''}>${t.label}</option>`).join('')}
+      </select>
+      <input type="text" value="${esc(d.name)}" placeholder="Nombre / descripción" class="modal-input" style="flex:1;font-size:12px;" onchange="updateCmDoc('${d.id}','name',this.value)"/>
+      <input type="url" value="${esc(d.url)}" placeholder="URL de Google Drive / Dropbox…" class="modal-input" style="flex:2;font-size:12px;" onchange="updateCmDoc('${d.id}','url',this.value)"/>
+      ${d.url ? `<a href="${esc(d.url)}" target="_blank" style="background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:6px;padding:5px 8px;font-size:11px;text-decoration:none;flex-shrink:0;white-space:nowrap;" title="Abrir documento">↗ Abrir</a>` : ''}
+      <button onclick="removeCmDoc('${d.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:4px;flex-shrink:0;" title="Eliminar">✕</button>
+    </div>`).join('')
+}
+
 // ── Accounts ─────────────────────────────────────────────────────────────────
 window.addCmAccount = function() {
   _cmAccounts.push({ id: uid(), label: '', type: 'bank', bank: '', clabe: '', wallet: '', network: '', specialty: '', notes: '' })
@@ -6529,6 +6597,7 @@ window.saveContact = async () => {
     roles,
     cType: roles[0], // backwards compat
     color:      document.getElementById('cm-color')?.value || '#00f0ff',
+    photo_url:  document.getElementById('cm-photo-url')?.value.trim() || undefined,
     // Multi-phone/email arrays
     phones:     _cmPhones.length  ? _cmPhones.map(({id: _id, ...rest}) => rest)  : undefined,
     emails:     _cmEmails.length  ? _cmEmails.map(({id: _id, ...rest}) => rest)  : undefined,
@@ -6549,6 +6618,8 @@ window.saveContact = async () => {
     specialties: _cmSpecialties.length ? _cmSpecialties : undefined,
     specialty:  _cmSpecialties[0] || undefined, // backwards compat
     contact_accounts: _cmAccounts.length ? _cmAccounts : undefined,
+    // Documents
+    documents:  _cmDocs.length ? _cmDocs.map(({id: _id, ...rest}) => rest) : undefined,
     notes:      document.getElementById('cm-notes')?.value.trim() || undefined,
   }
   // Remove undefined keys
@@ -6594,6 +6665,277 @@ window.deleteContact = async () => {
   showToast('🗑 Contacto eliminado')
 }
 
+// ── Contact Profile Modal (Ficha Completa) ────────────────────────────────────
+window.openContactProfile = function(id) {
+  _profileContactId = id
+  const c = allNodes.find(n => n.id === id)
+  if (!c) return
+  const m = c.metadata || {}
+  const name    = m.name || c.content || '?'
+  const color   = m.color || '#00f0ff'
+  const roles   = m.roles || (m.cType ? [m.cType] : ['persona'])
+  const specs   = m.specialties || (m.specialty ? [m.specialty] : [])
+  const phones  = m.phones || (m.phone ? [{ label:'Personal', number:m.phone }] : [])
+  const emails  = m.emails || (m.email ? [{ label:'Personal', address:m.email }] : [])
+  const docs    = m.documents || []
+  const accounts = m.contact_accounts || []
+  const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase() || '?'
+
+  const roleColors = { persona:'#00f0ff', proveedor:'#f97316', cliente:'#4ade80', colaborador:'#a78bfa' }
+  const roleIcons  = { persona:'👤', proveedor:'🔧', cliente:'💼', colaborador:'🤝' }
+
+  // ── Avatar / Photo ──────────────────────────────────────────────
+  const avatarEl = document.getElementById('cpf-avatar')
+  if (avatarEl) {
+    avatarEl.style.borderColor = color + '66'
+    if (m.photo_url) {
+      avatarEl.innerHTML = `<img src="${m.photo_url}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<span>${initials}</span>';this.parentElement.style.background='${color}22';this.parentElement.style.color='${color}';"/>`
+      avatarEl.style.background = 'transparent'
+    } else {
+      avatarEl.innerHTML = `<span style="font-size:32px;font-weight:900;color:${color};">${initials}</span>`
+      avatarEl.style.background = color + '18'
+    }
+  }
+
+  // ── Name / Roles / Rating / Specs ──────────────────────────────
+  const nameEl = document.getElementById('cpf-name')
+  if (nameEl) nameEl.textContent = name
+
+  const rolesEl = document.getElementById('cpf-roles')
+  if (rolesEl) rolesEl.innerHTML = roles.map(r =>
+    `<span style="font-size:11px;padding:3px 10px;background:${roleColors[r]||'#888'}1a;border:1px solid ${roleColors[r]||'#888'}44;color:${roleColors[r]||'#888'};border-radius:6px;font-weight:700;">${roleIcons[r]||''} ${r}</span>`
+  ).join('')
+
+  const ratingEl = document.getElementById('cpf-rating')
+  if (ratingEl) ratingEl.textContent = m.rating ? '⭐'.repeat(m.rating) : ''
+
+  const specsEl = document.getElementById('cpf-specialties')
+  if (specsEl) specsEl.innerHTML = specs.map(s =>
+    `<span style="font-size:11px;padding:2px 9px;background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);color:#fb923c;border-radius:5px;">${esc(s)}</span>`
+  ).join('')
+
+  // ── Hero gradient matching contact color ────────────────────────
+  const heroEl = document.getElementById('cpf-hero')
+  if (heroEl) heroEl.style.background = `linear-gradient(135deg, ${color}08, rgba(255,255,255,0.02))`
+
+  // ── Quick action buttons ────────────────────────────────────────
+  const qaEl = document.getElementById('cpf-quick-actions')
+  if (qaEl) {
+    const btns = []
+    // Primary phone → call + WhatsApp
+    if (phones.length) {
+      const p = phones[0].number.replace(/\D/g, '')
+      btns.push(`<a href="tel:${p}" style="${_cpfBtn('#4ade80')}">📞 Llamar</a>`)
+      // WhatsApp: 10 digits → prepend 52 for Mexico
+      const wa = p.length === 10 ? '52' + p : p
+      btns.push(`<a href="https://wa.me/${wa}" target="_blank" style="${_cpfBtn('#25d366')}">💬 WhatsApp</a>`)
+    }
+    // Primary email
+    if (emails.length) {
+      btns.push(`<a href="mailto:${emails[0].address}" style="${_cpfBtn('#60a5fa')}">✉️ Email</a>`)
+    }
+    // RFC → copy
+    if (m.rfc) {
+      btns.push(`<button onclick="navigator.clipboard.writeText('${m.rfc}');showToast('✅ RFC copiado')" style="${_cpfBtn('#a78bfa')}">🧾 Copiar RFC</button>`)
+    }
+    qaEl.innerHTML = btns.join('')
+  }
+
+  // ── Section builder ─────────────────────────────────────────────
+  const SEC = (title, content) => `
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.07em;color:var(--text-muted);margin-bottom:12px;text-transform:uppercase;">${title}</div>
+      ${content}
+    </div>`
+
+  // ── Phones ──────────────────────────────────────────────────────
+  const phonesEl = document.getElementById('cpf-phones-section')
+  if (phonesEl) {
+    if (phones.length) {
+      phonesEl.innerHTML = SEC('📞 Teléfonos', phones.map(p => {
+        const n = p.number.replace(/\D/g,'')
+        const wa = n.length === 10 ? '52'+n : n
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="font-size:10px;min-width:70px;color:var(--text-dim);">${esc(p.label)}</span>
+          <a href="tel:${n}" style="font-size:13px;font-weight:600;color:#fff;text-decoration:none;flex:1;font-family:'JetBrains Mono',monospace;">${esc(p.number)}</a>
+          <a href="https://wa.me/${wa}" target="_blank" style="font-size:11px;color:#25d366;text-decoration:none;padding:2px 6px;background:rgba(37,211,102,0.1);border-radius:4px;">WA</a>
+        </div>`
+      }).join(''))
+    } else {
+      phonesEl.innerHTML = SEC('📞 Teléfonos', `<span style="font-size:12px;color:var(--text-dim);">Sin teléfonos registrados</span>`)
+    }
+  }
+
+  // ── Emails ──────────────────────────────────────────────────────
+  const emailsEl = document.getElementById('cpf-emails-section')
+  if (emailsEl) {
+    if (emails.length) {
+      emailsEl.innerHTML = SEC('✉️ Correos', emails.map(e =>
+        `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="font-size:10px;min-width:70px;color:var(--text-dim);">${esc(e.label)}</span>
+          <a href="mailto:${esc(e.address)}" style="font-size:12px;font-weight:600;color:#60a5fa;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(e.address)}</a>
+        </div>`
+      ).join(''))
+    } else {
+      emailsEl.innerHTML = SEC('✉️ Correos', `<span style="font-size:12px;color:var(--text-dim);">Sin correos registrados</span>`)
+    }
+  }
+
+  // ── Address ─────────────────────────────────────────────────────
+  const addrEl = document.getElementById('cpf-address-section')
+  if (addrEl) {
+    const hasAddr = m.address_street || m.city || m.address_state
+    if (hasAddr) {
+      const parts = [m.address_street, [m.address_postal, m.city].filter(Boolean).join(' '), [m.address_state, m.address_country].filter(Boolean).join(', ')].filter(Boolean)
+      addrEl.innerHTML = SEC('📍 Dirección', `<div style="font-size:13px;color:var(--text-secondary);line-height:1.7;">${parts.map(p => esc(p)).join('<br>')}</div>`)
+    } else {
+      addrEl.innerHTML = ''
+    }
+  }
+
+  // ── Dates ───────────────────────────────────────────────────────
+  const datesEl = document.getElementById('cpf-dates-section')
+  if (datesEl) {
+    const hasDates = m.birthday || m.anniversary
+    if (hasDates) {
+      const fmtDate = d => { if (!d) return ''; const [y,mo,dy] = d.split('-'); return `${dy}/${mo}/${y}` }
+      const today = new Date()
+      const daysUntil = d => {
+        if (!d) return null
+        const [,mo,dy] = d.split('-').map(Number)
+        let ev = new Date(today.getFullYear(), mo-1, dy)
+        if (ev < today) ev.setFullYear(ev.getFullYear()+1)
+        return Math.ceil((ev-today)/86400000)
+      }
+      const du_b = daysUntil(m.birthday)
+      const du_a = daysUntil(m.anniversary)
+      datesEl.innerHTML = SEC('🎉 Fechas Especiales', `
+        <div style="display:flex;gap:24px;flex-wrap:wrap;">
+          ${m.birthday ? `<div><div style="font-size:10px;color:var(--text-dim);">🎂 Cumpleaños</div><div style="font-size:14px;font-weight:700;color:#f472b6;font-family:'JetBrains Mono',monospace;">${fmtDate(m.birthday)}</div>${du_b!==null?`<div style="font-size:10px;color:var(--text-muted);">${du_b===0?'¡HOY! 🥳':du_b+' días'}</div>`:''}</div>` : ''}
+          ${m.anniversary ? `<div><div style="font-size:10px;color:var(--text-dim);">💑 Aniversario</div><div style="font-size:14px;font-weight:700;color:#a78bfa;font-family:'JetBrains Mono',monospace;">${fmtDate(m.anniversary)}</div>${du_a!==null?`<div style="font-size:10px;color:var(--text-muted);">${du_a===0?'¡HOY! 🥳':du_a+' días'}</div>`:''}</div>` : ''}
+        </div>`)
+    } else {
+      datesEl.innerHTML = ''
+    }
+  }
+
+  // ── Cuentas de cobro ─────────────────────────────────────────────
+  const accEl = document.getElementById('cpf-accounts-section')
+  if (accEl) {
+    if (accounts.length) {
+      const accTypeIcon = { bank:'🏦', crypto:'₿', cash:'💵' }
+      accEl.innerHTML = SEC('🏦 Cuentas de Cobro', accounts.map(a => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="font-size:16px;flex-shrink:0;">${accTypeIcon[a.type]||'💳'}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:700;color:#fff;">${esc(a.label||a.bank||a.network||'Cuenta')}</div>
+            ${a.bank ? `<div style="font-size:11px;color:var(--text-muted);">${esc(a.bank)}</div>` : ''}
+            ${a.clabe ? `<div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-secondary);display:flex;align-items:center;gap:6px;">${esc(a.clabe)} <button onclick="navigator.clipboard.writeText('${a.clabe}');showToast('✅ CLABE copiada')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:10px;padding:0;" title="Copiar CLABE">📋</button></div>` : ''}
+            ${a.wallet ? `<div style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-muted);word-break:break-all;">${esc(a.wallet)}</div>` : ''}
+          </div>
+          ${a.clabe ? `<button onclick="navigator.clipboard.writeText('${a.clabe}');showToast('✅ Cuenta copiada')" style="background:rgba(0,246,255,0.06);border:1px solid rgba(0,246,255,0.15);color:#00f6ff;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;flex-shrink:0;">📋 Copiar</button>` : ''}
+        </div>`).join(''))
+    } else {
+      accEl.innerHTML = ''
+    }
+  }
+
+  // ── Documentos ──────────────────────────────────────────────────
+  const docsEl = document.getElementById('cpf-docs-section')
+  if (docsEl) {
+    if (docs.length) {
+      docsEl.innerHTML = SEC('📎 Documentos', `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;">
+          ${docs.map(d => {
+            const icon = DOC_ICONS[d.docType] || '📎'
+            return `<a href="${d.url||'#'}" target="${d.url?'_blank':'_self'}" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 12px;background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.2);border-radius:12px;text-decoration:none;cursor:${d.url?'pointer':'default'};transition:background .15s;" ${d.url?'':'onclick="event.preventDefault()"'} onmouseover="if('${d.url}')this.style.background='rgba(251,146,60,0.12)'" onmouseout="this.style.background='rgba(251,146,60,0.06)'">
+              <span style="font-size:28px;">${icon}</span>
+              <span style="font-size:11px;font-weight:700;color:${d.url?'#fb923c':'var(--text-muted)'};text-align:center;line-height:1.3;">${esc(d.name || d.docType)}</span>
+              ${d.url ? '<span style="font-size:9px;color:var(--text-dim);">↗ Abrir</span>' : '<span style="font-size:9px;color:var(--text-dim);">Sin enlace</span>'}
+            </a>`
+          }).join('')}
+        </div>`)
+    } else {
+      docsEl.innerHTML = SEC('📎 Documentos', `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px 0;">Sin documentos vinculados — edita el contacto para agregar.</div>`)
+    }
+  }
+
+  // ── Historial de pagos ──────────────────────────────────────────
+  const paymentsEl = document.getElementById('cpf-payments-section')
+  if (paymentsEl) {
+    const txs = allNodes.filter(n =>
+      (n.type==='income'||n.type==='expense') && n.metadata?.contact_id === id
+    ).sort((a,b) => (b.metadata?.date||'').localeCompare(a.metadata?.date||''))
+    if (txs.length) {
+      const totalInc = txs.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+      const totalExp = txs.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+      paymentsEl.innerHTML = SEC(`💰 Historial de Pagos <span style="font-size:10px;font-weight:400;color:var(--text-dim);">${txs.length} movimiento${txs.length>1?'s':''}</span>`, `
+        <div style="display:flex;gap:20px;margin-bottom:12px;">
+          ${totalInc>0?`<div><div style="font-size:9px;color:var(--text-dim);">Ingresos</div><div style="font-size:15px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${totalInc.toLocaleString('es-MX')}</div></div>`:''}
+          ${totalExp>0?`<div><div style="font-size:9px;color:var(--text-dim);">Pagado</div><div style="font-size:15px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${totalExp.toLocaleString('es-MX')}</div></div>`:''}
+        </div>
+        ${txs.slice(0,8).map(n => {
+          const isInc = n.type === 'income'
+          return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="font-size:12px;">${isInc?'↑':'↓'}</span>
+            <span style="flex:1;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.description||n.content)}</span>
+            <span style="font-size:11px;color:var(--text-dim);flex-shrink:0;">${n.metadata?.date||''}</span>
+            <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:${isInc?'#4ade80':'#f87171'};flex-shrink:0;">${isInc?'+':'-'}$${(n.metadata?.amount||0).toLocaleString('es-MX')}</span>
+          </div>`
+        }).join('')}
+        ${txs.length>8?`<div style="font-size:11px;color:var(--text-dim);text-align:center;padding-top:8px;">+${txs.length-8} más en Bio-Finanzas</div>`:''}`)
+    } else {
+      paymentsEl.innerHTML = ''
+    }
+  }
+
+  // ── Proyectos vinculados ─────────────────────────────────────────
+  const projEl = document.getElementById('cpf-projects-section')
+  if (projEl) {
+    const proyectos = allNodes.filter(n => n.type==='proyecto' && (
+      (n.metadata?.team||[]).includes(id) ||
+      (n.metadata?.client_id===id) ||
+      (n.metadata?.contact_id===id)
+    ))
+    if (proyectos.length) {
+      projEl.innerHTML = SEC(`🏗️ Proyectos (${proyectos.length})`, proyectos.map(p =>
+        `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="closeContactProfile();openProjectView('${p.id}')">
+          <span style="flex:1;font-size:12px;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.metadata?.label||p.content)}</span>
+          <span style="font-size:10px;color:var(--text-dim);">↗</span>
+        </div>`).join(''))
+    } else {
+      projEl.innerHTML = ''
+    }
+  }
+
+  // ── Notas ────────────────────────────────────────────────────────
+  const notesEl = document.getElementById('cpf-notes-section')
+  if (notesEl) {
+    if (m.notes) {
+      notesEl.innerHTML = SEC('📝 Notas', `<div style="font-size:13px;color:var(--text-secondary);line-height:1.7;white-space:pre-wrap;">${esc(m.notes)}</div>`)
+    } else {
+      notesEl.innerHTML = ''
+    }
+  }
+
+  document.getElementById('contact-profile-modal').classList.remove('hidden')
+}
+
+function _cpfBtn(clr) {
+  return `display:inline-flex;align-items:center;gap:5px;padding:7px 14px;background:${clr}18;border:1px solid ${clr}44;color:${clr};border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;`
+}
+
+window.closeContactProfile = function() {
+  document.getElementById('contact-profile-modal').classList.add('hidden')
+  _profileContactId = null
+}
+
+window.openContactEditFromProfile = function() {
+  const id = _profileContactId
+  closeContactProfile()
+  openContactModal(id)
+}
+
 // ── Render contacts grid ──────────────────────────────────────────────────────
 function renderContacts() {
   const root = document.getElementById('contacts-root')
@@ -6609,11 +6951,18 @@ function renderContacts() {
   if (search) {
     contacts = contacts.filter(c => {
       const m = c.metadata || {}
+      const allPhones = (m.phones || []).map(p => p.number).concat(m.phone || '')
+      const allEmails = (m.emails || []).map(e => e.address).concat(m.email || '')
       return (m.name || c.content).toLowerCase().includes(search)
-        || (m.phone || '').includes(search)
+        || allPhones.some(p => p.includes(search))
+        || allEmails.some(e => e.toLowerCase().includes(search))
         || (m.city || m.zone || '').toLowerCase().includes(search)
+        || (m.rfc || '').toLowerCase().includes(search)
+        || (m.address_street || '').toLowerCase().includes(search)
         || (m.specialties || []).some(s => s.toLowerCase().includes(search))
         || (m.specialty || '').toLowerCase().includes(search)
+        || (m.documents || []).some(d => (d.name || '').toLowerCase().includes(search))
+        || (m.notes || '').toLowerCase().includes(search)
     })
   }
 
@@ -6626,13 +6975,16 @@ function renderContacts() {
   }
 
   root.innerHTML = contacts.map(c => {
-    const m = c.metadata || {}
-    const name    = m.name || c.content
-    const color   = m.color || '#00f0ff'
-    const roles   = m.roles || (m.cType ? [m.cType] : ['persona'])
-    const specs   = m.specialties || (m.specialty ? [m.specialty] : [])
+    const m        = c.metadata || {}
+    const name     = m.name || c.content
+    const color    = m.color || '#00f0ff'
+    const roles    = m.roles || (m.cType ? [m.cType] : ['persona'])
+    const specs    = m.specialties || (m.specialty ? [m.specialty] : [])
     const accounts = m.contact_accounts || []
-    const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase()
+    const docs     = m.documents || []
+    const phones   = m.phones || (m.phone ? [{ label:'Personal', number:m.phone }] : [])
+    const emails   = m.emails || (m.email ? [{ label:'Personal', address:m.email }] : [])
+    const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase() || '?'
 
     const roleColors = { persona:'#00f0ff', proveedor:'#f97316', cliente:'#4ade80', colaborador:'#a78bfa' }
     const roleIcons  = { persona:'👤', proveedor:'🔧', cliente:'💼', colaborador:'🤝' }
@@ -6640,33 +6992,49 @@ function renderContacts() {
       `<span style="font-size:10px;padding:2px 7px;background:${roleColors[r]||'#888'}1a;border:1px solid ${roleColors[r]||'#888'}44;color:${roleColors[r]||'#888'};border-radius:4px;font-weight:700;">${roleIcons[r]||''} ${r}</span>`
     ).join('')
 
-    const specChips = specs.slice(0,4).map(s =>
+    const specChips = specs.slice(0,3).map(s =>
       `<span style="font-size:10px;padding:2px 8px;background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);color:#fb923c;border-radius:4px;">${esc(s)}</span>`
-    ).join('') + (specs.length > 4 ? `<span style="font-size:10px;color:var(--text-dim);">+${specs.length-4}</span>` : '')
+    ).join('') + (specs.length > 3 ? `<span style="font-size:10px;color:var(--text-dim);">+${specs.length-3}</span>` : '')
 
-    const txCount = allNodes.filter(n =>
-      (n.type==='income'||n.type==='expense') && n.metadata?.contact_id===c.id
-    ).length
+    const txCount  = allNodes.filter(n => (n.type==='income'||n.type==='expense') && n.metadata?.contact_id===c.id).length
     const totalPaid = allNodes.filter(n => n.type==='expense' && n.metadata?.contact_id===c.id)
       .reduce((s,n) => s+(n.metadata?.amount||0), 0)
 
-    return `<div class="contact-card" onclick="openContactModal('${c.id}')" style="cursor:pointer;">
+    // Avatar — photo or initials
+    const avatarHTML = m.photo_url
+      ? `<img src="${m.photo_url}" style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid ${color}44;flex-shrink:0;" onerror="this.outerHTML='<div style=\\'width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;background:${color}18;color:${color};border:2px solid ${color}44;flex-shrink:0;\\'>${initials}</div>'">`
+      : `<div style="width:52px;height:52px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;background:${color}18;color:${color};border:2px solid ${color}44;">${initials}</div>`
+
+    // Quick action strip for cards
+    const firstPhone = phones[0]?.number?.replace(/\D/g,'') || ''
+    const waNum = firstPhone.length === 10 ? '52'+firstPhone : firstPhone
+    const qActions = `
+      <div style="display:flex;gap:6px;margin-top:10px;" onclick="event.stopPropagation()">
+        ${firstPhone ? `<a href="tel:${firstPhone}" style="flex:1;text-align:center;padding:5px 0;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:7px;font-size:10px;color:#4ade80;text-decoration:none;font-weight:700;">📞</a>` : ''}
+        ${firstPhone ? `<a href="https://wa.me/${waNum}" target="_blank" style="flex:1;text-align:center;padding:5px 0;background:rgba(37,211,102,0.08);border:1px solid rgba(37,211,102,0.2);border-radius:7px;font-size:10px;color:#25d366;text-decoration:none;font-weight:700;">💬</a>` : ''}
+        ${emails[0]?.address ? `<a href="mailto:${emails[0].address}" style="flex:1;text-align:center;padding:5px 0;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:7px;font-size:10px;color:#60a5fa;text-decoration:none;font-weight:700;">✉️</a>` : ''}
+        <button onclick="openContactModal('${c.id}')" style="flex:1;padding:5px 0;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:7px;font-size:10px;color:var(--text-muted);cursor:pointer;font-weight:700;">✏️</button>
+      </div>`
+
+    return `<div class="contact-card" onclick="openContactProfile('${c.id}')" style="cursor:pointer;position:relative;">
       <div style="display:flex;gap:12px;align-items:flex-start;">
-        <div style="width:46px;height:46px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;background:${color}18;color:${color};border:1.5px solid ${color}44;">${initials||'?'}</div>
+        <div style="flex-shrink:0;">${avatarHTML}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:14px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${roleBadges}</div>
-          ${m.phone ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">📞 ${esc(m.phone)}</div>` : ''}
-          ${m.city  ? `<div style="font-size:11px;color:var(--text-muted);">📍 ${esc(m.city)}</div>` : ''}
+          ${phones.length ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">📞 ${esc(phones[0].number)}</div>` : ''}
+          ${m.city ? `<div style="font-size:11px;color:var(--text-muted);">📍 ${esc(m.city)}</div>` : ''}
           ${specs.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">${specChips}</div>` : ''}
           ${m.rating ? `<div style="font-size:12px;margin-top:4px;">${'⭐'.repeat(m.rating)}</div>` : ''}
-          ${accounts.length ? `<div style="font-size:10px;color:var(--text-dim);margin-top:4px;">🏦 ${accounts.length} cuenta${accounts.length>1?'s':''} de cobro</div>` : ''}
         </div>
       </div>
-      ${txCount > 0 ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);">
-        <span>${txCount} tx</span>
-        ${totalPaid>0?`<span style="color:#f87171;">-$${totalPaid.toLocaleString()}</span>`:''}
-      </div>` : ''}
+      <!-- Badges inferiores -->
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+        ${accounts.length ? `<span style="font-size:10px;color:var(--text-dim);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:5px;padding:2px 7px;">🏦 ${accounts.length} cuenta${accounts.length>1?'s':''}</span>` : ''}
+        ${docs.length ? `<span style="font-size:10px;color:#fb923c;background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.2);border-radius:5px;padding:2px 7px;">📎 ${docs.length} doc${docs.length>1?'s':''}</span>` : ''}
+        ${txCount > 0 ? `<span style="font-size:10px;color:var(--text-dim);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:5px;padding:2px 7px;">${txCount} tx${totalPaid>0?' · <span style=color:#f87171>-$'+totalPaid.toLocaleString('es-MX')+'</span>':''}</span>` : ''}
+      </div>
+      ${(firstPhone || emails.length) ? qActions : ''}
     </div>`
   }).join('')
 }

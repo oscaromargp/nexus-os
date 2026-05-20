@@ -3878,11 +3878,15 @@
 <!-- ═══ MODAL: CONTACTO UNIFICADO ═══════════════════════════════════════════ -->
 <div id="contact-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeContactModal()">
   <div class="modal-box" style="max-width:600px;width:95%;max-height:92vh;overflow-y:auto;">
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px;">
-      <div id="cm-avatar-preview" onclick="document.getElementById('cm-color').click()" style="width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;cursor:pointer;border:2px solid rgba(255,255,255,0.2);flex-shrink:0;background:rgba(0,246,255,0.15);color:#00f0ff;">?</div>
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+      <!-- Avatar / Foto -->
+      <div style="position:relative;flex-shrink:0;">
+        <div id="cm-avatar-preview" onclick="document.getElementById('cm-color').click()" style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;cursor:pointer;border:2px solid rgba(255,255,255,0.2);flex-shrink:0;background:rgba(0,246,255,0.15);color:#00f0ff;overflow:hidden;">?</div>
+        <button onclick="document.getElementById('cm-photo-url').focus()" title="Agregar foto URL" style="position:absolute;bottom:-2px;right:-2px;width:20px;height:20px;border-radius:50%;background:#1e293b;border:1px solid rgba(255,255,255,0.2);cursor:pointer;font-size:10px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);">📷</button>
+      </div>
       <div style="flex:1;">
         <div class="modal-title" id="contact-modal-title" style="margin-bottom:4px;">Nuevo Contacto</div>
-        <div style="font-size:11px;color:var(--text-muted);">Haz clic en el avatar para cambiar el color</div>
+        <input type="url" id="cm-photo-url" class="modal-input" placeholder="URL de foto (Google Drive, etc.)" style="font-size:11px;padding:5px 10px;margin-top:4px;" oninput="updateAvatarPreview()" />
       </div>
       <input type="color" id="cm-color" value="#00f0ff" style="display:none;" onchange="updateAvatarPreview()"/>
       <button onclick="closeContactModal()" style="background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:4px;">✕</button>
@@ -4004,6 +4008,15 @@
       <div id="cm-accounts-list" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
 
+    <!-- Documentos vinculados a Google Drive -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <label style="font-size:11px;font-weight:700;color:var(--text-muted);">📎 DOCUMENTOS VINCULADOS</label>
+        <button onclick="addCmDoc()" style="background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-weight:600;">+ Documento</button>
+      </div>
+      <div id="cm-docs-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+
     <!-- Notas -->
     <div style="margin-bottom:24px;">
       <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:6px;">NOTAS</label>
@@ -4014,6 +4027,53 @@
     <div style="display:flex;gap:10px;align-items:center;">
       <button onclick="saveContact()" style="flex:1;padding:13px;background:linear-gradient(135deg,#00f0ff,#06b6d4);color:#000;border:none;border-radius:12px;font-size:14px;font-weight:800;cursor:pointer;">💾 Guardar</button>
       <button id="cm-delete" onclick="deleteContact()" style="display:none;padding:13px 18px;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);color:#f87171;border-radius:12px;font-size:13px;cursor:pointer;">🗑</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: FICHA DE CONTACTO (PERFIL COMPLETO) ══════════════════════════ -->
+<div id="contact-profile-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeContactProfile()">
+  <div class="modal-box" style="max-width:820px;width:96%;max-height:94vh;overflow-y:auto;padding:0;border-radius:20px;">
+    <!-- Header hero -->
+    <div id="cpf-hero" style="position:relative;padding:32px 32px 24px;border-radius:20px 20px 0 0;background:rgba(255,255,255,0.02);">
+      <div style="display:flex;gap:20px;align-items:flex-start;">
+        <div id="cpf-avatar" style="width:88px;height:88px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:900;border:3px solid rgba(0,246,255,0.4);overflow:hidden;"></div>
+        <div style="flex:1;min-width:0;">
+          <h2 id="cpf-name" style="font-size:22px;font-weight:900;color:#fff;margin:0 0 6px;"></h2>
+          <div id="cpf-roles" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;"></div>
+          <div id="cpf-rating" style="font-size:14px;"></div>
+          <div id="cpf-specialties" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;"></div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button id="cpf-edit-btn" style="padding:8px 16px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f6ff;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;" onclick="openContactEditFromProfile()">✏️ Editar</button>
+          <button onclick="closeContactProfile()" style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+      </div>
+      <!-- Acciones rápidas -->
+      <div id="cpf-quick-actions" style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;"></div>
+    </div>
+
+    <!-- Cuerpo -->
+    <div style="padding:24px 32px;display:flex;flex-direction:column;gap:20px;">
+      <!-- Fila: Teléfonos + Emails -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div id="cpf-phones-section"></div>
+        <div id="cpf-emails-section"></div>
+      </div>
+      <!-- Dirección -->
+      <div id="cpf-address-section"></div>
+      <!-- Fechas especiales -->
+      <div id="cpf-dates-section"></div>
+      <!-- Cuentas de cobro -->
+      <div id="cpf-accounts-section"></div>
+      <!-- Documentos -->
+      <div id="cpf-docs-section"></div>
+      <!-- Historial de pagos -->
+      <div id="cpf-payments-section"></div>
+      <!-- Proyectos vinculados -->
+      <div id="cpf-projects-section"></div>
+      <!-- Notas -->
+      <div id="cpf-notes-section"></div>
     </div>
   </div>
 </div>
