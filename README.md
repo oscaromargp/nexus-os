@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.5.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-1.6.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -67,7 +67,9 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 📤 **Print / Export CSV** | Exporta transacciones y movimientos financieros en un clic |
 | 📱 **PWA-ready** | Diseño responsivo, usable en móvil y tablet |
 | 🎨 **Editor rico** | Bóveda Neural con colores de texto, resaltado, tamaños y formato completo |
-| 👤 **Ficha de contacto** | Perfil completo con foto, documentos Drive, WhatsApp directo e historial de pagos |
+| 👤 **Ficha de contacto** | Perfil de página completa con tabs (Info/Docs/Pagos/Proyectos), upload de foto, preview docs e impresión |
+| 🖼️ **Upload de foto** | Sube fotos directamente (compresión automática + Supabase Storage) o pega URLs de Drive |
+| 👁️ **Preview de documentos** | Lightbox con iframe para ver documentos Drive, PDFs e imágenes sin salir de la app |
 | 💎 **Portafolio Crypto** | Seguimiento multi-moneda con edición de compras y precio actual |
 
 ---
@@ -121,16 +123,25 @@ Vincula archivos del contacto directamente desde Drive, Dropbox o cualquier serv
 | 🏠 Comprobante de Domicilio | Dirección verificada |
 | 📷 Fotografía | Foto adicional |
 
-### Ficha de Perfil (Modal completo)
+### 📄 Ficha de Perfil — Página completa con Tabs
 
-Al hacer clic en cualquier tarjeta de contacto se abre la **Ficha de Perfil**:
+Al hacer clic en cualquier tarjeta de contacto se abre la **Ficha de Perfil como vista completa** (igual que Proyectos):
 
-- **Hero**: foto grande, nombre, roles, rating, especialidades
-- **Acciones rápidas**: 📞 Llamar, 💬 WhatsApp, ✉️ Email, 🧾 Copiar RFC
-- **Grid de documentos**: iconos grandes con botón "↗ Abrir" hacia Drive
-- **Historial de pagos**: transacciones vinculadas a este contacto con totales
-- **Proyectos vinculados**: proyectos donde aparece como equipo/cliente
-- **Botón ✏️ Editar**: abre el modal de edición desde la ficha
+- **Hero**: foto grande, nombre, roles, rating, especialidades, ciudad, RFC
+- **Acciones rápidas**: 📞 Llamar, 💬 WhatsApp, ✉️ Email, 🧾 Copiar RFC, 🖨️ Imprimir, ✏️ Editar
+- **Tab 📋 Info**: teléfonos, correos, dirección, fechas especiales, cuentas de cobro, notas
+- **Tab 📎 Docs**: grid de documentos — clic abre **lightbox iframe** para preview dentro de la app
+- **Tab 💰 Pagos**: historial financiero con totales de ingresos y egresos vinculados al contacto
+- **Tab 🏗️ Proyectos**: proyectos donde aparece como equipo/cliente con acceso directo
+
+### 📸 Foto de perfil — Dos métodos
+
+1. **URL directa**: pega link de Google Drive (se auto-convierte), Dropbox o imagen pública
+2. **Subir archivo**: botón `📎 Subir` → comprime a 400×400 JPEG → sube a Supabase Storage → se guarda como URL pública
+
+### 🖨️ Impresión
+
+Botón **🖨️ Imprimir** en la ficha genera una ventana de impresión limpia con todos los datos del contacto.
 
 ---
 
