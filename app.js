@@ -6156,11 +6156,142 @@ let _cmPhones = []    // [{id, label, number}]
 let _cmEmails = []    // [{id, label, address}]
 let _cmDocs   = []    // [{id, docType, name, url, notes}]
 let _currentContactId = null
-let _profileContactId = null  // contact currently open in profile modal
+let _profileContactId = null  // contact currently open in profile view
+let _contactsMode = 'grid'         // 'grid' | 'profile'
+let _contactProfileTab = 'info'    // 'info' | 'docs' | 'pagos' | 'proyectos'
 
 function uid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random()*16|0; return (c==='x'?r:(r&0x3|0x8)).toString(16)
+  })
+}
+
+// ── Image URL normalization (Google Drive → direct embed URL) ─────────────
+function normalizeImageUrl(url) {
+  if (!url) return url
+  // /file/d/ID/view  →  /uc?export=view&id=ID
+  const dm = url.match(/drive\.google\.com\/file\/d\/([^\/\?]+)/)
+  if (dm) return `https://drive.google.com/uc?export=view&id=${dm[1]}`
+  return url
+}
+
+// ── Contact photo upload → Supabase Storage (nexus-media bucket) ──────────
+window.handleContactPhotoUpload = async function(input) {
+  const file = input.files?.[0]
+  if (!file) return
+  showToast('⏳ Comprimiendo y subiendo foto...')
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image()
+      i.onload = () => res(i)
+      i.onerror = rej
+      i.src = URL.createObjectURL(file)
+    })
+    const canvas = document.createElement('canvas')
+    const maxDim = 400
+    const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1)
+    canvas.width  = Math.round(img.width  * ratio)
+    canvas.height = Math.round(img.height * ratio)
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.82))
+    const fileName = `contact-${Date.now()}.jpg`
+    let publicUrl = null
+    try {
+      const { error } = await supabase.storage.from('nexus-media').upload(fileName, blob, { contentType: 'image/jpeg', upsert: true })
+      if (!error) {
+        const { data: ud } = supabase.storage.from('nexus-media').getPublicUrl(fileName)
+        publicUrl = ud?.publicUrl || null
+      }
+    } catch (_) {}
+    if (!publicUrl) {
+      // Fallback: embed as data URL (works offline)
+      publicUrl = await new Promise(res => { const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(blob) })
+    }
+    const photoInput = document.getElementById('cm-photo-url')
+    if (photoInput) { photoInput.value = publicUrl; updateAvatarPreview() }
+    showToast('✅ Foto subida correctamente')
+  } catch (e) {
+    showToast('❌ Error al subir foto')
+    console.error('[photo-upload]', e)
+  }
+  input.value = ''
+}
+
+// ── Document preview (iframe lightbox) ───────────────────────────────────
+window.openDocPreview = function(url, name) {
+  const modal = document.getElementById('doc-preview-modal')
+  if (!modal) return
+  const titleEl = document.getElementById('doc-preview-title')
+  const openEl  = document.getElementById('doc-preview-open')
+  const bodyEl  = document.getElementById('doc-preview-body')
+  if (titleEl) titleEl.textContent = name || 'Documento'
+  if (openEl)  openEl.href = url
+  if (bodyEl) {
+    const driveMatch = url.match(/drive\.google\.com\/(?:file\/d\/|uc\?export=view&id=)([^\/\?&]+)/)
+    const isImage = /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(url) || url.startsWith('data:image')
+    if (driveMatch) {
+      bodyEl.innerHTML = `<iframe src="https://drive.google.com/file/d/${driveMatch[1]}/preview" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>`
+    } else if (isImage) {
+      bodyEl.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:auto;padding:16px;"><img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;"/></div>`
+    } else {
+      bodyEl.innerHTML = `<iframe src="${url}" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>`
+    }
+  }
+  modal.classList.remove('hidden')
+}
+
+window.closeDocPreview = function() {
+  const modal = document.getElementById('doc-preview-modal')
+  if (modal) modal.classList.add('hidden')
+  const bodyEl = document.getElementById('doc-preview-body')
+  if (bodyEl) bodyEl.innerHTML = ''
+}
+
+// ── Print contact profile ─────────────────────────────────────────────────
+window.printContactProfile = function(id) {
+  const c = allNodes.find(n => n.id === id)
+  if (!c) return
+  const m = c.metadata || {}
+  const name = m.name || c.content || 'Contacto'
+  const phones   = m.phones   || (m.phone  ? [{ label:'Personal', number:m.phone  }] : [])
+  const emails   = m.emails   || (m.email  ? [{ label:'Personal', address:m.email }] : [])
+  const docs     = m.documents || []
+  const accounts = m.contact_accounts || []
+  const fmtDate  = d => { if (!d) return ''; const [y,mo,dy] = d.split('-'); return `${dy}/${mo}/${y}` }
+  const w = window.open('', '_blank')
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name} — Ficha Nexus OS</title>
+    <style>body{font-family:system-ui,sans-serif;color:#111;padding:24px;max-width:700px;margin:0 auto}h1{font-size:22px;margin-bottom:4px}
+    table{width:100%;border-collapse:collapse;margin:10px 0}td,th{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px}
+    th{text-align:left;font-size:10px;color:#666;font-weight:700;text-transform:uppercase;background:#f9f9f9}
+    h3{margin:16px 0 4px;font-size:12px;color:#555;text-transform:uppercase;letter-spacing:.06em}
+    @media print{body{padding:0}.no-print{display:none}}</style></head><body>
+    <h1>${name}</h1>
+    <p style="font-size:12px;color:#666;margin:2px 0">${m.city||''}${m.rfc?' · RFC: '+m.rfc:''}</p>
+    ${m.birthday?`<p style="font-size:12px;color:#666;margin:2px 0">🎂 ${fmtDate(m.birthday)}</p>`:''}
+    ${phones.length?`<h3>📞 Teléfonos</h3><table>${phones.map(p=>`<tr><td style="color:#888;width:100px">${p.label}</td><td>${p.number}</td></tr>`).join('')}</table>`:''}
+    ${emails.length?`<h3>✉️ Correos</h3><table>${emails.map(e=>`<tr><td style="color:#888;width:100px">${e.label}</td><td>${e.address}</td></tr>`).join('')}</table>`:''}
+    ${(m.address_street||m.city)?`<h3>📍 Dirección</h3><p style="font-size:13px">${[m.address_street,[m.address_postal,m.city].filter(Boolean).join(' '),[m.address_state,m.address_country].filter(Boolean).join(', ')].filter(Boolean).join('<br>')}</p>`:''}
+    ${accounts.length?`<h3>🏦 Cuentas de Cobro</h3><table><tr><th>Tipo</th><th>Banco / Red</th><th>CLABE / Wallet</th></tr>${accounts.map(a=>`<tr><td>${a.type||''}</td><td>${a.bank||a.network||''}</td><td style="font-family:monospace;font-size:11px">${a.clabe||a.wallet||''}</td></tr>`).join('')}</table>`:''}
+    ${docs.length?`<h3>📎 Documentos</h3><table>${docs.map(d=>`<tr><td>${DOC_ICONS[d.docType]||'📎'} ${d.name||d.docType}</td><td><a href="${d.url||'#'}">${d.url||'Sin enlace'}</a></td></tr>`).join('')}</table>`:''}
+    ${m.notes?`<h3>📝 Notas</h3><p style="font-size:13px;white-space:pre-wrap">${m.notes}</p>`:''}
+    <p style="margin-top:24px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">Generado por Nexus OS · ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}</p>
+    </body></html>`)
+  w.document.close()
+  w.focus()
+  setTimeout(() => w.print(), 600)
+}
+
+// ── Tab switching inside full-page profile ────────────────────────────────
+window.switchContactProfileTab = function(tab) {
+  _contactProfileTab = tab
+  document.querySelectorAll('.cpf-tab-btn').forEach(b => {
+    const active = b.dataset.tab === tab
+    b.style.background   = active ? 'rgba(0,246,255,0.1)' : 'transparent'
+    b.style.color        = active ? '#00f6ff' : 'var(--text-muted)'
+    b.style.borderColor  = active ? 'rgba(0,246,255,0.3)' : 'rgba(255,255,255,0.08)'
+  })
+  document.querySelectorAll('.cpf-tab-content').forEach(el => {
+    el.style.display = el.dataset.tab === tab ? 'block' : 'none'
   })
 }
 
@@ -6263,7 +6394,7 @@ window.closeContactModal = () => {
 window.updateAvatarPreview = function() {
   const name = document.getElementById('cm-name')?.value || ''
   const color = document.getElementById('cm-color')?.value || '#00f0ff'
-  const photoUrl = document.getElementById('cm-photo-url')?.value?.trim() || ''
+  const photoUrl = normalizeImageUrl(document.getElementById('cm-photo-url')?.value?.trim() || '')
   const el = document.getElementById('cm-avatar-preview')
   if (!el) return
   if (photoUrl) {
@@ -6665,9 +6796,15 @@ window.deleteContact = async () => {
   showToast('🗑 Contacto eliminado')
 }
 
-// ── Contact Profile Modal (Ficha Completa) ────────────────────────────────────
+// ── Contact Profile — Full-page view (like Projects) ─────────────────────────
 window.openContactProfile = function(id) {
   _profileContactId = id
+  _contactsMode = 'profile'
+  _contactProfileTab = 'info'
+  renderContacts()
+}
+
+function _OLD_openContactProfile_DISABLED(id) {  // kept for reference only
   const c = allNodes.find(n => n.id === id)
   if (!c) return
   const m = c.metadata || {}
@@ -6918,7 +7055,7 @@ window.openContactProfile = function(id) {
     }
   }
 
-  document.getElementById('contact-profile-modal').classList.remove('hidden')
+  // (disabled — this function body is unused)
 }
 
 function _cpfBtn(clr) {
@@ -6926,8 +7063,11 @@ function _cpfBtn(clr) {
 }
 
 window.closeContactProfile = function() {
-  document.getElementById('contact-profile-modal').classList.add('hidden')
+  _contactsMode = 'grid'
   _profileContactId = null
+  renderContacts()
+  // Scroll back to top of contacts section
+  document.getElementById('contacts-root')?.scrollIntoView({ behavior:'smooth', block:'start' })
 }
 
 window.openContactEditFromProfile = function() {
@@ -6936,10 +7076,240 @@ window.openContactEditFromProfile = function() {
   openContactModal(id)
 }
 
+// ── Full-page profile builder ─────────────────────────────────────────────────
+function _buildContactProfileHTML(id) {
+  const c = allNodes.find(n => n.id === id)
+  if (!c) return `<div style="color:var(--text-muted);padding:60px;text-align:center;font-size:14px;">Contacto no encontrado</div>`
+  const m        = c.metadata || {}
+  const name     = m.name || c.content || '?'
+  const color    = m.color || '#00f0ff'
+  const roles    = m.roles    || (m.cType     ? [m.cType]    : ['persona'])
+  const specs    = m.specialties || (m.specialty ? [m.specialty] : [])
+  const phones   = m.phones   || (m.phone  ? [{ label:'Personal', number:m.phone  }] : [])
+  const emails   = m.emails   || (m.email  ? [{ label:'Personal', address:m.email }] : [])
+  const docs     = m.documents        || []
+  const accounts = m.contact_accounts || []
+  const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase() || '?'
+
+  const roleColors = { persona:'#00f0ff', proveedor:'#f97316', cliente:'#4ade80', colaborador:'#a78bfa' }
+  const roleIcons  = { persona:'👤',      proveedor:'🔧',      cliente:'💼',      colaborador:'🤝' }
+
+  // ── Avatar ────────────────────────────────────────────────────────────
+  const photoUrl = normalizeImageUrl(m.photo_url)
+  const avatarHTML = photoUrl
+    ? `<img src="${photoUrl}" style="width:88px;height:88px;border-radius:50%;object-fit:cover;border:3px solid ${color}55;flex-shrink:0;" onerror="this.outerHTML='<div style=\\'width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;background:${color}18;color:${color};border:3px solid ${color}44;flex-shrink:0;\\'>${initials}</div>'">`
+    : `<div style="width:88px;height:88px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;background:${color}18;color:${color};border:3px solid ${color}44;">${initials}</div>`
+
+  // ── Quick action buttons ──────────────────────────────────────────────
+  const fp = phones[0]?.number?.replace(/\D/g,'') || ''
+  const wa = fp.length === 10 ? '52'+fp : fp
+  const qA = []
+  if (fp) {
+    qA.push(`<a href="tel:${fp}" style="${_cpfBtn('#4ade80')}">📞 Llamar</a>`)
+    qA.push(`<a href="https://wa.me/${wa}" target="_blank" style="${_cpfBtn('#25d366')}">💬 WhatsApp</a>`)
+  }
+  if (emails[0]?.address) qA.push(`<a href="mailto:${esc(emails[0].address)}" style="${_cpfBtn('#60a5fa')}">✉️ Email</a>`)
+  if (m.rfc) qA.push(`<button onclick="navigator.clipboard.writeText('${m.rfc}');showToast('✅ RFC copiado')" style="${_cpfBtn('#a78bfa')}">🧾 RFC</button>`)
+  qA.push(`<button onclick="printContactProfile('${id}')" style="${_cpfBtn('#fb923c')}">🖨️ Imprimir</button>`)
+  qA.push(`<button onclick="openContactEditFromProfile()" style="${_cpfBtn('#64748b')}">✏️ Editar</button>`)
+
+  // ── Section builder ───────────────────────────────────────────────────
+  const SEC = (title, content) => `
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;margin-bottom:14px;">
+      <div style="font-size:10px;font-weight:800;letter-spacing:.07em;color:var(--text-muted);margin-bottom:12px;text-transform:uppercase;">${title}</div>
+      ${content}
+    </div>`
+
+  // ── Tab bar ───────────────────────────────────────────────────────────
+  const TABS = [
+    { id:'info',      label:'📋 Info' },
+    { id:'docs',      label:`📎 Docs${docs.length ? ' ('+docs.length+')' : ''}` },
+    { id:'pagos',     label:'💰 Pagos' },
+    { id:'proyectos', label:'🏗️ Proyectos' },
+  ]
+  const tabBar = TABS.map(t => {
+    const active = _contactProfileTab === t.id
+    return `<button class="cpf-tab-btn" data-tab="${t.id}" onclick="switchContactProfileTab('${t.id}')" style="padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid ${active?'rgba(0,246,255,0.3)':'rgba(255,255,255,0.08)'};background:${active?'rgba(0,246,255,0.1)':'transparent'};color:${active?'#00f6ff':'var(--text-muted)'};transition:all .15s;">${t.label}</button>`
+  }).join('')
+
+  // ── INFO content ──────────────────────────────────────────────────────
+  let infoContent = ''
+  if (phones.length) {
+    infoContent += SEC('📞 Teléfonos', phones.map(p => {
+      const n = p.number.replace(/\D/g,''); const w2 = n.length===10 ? '52'+n : n
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <span style="font-size:10px;min-width:70px;color:var(--text-dim);">${esc(p.label)}</span>
+        <a href="tel:${n}" style="font-size:13px;font-weight:600;color:#fff;text-decoration:none;flex:1;font-family:'JetBrains Mono',monospace;">${esc(p.number)}</a>
+        <a href="https://wa.me/${w2}" target="_blank" style="font-size:11px;color:#25d366;text-decoration:none;padding:2px 6px;background:rgba(37,211,102,0.1);border-radius:4px;">WA</a>
+      </div>`
+    }).join(''))
+  }
+  if (emails.length) {
+    infoContent += SEC('✉️ Correos', emails.map(e =>
+      `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <span style="font-size:10px;min-width:70px;color:var(--text-dim);">${esc(e.label)}</span>
+        <a href="mailto:${esc(e.address)}" style="font-size:12px;font-weight:600;color:#60a5fa;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(e.address)}</a>
+      </div>`
+    ).join(''))
+  }
+  if (m.address_street || m.city || m.address_state) {
+    const parts = [m.address_street, [m.address_postal,m.city].filter(Boolean).join(' '), [m.address_state,m.address_country].filter(Boolean).join(', ')].filter(Boolean)
+    infoContent += SEC('📍 Dirección', `<div style="font-size:13px;color:var(--text-secondary);line-height:1.7;">${parts.map(p => esc(p)).join('<br>')}</div>`)
+  }
+  if (m.birthday || m.anniversary) {
+    const today = new Date()
+    const fmtD = d => { if (!d) return ''; const [y,mo,dy] = d.split('-'); return `${dy}/${mo}/${y}` }
+    const daysU = d => { if (!d) return null; const [,mo,dy] = d.split('-').map(Number); let ev = new Date(today.getFullYear(),mo-1,dy); if(ev<today) ev.setFullYear(ev.getFullYear()+1); return Math.ceil((ev-today)/86400000) }
+    const db = daysU(m.birthday), da = daysU(m.anniversary)
+    infoContent += SEC('🎉 Fechas Especiales', `<div style="display:flex;gap:24px;flex-wrap:wrap;">
+      ${m.birthday   ? `<div><div style="font-size:10px;color:var(--text-dim);">🎂 Cumpleaños</div><div style="font-size:14px;font-weight:700;color:#f472b6;font-family:'JetBrains Mono',monospace;">${fmtD(m.birthday)}</div>${db!==null?`<div style="font-size:10px;color:var(--text-muted);">${db===0?'¡HOY! 🥳':db+' días'}</div>`:''}</div>` : ''}
+      ${m.anniversary ? `<div><div style="font-size:10px;color:var(--text-dim);">💑 Aniversario</div><div style="font-size:14px;font-weight:700;color:#a78bfa;font-family:'JetBrains Mono',monospace;">${fmtD(m.anniversary)}</div>${da!==null?`<div style="font-size:10px;color:var(--text-muted);">${da===0?'¡HOY! 🥳':da+' días'}</div>`:''}</div>` : ''}
+    </div>`)
+  }
+  if (accounts.length) {
+    const accIcon = { bank:'🏦', crypto:'₿', cash:'💵' }
+    infoContent += SEC('🏦 Cuentas de Cobro', accounts.map(a => `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+        <span style="font-size:18px;flex-shrink:0;">${accIcon[a.type]||'💳'}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:#fff;">${esc(a.label||a.bank||a.network||'Cuenta')}</div>
+          ${a.bank?`<div style="font-size:11px;color:var(--text-muted);">${esc(a.bank)}</div>`:''}
+          ${a.clabe?`<div style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-secondary);">${esc(a.clabe)} <button onclick="navigator.clipboard.writeText('${a.clabe}');showToast('✅ CLABE copiada')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:10px;" title="Copiar">📋</button></div>`:''}
+          ${a.wallet?`<div style="font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text-muted);word-break:break-all;">${esc(a.wallet)}</div>`:''}
+        </div>
+        ${a.clabe?`<button onclick="navigator.clipboard.writeText('${a.clabe}');showToast('✅ Cuenta copiada')" style="background:rgba(0,246,255,0.06);border:1px solid rgba(0,246,255,0.15);color:#00f6ff;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer;flex-shrink:0;">📋</button>`:''}
+      </div>`).join(''))
+  }
+  if (m.notes) infoContent += SEC('📝 Notas', `<div style="font-size:13px;color:var(--text-secondary);line-height:1.7;white-space:pre-wrap;">${esc(m.notes)}</div>`)
+
+  // ── DOCS content ──────────────────────────────────────────────────────
+  const docsContent = docs.length
+    ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px;">
+        ${docs.map(d => {
+          const icon = DOC_ICONS[d.docType] || '📎'
+          const hasUrl = !!d.url
+          const previewFn = hasUrl ? `openDocPreview('${(d.url||'').replace(/'/g,"\\'")}','${(d.name||d.docType).replace(/'/g,"\\'")}')` : ''
+          return `<div onclick="${previewFn||'void(0)'}" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 12px;background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.2);border-radius:12px;cursor:${hasUrl?'pointer':'default'};transition:background .15s;" ${hasUrl?'onmouseover="this.style.background=\'rgba(251,146,60,0.12)\'" onmouseout="this.style.background=\'rgba(251,146,60,0.06)\'"':''}>
+            <span style="font-size:28px;">${icon}</span>
+            <span style="font-size:11px;font-weight:700;color:${hasUrl?'#fb923c':'var(--text-muted)'};text-align:center;line-height:1.3;">${esc(d.name||d.docType)}</span>
+            ${hasUrl ? `<div style="display:flex;gap:6px;align-items:center;"><span style="font-size:9px;color:var(--text-dim);">👁 Ver</span><a href="${d.url}" target="_blank" onclick="event.stopPropagation()" style="font-size:9px;color:#fb923c;text-decoration:none;">↗</a></div>` : '<span style="font-size:9px;color:var(--text-dim);">Sin enlace</span>'}
+          </div>`
+        }).join('')}
+      </div>`
+    : `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0;">Sin documentos vinculados. <button onclick="openContactEditFromProfile()" style="background:none;border:none;color:#00f6ff;cursor:pointer;text-decoration:underline;font-size:12px;">Editar contacto</button> para agregar.</div>`
+
+  // ── PAGOS content ─────────────────────────────────────────────────────
+  const txs = allNodes.filter(n =>
+    (n.type==='income'||n.type==='expense') && n.metadata?.contact_id === id
+  ).sort((a,b) => (b.metadata?.date||'').localeCompare(a.metadata?.date||''))
+  const totalInc = txs.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const totalExp = txs.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const pagosContent = txs.length
+    ? `<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+        ${totalInc>0?`<div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15);border-radius:10px;padding:12px 18px;"><div style="font-size:9px;color:var(--text-dim);">INGRESOS</div><div style="font-size:18px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${totalInc.toLocaleString('es-MX')}</div></div>`:''}
+        ${totalExp>0?`<div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);border-radius:10px;padding:12px 18px;"><div style="font-size:9px;color:var(--text-dim);">PAGADO</div><div style="font-size:18px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${totalExp.toLocaleString('es-MX')}</div></div>`:''}
+      </div>
+      ${txs.map(n => {
+        const isInc = n.type==='income'
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <span style="width:20px;text-align:center;font-size:12px;color:${isInc?'#4ade80':'#f87171'};">${isInc?'↑':'↓'}</span>
+          <span style="flex:1;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.description||n.content)}</span>
+          <span style="font-size:11px;color:var(--text-dim);flex-shrink:0;font-family:'JetBrains Mono',monospace;">${n.metadata?.date||''}</span>
+          <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:${isInc?'#4ade80':'#f87171'};flex-shrink:0;">${isInc?'+':'-'}$${(n.metadata?.amount||0).toLocaleString('es-MX')}</span>
+        </div>`
+      }).join('')}`
+    : `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0;">Sin movimientos financieros para este contacto.</div>`
+
+  // ── PROYECTOS content ─────────────────────────────────────────────────
+  const proyectos = allNodes.filter(n => n.type==='proyecto' && (
+    (n.metadata?.team||[]).includes(id) || n.metadata?.client_id===id || n.metadata?.contact_id===id
+  ))
+  const proyectosContent = proyectos.length
+    ? proyectos.map(p =>
+        `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="closeContactProfile();openProjectView('${p.id}')">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(p.metadata?.label||p.content)}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${p.metadata?.status||''}</div>
+          </div>
+          <span style="font-size:11px;color:#00f6ff;">↗ Ver</span>
+        </div>`
+      ).join('')
+    : `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0;">Sin proyectos vinculados a este contacto.</div>`
+
+  // ── Assemble ──────────────────────────────────────────────────────────
+  return `
+    <div style="max-width:920px;margin:0 auto;padding-bottom:40px;">
+      <!-- ← Back -->
+      <div style="margin-bottom:22px;">
+        <button onclick="closeContactProfile()" style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;">← Volver a Contactos</button>
+      </div>
+
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,${color}0a,rgba(255,255,255,0.02));border:1px solid ${color}25;border-radius:20px;padding:24px 28px;margin-bottom:22px;">
+        <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
+          <div style="flex-shrink:0;">${avatarHTML}</div>
+          <div style="flex:1;min-width:180px;">
+            <div style="font-size:24px;font-weight:900;color:#fff;margin-bottom:8px;">${esc(name)}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+              ${roles.map(r => `<span style="font-size:11px;padding:3px 10px;background:${roleColors[r]||'#888'}1a;border:1px solid ${roleColors[r]||'#888'}44;color:${roleColors[r]||'#888'};border-radius:6px;font-weight:700;">${roleIcons[r]||''} ${r}</span>`).join('')}
+              ${m.rating ? `<span style="font-size:12px;margin-left:4px;">${'⭐'.repeat(m.rating)}</span>` : ''}
+            </div>
+            ${specs.length ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">${specs.map(s=>`<span style="font-size:10px;padding:2px 9px;background:rgba(249,115,22,0.08);border:1px solid rgba(249,115,22,0.2);color:#fb923c;border-radius:5px;">${esc(s)}</span>`).join('')}</div>` : ''}
+            ${m.city ? `<div style="font-size:12px;color:var(--text-muted);">📍 ${esc(m.city)}</div>` : ''}
+            ${m.rfc  ? `<div style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;">🧾 ${esc(m.rfc)}</div>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid ${color}18;">
+          ${qA.join('')}
+        </div>
+      </div>
+
+      <!-- Tab bar -->
+      <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;">
+        ${tabBar}
+      </div>
+
+      <!-- Tab: Info -->
+      <div class="cpf-tab-content" data-tab="info" style="display:${_contactProfileTab==='info'?'block':'none'};">
+        ${infoContent || `<div style="font-size:12px;color:var(--text-dim);padding:20px 0;text-align:center;">Sin información adicional. <button onclick="openContactEditFromProfile()" style="background:none;border:none;color:#00f6ff;cursor:pointer;text-decoration:underline;font-size:12px;">Editar</button></div>`}
+      </div>
+
+      <!-- Tab: Docs -->
+      <div class="cpf-tab-content" data-tab="docs" style="display:${_contactProfileTab==='docs'?'block':'none'};">
+        ${docsContent}
+      </div>
+
+      <!-- Tab: Pagos -->
+      <div class="cpf-tab-content" data-tab="pagos" style="display:${_contactProfileTab==='pagos'?'block':'none'};">
+        ${pagosContent}
+      </div>
+
+      <!-- Tab: Proyectos -->
+      <div class="cpf-tab-content" data-tab="proyectos" style="display:${_contactProfileTab==='proyectos'?'block':'none'};">
+        ${proyectosContent}
+      </div>
+    </div>`
+}
+
 // ── Render contacts grid ──────────────────────────────────────────────────────
 function renderContacts() {
   const root = document.getElementById('contacts-root')
   if (!root) return
+
+  // ── Full-page profile mode ─────────────────────────────────────────
+  if (_contactsMode === 'profile' && _profileContactId) {
+    root.style.display = 'block'
+    root.style.gridTemplateColumns = ''
+    root.style.gap = ''
+    root.innerHTML = _buildContactProfileHTML(_profileContactId)
+    return
+  }
+
+  // ── Grid mode ──────────────────────────────────────────────────────
+  root.style.display = 'grid'
+  root.style.gridTemplateColumns = 'repeat(auto-fill,minmax(280px,1fr))'
+  root.style.gap = '16px'
+
   const search = (document.getElementById('contact-search')?.value || '').toLowerCase()
   let contacts = allNodes.filter(n => n.type === 'persona' || n.type === 'contact')
   if (activeContactFilter !== 'all') {
