@@ -7030,7 +7030,7 @@ function _OLD_openContactProfile_DISABLED(id) {  // kept for reference only
   const projEl = document.getElementById('cpf-projects-section')
   if (projEl) {
     const proyectos = allNodes.filter(n => n.type==='proyecto' && (
-      (n.metadata?.team||[]).includes(id) ||
+      (n.metadata?.members||[]).some(mb => mb.contact_id === id) ||
       (n.metadata?.client_id===id) ||
       (n.metadata?.contact_id===id)
     ))
@@ -7074,6 +7074,162 @@ window.openContactEditFromProfile = function() {
   const id = _profileContactId
   closeContactProfile()
   openContactModal(id)
+}
+
+// ── Pagos helpers (filter, select, print report) ─────────────────────────────
+function _cpfPagoRow(n) {
+  const isInc = n.type === 'income'
+  const date  = n.metadata?.date || ''
+  const pTag  = n.metadata?.project_tag || ''
+  return `<div class="cpf-pago-row" data-id="${n.id}" data-type="${n.type}" data-date="${date}" data-proj="${pTag}"
+    style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;transition:background .12s;"
+    onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background=''">
+    <input type="checkbox" class="cpf-pago-check" data-id="${n.id}" onclick="event.stopPropagation();_cpfUpdatePagoTotals()" style="accent-color:#00f6ff;cursor:pointer;flex-shrink:0;"/>
+    <span onclick="openFinanceDetail('${n.id}')" style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+      <span style="width:18px;text-align:center;font-size:12px;color:${isInc?'#4ade80':'#f87171'};flex-shrink:0;">${isInc?'↑':'↓'}</span>
+      <span style="flex:1;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(n.metadata?.description||n.metadata?.label||n.content)}">${esc(n.metadata?.description||n.metadata?.label||n.content)}</span>
+      ${pTag?`<span style="font-size:9px;padding:1px 6px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:4px;flex-shrink:0;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pTag)}</span>`:''}
+      <span style="font-size:11px;color:var(--text-dim);flex-shrink:0;font-family:'JetBrains Mono',monospace;min-width:78px;text-align:right;">${date}</span>
+      <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:${isInc?'#4ade80':'#f87171'};flex-shrink:0;min-width:90px;text-align:right;">${isInc?'+':'-'}$${(n.metadata?.amount||0).toLocaleString('es-MX')}</span>
+    </span>
+  </div>`
+}
+
+window._cpfFilterPagos = function(contactId) {
+  const from = document.getElementById('cpf-pago-from')?.value || ''
+  const to   = document.getElementById('cpf-pago-to')?.value || ''
+  const type = document.getElementById('cpf-pago-type')?.value || 'all'
+  const proj = document.getElementById('cpf-pago-proj')?.value || 'all'
+
+  document.querySelectorAll('.cpf-pago-row').forEach(row => {
+    const d = row.dataset.date
+    const t = row.dataset.type
+    const p = row.dataset.proj
+    let show = true
+    if (from && d < from) show = false
+    if (to && d > to)     show = false
+    if (type !== 'all' && t !== type) show = false
+    if (proj !== 'all' && p !== proj) show = false
+    row.style.display = show ? 'flex' : 'none'
+    if (!show) { const cb = row.querySelector('.cpf-pago-check'); if (cb) cb.checked = false }
+  })
+  _cpfUpdatePagoTotals()
+}
+
+window._cpfUpdatePagoTotals = function() {
+  const rows = document.querySelectorAll('.cpf-pago-row')
+  let visibleInc = 0, visibleExp = 0, visibleCount = 0
+  let selInc = 0, selExp = 0, selCount = 0
+  rows.forEach(row => {
+    if (row.style.display === 'none') return
+    const id = row.dataset.id
+    const n = allNodes.find(x => x.id === id)
+    if (!n) return
+    const amt = n.metadata?.amount || 0
+    if (n.type === 'income') visibleInc += amt; else visibleExp += amt
+    visibleCount++
+    const cb = row.querySelector('.cpf-pago-check')
+    if (cb?.checked) {
+      if (n.type === 'income') selInc += amt; else selExp += amt
+      selCount++
+    }
+  })
+  const el = document.getElementById('cpf-pago-filtered-totals')
+  if (!el) return
+  if (selCount > 0) {
+    el.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <span style="font-size:10px;color:var(--text-dim);">Seleccionados: <b style="color:#00f6ff;">${selCount}</b></span>
+      ${selInc>0?`<span style="font-size:11px;font-weight:700;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${selInc.toLocaleString('es-MX')}</span>`:''}
+      ${selExp>0?`<span style="font-size:11px;font-weight:700;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${selExp.toLocaleString('es-MX')}</span>`:''}
+    </div>`
+  } else {
+    const diffVis = visibleCount < rows.length
+    el.innerHTML = diffVis
+      ? `<span style="font-size:10px;color:var(--text-dim);">Filtrados: <b>${visibleCount}</b> de ${rows.length} · Ingresos: <b style="color:#4ade80">+$${visibleInc.toLocaleString('es-MX')}</b> · Egresos: <b style="color:#f87171">-$${visibleExp.toLocaleString('es-MX')}</b></span>`
+      : ''
+  }
+}
+
+window._cpfSelectAllPagos = function() {
+  const checks = document.querySelectorAll('.cpf-pago-row:not([style*="display: none"]) .cpf-pago-check')
+  const allChecked = [...checks].every(cb => cb.checked)
+  checks.forEach(cb => cb.checked = !allChecked)
+  _cpfUpdatePagoTotals()
+}
+
+window._cpfPrintPagosReport = function(contactId) {
+  const c = allNodes.find(n => n.id === contactId)
+  if (!c) return
+  const name = c.metadata?.name || c.content || 'Contacto'
+
+  // Collect checked rows; if none checked, use all visible
+  const rows = document.querySelectorAll('.cpf-pago-row')
+  let ids = []
+  rows.forEach(row => {
+    if (row.style.display === 'none') return
+    const cb = row.querySelector('.cpf-pago-check')
+    if (cb?.checked) ids.push(row.dataset.id)
+  })
+  if (!ids.length) {
+    // Use all visible
+    rows.forEach(row => {
+      if (row.style.display !== 'none') ids.push(row.dataset.id)
+    })
+  }
+  if (!ids.length) { showToast('⚠️ No hay pagos para imprimir'); return }
+
+  const nodes = ids.map(i => allNodes.find(n => n.id === i)).filter(Boolean)
+  const totalInc = nodes.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+  const totalExp = nodes.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
+
+  const from = document.getElementById('cpf-pago-from')?.value || ''
+  const to   = document.getElementById('cpf-pago-to')?.value || ''
+  const rangoStr = (from || to) ? `Período: ${from || '—'} al ${to || '—'}` : ''
+
+  const w = window.open('', '_blank')
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte de Pagos — ${name}</title>
+    <style>
+      body{font-family:system-ui,sans-serif;color:#111;padding:24px;max-width:800px;margin:0 auto}
+      h1{font-size:20px;margin-bottom:2px}
+      table{width:100%;border-collapse:collapse;margin:14px 0;font-size:12px}
+      td,th{padding:7px 10px;border-bottom:1px solid #ddd}
+      th{text-align:left;font-size:10px;color:#555;font-weight:700;text-transform:uppercase;background:#f5f5f5}
+      .inc{color:#16a34a}.exp{color:#dc2626}
+      .summary{display:flex;gap:24px;margin:12px 0;padding:12px;background:#f9f9f9;border-radius:8px}
+      .summary div{font-size:13px}.summary strong{font-size:16px}
+      @media print{body{padding:0}.no-print{display:none}}
+    </style></head><body>
+    <h1>Reporte de Pagos — ${name}</h1>
+    <p style="font-size:12px;color:#666;margin:2px 0;">${rangoStr} ${nodes.length} movimiento${nodes.length>1?'s':''}</p>
+    <div class="summary">
+      ${totalInc>0?`<div>Ingresos: <strong class="inc">+$${totalInc.toLocaleString('es-MX')}</strong></div>`:''}
+      ${totalExp>0?`<div>Egresos: <strong class="exp">-$${totalExp.toLocaleString('es-MX')}</strong></div>`:''}
+      <div>Balance: <strong style="color:${(totalInc-totalExp)>=0?'#16a34a':'#dc2626'}">${(totalInc-totalExp)>=0?'+':''}$${(totalInc-totalExp).toLocaleString('es-MX')}</strong></div>
+    </div>
+    <table>
+      <tr><th>#</th><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Proyecto</th><th style="text-align:right">Monto</th></tr>
+      ${nodes.map((n, i) => {
+        const isInc = n.type==='income'
+        const m = n.metadata || {}
+        return `<tr>
+          <td style="color:#999">${i+1}</td>
+          <td style="font-family:monospace;font-size:11px">${m.date||''}</td>
+          <td>${isInc?'Ingreso':'Egreso'}</td>
+          <td>${m.description||m.label||n.content||''}</td>
+          <td style="font-size:11px;color:#888">${m.project_tag||''}</td>
+          <td style="text-align:right;font-family:monospace;font-weight:700" class="${isInc?'inc':'exp'}">${isInc?'+':'-'}$${(m.amount||0).toLocaleString('es-MX')}</td>
+        </tr>`
+      }).join('')}
+      <tr style="border-top:2px solid #333;font-weight:700;">
+        <td colspan="5" style="text-align:right;padding-top:10px;">TOTAL</td>
+        <td style="text-align:right;font-family:monospace;padding-top:10px;" class="${(totalInc-totalExp)>=0?'inc':'exp'}">${(totalInc-totalExp)>=0?'+':''}$${(totalInc-totalExp).toLocaleString('es-MX')}</td>
+      </tr>
+    </table>
+    <p style="margin-top:20px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">Generado por Nexus OS · ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}</p>
+    </body></html>`)
+  w.document.close()
+  w.focus()
+  setTimeout(() => w.print(), 600)
 }
 
 // ── Full-page profile builder ─────────────────────────────────────────────────
@@ -7198,31 +7354,75 @@ function _buildContactProfileHTML(id) {
       </div>`
     : `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0;">Sin documentos vinculados. <button onclick="openContactEditFromProfile()" style="background:none;border:none;color:#00f6ff;cursor:pointer;text-decoration:underline;font-size:12px;">Editar contacto</button> para agregar.</div>`
 
-  // ── PAGOS content ─────────────────────────────────────────────────────
+  // ── PAGOS content (enhanced: filters, select, print report, click detail) ──
   const txs = allNodes.filter(n =>
     (n.type==='income'||n.type==='expense') && n.metadata?.contact_id === id
   ).sort((a,b) => (b.metadata?.date||'').localeCompare(a.metadata?.date||''))
+
+  // Collect unique project tags from transactions
+  const txProjTags = [...new Set(txs.map(n => n.metadata?.project_tag).filter(Boolean))]
+  const txProjOptions = txProjTags.map(tag => {
+    const proj = allNodes.find(n => n.type==='proyecto' && (n.metadata?.slug===tag || (n.metadata?.label||n.content||'').toLowerCase().replace(/\s+/g,'')=== tag))
+    const label = proj ? (proj.metadata?.label || proj.content) : tag
+    return `<option value="${tag}">${esc(label)}</option>`
+  }).join('')
+
+  // Date range: default to full range
+  const firstDate = txs.length ? txs[txs.length-1].metadata?.date || '' : ''
+  const lastDate  = txs.length ? txs[0].metadata?.date || '' : ''
+
   const totalInc = txs.filter(n=>n.type==='income').reduce((s,n)=>s+(n.metadata?.amount||0),0)
   const totalExp = txs.filter(n=>n.type==='expense').reduce((s,n)=>s+(n.metadata?.amount||0),0)
-  const pagosContent = txs.length
-    ? `<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
-        ${totalInc>0?`<div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15);border-radius:10px;padding:12px 18px;"><div style="font-size:9px;color:var(--text-dim);">INGRESOS</div><div style="font-size:18px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${totalInc.toLocaleString('es-MX')}</div></div>`:''}
-        ${totalExp>0?`<div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);border-radius:10px;padding:12px 18px;"><div style="font-size:9px;color:var(--text-dim);">PAGADO</div><div style="font-size:18px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${totalExp.toLocaleString('es-MX')}</div></div>`:''}
+
+  let pagosContent
+  if (txs.length) {
+    pagosContent = `
+      <!-- KPIs -->
+      <div style="display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;">
+        ${totalInc>0?`<div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.15);border-radius:10px;padding:10px 16px;"><div style="font-size:9px;color:var(--text-dim);">INGRESOS</div><div style="font-size:17px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">+$${totalInc.toLocaleString('es-MX')}</div></div>`:''}
+        ${totalExp>0?`<div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.15);border-radius:10px;padding:10px 16px;"><div style="font-size:9px;color:var(--text-dim);">PAGADO</div><div style="font-size:17px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">-$${totalExp.toLocaleString('es-MX')}</div></div>`:''}
+        <div style="background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.15);border-radius:10px;padding:10px 16px;"><div style="font-size:9px;color:var(--text-dim);">BALANCE</div><div style="font-size:17px;font-weight:800;color:${(totalInc-totalExp)>=0?'#4ade80':'#f87171'};font-family:'JetBrains Mono',monospace;">${(totalInc-totalExp)>=0?'+':''}$${(totalInc-totalExp).toLocaleString('es-MX')}</div></div>
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 16px;"><div style="font-size:9px;color:var(--text-dim);">MOVIMIENTOS</div><div style="font-size:17px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;">${txs.length}</div></div>
       </div>
-      ${txs.map(n => {
-        const isInc = n.type==='income'
-        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-          <span style="width:20px;text-align:center;font-size:12px;color:${isInc?'#4ade80':'#f87171'};">${isInc?'↑':'↓'}</span>
-          <span style="flex:1;font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.description||n.content)}</span>
-          <span style="font-size:11px;color:var(--text-dim);flex-shrink:0;font-family:'JetBrains Mono',monospace;">${n.metadata?.date||''}</span>
-          <span style="font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;color:${isInc?'#4ade80':'#f87171'};flex-shrink:0;">${isInc?'+':'-'}$${(n.metadata?.amount||0).toLocaleString('es-MX')}</span>
-        </div>`
-      }).join('')}`
-    : `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0;">Sin movimientos financieros para este contacto.</div>`
+
+      <!-- Filters bar -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:10px;color:var(--text-dim);">Desde</span>
+          <input type="date" id="cpf-pago-from" value="${firstDate}" onchange="_cpfFilterPagos('${id}')" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 8px;color:#fff;font-size:11px;font-family:'JetBrains Mono',monospace;"/>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="font-size:10px;color:var(--text-dim);">Hasta</span>
+          <input type="date" id="cpf-pago-to" value="${lastDate}" onchange="_cpfFilterPagos('${id}')" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 8px;color:#fff;font-size:11px;font-family:'JetBrains Mono',monospace;"/>
+        </div>
+        <select id="cpf-pago-type" onchange="_cpfFilterPagos('${id}')" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 8px;color:#fff;font-size:11px;">
+          <option value="all">Todos</option>
+          <option value="income">↑ Ingresos</option>
+          <option value="expense">↓ Egresos</option>
+        </select>
+        ${txProjTags.length ? `<select id="cpf-pago-proj" onchange="_cpfFilterPagos('${id}')" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 8px;color:#fff;font-size:11px;">
+          <option value="all">Todos los proyectos</option>
+          ${txProjOptions}
+        </select>` : ''}
+        <div style="flex:1;"></div>
+        <button onclick="_cpfSelectAllPagos()" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 10px;color:var(--text-muted);font-size:10px;font-weight:700;cursor:pointer;">☑ Todos</button>
+        <button onclick="_cpfPrintPagosReport('${id}')" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.25);border-radius:6px;padding:4px 10px;color:#fb923c;font-size:10px;font-weight:700;cursor:pointer;">🖨️ Imprimir reporte</button>
+      </div>
+
+      <!-- Totals for filtered (updated by JS) -->
+      <div id="cpf-pago-filtered-totals" style="margin-bottom:10px;"></div>
+
+      <!-- Transaction list -->
+      <div id="cpf-pago-list">
+        ${txs.map(n => _cpfPagoRow(n)).join('')}
+      </div>`
+  } else {
+    pagosContent = `<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:20px 0;">Sin movimientos financieros para este contacto.</div>`
+  }
 
   // ── PROYECTOS content ─────────────────────────────────────────────────
   const proyectos = allNodes.filter(n => n.type==='proyecto' && (
-    (n.metadata?.team||[]).includes(id) || n.metadata?.client_id===id || n.metadata?.contact_id===id
+    (n.metadata?.members||[]).some(mb => mb.contact_id === id) || n.metadata?.client_id===id || n.metadata?.contact_id===id
   ))
   const proyectosContent = proyectos.length
     ? proyectos.map(p =>
