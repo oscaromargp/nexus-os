@@ -8109,31 +8109,38 @@ window.renderProyectos = function renderProyectos() {
   const byHealth = {}
   proyectos.forEach(p => { const s = p.metadata?.health?.status||'sin_estado'; byHealth[s]=(byHealth[s]||0)+1 })
 
-  root.innerHTML = `
-    <div style="padding:24px 28px 20px;">
-      <!-- Header -->
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-        <div>
-          <h1 style="margin:0 0 4px;font-size:26px;font-weight:900;color:var(--text-primary);">🏗️ Proyectos</h1>
-          <span style="font-size:12px;color:var(--text-muted);">${proyectos.length} proyecto${proyectos.length!==1?'s':''} en total</span>
-        </div>
-        <button onclick="document.getElementById('ide-input')?.focus()" style="background:linear-gradient(135deg,rgba(0,246,255,0.12),rgba(167,139,250,0.08));border:1px solid rgba(0,246,255,0.25);border-radius:10px;color:#00f6ff;padding:8px 18px;cursor:pointer;font-size:12px;font-weight:800;font-family:inherit;">+ Nuevo Proyecto</button>
-      </div>
+  // Resumen de totales financieros de todos los proyectos
+  const totalComprometido = proyectos.reduce((s, p2) => {
+    const d2 = _computeProjData(p2.id)
+    return s + (d2?.comprometido || 0)
+  }, 0)
+  const totalPendiente = proyectos.reduce((s, p2) => {
+    const d2 = _computeProjData(p2.id)
+    return s + (d2?.pendientePago || 0)
+  }, 0)
+  const fmtM2 = (n) => '$' + Math.abs(n||0).toLocaleString('es-MX',{maximumFractionDigits:0})
 
-      <!-- Status summary pills -->
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px;">
+  root.innerHTML = `
+    <div style="padding:16px 24px 24px;">
+      <!-- Stats pills -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center;">
         ${Object.entries(byHealth).map(([s,count]) => {
           const cfg = HEALTH_CFG2[s] || {emoji:'⬜',label:s,color:'#94a3b8'}
-          return `<div style="display:flex;align-items:center;gap:6px;background:${cfg.color}12;border:1px solid ${cfg.color}30;border-radius:20px;padding:5px 14px;">
-            <span style="font-size:13px;">${cfg.emoji}</span>
+          return `<div style="display:flex;align-items:center;gap:5px;background:${cfg.color}12;border:1px solid ${cfg.color}30;border-radius:20px;padding:4px 12px;">
+            <span style="font-size:12px;">${cfg.emoji}</span>
             <span style="font-size:11px;font-weight:700;color:${cfg.color};">${cfg.label}</span>
-            <span style="font-size:13px;font-weight:900;color:${cfg.color};font-family:monospace;">${count}</span>
+            <span style="font-size:12px;font-weight:900;color:${cfg.color};font-family:monospace;">${count}</span>
           </div>`
         }).join('')}
+        ${totalPendiente > 0 ? `
+        <div style="display:flex;align-items:center;gap:5px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:20px;padding:4px 12px;margin-left:auto;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          <span style="font-size:11px;font-weight:700;color:#f87171;">${fmtM2(totalPendiente)} pendiente en total</span>
+        </div>` : ''}
       </div>
 
       <!-- Cards grid -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;">
         ${proyectos.map(p => renderProjectCard(p)).join('')}
       </div>
     </div>`
@@ -8240,100 +8247,145 @@ function renderProjectCard(p) {
       </div>
 
       <!-- ── BODY ── -->
-      <div style="padding:30px 18px 16px;">
+      <div style="padding:30px 16px 14px;">
 
         <!-- Title + stage -->
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
-          <div style="font-size:16px;font-weight:800;color:var(--text-primary);line-height:1.2;flex:1;min-width:0;">${esc(projName)}</div>
-          <span style="font-size:10px;font-weight:700;color:${stageCfg.color};background:${stageCfg.color}15;border-radius:6px;padding:2px 8px;white-space:nowrap;flex-shrink:0;">${stageCfg.emoji} ${stageCfg.label}</span>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px;">
+          <div style="font-size:15px;font-weight:800;color:var(--text-primary);line-height:1.2;flex:1;min-width:0;">${esc(projName)}</div>
+          <span style="font-size:9px;font-weight:700;color:${stageCfg.color};background:${stageCfg.color}15;border-radius:6px;padding:2px 7px;white-space:nowrap;flex-shrink:0;">${stageCfg.emoji} ${stageCfg.label}</span>
         </div>
 
-        <!-- Description -->
-        ${m.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:12px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(m.desc)}</div>` : '<div style="margin-bottom:12px;"></div>'}
+        ${m.desc ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">${esc(m.desc)}</div>` : '<div style="margin-bottom:8px;"></div>'}
 
-        <!-- Health note / last update -->
-        ${health.note ? `<div style="font-size:11px;color:var(--text-muted);background:${accentColor}08;border-left:2px solid ${accentColor};padding:6px 10px;border-radius:0 8px 8px 0;margin-bottom:12px;font-style:italic;line-height:1.4;">"${esc(health.note)}"</div>` : ''}
+        <!-- ── SEMÁFORO DE SALUD ─────────────────────────────── -->
+        ${(() => {
+          // Tiempo
+          let tiempoClr = '#4ade80', tiempoLbl = 'A tiempo'
+          if (deadline) {
+            const daysLeft = Math.ceil((new Date(deadline) - new Date()) / 86400000)
+            if (daysLeft < 0) { tiempoClr = '#f87171'; tiempoLbl = 'Vencido' }
+            else if (daysLeft <= 14) { tiempoClr = '#fbbf24'; tiempoLbl = daysLeft + 'd' }
+            else { tiempoClr = '#4ade80'; tiempoLbl = daysLeft + 'd' }
+          } else { tiempoClr = '#475569'; tiempoLbl = 'Sin fecha' }
 
-        <!-- ── PROPERTIES (Notion-style rows) ── -->
-        <div style="display:flex;flex-direction:column;gap:0;border:1px solid rgba(255,255,255,0.05);border-radius:10px;overflow:hidden;margin-bottom:14px;font-size:11px;">
-          <!-- Budget row -->
+          // Presupuesto
+          let presClr = '#4ade80', presLbl = 'OK'
+          if (budget > 0) {
+            if (overBudget) { presClr = '#f87171'; presLbl = 'Excedido' }
+            else if (budgetPct >= 80) { presClr = '#fbbf24'; presLbl = budgetPct + '%' }
+            else { presClr = '#4ade80'; presLbl = budgetPct + '%' }
+          } else { presClr = '#475569'; presLbl = 'Sin budget' }
+
+          // Alcance (hitos)
+          let alcClr = '#475569', alcLbl = 'Sin hitos'
+          if (mils.length > 0) {
+            if (milPct >= 60) { alcClr = '#4ade80'; alcLbl = milPct + '%' }
+            else if (milPct >= 25) { alcClr = '#fbbf24'; alcLbl = milPct + '%' }
+            else { alcClr = '#f87171'; alcLbl = milPct + '%' }
+          }
+
+          const dot = (clr, lbl, title) => `
+            <div style="display:flex;align-items:center;gap:5px;" title="${title}">
+              <span style="width:10px;height:10px;border-radius:50%;background:${clr};box-shadow:0 0 6px ${clr}99;flex-shrink:0;display:inline-block;"></span>
+              <span style="font-size:10px;color:var(--text-muted);">${lbl}</span>
+            </div>`
+
+          return `<div style="display:flex;align-items:center;gap:14px;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;margin-bottom:12px;">
+            <span style="font-size:9px;font-weight:800;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;flex-shrink:0;">Salud</span>
+            ${dot(tiempoClr, tiempoLbl, 'Tiempo · ' + (deadlineStr || 'sin deadline'))}
+            <div style="width:1px;height:12px;background:rgba(255,255,255,0.07);flex-shrink:0;"></div>
+            ${dot(presClr, presLbl, 'Presupuesto · ' + (budget > 0 ? '$' + budget.toLocaleString('es-MX', {maximumFractionDigits:0}) : 'no definido'))}
+            <div style="width:1px;height:12px;background:rgba(255,255,255,0.07);flex-shrink:0;"></div>
+            ${dot(alcClr, alcLbl, 'Alcance · ' + (mils.length > 0 ? milDone + '/' + mils.length + ' hitos' : 'sin hitos'))}
+          </div>`
+        })()}
+
+        <!-- ── FINANCIERO COMPACTO ── -->
+        ${(comprometido > 0 || pagado > 0) ? `
+        <div style="display:flex;gap:0;border:1px solid rgba(255,255,255,0.06);border-radius:10px;overflow:hidden;margin-bottom:12px;">
+          ${comprometido > 0 ? `<div style="flex:1;padding:8px 10px;border-right:1px solid rgba(255,255,255,0.05);text-align:center;">
+            <div style="font-size:9px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;">Comprometido</div>
+            <div style="font-size:13px;font-weight:800;color:#fb923c;font-family:'JetBrains Mono',monospace;">$${comprometido.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+          </div>` : ''}
+          ${pagado > 0 ? `<div style="flex:1;padding:8px 10px;border-right:1px solid rgba(255,255,255,0.05);text-align:center;">
+            <div style="font-size:9px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;">Pagado</div>
+            <div style="font-size:13px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">$${pagado.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+          </div>` : ''}
+          ${pendiente > 0 ? `<div style="flex:1;padding:8px 10px;text-align:center;background:rgba(248,113,113,0.06);">
+            <div style="font-size:9px;color:#f87171;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;">Por pagar</div>
+            <div style="font-size:13px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">$${pendiente.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+          </div>` : `<div style="flex:1;padding:8px 10px;text-align:center;background:rgba(74,222,128,0.04);">
+            <div style="font-size:9px;color:#4ade80;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;">Saldo</div>
+            <div style="font-size:11px;font-weight:800;color:#4ade80;">✓ Al día</div>
+          </div>`}
+        </div>` : ''}
+
+        <!-- ── DATOS CLAVE ── -->
+        <div style="display:flex;flex-direction:column;gap:0;border:1px solid rgba(255,255,255,0.05);border-radius:10px;overflow:hidden;margin-bottom:12px;font-size:11px;">
           ${budget > 0 ? `
-          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">💰 Presupuesto</span>
-            <div style="flex:1;">
-              <div style="display:flex;align-items:center;gap:8px;">
-                <div style="flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
-                  <div style="height:100%;width:${budgetPct}%;background:${gaugeColor};border-radius:2px;"></div>
-                </div>
-                <span style="font-family:monospace;font-weight:700;color:${gaugeColor};white-space:nowrap;">${budgetPct}%</span>
+          <div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="width:90px;color:var(--text-dim);font-size:9px;font-weight:700;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;">Presupuesto</span>
+            <div style="flex:1;display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+                <div style="height:100%;width:${Math.min(budgetPct,100)}%;background:${gaugeColor};border-radius:2px;"></div>
               </div>
-              <div style="display:flex;justify-content:space-between;margin-top:3px;">
-                <span style="color:var(--text-dim);">$${pagado.toLocaleString('es-MX',{maximumFractionDigits:0})} pagado</span>
-                <span style="color:var(--text-muted);">de $${budget.toLocaleString('es-MX',{maximumFractionDigits:0})}</span>
-              </div>
+              <span style="font-size:10px;font-weight:700;color:${gaugeColor};font-family:monospace;flex-shrink:0;">${budgetPct}% <span style="font-weight:400;color:var(--text-dim);">de $${budget.toLocaleString('es-MX',{maximumFractionDigits:0})}</span></span>
             </div>
           </div>` : ''}
-          <!-- Milestones row -->
           ${mils.length > 0 ? `
-          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">🏁 Hitos</span>
-            <div style="flex:1;">
-              <div style="display:flex;align-items:center;gap:8px;">
-                <div style="flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
-                  <div style="height:100%;width:${milPct}%;background:${milOverdue?'#f87171':'#a78bfa'};border-radius:2px;"></div>
-                </div>
-                <span style="font-family:monospace;font-weight:700;color:${milOverdue?'#f87171':'#a78bfa'};white-space:nowrap;">${milDone}/${mils.length}</span>
+          <div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="width:90px;color:var(--text-dim);font-size:9px;font-weight:700;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;">Hitos</span>
+            <div style="flex:1;display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+                <div style="height:100%;width:${milPct}%;background:${milOverdue?'#f87171':'#a78bfa'};border-radius:2px;"></div>
               </div>
-              ${milOverdue ? `<div style="color:#f87171;margin-top:2px;font-size:10px;">⚠️ ${milOverdue} vencido${milOverdue>1?'s':''}</div>` : ''}
+              <span style="font-size:10px;font-weight:700;color:${milOverdue?'#f87171':'#a78bfa'};font-family:monospace;flex-shrink:0;">${milDone}/${mils.length}${milOverdue ? ' · <span style="color:#f87171;">'+milOverdue+' vencido'+(milOverdue>1?'s':'')+'</span>' : ''}</span>
             </div>
           </div>` : ''}
-          <!-- Tasks row -->
           ${taskCount > 0 ? `
-          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">✅ Tareas</span>
-            <span style="color:var(--text-muted);">${taskDone} completadas de ${taskCount}</span>
-          </div>` : ''}
-          <!-- Cotizaciones row -->
-          ${cots.length > 0 ? `
-          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">📄 Cotizaciones</span>
-            <span style="color:var(--text-muted);">${aceptadas.length} aceptadas · ${cots.length} total${pendiente>0?' · <span style="color:#fb923c;">$'+pendiente.toLocaleString('es-MX',{maximumFractionDigits:0})+' pendiente</span>':''}</span>
-          </div>` : ''}
-          <!-- Deadline row -->
-          ${deadlineStr ? `
-          <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
-            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">📅 Fecha límite</span>
-            <span style="color:${isOverdue?'#f87171':'var(--text-muted)'};font-weight:${isOverdue?'700':'400'};">${deadlineStr}${isOverdue?' ⚠️':''}</span>
-          </div>` : ''}
-          <!-- Tags row -->
-          ${tagStr.filter(t=>t!=='proyecto').length > 0 ? `
-          <div style="display:flex;align-items:center;gap:6px;padding:7px 12px;">
-            <span style="width:100px;color:var(--text-dim);font-size:10px;font-weight:600;flex-shrink:0;">🏷 Tags</span>
-            <div style="display:flex;gap:4px;flex-wrap:wrap;">
-              ${tagStr.filter(t=>t!=='proyecto').map(t=>`<span style="background:${accentColor}15;color:${accentColor};border-radius:4px;padding:1px 7px;font-size:9px;font-weight:700;">#${t}</span>`).join('')}
+          <div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="width:90px;color:var(--text-dim);font-size:9px;font-weight:700;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;">Tareas</span>
+            <div style="flex:1;display:flex;align-items:center;gap:8px;">
+              <div style="flex:1;height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;">
+                <div style="height:100%;width:${taskCount > 0 ? Math.round(taskDone/taskCount*100) : 0}%;background:#60a5fa;border-radius:2px;"></div>
+              </div>
+              <span style="font-size:10px;color:var(--text-muted);flex-shrink:0;">${taskDone}/${taskCount}</span>
             </div>
+          </div>` : ''}
+          ${cots.length > 0 ? `
+          <div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid rgba(255,255,255,0.04);">
+            <span style="width:90px;color:var(--text-dim);font-size:9px;font-weight:700;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;">Cotizaciones</span>
+            <span style="font-size:10px;color:var(--text-muted);">${aceptadas.length} aceptadas · ${cots.length} total</span>
+          </div>` : ''}
+          ${deadlineStr ? `
+          <div style="display:flex;align-items:center;padding:6px 12px;">
+            <span style="width:90px;color:var(--text-dim);font-size:9px;font-weight:700;flex-shrink:0;text-transform:uppercase;letter-spacing:.04em;">Entrega</span>
+            <span style="font-size:10px;color:${isOverdue?'#f87171':'var(--text-muted)'};font-weight:${isOverdue?'700':'400'};">${deadlineStr}${isOverdue?' — Vencido':''}</span>
           </div>` : ''}
         </div>
 
-        <!-- ── TEAM AVATARS ── -->
-        ${members.length > 0 ? `
-        <div style="display:flex;align-items:center;justify-content:space-between;">
+        <!-- ── FOOTER: team + tags ── -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <!-- Team avatars -->
           <div style="display:flex;align-items:center;">
-            ${members.slice(0,6).map(mb => {
+            ${members.slice(0,5).map(mb => {
               const c = allNodes.find(n => n.id === mb.contact_id)
               const name = c ? (c.metadata?.name||c.content) : '?'
               const initials = name.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
               const rolColors = { financiador:'#f59e0b', administrador:'#60a5fa', ejecutor:'#fb923c', supervisor:'#a78bfa', colaborador:'#4ade80' }
               const clr = rolColors[mb.role] || '#94a3b8'
-              return `<div style="width:28px;height:28px;border-radius:50%;background:${clr}25;color:${clr};border:2px solid var(--bg-panel);display:grid;place-items:center;font-size:10px;font-weight:800;margin-right:-8px;" title="${esc(name)} · ${mb.role||''}">${initials}</div>`
+              return `<div style="width:24px;height:24px;border-radius:50%;background:${clr}25;color:${clr};border:2px solid var(--bg-panel);display:grid;place-items:center;font-size:9px;font-weight:800;margin-right:-6px;" title="${esc(name)}">${initials}</div>`
             }).join('')}
-            ${members.length > 6 ? `<div style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.06);color:var(--text-muted);border:2px solid var(--bg-panel);display:grid;place-items:center;font-size:9px;font-weight:700;margin-right:-8px;">+${members.length-6}</div>` : ''}
+            ${members.length > 5 ? `<div style="width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,0.06);color:var(--text-muted);border:2px solid var(--bg-panel);display:grid;place-items:center;font-size:8px;font-weight:700;margin-right:-6px;">+${members.length-5}</div>` : ''}
+            ${members.length > 0 ? `<span style="font-size:9px;color:var(--text-dim);margin-left:${members.length>0?'12':'0'}px;">${members.length} miembro${members.length!==1?'s':''}</span>` : '<span style="font-size:9px;color:var(--text-dim);">Sin equipo</span>'}
           </div>
-          <span style="font-size:10px;color:var(--text-dim);">${members.length} miembro${members.length!==1?'s':''}</span>
-        </div>` : `
-        <div style="display:flex;align-items:center;gap:6px;color:var(--text-dim);font-size:10px;">
-          <span>Sin equipo asignado</span>
-        </div>`}
+          <!-- Tags -->
+          <div style="display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;">
+            ${tagStr.filter(t=>t!=='proyecto').slice(0,2).map(t=>`<span style="background:${accentColor}15;color:${accentColor};border-radius:4px;padding:1px 6px;font-size:8px;font-weight:700;">#${t}</span>`).join('')}
+          </div>
+        </div>
+
+        ${health.note ? `<div style="font-size:10px;color:var(--text-muted);background:${accentColor}08;border-left:2px solid ${accentColor};padding:5px 10px;border-radius:0 6px 6px 0;margin-top:10px;font-style:italic;line-height:1.4;">${esc(health.note)}</div>` : ''}
       </div>
     </div>`
 }
@@ -8529,7 +8581,8 @@ function _renderProjResumen(d) {
   const _s = (fn) => { try { return fn() } catch(e) { return '' } }
   const STATUS_CFG = { pendiente:{l:'Pendiente',c:'#94a3b8'}, aceptada:{l:'Aceptada',c:'#4ade80'}, rechazada:{l:'Rechazada',c:'#f87171'}, en_proceso:{l:'En proceso',c:'#60a5fa'}, pagada:{l:'Pagada',c:'#a78bfa'}, parcial:{l:'Parcial',c:'#fbbf24'} }
   const h   = m.health || {}
-  const hc  = HCFG[h.status] || null
+  const _HCFG = { on_track:{emoji:'🟢',label:'En curso',color:'#4ade80'}, at_risk:{emoji:'🟡',label:'En riesgo',color:'#fbbf24'}, off_track:{emoji:'🔴',label:'Atrasado',color:'#f87171'}, on_hold:{emoji:'🔵',label:'Pausado',color:'#60a5fa'}, done:{emoji:'🟣',label:'Terminado',color:'#a78bfa'} }
+  const hc  = _HCFG[h.status] || null
   const mils = m.milestones || []
   const milsDone = mils.filter(ms => ms.is_reached).length
   const today = new Date().toISOString().split('T')[0]
