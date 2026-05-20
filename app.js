@@ -5729,9 +5729,8 @@ window.openFinanceDetail = (id) => {
   // RFC / Referencia
   const refEl = document.getElementById('fd-referencia')
   if (refEl) refEl.value = m.referencia || ''
-  // Ordenante
-  const ordEl = document.getElementById('fd-ordenante')
-  if (ordEl) ordEl.value = m.ordenante || ''
+  // Ordenante (contact selector + manual fallback)
+  _fdPopulateOrdenante(m.ordenante_id || '', m.ordenante || '')
   // Cuenta origen/destino
   const accounts = allNodes.filter(n => n.type === 'account')
   const acSel = document.getElementById('fd-account')
@@ -5834,6 +5833,46 @@ function _fdApplyDestAccount(a) {
   }
 }
 
+// ── Ordenante as contact selector ─────────────────────────────────────────
+function _fdPopulateOrdenante(savedContactId, savedManualName) {
+  const sel = document.getElementById('fd-ordenante-sel')
+  const inp = document.getElementById('fd-ordenante')
+  if (!sel) return
+  const contacts = getContacts()
+  const roleIcons = { proveedor:'🔧', cliente:'💼', colaborador:'🤝' }
+  sel.innerHTML = `<option value="">— Sin ordenante —</option>
+    <option value="__manual__">✏️ Escribir nombre...</option>` +
+    contacts.map(c => {
+      const name = c.metadata?.name || c.content
+      const roles = c.metadata?.roles || (c.metadata?.cType ? [c.metadata.cType] : ['persona'])
+      const icon = roleIcons[roles[0]] || '👤'
+      return `<option value="${c.id}" ${savedContactId===c.id?'selected':''}>${icon} ${esc(name)}</option>`
+    }).join('')
+
+  if (savedContactId && savedContactId !== '__manual__') {
+    sel.value = savedContactId
+    if (inp) inp.style.display = 'none'
+  } else if (savedManualName && !savedContactId) {
+    sel.value = '__manual__'
+    if (inp) { inp.style.display = 'block'; inp.value = savedManualName }
+  } else {
+    if (inp) inp.style.display = 'none'
+  }
+}
+
+window._fdOnOrdenanteChange = function() {
+  const sel = document.getElementById('fd-ordenante-sel')
+  const inp = document.getElementById('fd-ordenante')
+  if (!sel || !inp) return
+  if (sel.value === '__manual__') {
+    inp.style.display = 'block'
+    inp.focus()
+  } else {
+    inp.style.display = 'none'
+    inp.value = ''
+  }
+}
+
 // ── Print Finance CEP (Comprobante Electrónico de Pago interno) ───────────
 window.printFinanceCEP = function() {
   const node = allNodes.find(n => n.id === editingFinanceId)
@@ -5846,10 +5885,15 @@ window.printFinanceCEP = function() {
   const fecha = m.fecha || node.created_at?.split('T')[0] || ''
   const fmtDate = d => { if(!d) return ''; const [y,mo,dy]=d.split('-'); return `${dy}/${mo}/${y}` }
 
-  // Contact info
+  // Contact (beneficiario)
   const contact = m.contact_id ? allNodes.find(n => n.id === m.contact_id) : null
-  const contactName = contact ? (contact.metadata?.name || contact.content) : m.contact_name || m.ordenante || ''
+  const contactName = contact ? (contact.metadata?.name || contact.content) : m.contact_name || ''
   const contactRFC = contact?.metadata?.rfc || ''
+
+  // Ordenante
+  const ordContact = m.ordenante_id ? allNodes.find(n => n.id === m.ordenante_id) : null
+  const ordName = ordContact ? (ordContact.metadata?.name || ordContact.content) : m.ordenante || ''
+  const ordRFC = ordContact?.metadata?.rfc || ''
 
   // Account info
   const myAccount = m.account_id ? allNodes.find(n => n.id === m.account_id) : null
@@ -5859,31 +5903,60 @@ window.printFinanceCEP = function() {
   const ivaRate = m.iva ? parseFloat(m.iva) : 0
   const subtotal = ivaRate ? (amount / (1 + ivaRate/100)) : amount
   const ivaAmount = ivaRate ? (amount - subtotal) : 0
-
-  // TC
   const tc = m.tc ? parseFloat(m.tc) : 0
   const amountAlt = tc ? (amount / tc) : 0
+
+  // ── Build attachments section for print ─────────────────────────────
+  const imgs = m.images || []
+  let attachHTML = ''
+  if (imgs.length) {
+    const parts = imgs.map((src, i) => {
+      const isUrl   = src.startsWith('http://') || src.startsWith('https://')
+      const isPdf   = src.startsWith('data:application/pdf') || src.includes(';base64,JVBER')
+      const isImgUrl = isUrl && /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(src)
+      const isPdfUrl = isUrl && /\.pdf(\?|$)/i.test(src)
+      if (isImgUrl) {
+        return `<div style="text-align:center;"><img src="${src}" style="max-width:200px;max-height:150px;border:1px solid #ddd;border-radius:4px;" /><div style="font-size:9px;color:#888;margin-top:2px;"><a href="${src}" style="color:#2563eb;">↗ Abrir imagen</a></div></div>`
+      } else if (isUrl) {
+        return `<div style="padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:11px;"><a href="${src}" style="color:#2563eb;text-decoration:underline;word-break:break-all;">${isPdfUrl?'📄 ':''} ${src}</a></div>`
+      } else if (isPdf) {
+        return `<div style="padding:8px 12px;border:1px solid #f87171;border-radius:6px;font-size:11px;color:#dc2626;">📄 PDF adjunto #${i+1} (embebido en sistema)</div>`
+      } else if (src.startsWith('data:image')) {
+        return `<div style="text-align:center;"><img src="${src}" style="max-width:200px;max-height:150px;border:1px solid #ddd;border-radius:4px;" /><div style="font-size:9px;color:#888;margin-top:2px;">Imagen adjunta #${i+1}</div></div>`
+      }
+      return ''
+    }).filter(Boolean)
+    if (parts.length) {
+      attachHTML = `<div style="border-top:2px solid #e5e5e5;padding:16px 24px;">
+        <div style="font-size:10px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;">📎 Comprobantes adjuntos (${parts.length})</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">${parts.join('')}</div>
+      </div>`
+    }
+  }
 
   const w = window.open('', '_blank')
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>CEP — ${label}</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:system-ui,-apple-system,sans-serif;color:#1a1a1a;padding:0;background:#fff}
-    .cep{max-width:600px;margin:20px auto;border:2px solid #1a1a1a;border-radius:8px;overflow:hidden}
+    .cep{max-width:640px;margin:20px auto;border:2px solid #1a1a1a;border-radius:8px;overflow:hidden}
     .cep-header{background:#1a2332;color:#fff;padding:18px 24px;display:flex;align-items:center;justify-content:space-between}
-    .cep-header h1{font-size:16px;font-weight:800;letter-spacing:.05em}
-    .cep-header .type{font-size:12px;padding:3px 12px;border-radius:4px;font-weight:700;text-transform:uppercase}
-    .cep-body{padding:20px 24px}
-    .cep-row{display:flex;border-bottom:1px solid #e5e5e5;padding:10px 0}
+    .cep-header h1{font-size:15px;font-weight:800;letter-spacing:.05em}
+    .cep-header .type{font-size:11px;padding:3px 12px;border-radius:4px;font-weight:700;text-transform:uppercase}
+    .cep-body{padding:16px 24px}
+    .cep-row{display:flex;border-bottom:1px solid #e8e8e8;padding:9px 0}
     .cep-row:last-child{border-bottom:none}
-    .cep-key{font-size:11px;color:#666;font-weight:600;text-transform:uppercase;letter-spacing:.06em;width:160px;flex-shrink:0}
+    .cep-key{font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:.06em;width:150px;flex-shrink:0;padding-top:2px}
     .cep-val{font-size:13px;color:#1a1a1a;font-weight:500;flex:1}
     .cep-val.mono{font-family:'JetBrains Mono',Consolas,monospace;font-size:12px}
     .cep-amount{text-align:center;padding:20px;background:#f8f8f8;border-top:1px solid #e5e5e5}
-    .cep-amount .big{font-size:32px;font-weight:900;font-family:'JetBrains Mono',monospace}
-    .cep-amount .label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+    .cep-amount .big{font-size:30px;font-weight:900;font-family:'JetBrains Mono',monospace}
+    .cep-amount .lbl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
     .cep-footer{padding:12px 24px;background:#f0f0f0;font-size:10px;color:#888;display:flex;justify-content:space-between}
     .inc{color:#16a34a}.exp{color:#dc2626}
+    .cep-section{border-top:1px solid #e5e5e5;padding:12px 24px}
+    .cep-section-title{font-size:10px;font-weight:700;color:#666;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+    a{color:#2563eb}
     @media print{body{padding:0}.no-print{display:none !important}}
   </style></head><body>
   <div class="cep">
@@ -5892,27 +5965,39 @@ window.printFinanceCEP = function() {
       <span class="type" style="background:${isInc?'#16a34a':'#dc2626'}">${isInc?'INGRESO':'EGRESO'}</span>
     </div>
     <div class="cep-amount">
-      <div class="label">Monto total</div>
+      <div class="lbl">Monto total</div>
       <div class="big ${isInc?'inc':'exp'}">${isInc?'+':''}$${amount.toLocaleString('es-MX',{minimumFractionDigits:2})} ${moneda}</div>
       ${tc && moneda!=='MXN' ? `<div style="font-size:12px;color:#666;margin-top:4px;">≈ $${amountAlt.toLocaleString('es-MX',{minimumFractionDigits:2})} USD · T.C. ${tc}</div>` : ''}
       ${ivaRate ? `<div style="font-size:11px;color:#888;margin-top:4px;">Subtotal: $${subtotal.toLocaleString('es-MX',{minimumFractionDigits:2})} + IVA ${ivaRate}%: $${ivaAmount.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>` : ''}
     </div>
+
     <div class="cep-body">
       <div class="cep-row"><div class="cep-key">Descripción</div><div class="cep-val">${label}</div></div>
-      <div class="cep-row"><div class="cep-key">Fecha</div><div class="cep-val mono">${fmtDate(fecha)}</div></div>
-      ${contactName ? `<div class="cep-row"><div class="cep-key">${isInc?'Ordenante':'Beneficiario'}</div><div class="cep-val">${contactName}${contactRFC?' · RFC: '+contactRFC:''}</div></div>` : ''}
-      ${m.ordenante && m.ordenante !== contactName ? `<div class="cep-row"><div class="cep-key">Ordenante</div><div class="cep-val">${m.ordenante}</div></div>` : ''}
+      <div class="cep-row"><div class="cep-key">Fecha operación</div><div class="cep-val mono">${fmtDate(fecha)}</div></div>
+      ${contactName ? `<div class="cep-row"><div class="cep-key">${isInc?'Pagador / Cliente':'Beneficiario'}</div><div class="cep-val"><strong>${contactName}</strong>${contactRFC?' · RFC: <span class="mono">'+contactRFC+'</span>':''}</div></div>` : ''}
+      ${ordName ? `<div class="cep-row"><div class="cep-key">Ordenante / Emisor</div><div class="cep-val"><strong>${ordName}</strong>${ordRFC?' · RFC: <span class="mono">'+ordRFC+'</span>':''}</div></div>` : ''}
       <div class="cep-row"><div class="cep-key">Cuenta origen</div><div class="cep-val">${myAccLabel}</div></div>
       ${m.banco ? `<div class="cep-row"><div class="cep-key">Banco destino</div><div class="cep-val">${m.banco}</div></div>` : ''}
       ${m.clabe ? `<div class="cep-row"><div class="cep-key">CLABE / Wallet</div><div class="cep-val mono">${m.clabe}</div></div>` : ''}
-      ${m.referencia ? `<div class="cep-row"><div class="cep-key">Referencia</div><div class="cep-val mono">${m.referencia}</div></div>` : ''}
+      ${m.referencia ? `<div class="cep-row"><div class="cep-key">Folio / Referencia</div><div class="cep-val mono">${m.referencia}</div></div>` : ''}
       ${m.project_tag ? `<div class="cep-row"><div class="cep-key">Proyecto</div><div class="cep-val">${m.project_tag}</div></div>` : ''}
-      ${m.cep_url ? `<div class="cep-row"><div class="cep-key">CEP oficial</div><div class="cep-val"><a href="${m.cep_url}" style="color:#2563eb;text-decoration:underline;">${m.cep_url.length>50?m.cep_url.substring(0,50)+'…':m.cep_url}</a></div></div>` : ''}
-      ${(m.comments||[]).length ? `<div class="cep-row"><div class="cep-key">Comentarios</div><div class="cep-val">${m.comments.map(c=>c.text).join(' | ')}</div></div>` : ''}
     </div>
+
+    ${m.cep_url ? `<div class="cep-section">
+      <div class="cep-section-title">🏛️ CEP oficial (Banxico / Banco)</div>
+      <a href="${m.cep_url}" style="font-size:12px;word-break:break-all;">${m.cep_url}</a>
+    </div>` : ''}
+
+    ${attachHTML}
+
+    ${(m.comments||[]).length ? `<div class="cep-section">
+      <div class="cep-section-title">📝 Comentarios</div>
+      ${m.comments.map(c => `<div style="font-size:12px;padding:4px 0;border-bottom:1px solid #f0f0f0;">${c.text} <span style="font-size:10px;color:#aaa;">${c.time||''}</span></div>`).join('')}
+    </div>` : ''}
+
     <div class="cep-footer">
       <span>ID: ${editingFinanceId?.substring(0,8) || '—'}</span>
-      <span>Generado: ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})} · Nexus OS</span>
+      <span>Generado: ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'})} · Nexus OS</span>
     </div>
   </div>
   <div class="no-print" style="text-align:center;margin:16px;">
@@ -5960,7 +6045,19 @@ window.saveFinanceDetail = async () => {
   node.metadata.tc        = parseFloat(document.getElementById('fd-tc')?.value) || undefined
   node.metadata.iva       = parseFloat(document.getElementById('fd-iva')?.value) || undefined
   node.metadata.referencia = document.getElementById('fd-referencia')?.value.trim() || undefined
-  node.metadata.ordenante  = document.getElementById('fd-ordenante')?.value.trim() || undefined
+  // Ordenante: contact selector or manual
+  const ordSel = document.getElementById('fd-ordenante-sel')?.value || ''
+  if (ordSel && ordSel !== '__manual__') {
+    node.metadata.ordenante_id = ordSel
+    const ordContact = getContacts().find(c => c.id === ordSel)
+    node.metadata.ordenante = ordContact ? (ordContact.metadata?.name || ordContact.content) : undefined
+  } else if (ordSel === '__manual__') {
+    node.metadata.ordenante_id = undefined
+    node.metadata.ordenante = document.getElementById('fd-ordenante')?.value.trim() || undefined
+  } else {
+    node.metadata.ordenante_id = undefined
+    node.metadata.ordenante = undefined
+  }
   node.metadata.clabe      = document.getElementById('fd-clabe')?.value.trim() || undefined
   node.metadata.banco      = document.getElementById('fd-banco')?.value.trim() || undefined
   const acId = document.getElementById('fd-account').value
@@ -6049,6 +6146,13 @@ async function addAttachment(base64, context) {
   renderAttachments(node.metadata.images || [], context)
 }
 
+// ── Add link URL as attachment ────────────────────────────────────────────
+window.addAttachmentUrl = async function(context) {
+  const url = prompt('Pega el link al documento, imagen o CEP:')
+  if (!url || !url.trim()) return
+  await addAttachment(url.trim(), context)
+}
+
 function renderAttachments(images, context) {
   const containerId = context === 'card' ? 'tm-attachments' : context === 'note' ? 'ne-attachments' : 'fd-attachments'
   const container = document.getElementById(containerId)
@@ -6056,8 +6160,22 @@ function renderAttachments(images, context) {
   container.innerHTML = (images || []).map((src, i) => {
     const isPdf   = src.startsWith('data:application/pdf') || src.includes(';base64,JVBER')
     const isAudio = src.startsWith('data:audio/')
+    const isUrl   = src.startsWith('http://') || src.startsWith('https://')
     let thumb
-    if (isPdf) {
+    if (isUrl) {
+      // External link: show as card with icon
+      const isImgUrl = /\.(jpg|jpeg|png|gif|webp|svg)(\?|$)/i.test(src)
+      const isPdfUrl = /\.pdf(\?|$)/i.test(src)
+      const shortUrl = src.replace(/^https?:\/\//, '').substring(0, 28) + (src.length > 40 ? '…' : '')
+      if (isImgUrl) {
+        thumb = `<div style="position:relative;width:80px;height:80px;border-radius:10px;border:1px solid var(--glass-border);overflow:hidden;cursor:pointer;" onclick="openDocPreview('${src.replace(/'/g,"\\'")}','Adjunto')">
+          <img src="${src}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;font-size:10px;color:#fb923c;gap:4px;\\'>🔗<span>link</span></div>'"/>
+        </div>`
+      } else {
+        thumb = `<div onclick="openDocPreview('${src.replace(/'/g,"\\'")}','Adjunto')" style="width:80px;height:80px;border-radius:10px;border:1px solid ${isPdfUrl?'rgba(248,113,113,0.3)':'rgba(96,165,250,0.3)'};background:${isPdfUrl?'rgba(248,113,113,0.08)':'rgba(96,165,250,0.08)'};display:flex;align-items:center;justify-content:center;cursor:pointer;flex-direction:column;font-size:10px;color:${isPdfUrl?'#f87171':'#60a5fa'};gap:4px;">
+          <span style="font-size:22px;">${isPdfUrl?'📄':'🔗'}</span><span style="max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${isPdfUrl?'PDF':shortUrl}</span></div>`
+      }
+    } else if (isPdf) {
       thumb = `<div onclick="viewAttachment('PDF_${i}','${context}')" style="width:80px;height:80px;border-radius:10px;border:1px solid var(--glass-border);background:rgba(248,113,113,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-direction:column;font-size:10px;color:#f87171;gap:4px;">
         <span style="font-size:28px;">📄</span><span>PDF</span></div>`
     } else if (isAudio) {
@@ -7771,6 +7889,168 @@ function renderContacts() {
       ${(firstPhone || emails.length) ? qActions : ''}
     </div>`
   }).join('')
+}
+
+// ── Bulk import / export contacts (CSV) ───────────────────────────────────────
+window.downloadContactCSVTemplate = function() {
+  const headers = [
+    'nombre','rol','telefono_1','tel_1_etiqueta','telefono_2','tel_2_etiqueta',
+    'email_1','email_1_etiqueta','email_2','email_2_etiqueta',
+    'ciudad','estado','pais','calle','codigo_postal',
+    'rfc','cumpleanos','aniversario',
+    'especialidad_1','especialidad_2','especialidad_3',
+    'color','rating','notas',
+    'cuenta_1_tipo','cuenta_1_banco','cuenta_1_clabe','cuenta_1_etiqueta',
+    'cuenta_2_tipo','cuenta_2_banco','cuenta_2_clabe','cuenta_2_etiqueta'
+  ]
+  const example = [
+    'Juan Pérez García','proveedor','9981234567','Personal','9989876543','Trabajo',
+    'juan@email.com','Personal','juan.oficina@empresa.com','Trabajo',
+    'Cancún','Quintana Roo','México','Av. Tulum 123 SM 4','77500',
+    'PEGJ850101ABC','1985-01-01','2010-06-15',
+    'Albañilería','Plomería','',
+    '#f97316','4','Proveedor de confianza desde 2018',
+    'bank','BBVA','012345678901234567','Cuenta nómina',
+    'crypto','BTC','bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh','Bitcoin wallet'
+  ]
+  const csv = [headers.join(','), example.map(v => `"${(v||'').replace(/"/g,'""')}"`).join(',')].join('\n')
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = 'nexus-os-contactos-plantilla.csv'
+  a.click()
+  showToast('📥 Plantilla CSV descargada — ábrela en Excel o Google Sheets')
+}
+
+window.importContactsCSV = async function(input) {
+  const file = input.files?.[0]
+  if (!file) return
+  input.value = ''
+  const text = await file.text()
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) { showToast('⚠️ El CSV está vacío o no tiene datos'); return }
+
+  // Parse header
+  const headers = _parseCSVRow(lines[0])
+  const nameIdx = headers.findIndex(h => h.toLowerCase().includes('nombre'))
+  if (nameIdx < 0) { showToast('❌ El CSV debe tener una columna "nombre"'); return }
+
+  const h = (name) => headers.findIndex(h => h.toLowerCase().replace(/\s+/g,'_') === name.toLowerCase().replace(/\s+/g,'_'))
+
+  const rows = lines.slice(1).map(line => _parseCSVRow(line))
+  const contacts = []
+
+  for (const row of rows) {
+    const name = (row[h('nombre')] || '').trim()
+    if (!name) continue
+
+    const roles = []
+    const rawRol = (row[h('rol')] || '').toLowerCase().trim()
+    if (rawRol) {
+      rawRol.split(/[,;|]/).map(r => r.trim()).filter(Boolean).forEach(r => {
+        if (['persona','proveedor','cliente','colaborador'].includes(r)) roles.push(r)
+      })
+    }
+    if (!roles.length) roles.push('persona')
+
+    // Phones
+    const phones = []
+    const p1 = (row[h('telefono_1')] || '').trim()
+    if (p1) phones.push({ label: row[h('tel_1_etiqueta')] || 'Personal', number: p1 })
+    const p2 = (row[h('telefono_2')] || '').trim()
+    if (p2) phones.push({ label: row[h('tel_2_etiqueta')] || 'Trabajo', number: p2 })
+
+    // Emails
+    const emails = []
+    const e1 = (row[h('email_1')] || '').trim()
+    if (e1) emails.push({ label: row[h('email_1_etiqueta')] || 'Personal', address: e1 })
+    const e2 = (row[h('email_2')] || '').trim()
+    if (e2) emails.push({ label: row[h('email_2_etiqueta')] || 'Trabajo', address: e2 })
+
+    // Specialties
+    const specialties = [row[h('especialidad_1')], row[h('especialidad_2')], row[h('especialidad_3')]].map(s=>(s||'').trim()).filter(Boolean)
+
+    // Accounts
+    const accts = []
+    const a1Type = (row[h('cuenta_1_tipo')] || '').trim().toLowerCase()
+    if (a1Type) accts.push({ type: a1Type, bank: row[h('cuenta_1_banco')]||'', clabe: row[h('cuenta_1_clabe')]||'', label: row[h('cuenta_1_etiqueta')]||'' })
+    const a2Type = (row[h('cuenta_2_tipo')] || '').trim().toLowerCase()
+    if (a2Type) accts.push({ type: a2Type, bank: row[h('cuenta_2_banco')]||'', clabe: row[h('cuenta_2_clabe')]||'', label: row[h('cuenta_2_etiqueta')]||'' })
+
+    const meta = {
+      name,
+      roles,
+      cType: roles[0],
+      color: (row[h('color')] || '').trim() || '#00f0ff',
+      phone: phones[0]?.number,
+      email: emails[0]?.address,
+      phones: phones.length ? phones : undefined,
+      emails: emails.length ? emails : undefined,
+      city: (row[h('ciudad')] || '').trim() || undefined,
+      address_state: (row[h('estado')] || '').trim() || undefined,
+      address_country: (row[h('pais')] || '').trim() || undefined,
+      address_street: (row[h('calle')] || '').trim() || undefined,
+      address_postal: (row[h('codigo_postal')] || '').trim() || undefined,
+      rfc: (row[h('rfc')] || '').trim().toUpperCase() || undefined,
+      birthday: (row[h('cumpleanos')] || '').trim() || undefined,
+      anniversary: (row[h('aniversario')] || '').trim() || undefined,
+      specialties: specialties.length ? specialties : undefined,
+      specialty: specialties[0] || undefined,
+      rating: parseInt(row[h('rating')]) || undefined,
+      contact_accounts: accts.length ? accts : undefined,
+      notes: (row[h('notas')] || '').trim() || undefined,
+    }
+    // Clean undefined
+    Object.keys(meta).forEach(k => meta[k] === undefined && delete meta[k])
+    contacts.push({ content: name, type: 'persona', metadata: meta })
+  }
+
+  if (!contacts.length) { showToast('⚠️ No se encontraron contactos válidos en el CSV'); return }
+
+  if (!confirm(`Se importarán ${contacts.length} contacto${contacts.length>1?'s':''}. ¿Continuar?`)) return
+
+  showToast(`⏳ Importando ${contacts.length} contactos...`)
+  let created = 0
+  for (const c of contacts) {
+    const nodeData = {
+      type: c.type,
+      content: c.content,
+      metadata: c.metadata,
+      user_id: (await supabase.auth.getUser()).data?.user?.id
+    }
+    if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+      // Offline mode: generate local ID
+      nodeData.id = uid()
+      nodeData.created_at = new Date().toISOString()
+      allNodes.push(nodeData)
+      created++
+    } else {
+      const { data, error } = await supabase.from('nodes').insert(nodeData).select().single()
+      if (!error && data) { allNodes.push(data); created++ }
+    }
+  }
+  renderContacts()
+  showToast(`✅ ${created} contacto${created>1?'s':''} importado${created>1?'s':''} correctamente`)
+}
+
+function _parseCSVRow(line) {
+  const result = []
+  let current = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQuotes) {
+      if (ch === '"' && line[i+1] === '"') { current += '"'; i++ }
+      else if (ch === '"') inQuotes = false
+      else current += ch
+    } else {
+      if (ch === '"') inQuotes = true
+      else if (ch === ',') { result.push(current); current = '' }
+      else current += ch
+    }
+  }
+  result.push(current)
+  return result
 }
 
 // ── FEEDBACK ─────────────────────────────────────────────────────────────────
