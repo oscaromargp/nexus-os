@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.8.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-1.9.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -71,13 +71,14 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 👤 **Ficha de contacto** | Perfil de página completa con tabs (Info/Docs/Pagos/Proyectos), upload de foto, preview docs e impresión |
 | 🖼️ **Upload de foto** | Sube fotos directamente (compresión automática + Supabase Storage) o pega URLs de Drive |
 | 👁️ **Preview de documentos** | Lightbox con iframe para ver documentos Drive, PDFs e imágenes sin salir de la app |
-| 🧾 **CEP universal** | Comprobante Electrónico de Pago accesible desde cualquier vista — clic en ingreso/gasto abre el detalle financiero |
+| 🧾 **CEP universal** | Comprobante Electrónico de Pago accesible desde cualquier vista — clic en ingreso/gasto/cotización abre el detalle |
 | 📥 **CSV masivo** | Importación masiva de contactos con 48 columnas y detección de duplicados por nombre (fuzzy) |
 | 💎 **Portafolio Crypto** | Seguimiento multi-moneda con edición de compras y precio actual |
 | 📋 **Paste limpio** | Pega texto sin formato por defecto — mantiene tu estilo limpio sin heredar fuentes externas |
 | 🧹 **Limpiar formato** | Botón en la barra de herramientas del editor para eliminar formato de selección |
 | 📊 **Stats visuales Kanban** | Donut chart, progress bar y gráfica semanal con Chart.js en Muro Táctico y Kanban de proyectos |
-| 📈 **Reporte financiero** | Timeline de pagos con gráfica Chart.js (barras + línea acumulada), KPIs, tabla detallada e impresión |
+| 📈 **Reporte financiero** | Timeline de pagos con gráfica Chart.js, filtros por proveedor/fecha, comprobantes, deduplicación inteligente |
+| 📄 **Cotización detalle** | Vista rica universal para cotizaciones: historial de pagos, comprobantes, notas/prórrogas, impresión |
 | 🔗 **Auto-link a proyectos** | Al escribir en la línea de comandos dentro de un proyecto, el nodo se vincula automáticamente |
 | 🧠 **Notas full-page en proyectos** | Editor de notas a página completa dentro del contexto de cada proyecto |
 
@@ -267,7 +268,7 @@ npm install
 
 ```sql
 -- ============================================================
--- NEXUS OS — Schema v1.8
+-- NEXUS OS — Schema v1.9
 -- Ejecutar en: Supabase > SQL Editor
 -- ============================================================
 
@@ -372,9 +373,11 @@ nexus-os/
 | `openProjNote_fp(id)` | Editor full-page de nota dentro de proyecto |
 | `buildNoteBlockEditor()` | Editor rico con colores/tamaños/paste limpio |
 | `printFinanceCEP()` | Comprobante Electrónico de Pago (accesible desde cualquier vista) |
-| `printProjectReport(id)` | Reporte financiero con timeline de pagos y gráfica Chart.js |
+| `printProjectReport(id)` | Reporte financiero con filtros (proveedor, fecha), gráfica Chart.js y deduplicación |
+| `openCotizacionDetail(id)` | Vista detalle rica de cotización con historial de pagos y comprobantes |
+| `printCotizacionDetail(id)` | Imprimir historial de pagos de una cotización con tabla detallada |
 | `importContactsCSV()` | Importación masiva CSV con detección de duplicados |
-| `_buildPaymentTimeline()` | Timeline de pagos con KPIs, tabla y duración |
+| `_buildPaymentTimeline()` | Timeline de pagos con KPIs, tabla, comprobantes y duración |
 | `_initProjKanbanChart(d)` | Donut chart de tareas en Kanban de proyecto |
 
 ---

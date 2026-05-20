@@ -732,6 +732,10 @@ window.openCardModal = (id) => {
   if (node.type === 'income' || node.type === 'expense' || node.type === 'bill' || node.type === 'subscription') {
     openFinanceDetail(id); return
   }
+  // Route cotizaciones to the rich detail view
+  if (node.type === 'cotizacion') {
+    openCotizacionDetail(id); return
+  }
   // Si es una tarjeta Kanban vinculada a una cotización → abrir la cotización
   if (node.metadata?.cot_id) {
     const cot = allNodes.find(n => n.id === node.metadata.cot_id)
@@ -2845,6 +2849,7 @@ window.openNoteEdit = (id) => {
   if (!node) return
   if (node.type === 'kanban') { openCardModal(id); return }
   if (node.type === 'income' || node.type === 'expense' || node.type === 'bill' || node.type === 'subscription') { openFinanceDetail(id); return }
+  if (node.type === 'cotizacion') { openCotizacionDetail(id); return }
   // Open full-page editor instead of modal
   openNoteFullPage(id)
 }
@@ -10489,10 +10494,10 @@ function _computeProjData(projectId) {
   const pendientes  = cots.filter(n => n.metadata?.status === 'pendiente')
   const comprometido= aceptadas.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
   const pagos       = allLinked.filter(n => n.type==='expense'||n.type==='gasto')
-  // cotizaciones 'pagada' también suman a pagado directamente
-  const cotsPagadas = cots.filter(n => n.metadata?.status === 'pagada')
-  const pagado      = pagos.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
-                    + cotsPagadas.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
+  // Pagado = sum of abonos from cotizaciones + orphan expenses (not linked to a cotización)
+  const abonoTotal  = cots.reduce((s,c) => s + (c.metadata?.abonos||[]).reduce((s2,a) => s2 + (+(a.amount||0)), 0), 0)
+  const orphanExpenses = pagos.filter(n => !n.metadata?.es_abono && !n.metadata?.cot_id)
+  const pagado      = abonoTotal + orphanExpenses.reduce((s,n) => s+(+n.metadata?.amount||0), 0)
   const pendientePago   = Math.max(0, comprometido - pagado)
   const sinComprometer  = Math.max(0, budget - comprometido)
   const overBudget  = comprometido > budget && budget > 0
@@ -11661,7 +11666,8 @@ function _renderProjFinanzas(d) {
             <button onclick="openCotizacionModal('${c.id}','${projSlug}')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:6px;cursor:pointer;">✏️ Editar</button>
             ${cm.provider_id && cotSaldo > 0 ? `<button onclick="openAbonoModal('${cm.provider_id}','${esc(provName)}','${projSlug}','${p.id}','${c.id}')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;">+ Abono</button>` : ''}
             ${cm.status === 'pendiente' ? `<button onclick="changeCotizacionStatus('${c.id}','aceptada')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;">✅ Aceptar</button>` : ''}
-            <button onclick="printCotizacion('${c.id}')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:6px;cursor:pointer;">🖨️</button>
+            <button onclick="openCotizacionDetail('${c.id}')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:6px;cursor:pointer;">👁️ Detalle</button>
+            <button onclick="printCotizacionDetail('${c.id}')" style="font-size:10px;font-weight:600;padding:4px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:6px;cursor:pointer;">🖨️</button>
             <div style="flex:1;"></div>
             <span style="font-size:9px;color:var(--text-dim);align-self:center;">${(c.created_at||'').slice(0,10)}</span>
           </div>
@@ -12791,6 +12797,7 @@ function _buildPaymentTimeline(allPayments, pagado, paidPct, daysElapsed, startD
     '<td>' + esc(pay.label) + '</td>' +
     '<td>' + esc(pay.provider || '—') + '</td>' +
     '<td>' + (pay.method || '—') + '</td>' +
+    '<td>' + (pay.receipt_url ? '<a href="' + esc(pay.receipt_url) + '" target="_blank" style="color:#2563eb;">📎 Ver</a>' : '—') + '</td>' +
     '<td style="text-align:right;font-weight:700;font-family:monospace;color:#1e40af;">' + fmtP(pay.amount) + '</td>' +
     '<td style="text-align:right;font-family:monospace;color:#475569;">' + fmtP(pay.cumulative) + '</td></tr>'
   ).join('')
@@ -12808,9 +12815,9 @@ function _buildPaymentTimeline(allPayments, pagado, paidPct, daysElapsed, startD
     '<div style="margin:16px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">' +
       '<canvas id="paymentChart" width="800" height="280"></canvas>' +
     '</div>' +
-    '<table><tr><th>#</th><th>Fecha</th><th>Concepto</th><th>Proveedor</th><th>Método</th><th style="text-align:right;">Monto</th><th style="text-align:right;">Acumulado</th></tr>' +
+    '<table><tr><th>#</th><th>Fecha</th><th>Concepto</th><th>Proveedor</th><th>Método</th><th>Comprobante</th><th style="text-align:right;">Monto</th><th style="text-align:right;">Acumulado</th></tr>' +
       rows +
-      '<tr style="font-weight:700;background:#f1f5f9;"><td colspan="5">Total</td><td style="text-align:right;font-family:monospace;font-size:14px;color:#1e40af;">' + fmtP(pagado) + '</td><td></td></tr>' +
+      '<tr style="font-weight:700;background:#f1f5f9;"><td colspan="6">Total</td><td style="text-align:right;font-family:monospace;font-size:14px;color:#1e40af;">' + fmtP(pagado) + '</td><td></td></tr>' +
     '</table>' +
     '<div style="margin-top:14px;padding:12px;background:#f1f5f9;border-radius:8px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
@@ -12840,7 +12847,40 @@ function _buildPaymentChartScript(allPayments, chartLabels, chartAmounts, chartC
     '<\/script>'
 }
 
+// Show filter modal before generating report
 window.printProjectReport = (projectId) => {
+  const d = _computeProjData(projectId)
+  if (!d) return
+  document.getElementById('rf-project-id').value = projectId
+  // Populate provider dropdown
+  const provSel = document.getElementById('rf-provider')
+  provSel.innerHTML = '<option value="">Todos los proveedores</option>'
+  Object.entries(d.provMap).forEach(([pid]) => {
+    const prov = allNodes.find(n => n.id === pid)
+    const name = prov ? (prov.metadata?.name || prov.content) : '?'
+    provSel.innerHTML += '<option value="' + pid + '">' + esc(name) + '</option>'
+  })
+  // Default dates: project start → today
+  const projStart = d.m.start_date || (d.p.created_at || '').slice(0, 10)
+  document.getElementById('rf-from').value = projStart
+  document.getElementById('rf-to').value = new Date().toISOString().split('T')[0]
+  document.getElementById('report-filter-modal').classList.remove('hidden')
+}
+
+window.closeReportFilter = () => {
+  document.getElementById('report-filter-modal').classList.add('hidden')
+}
+
+window.generateFilteredReport = () => {
+  const projectId = document.getElementById('rf-project-id').value
+  const filterProvider = document.getElementById('rf-provider').value
+  const filterFrom = document.getElementById('rf-from').value
+  const filterTo = document.getElementById('rf-to').value
+  closeReportFilter()
+  _generateProjectReport(projectId, filterProvider, filterFrom, filterTo)
+}
+
+function _generateProjectReport(projectId, filterProvider, filterFrom, filterTo) {
   const d = _computeProjData(projectId)
   if (!d) return
   const { p, m, budget, projSlug, tagStr, cots, aceptadas, comprometido, pagos, pagado,
@@ -12865,21 +12905,13 @@ window.printProjectReport = (projectId) => {
     tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)
   ).sort((a,b) => (a.metadata?.dayOfMonth||99)-(b.metadata?.dayOfMonth||99))
 
-  // ── Payment timeline: collect ALL individual payments with dates ──
+  // ── Payment timeline: deduplicated — cotización abonos first, then orphan expenses ──
   const allPayments = []
-  // Direct expense payments
-  pagos.forEach(pg => {
-    allPayments.push({
-      date: (pg.metadata?.date || pg.created_at || '').slice(0, 10),
-      amount: +(pg.metadata?.amount || 0),
-      label: pg.metadata?.label || pg.content || 'Pago',
-      method: pg.metadata?.method || '',
-      provider: (() => { const c = pg.metadata?.contact_id ? allNodes.find(n => n.id === pg.metadata.contact_id) : null; return c ? (c.metadata?.name || c.content) : '' })()
-    })
-  })
-  // Abonos from cotizaciones
+  // 1) Collect abonos from cotizaciones (primary source — most detailed: method, notes, receipt_url)
+  const cotProviderIds = new Set()
   cots.forEach(c => {
     const cm = c.metadata || {}
+    if (cm.provider_id) cotProviderIds.add(cm.provider_id)
     const provNode = cm.provider_id ? allNodes.find(n => n.id === cm.provider_id) : null
     const provName = provNode ? (provNode.metadata?.name || provNode.content) : ''
     ;(cm.abonos || []).forEach(a => {
@@ -12888,26 +12920,59 @@ window.printProjectReport = (projectId) => {
         amount: +(a.amount || 0),
         label: a.notes || cm.label || cm.description || c.content || 'Abono',
         method: a.method || '',
-        provider: provName
+        provider: provName,
+        receipt_url: a.receipt_url || null,
+        source: 'abono'
       })
     })
   })
+  // 2) Add expense nodes ONLY if they are NOT linked to a provider with cotizaciones (orphan expenses)
+  //    This avoids double-counting: expense + abono for the same payment
+  pagos.forEach(pg => {
+    const pgContactId = pg.metadata?.contact_id || ''
+    // Skip if this expense's provider has cotizaciones (those payments are tracked via abonos)
+    if (pgContactId && cotProviderIds.has(pgContactId)) return
+    allPayments.push({
+      date: (pg.metadata?.date || pg.created_at || '').slice(0, 10),
+      amount: +(pg.metadata?.amount || 0),
+      label: pg.metadata?.label || pg.content || 'Pago',
+      method: pg.metadata?.method || '',
+      provider: (() => { const c = pg.metadata?.contact_id ? allNodes.find(n => n.id === pg.metadata.contact_id) : null; return c ? (c.metadata?.name || c.content) : '' })(),
+      receipt_url: null,
+      source: 'expense'
+    })
+  })
+  // Apply filters (provider, date range)
+  let filteredPayments = allPayments
+  if (filterProvider) {
+    const provNode = allNodes.find(n => n.id === filterProvider)
+    const provNameFilter = provNode ? (provNode.metadata?.name || provNode.content) : ''
+    filteredPayments = filteredPayments.filter(p => p.provider === provNameFilter)
+  }
+  if (filterFrom) filteredPayments = filteredPayments.filter(p => p.date >= filterFrom)
+  if (filterTo) filteredPayments = filteredPayments.filter(p => p.date <= filterTo)
+  // Replace allPayments with filtered set
+  const allPaymentsFinal = filteredPayments
   // Sort by date ascending
-  allPayments.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  allPaymentsFinal.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
   // Compute running totals
   let runningTotal = 0
-  allPayments.forEach(pay => { runningTotal += pay.amount; pay.cumulative = runningTotal })
+  allPaymentsFinal.forEach(pay => { runningTotal += pay.amount; pay.cumulative = runningTotal })
+  const filteredPagado = allPaymentsFinal.reduce((s, p) => s + p.amount, 0)
   // Project duration
   const projCreated = (p.created_at || '').slice(0, 10)
   const todayISO = new Date().toISOString().split('T')[0]
   const startDate = m.start_date || projCreated || todayISO
   const daysElapsed = Math.max(0, Math.round((new Date(todayISO) - new Date(startDate)) / 86400000))
   const totalTarget = budget > 0 ? budget : comprometido
-  const paidPct = totalTarget > 0 ? Math.min(100, Math.round(pagado / totalTarget * 100)) : 0
+  const paidPct = totalTarget > 0 ? Math.min(100, Math.round(filteredPagado / totalTarget * 100)) : 0
+  // Filter description for report subtitle
+  const filterDesc = (filterProvider ? 'Proveedor: ' + (allNodes.find(n=>n.id===filterProvider)?.metadata?.name || '?') + ' · ' : '') +
+    (filterFrom ? 'Desde: ' + filterFrom + ' ' : '') + (filterTo ? 'Hasta: ' + filterTo : '')
   // Chart data for timeline
-  const chartLabels = JSON.stringify(allPayments.map(pay => pay.date.slice(5)))
-  const chartAmounts = JSON.stringify(allPayments.map(pay => pay.amount))
-  const chartCumulative = JSON.stringify(allPayments.map(pay => pay.cumulative))
+  const chartLabels = JSON.stringify(allPaymentsFinal.map(pay => pay.date.slice(5)))
+  const chartAmounts = JSON.stringify(allPaymentsFinal.map(pay => pay.amount))
+  const chartCumulative = JSON.stringify(allPaymentsFinal.map(pay => pay.cumulative))
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -13050,12 +13115,15 @@ window.printProjectReport = (projectId) => {
   <!-- Notas del health -->
   ${health.note ? `<div class="section"><h2>Nota de Estado</h2><p style="color:#475569;font-style:italic;border-left:3px solid #3b82f6;padding-left:12px;">"${esc(health.note)}"</p></div>` : ''}
 
+  <!-- Filter description -->
+  ${filterDesc ? `<div class="section" style="margin-bottom:8px;"><div style="font-size:11px;color:#64748b;background:#f1f5f9;padding:6px 12px;border-radius:6px;">📋 Filtros aplicados: ${filterDesc}</div></div>` : ''}
+
   <!-- Timeline de pagos con gráfica -->
-  ${_buildPaymentTimeline(allPayments, pagado, paidPct, daysElapsed, startDate, todayISO, budget, pendientePago, totalTarget)}
+  ${_buildPaymentTimeline(allPaymentsFinal, filteredPagado, paidPct, daysElapsed, startDate, todayISO, budget, pendientePago, totalTarget)}
 
   <div class="footer">Nexus OS — ${projName} — ${today}</div>
 
-  ${_buildPaymentChartScript(allPayments, chartLabels, chartAmounts, chartCumulative, budget)}
+  ${_buildPaymentChartScript(allPaymentsFinal, chartLabels, chartAmounts, chartCumulative, budget)}
 </body>
 </html>`
 
@@ -13223,6 +13291,255 @@ window.updateCotAbono = (idx) => {
   showToast('✅ Pago actualizado — guarda la cotización para persistir')
 }
 
+// ═══════════════════════════════════════════════════════════
+// COTIZACIÓN DETAIL — Vista rica universal
+// ═══════════════════════════════════════════════════════════
+window.openCotizacionDetail = (id) => {
+  const c = allNodes.find(n => n.id === id)
+  if (!c) return
+  const cm = c.metadata || {}
+  const provNode = cm.provider_id ? allNodes.find(n => n.id === cm.provider_id) : null
+  const provName = provNode ? (provNode.metadata?.name || provNode.content) : '—'
+  const provInitial = provName !== '—' ? provName.charAt(0).toUpperCase() : '?'
+  const total = +(cm.amount || 0)
+  const abonos = cm.abonos || []
+  const paid = abonos.reduce((s, a) => s + (+(a.amount || 0)), 0)
+  const saldo = Math.max(0, total - paid)
+  const pct = total > 0 ? Math.min(100, Math.round(paid / total * 100)) : 0
+  const STATUS_CFG = { pendiente:{l:'Pendiente',c:'#94a3b8',bg:'#94a3b81a'}, aceptada:{l:'Aceptada',c:'#4ade80',bg:'#4ade801a'}, rechazada:{l:'Rechazada',c:'#f87171',bg:'#f871711a'}, en_proceso:{l:'En proceso',c:'#60a5fa',bg:'#60a5fa1a'}, pagada:{l:'Pagada',c:'#a78bfa',bg:'#a78bfa1a'}, parcial:{l:'Pago parcial',c:'#fbbf24',bg:'#fbbf241a'} }
+  const st = STATUS_CFG[cm.status] || STATUS_CFG.pendiente
+  const fmtM = n => '$' + Math.abs(n||0).toLocaleString('es-MX',{maximumFractionDigits:0})
+  const catIcon = typeof getCategoryIcon === 'function' ? getCategoryIcon(cm.category || '') : '📄'
+  const barClr = pct >= 100 ? '#4ade80' : pct > 50 ? '#60a5fa' : '#fbbf24'
+  const images = (cm.images || []).filter(s => typeof s === 'string')
+  const links = (cm.images || []).filter(s => typeof s === 'object' && s.type === 'link')
+  const notesLog = cm.notes_log || []
+  const projTag = cm.project_tag || ''
+
+  // Timeline of abonos
+  const abonosHTML = abonos.length > 0 ? abonos.map((a, i) => {
+    const aDate = (a.date || '').slice(0, 10)
+    const aAmt = +(a.amount || 0)
+    const METHOD_ICON = { transferencia:'🏦', efectivo:'💵', tarjeta:'💳', cheque:'📄', domiciliado:'🔄', cripto:'₿' }
+    const mIcon = METHOD_ICON[a.method] || '💸'
+    const mLabel = a.method || 'Sin especificar'
+    const receiptLink = a.receipt_url
+      ? '<a href="' + esc(a.receipt_url) + '" target="_blank" onclick="event.stopPropagation()" style="color:#60a5fa;font-size:11px;text-decoration:none;display:inline-flex;align-items:center;gap:3px;">📎 Comprobante</a>'
+      : '<span style="font-size:10px;color:var(--text-dim);">Sin comprobante</span>'
+    return '<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);' + (i===0?'':'') + '">' +
+      '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:36px;">' +
+        '<div style="width:30px;height:30px;border-radius:50%;background:rgba(74,222,128,0.12);border:2px solid #4ade80;display:grid;place-items:center;font-size:14px;">' + mIcon + '</div>' +
+        '<div style="width:1px;flex:1;background:rgba(255,255,255,0.08);"></div>' +
+      '</div>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+          '<span style="font-size:15px;font-weight:900;font-family:\'JetBrains Mono\',monospace;color:#4ade80;">' + fmtM(aAmt) + '</span>' +
+          '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,0.05);color:var(--text-muted);">' + mLabel + '</span>' +
+          '<span style="font-size:10px;color:var(--text-dim);margin-left:auto;">' + aDate + '</span>' +
+        '</div>' +
+        (a.notes ? '<div style="font-size:12px;color:var(--text-muted);margin-top:4px;">' + esc(a.notes) + '</div>' : '') +
+        '<div style="margin-top:5px;">' + receiptLink + '</div>' +
+      '</div>' +
+    '</div>'
+  }).join('') : '<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Sin pagos registrados</div>'
+
+  // Notes/prórrogas log
+  const notesLogHTML = notesLog.length > 0 ? notesLog.map(nl => {
+    return '<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;gap:8px;">' +
+      '<span style="font-size:10px;color:var(--text-dim);flex-shrink:0;min-width:70px;">' + ((nl.date||'').slice(0,10)) + '</span>' +
+      '<span style="font-size:12px;color:var(--text-muted);flex:1;">' + esc(nl.text || '') + '</span>' +
+      (nl.url ? '<a href="' + esc(nl.url) + '" target="_blank" style="color:#60a5fa;font-size:10px;flex-shrink:0;">📎</a>' : '') +
+    '</div>'
+  }).join('') : ''
+
+  // Evidencias
+  const evidHTML = images.length > 0 || links.length > 0
+    ? '<div style="margin-top:12px;"><div style="font-size:10px;font-weight:800;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">Evidencias / Adjuntos</div>' +
+      (images.length > 0 ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:6px;margin-bottom:8px;">' + images.map(src => '<img src="' + src + '" onclick="viewImage(\'' + src + '\')" style="width:100%;height:60px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid rgba(255,255,255,0.08);" />').join('') + '</div>' : '') +
+      (links.length > 0 ? links.map(l => '<div style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:4px;"><span>🔗</span><a href="' + esc(l.url) + '" target="_blank" style="color:#60a5fa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(l.label||l.url) + '</a></div>').join('') : '') +
+    '</div>'
+    : ''
+
+  const content = document.getElementById('cot-detail-content')
+  content.innerHTML = `
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:44px;height:44px;border-radius:50%;background:${st.bg};color:${st.c};display:grid;place-items:center;font-size:22px;flex-shrink:0;">${catIcon}</div>
+        <div>
+          <h2 style="font-size:18px;font-weight:800;color:var(--text-primary);margin:0;line-height:1.2;">${esc(cm.label || cm.description || c.content || 'Cotización')}</h2>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+            <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${st.bg};color:${st.c};">${st.l}</span>
+            ${projTag ? `<span style="font-size:10px;color:var(--text-dim);">#${esc(projTag)}</span>` : ''}
+            <span style="font-size:10px;color:var(--text-dim);">${(c.created_at||'').slice(0,10)}</span>
+          </div>
+        </div>
+      </div>
+      <button onclick="closeCotDetail()" style="background:none;border:none;color:var(--text-dim);font-size:22px;cursor:pointer;padding:4px;">✕</button>
+    </div>
+
+    <!-- Proveedor + Monto -->
+    <div style="display:flex;gap:12px;margin-bottom:16px;">
+      <div style="flex:1;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;border-radius:50%;background:rgba(251,146,60,0.14);color:#fb923c;display:grid;place-items:center;font-size:15px;font-weight:800;flex-shrink:0;">${provInitial}</div>
+        <div>
+          <div style="font-size:9px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">Proveedor</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-primary);">${esc(provName)}</div>
+        </div>
+      </div>
+      <div style="flex:1;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;text-align:center;">
+        <div style="font-size:9px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">Monto total</div>
+        <div style="font-size:22px;font-weight:900;color:#fb923c;font-family:'JetBrains Mono',monospace;">${fmtM(total)}</div>
+      </div>
+    </div>
+
+    <!-- Progress bar -->
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div style="display:flex;gap:16px;font-size:11px;">
+          <span style="color:var(--text-muted);">Pagado: <span style="font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">${fmtM(paid)}</span></span>
+          <span style="color:var(--text-muted);">Saldo: <span style="font-weight:800;color:${saldo>0?'#f87171':'#4ade80'};font-family:'JetBrains Mono',monospace;">${fmtM(saldo)}</span></span>
+        </div>
+        <span style="font-size:14px;font-weight:900;color:${barClr};font-family:'JetBrains Mono',monospace;">${pct}%</span>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,${barClr},${pct>=100?'#4ade80':'#60a5fa'});border-radius:4px;transition:width .5s;"></div>
+      </div>
+    </div>
+
+    <!-- Historial de pagos -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:800;color:var(--text-muted);letter-spacing:.06em;text-transform:uppercase;">Historial de Pagos (${abonos.length})</div>
+        ${saldo > 0 && cm.provider_id ? `<button onclick="closeCotDetail();openAbonoModal('${cm.provider_id}','${esc(provName)}','${esc(projTag)}','','${id}')" style="font-size:10px;font-weight:700;padding:4px 12px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;">+ Registrar pago</button>` : ''}
+      </div>
+      ${abonosHTML}
+    </div>
+
+    ${evidHTML}
+
+    <!-- Notes / Prórrogas -->
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:800;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;">Notas y Prórrogas</div>
+        <button onclick="addCotNote('${id}')" style="font-size:10px;font-weight:700;padding:3px 10px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.2);color:#60a5fa;border-radius:6px;cursor:pointer;">+ Nota</button>
+      </div>
+      <div id="cot-detail-notes-log">${notesLogHTML}</div>
+      <div id="cot-detail-note-form" style="display:none;margin-top:8px;">
+        <textarea id="cot-note-text" rows="2" placeholder="Escribe una nota, prórroga o acuerdo..." style="width:100%;background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:6px;color:var(--text-primary);padding:8px;font-size:12px;font-family:inherit;resize:vertical;"></textarea>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <input id="cot-note-url" type="text" placeholder="URL adjunto (opcional)" style="flex:1;background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:6px;color:var(--text-primary);padding:5px 8px;font-size:11px;" />
+          <button onclick="saveCotNote('${id}')" style="font-size:10px;font-weight:700;padding:4px 12px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:6px;cursor:pointer;">Guardar</button>
+          <button onclick="document.getElementById('cot-detail-note-form').style.display='none'" style="font-size:10px;padding:4px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:6px;cursor:pointer;">Cancelar</button>
+        </div>
+      </div>
+      ${cm.notes ? `<div style="margin-top:8px;padding:8px 10px;background:rgba(255,255,255,0.02);border-left:2px solid #60a5fa;border-radius:4px;font-size:12px;color:var(--text-muted);font-style:italic;">${esc(cm.notes)}</div>` : ''}
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
+      <button onclick="printCotizacionDetail('${id}')" style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:6px 14px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;cursor:pointer;">🖨️ Imprimir historial</button>
+      <button onclick="closeCotDetail();openCotizacionModal('${id}','${esc(projTag)}')" style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:6px 14px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:7px;cursor:pointer;">✏️ Editar cotización</button>
+      ${saldo > 0 && cm.provider_id ? `<button onclick="closeCotDetail();openAbonoModal('${cm.provider_id}','${esc(provName)}','${esc(projTag)}','','${id}')" style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:6px 14px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:7px;cursor:pointer;">💸 Registrar pago</button>` : ''}
+    </div>
+  `
+  document.getElementById('cot-detail-modal').classList.remove('hidden')
+}
+
+window.closeCotDetail = () => {
+  document.getElementById('cot-detail-modal').classList.add('hidden')
+}
+
+// Add a note/prórroga to a cotización
+window.addCotNote = (cotId) => {
+  document.getElementById('cot-detail-note-form').style.display = 'block'
+  document.getElementById('cot-note-text').value = ''
+  document.getElementById('cot-note-url').value = ''
+  document.getElementById('cot-note-text').focus()
+}
+
+window.saveCotNote = async (cotId) => {
+  const text = document.getElementById('cot-note-text').value.trim()
+  if (!text) return
+  const url = document.getElementById('cot-note-url').value.trim()
+  const node = allNodes.find(n => n.id === cotId)
+  if (!node) return
+  const meta = { ...node.metadata }
+  if (!meta.notes_log) meta.notes_log = []
+  meta.notes_log.push({ date: new Date().toISOString(), text, url: url || null })
+  const { error } = await supabase.from('nodes').update({ metadata: meta }).eq('id', cotId)
+  if (!error) {
+    node.metadata = meta
+    document.getElementById('cot-detail-note-form').style.display = 'none'
+    openCotizacionDetail(cotId) // refresh
+    showToast('📝 Nota guardada')
+  } else { showToast('❌ Error al guardar nota') }
+}
+
+// Print cotización detail with full payment history
+window.printCotizacionDetail = (cotId) => {
+  const c = allNodes.find(n => n.id === cotId)
+  if (!c) return
+  const cm = c.metadata || {}
+  const provNode = cm.provider_id ? allNodes.find(n => n.id === cm.provider_id) : null
+  const provName = provNode ? (provNode.metadata?.name || provNode.content) : '—'
+  const total = +(cm.amount || 0)
+  const abonos = cm.abonos || []
+  const paid = abonos.reduce((s, a) => s + (+(a.amount || 0)), 0)
+  const saldo = Math.max(0, total - paid)
+  const pct = total > 0 ? Math.min(100, Math.round(paid / total * 100)) : 0
+  const label = cm.label || cm.description || c.content || 'Cotización'
+  const today = new Date().toLocaleDateString('es-MX', { dateStyle: 'long' })
+  const STATUS_LBL = { pendiente:'Pendiente', aceptada:'Aceptada', rechazada:'Rechazada', en_proceso:'En proceso', pagada:'Pagada', parcial:'Pago parcial' }
+  const stLabel = STATUS_LBL[cm.status] || 'Pendiente'
+  const METHOD_LBL = { transferencia:'Transferencia', efectivo:'Efectivo', tarjeta:'Tarjeta', cheque:'Cheque', domiciliado:'Cargo dom.', cripto:'Cripto' }
+  const notesLog = cm.notes_log || []
+
+  const html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"/>' +
+    '<title>Cotización — ' + esc(label) + '</title>' +
+    '<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:"Helvetica Neue",Arial,sans-serif;color:#1a1a2e;background:#fff;font-size:13px;padding:24px;}' +
+    'h1{font-size:20px;font-weight:800;margin-bottom:4px;}h2{font-size:14px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px;border-bottom:1px solid #e2e8f0;padding-bottom:5px;}' +
+    'table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px;}th{background:#f1f5f9;color:#475569;font-weight:700;font-size:10px;text-transform:uppercase;padding:6px 10px;text-align:left;}' +
+    'td{padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#334155;}.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;}' +
+    '.badge-ok{background:#dcfce7;color:#15803d;}.badge-warn{background:#fef9c3;color:#a16207;}.badge-err{background:#fee2e2;color:#dc2626;}' +
+    '.bar-wrap{height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin:8px 0;}.bar-fill{height:100%;border-radius:4px;}' +
+    '.kpi-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;}.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;flex:1;min-width:90px;text-align:center;}' +
+    '.kpi-val{font-size:18px;font-weight:800;color:#1e40af;font-family:monospace;}.kpi-lbl{font-size:10px;color:#64748b;margin-top:3px;text-transform:uppercase;}' +
+    '.footer{text-align:center;font-size:10px;color:#94a3b8;padding:16px;border-top:1px solid #e2e8f0;margin-top:24px;}' +
+    '@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}</style></head><body>' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">' +
+      '<div><h1>' + esc(label) + '</h1><div style="font-size:12px;color:#64748b;">Proveedor: <strong>' + esc(provName) + '</strong> · Estado: <span class="pill ' + (saldo===0?'badge-ok':paid>0?'badge-warn':'badge-err') + '">' + stLabel + '</span></div></div>' +
+      '<div style="text-align:right;"><div style="font-size:10px;color:#64748b;">Generado</div><div style="font-size:12px;font-weight:600;">' + today + '</div></div>' +
+    '</div>' +
+    '<div class="kpi-row">' +
+      '<div class="kpi"><div class="kpi-val">$' + total.toLocaleString('es-MX') + '</div><div class="kpi-lbl">Total acordado</div></div>' +
+      '<div class="kpi"><div class="kpi-val" style="color:#15803d;">$' + paid.toLocaleString('es-MX') + '</div><div class="kpi-lbl">Total pagado</div></div>' +
+      '<div class="kpi"><div class="kpi-val" style="color:' + (saldo>0?'#dc2626':'#15803d') + ';">$' + saldo.toLocaleString('es-MX') + '</div><div class="kpi-lbl">Saldo pendiente</div></div>' +
+      '<div class="kpi"><div class="kpi-val">' + pct + '%</div><div class="kpi-lbl">Avance</div></div>' +
+    '</div>' +
+    '<div class="bar-wrap" style="height:10px;"><div class="bar-fill" style="width:' + pct + '%;background:' + (pct>=100?'#22c55e':pct>60?'#3b82f6':'#f97316') + ';"></div></div>' +
+    '<h2>Historial de Pagos</h2>' +
+    '<table><tr><th>#</th><th>Fecha</th><th>Método</th><th>Notas</th><th>Comprobante</th><th style="text-align:right;">Monto</th><th style="text-align:right;">Acumulado</th></tr>' +
+    (() => {
+      let cum = 0
+      return abonos.map((a, i) => {
+        cum += +(a.amount || 0)
+        return '<tr><td>' + (i+1) + '</td><td>' + ((a.date||'').slice(0,10)) + '</td><td>' + (METHOD_LBL[a.method]||a.method||'—') + '</td><td style="color:#64748b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(a.notes||'—') + '</td><td>' + (a.receipt_url ? '<a href="' + esc(a.receipt_url) + '" target="_blank" style="color:#2563eb;">📎 Ver</a>' : '—') + '</td><td style="text-align:right;font-weight:700;font-family:monospace;">$' + (+(a.amount||0)).toLocaleString('es-MX') + '</td><td style="text-align:right;font-family:monospace;color:#64748b;">$' + cum.toLocaleString('es-MX') + '</td></tr>'
+      }).join('')
+    })() +
+    (abonos.length > 0 ? '<tr style="font-weight:700;background:#f1f5f9;"><td colspan="5">Total pagado</td><td style="text-align:right;font-family:monospace;">$' + paid.toLocaleString('es-MX') + '</td><td></td></tr>' : '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>') +
+    '</table>' +
+    (notesLog.length > 0 ? '<h2>Notas y Prórrogas</h2><table><tr><th>Fecha</th><th>Nota</th><th>Adjunto</th></tr>' + notesLog.map(nl => '<tr><td>' + ((nl.date||'').slice(0,10)) + '</td><td>' + esc(nl.text||'') + '</td><td>' + (nl.url ? '<a href="' + esc(nl.url) + '" target="_blank" style="color:#2563eb;">📎 Ver</a>' : '—') + '</td></tr>').join('') + '</table>' : '') +
+    (cm.notes ? '<div style="margin-top:12px;padding:10px;border-left:3px solid #3b82f6;background:#f8fafc;border-radius:4px;font-size:12px;color:#475569;font-style:italic;">' + esc(cm.notes) + '</div>' : '') +
+    '<div class="footer">Nexus OS — Cotización: ' + esc(label) + ' — ' + today + '</div></body></html>'
+
+  const win = window.open('', '_blank', 'width=800,height=650')
+  if (!win) { showToast('⚠️ Permite ventanas emergentes'); return }
+  win.document.write(html)
+  win.document.close()
+  win.onload = () => setTimeout(() => win.print(), 400)
+}
+
 window.openCotizacionModal = (id = null, prefillProjectTag = '') => {
   const c = id ? allNodes.find(n => n.id === id) : null
   const m = c?.metadata || {}
@@ -13366,6 +13683,9 @@ window.saveCotizacion = async () => {
   const category = document.getElementById('cot-category')?.value.trim() || undefined
   const tags = ['#cotizacion']
   if (projTag) tags.push('#' + projTag)
+  // Preserve existing notes_log when editing
+  const existingNode = currentCotizacionId ? allNodes.find(n => n.id === currentCotizacionId) : null
+  const existingNotesLog = existingNode?.metadata?.notes_log || []
   const meta = {
     label, category,
     amount:      parseFloat(document.getElementById('cot-amount').value) || 0,
@@ -13375,6 +13695,7 @@ window.saveCotizacion = async () => {
     notes:       document.getElementById('cot-notes').value.trim() || undefined,
     abonos:      _cotAbonosDraft.length ? _cotAbonosDraft : undefined,
     images:      _cotImagesDraft.length ? _cotImagesDraft : undefined,
+    notes_log:   existingNotesLog.length ? existingNotesLog : undefined,
     tags,
   }
   const bypass = localStorage.getItem('nexus_admin_bypass') === 'true'

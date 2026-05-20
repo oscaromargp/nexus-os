@@ -2913,6 +2913,38 @@
     </div>
   </div>
 
+  <!-- MODAL: REPORT FILTERS ───────────────────────────────── -->
+  <div id="report-filter-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeReportFilter()">
+    <div class="modal-box" style="max-width:440px;">
+      <div class="modal-header">
+        <h3 class="modal-title" style="margin-bottom:0;">📊 Configurar Reporte</h3>
+        <button onclick="closeReportFilter()" class="modal-close">✕</button>
+      </div>
+      <div style="padding:16px 20px;">
+        <label class="modal-label">Proveedor</label>
+        <select id="rf-provider" class="modal-input" style="margin-bottom:12px;">
+          <option value="">Todos los proveedores</option>
+        </select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+          <div><label class="modal-label">Desde</label><input type="date" id="rf-from" class="modal-input" /></div>
+          <div><label class="modal-label">Hasta</label><input type="date" id="rf-to" class="modal-input" /></div>
+        </div>
+        <input type="hidden" id="rf-project-id" />
+        <div style="display:flex;gap:8px;margin-top:16px;">
+          <button onclick="closeReportFilter()" class="btn-ghost" style="flex:1;padding:8px;">Cancelar</button>
+          <button onclick="generateFilteredReport()" class="btn-primary" style="flex:2;padding:8px;font-weight:700;">🖨️ Generar Reporte</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: COTIZACIÓN DETALLE (vista rica) ──────────────── -->
+  <div id="cot-detail-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeCotDetail()">
+    <div class="modal-box" style="max-width:720px;max-height:92vh;overflow-y:auto;">
+      <div id="cot-detail-content"></div>
+    </div>
+  </div>
+
   <!-- MODAL: COTIZACIÓN ──────────────────────────────────── -->
   <div id="cotizacion-modal" class="modal-overlay hidden" onclick="if(event.target===this) closeCotizacionModal()">
     <div class="modal-box" style="max-width:600px;">
