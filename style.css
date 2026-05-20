@@ -157,3 +157,84 @@ body {
 .fade-in {
   animation: fadeIn 0.5s ease forwards;
 }
+
+/* ── Herramientas Tab System ── */
+.herr-tab {
+  padding: 10px 22px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted, #94a3b8);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.2s ease;
+}
+.herr-tab:hover { color: #fff; }
+.herr-tab.active {
+  color: var(--accent-cyan, #00f6ff);
+  border-bottom-color: var(--accent-cyan, #00f6ff);
+}
+.herr-subtab {
+  padding: 8px 18px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted, #94a3b8);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.2s ease;
+  margin-right: -1px;
+}
+.herr-subtab:hover { color: #fff; }
+.herr-subtab.active {
+  color: var(--accent-cyan, #00f6ff);
+  background: rgba(0,246,255,0.06);
+  border-bottom-color: transparent;
+}
+
+/* OTC Dispersion row highlight */
+.otc-row-link { animation: otcBlink 1.2s ease-in-out infinite; }
+@keyframes otcBlink {
+  0%, 100% { background: transparent; }
+  50% { background: rgba(167,139,250,0.12); }
+}
+
+/* Semáforo colors */
+.otc-sema-yellow { background: #fbbf24 !important; }
+.otc-sema-green  { background: #4ade80 !important; }
+.otc-sema-red    { background: #f87171 !important; }
+
+/* Account card for Trámites */
+.tramite-acct-card {
+  background: var(--bg-panel, rgba(11,29,58,0.6));
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 20px;
+  transition: border-color 0.2s ease;
+}
+.tramite-acct-card:hover { border-color: rgba(0,246,255,0.4); }
+.tramite-copy-btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; padding: 12px;
+  background: rgba(0,246,255,0.08);
+  border: 1px solid rgba(0,246,255,0.3);
+  border-radius: 10px;
+  color: var(--accent-cyan, #00f6ff);
+  font-weight: 800; font-size: 13px;
+  cursor: pointer; font-family: 'JetBrains Mono', monospace;
+  transition: all 0.2s ease;
+}
+.tramite-copy-btn:hover {
+  background: rgba(0,246,255,0.18);
+  box-shadow: 0 0 12px rgba(0,246,255,0.2);
+}
+
+/* Light theme overrides */
+[data-theme="light"] .herr-tab { color: #6b7280; }
+[data-theme="light"] .herr-tab.active { color: #0284c7; border-bottom-color: #0284c7; }
+[data-theme="light"] .herr-subtab { color: #6b7280; background: rgba(0,0,0,0.02); }
+[data-theme="light"] .herr-subtab.active { color: #0284c7; background: rgba(2,132,199,0.06); }

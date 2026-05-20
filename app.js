@@ -5769,6 +5769,860 @@ window.calculateInverse = async function calculateInverse() {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// HERRAMIENTAS — TAB SYSTEM
+// ═══════════════════════════════════════════════════════════════════
+window.switchHerrTab = function(tab) {
+  document.querySelectorAll('.herr-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab))
+  document.querySelectorAll('.herr-panel').forEach(p => p.style.display = 'none')
+  const panel = document.getElementById('herr-panel-' + tab)
+  if (panel) panel.style.display = ''
+  if (tab === 'tramites') renderTramitesCuentas()
+}
+window.switchHerrSubtab = function(sub) {
+  document.querySelectorAll('.herr-subtab').forEach(t => t.classList.toggle('active', t.dataset.subtab === sub))
+  document.querySelectorAll('.herr-subpanel').forEach(p => p.style.display = 'none')
+  const panel = document.getElementById('herr-sub-' + sub)
+  if (panel) panel.style.display = ''
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ORQUESTADOR OTC — BLOQUE A: MATH ENGINE
+// ═══════════════════════════════════════════════════════════════════
+let _otcData = { ventaBruta:0, comisionCliente:0, ventaReportada:0, comisionBitso:0, gananciaOp:0 }
+let _otcRows = []
+let _otcAdminVisible = false
+const _floor2 = v => Math.floor(v * 100) / 100
+const _fmt$ = v => v.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2})
+
+window.otcRecalc = function() {
+  const qty = parseFloat(document.getElementById('otc-qty')?.value) || 0
+  const tc  = parseFloat(document.getElementById('otc-tc')?.value) || 0
+  const feeReported = parseFloat(document.getElementById('otc-fee-reported')?.value) || 0
+  const feeReal     = parseFloat(document.getElementById('otc-fee-real')?.value) || 0
+
+  const ventaBruta = _floor2(qty * tc)
+  const comisionCliente = _floor2(ventaBruta * (feeReported / 100))
+  const ventaReportada  = _floor2(ventaBruta - comisionCliente)
+  const comisionBitso   = _floor2(ventaBruta * (feeReal / 100))
+  const gananciaOp      = _floor2(comisionCliente - comisionBitso)
+
+  _otcData = { ventaBruta, comisionCliente, ventaReportada, comisionBitso, gananciaOp }
+
+  document.getElementById('otc-kpi-bruta').textContent    = '$' + _fmt$(ventaBruta)
+  document.getElementById('otc-kpi-comision').textContent  = '$' + _fmt$(comisionCliente)
+  document.getElementById('otc-kpi-neto').textContent      = '$' + _fmt$(ventaReportada)
+  document.getElementById('otc-kpi-ganancia').textContent  = _otcAdminVisible ? ('$' + _fmt$(gananciaOp)) : '****'
+
+  otcUpdateSemaforo()
+  otcUpdateWhatsApp()
+}
+
+window.toggleOtcAdmin = function() {
+  _otcAdminVisible = !_otcAdminVisible
+  document.getElementById('otc-kpi-ganancia').textContent = _otcAdminVisible ? ('$' + _fmt$(_otcData.gananciaOp)) : '****'
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ORQUESTADOR OTC — BLOQUE B: DISPERSIÓN TABLE
+// ═══════════════════════════════════════════════════════════════════
+window.otcAddRow = function() {
+  const id = 'odr_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
+  _otcRows.push({ id, contactId:'', contactName:'', bank:'', clabe:'', assignType:'fixed', value:0, montoMXN:0, receiptDataUrl:'', projectTag:'' })
+  otcRenderTable()
+}
+
+window.otcRemoveRow = function(id) {
+  _otcRows = _otcRows.filter(r => r.id !== id)
+  otcRenderTable()
+  otcUpdateSemaforo()
+  otcUpdateWhatsApp()
+}
+
+function otcRenderTable() {
+  const tbody = document.getElementById('otc-disp-body')
+  const empty = document.getElementById('otc-disp-empty')
+  const receiptsGrid = document.getElementById('otc-receipts-grid')
+  const receiptsEmpty = document.getElementById('otc-receipts-empty')
+  if (!tbody) return
+
+  if (_otcRows.length === 0) {
+    tbody.innerHTML = ''
+    if (empty) empty.style.display = ''
+    if (receiptsGrid) receiptsGrid.innerHTML = ''
+    if (receiptsEmpty) receiptsEmpty.style.display = ''
+    return
+  }
+  if (empty) empty.style.display = 'none'
+  if (receiptsEmpty) receiptsEmpty.style.display = _otcRows.length ? 'none' : ''
+
+  const contacts = (typeof getContacts === 'function') ? getContacts() : allNodes.filter(n => n.type === 'contact' || n.type === 'persona')
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
+
+  let html = ''
+  _otcRows.forEach((row, idx) => {
+    const linkClass = row.projectTag ? ' otc-row-link' : ''
+    html += '<tr class="' + linkClass + '" style="border-bottom:1px solid rgba(255,255,255,0.04);">'
+    // Beneficiario — autocomplete
+    html += '<td style="padding:6px;">'
+    html += '<input type="text" class="modal-input" style="font-size:11px;padding:6px 8px;" placeholder="Nombre..." '
+    html += 'value="' + esc(row.contactName) + '" '
+    html += 'oninput="otcContactSearch(this,\'' + row.id + '\')" '
+    html += 'onfocus="otcContactSearch(this,\'' + row.id + '\')" />'
+    html += '<div id="otc-ac-' + row.id + '" style="position:relative;"></div>'
+    html += '</td>'
+    // Banco / CLABE
+    html += '<td style="padding:6px;">'
+    html += '<div style="font-size:10px;color:var(--text-muted);" id="otc-bank-' + row.id + '">' + (row.bank ? esc(row.bank) : '—') + '</div>'
+    html += '<div style="font-size:10px;font-family:\'JetBrains Mono\',monospace;color:var(--text-dim);" id="otc-clabe-' + row.id + '">' + (row.clabe ? esc(row.clabe) : '') + '</div>'
+    html += '</td>'
+    // Tipo
+    html += '<td style="padding:6px;text-align:center;">'
+    html += '<select class="modal-input" style="font-size:10px;padding:4px 6px;width:70px;" onchange="otcChangeType(\'' + row.id + '\',this.value)">'
+    html += '<option value="fixed"' + (row.assignType==='fixed'?' selected':'') + '>$ Fijo</option>'
+    html += '<option value="pct"' + (row.assignType==='pct'?' selected':'') + '>% Porc.</option>'
+    html += '</select>'
+    html += '</td>'
+    // Valor
+    html += '<td style="padding:6px;">'
+    html += '<input type="number" class="modal-input" style="font-size:11px;padding:6px 8px;text-align:right;width:100px;" '
+    html += 'value="' + (row.value || '') + '" step="any" '
+    html += 'oninput="otcChangeValue(\'' + row.id + '\',this.value)" />'
+    html += '</td>'
+    // Monto MXN calculado
+    html += '<td style="padding:6px;text-align:right;">'
+    html += '<span style="font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;color:#4ade80;" id="otc-monto-' + row.id + '">$' + _fmt$(row.montoMXN) + '</span>'
+    html += '</td>'
+    // Botones copiar
+    html += '<td style="padding:6px;text-align:center;">'
+    html += '<div style="display:flex;gap:3px;justify-content:center;">'
+    html += '<button onclick="otcCopy(\'' + row.id + '\',\'clabe\')" style="background:none;border:1px solid var(--glass-border);border-radius:4px;padding:3px 5px;cursor:pointer;font-size:10px;color:var(--text-muted);" title="Copiar CLABE">📋C</button>'
+    html += '<button onclick="otcCopy(\'' + row.id + '\',\'monto\')" style="background:none;border:1px solid var(--glass-border);border-radius:4px;padding:3px 5px;cursor:pointer;font-size:10px;color:var(--text-muted);" title="Copiar Monto">📋$</button>'
+    html += '<button onclick="otcCopy(\'' + row.id + '\',\'concepto\')" style="background:none;border:1px solid var(--glass-border);border-radius:4px;padding:3px 5px;cursor:pointer;font-size:10px;color:var(--text-muted);" title="Copiar Concepto">📋T</button>'
+    html += '</div>'
+    html += '</td>'
+    // Proyecto link
+    html += '<td style="padding:6px;text-align:center;" id="otc-proj-' + row.id + '">'
+    if (row.projectTag) {
+      html += '<span style="font-size:10px;background:rgba(167,139,250,0.2);color:#c4b5fd;padding:2px 8px;border-radius:12px;cursor:pointer;" onclick="otcUnlinkProject(\'' + row.id + '\')" title="Desvincular">#' + esc(row.projectTag) + ' ✕</span>'
+    }
+    html += '</td>'
+    // Delete
+    html += '<td style="padding:6px;text-align:center;">'
+    html += '<button onclick="otcRemoveRow(\'' + row.id + '\')" style="background:none;border:none;cursor:pointer;color:#f87171;font-size:14px;" title="Eliminar">✕</button>'
+    html += '</td>'
+    html += '</tr>'
+  })
+  tbody.innerHTML = html
+
+  // Render receipts dropzones
+  if (receiptsGrid) {
+    let rhtml = ''
+    _otcRows.forEach(row => {
+      rhtml += '<div style="border:1px dashed var(--glass-border);border-radius:10px;padding:12px;text-align:center;min-height:100px;position:relative;" '
+      rhtml += 'ondragover="event.preventDefault();this.style.borderColor=\'#00f6ff\'" '
+      rhtml += 'ondragleave="this.style.borderColor=\'\'" '
+      rhtml += 'ondrop="otcReceiptDrop(event,\'' + row.id + '\')" '
+      rhtml += 'onclick="otcReceiptClick(\'' + row.id + '\')">'
+      rhtml += '<div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:6px;">' + (row.contactName || 'Beneficiario ' + (_otcRows.indexOf(row)+1)) + '</div>'
+      if (row.receiptDataUrl) {
+        rhtml += '<img src="' + row.receiptDataUrl + '" style="max-width:100%;max-height:120px;border-radius:6px;"/>'
+        rhtml += '<button onclick="event.stopPropagation();otcClearReceipt(\'' + row.id + '\')" style="position:absolute;top:4px;right:6px;background:rgba(0,0,0,0.6);border:none;color:#f87171;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;">✕</button>'
+      } else {
+        rhtml += '<div style="color:var(--text-dim);font-size:11px;padding:16px 0;">📎 Arrastra o haz clic<br/>para subir comprobante SPEI</div>'
+      }
+      rhtml += '</div>'
+    })
+    receiptsGrid.innerHTML = rhtml
+  }
+}
+
+// Contact autocomplete for OTC
+window.otcContactSearch = function(input, rowId) {
+  const val = (input.value || '').toLowerCase().trim()
+  const acEl = document.getElementById('otc-ac-' + rowId)
+  if (!acEl) return
+  const row = _otcRows.find(r => r.id === rowId)
+  if (row) { row.contactName = input.value; row.contactId = '' }
+
+  if (val.length < 1) { acEl.innerHTML = ''; return }
+
+  const contacts = (typeof getContacts === 'function') ? getContacts() : allNodes.filter(n => n.type === 'contact' || n.type === 'persona')
+  const matches = contacts.filter(c => {
+    const name = (c.metadata?.name || c.content || '').toLowerCase()
+    return name.includes(val)
+  }).slice(0, 6)
+
+  if (matches.length === 0) { acEl.innerHTML = ''; return }
+
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
+  let h = '<div style="position:absolute;z-index:100;background:var(--bg-panel,#0B132B);border:1px solid var(--glass-border);border-radius:8px;width:100%;max-height:160px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.4);">'
+  matches.forEach(c => {
+    const name = c.metadata?.name || c.content || ''
+    const accts = c.metadata?.contact_accounts || []
+    const bankAcct = accts.find(a => a.type === 'bank') || accts[0]
+    const desc = bankAcct ? (bankAcct.bank || bankAcct.label || '') : (c.metadata?.company || '')
+    h += '<div style="padding:8px 10px;cursor:pointer;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;justify-content:space-between;align-items:center;" '
+    h += 'onmousedown="otcSelectContact(\'' + rowId + '\',\'' + esc(c.id) + '\')">'
+    h += '<span style="color:#fff;font-weight:600;">' + esc(name) + '</span>'
+    h += '<span style="color:var(--text-dim);font-size:10px;">' + esc(desc) + '</span>'
+    h += '</div>'
+  })
+  h += '</div>'
+  acEl.innerHTML = h
+}
+
+window.otcSelectContact = function(rowId, contactId) {
+  const row = _otcRows.find(r => r.id === rowId)
+  if (!row) return
+  const contact = allNodes.find(n => n.id === contactId)
+  if (!contact) return
+
+  const m = contact.metadata || {}
+  row.contactId = contactId
+  row.contactName = m.name || contact.content || ''
+
+  // Find best bank account
+  const accts = m.contact_accounts || []
+  const bankAcct = accts.find(a => a.type === 'bank') || accts[0]
+  if (bankAcct) {
+    row.bank  = bankAcct.bank || bankAcct.label || ''
+    row.clabe = bankAcct.clabe || bankAcct.wallet || ''
+  } else {
+    row.bank  = m.bank_name || ''
+    row.clabe = m.clabe || ''
+  }
+
+  // Intersección proactiva con proyectos
+  _otcDetectProjectLink(row)
+
+  // Close autocomplete
+  const acEl = document.getElementById('otc-ac-' + rowId)
+  if (acEl) acEl.innerHTML = ''
+
+  otcRenderTable()
+  otcUpdateSemaforo()
+  otcUpdateWhatsApp()
+}
+
+function _otcDetectProjectLink(row) {
+  if (!row.contactId) return
+  // Find cotizaciones or expenses linked to this contact in any project
+  const projects = allNodes.filter(n => n.type === 'proyecto')
+  const cots = allNodes.filter(n => n.type === 'cotizacion' && n.metadata?.provider_id === row.contactId)
+  const pendingCot = cots.find(c => {
+    const m = c.metadata || {}
+    const total = +(m.total || m.amount || 0)
+    const paid = (m.abonos || []).reduce((s,a) => s + (+(a.amount||0)), 0)
+    return paid < total
+  })
+  if (pendingCot) {
+    const projTag = pendingCot.metadata?.project_tag || ''
+    if (projTag) {
+      row.projectTag = projTag
+      row._pendingCotId = pendingCot.id
+    }
+  }
+}
+
+window.otcUnlinkProject = function(rowId) {
+  const row = _otcRows.find(r => r.id === rowId)
+  if (row) { row.projectTag = ''; row._pendingCotId = '' }
+  otcRenderTable()
+}
+
+window.otcChangeType = function(rowId, type) {
+  const row = _otcRows.find(r => r.id === rowId)
+  if (row) { row.assignType = type; row.value = 0; row.montoMXN = 0 }
+  otcRenderTable()
+  otcUpdateSemaforo()
+  otcUpdateWhatsApp()
+}
+
+window.otcChangeValue = function(rowId, val) {
+  const row = _otcRows.find(r => r.id === rowId)
+  if (!row) return
+  row.value = parseFloat(val) || 0
+  if (row.assignType === 'pct') {
+    row.montoMXN = _floor2(_otcData.ventaReportada * (row.value / 100))
+  } else {
+    row.montoMXN = _floor2(row.value)
+  }
+  const montoEl = document.getElementById('otc-monto-' + rowId)
+  if (montoEl) montoEl.textContent = '$' + _fmt$(row.montoMXN)
+  otcUpdateSemaforo()
+  otcUpdateWhatsApp()
+}
+
+// Copy helpers
+window.otcCopy = function(rowId, what) {
+  const row = _otcRows.find(r => r.id === rowId)
+  if (!row) return
+  let text = ''
+  const ref = document.getElementById('otc-ref')?.value.trim() || ('OTC-' + new Date().toISOString().slice(0,10).replace(/-/g,''))
+  if (what === 'clabe') text = row.clabe || ''
+  else if (what === 'monto') text = row.montoMXN.toFixed(2)
+  else if (what === 'concepto') text = (row.projectTag ? row.projectTag.toUpperCase() + ' - ' : '') + ref
+  if (text) {
+    navigator.clipboard.writeText(text).then(() => showToast('Copiado: ' + text.slice(0,30)))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ORQUESTADOR OTC — SEMÁFORO
+// ═══════════════════════════════════════════════════════════════════
+function otcUpdateSemaforo() {
+  const total = _otcData.ventaReportada
+  const assigned = _otcRows.reduce((s,r) => s + r.montoMXN, 0)
+  const pct = total > 0 ? (assigned / total) * 100 : 0
+  const remaining = _floor2(total - assigned)
+
+  const bar   = document.getElementById('otc-sema-bar')
+  const label = document.getElementById('otc-sema-label')
+  const pctEl = document.getElementById('otc-sema-pct')
+  const msg   = document.getElementById('otc-sema-msg')
+  if (!bar) return
+
+  bar.style.width = Math.min(pct, 100) + '%'
+
+  if (pct < 100 - 0.001) {
+    bar.className = 'otc-sema-yellow'
+    if (label) { label.textContent = 'Saldo sin asignar'; label.style.color = '#fbbf24' }
+    if (pctEl) { pctEl.textContent = pct.toFixed(1) + '%'; pctEl.style.color = '#fbbf24' }
+    if (msg) { msg.textContent = 'Restante: $' + _fmt$(remaining) + ' MXN'; msg.style.color = '#fbbf24' }
+  } else if (pct <= 100 + 0.001) {
+    bar.className = 'otc-sema-green'
+    if (label) { label.textContent = 'Fondos asignados a la perfección'; label.style.color = '#4ade80' }
+    if (pctEl) { pctEl.textContent = '100%'; pctEl.style.color = '#4ade80' }
+    if (msg) { msg.textContent = 'Listo para dispersar'; msg.style.color = '#4ade80' }
+  } else {
+    bar.className = 'otc-sema-red'
+    if (label) { label.textContent = 'Error: Exceso de fondos'; label.style.color = '#f87171' }
+    if (pctEl) { pctEl.textContent = pct.toFixed(1) + '%'; pctEl.style.color = '#f87171' }
+    if (msg) { msg.textContent = 'Exceso: $' + _fmt$(Math.abs(remaining)) + ' MXN en negativo'; msg.style.color = '#f87171' }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ORQUESTADOR OTC — BLOQUE C: WHATSAPP MESSAGE
+// ═══════════════════════════════════════════════════════════════════
+function otcUpdateWhatsApp() {
+  const el = document.getElementById('otc-wa-preview')
+  if (!el) return
+  if (_otcData.ventaReportada <= 0 || _otcRows.length === 0) {
+    el.textContent = 'Completa la operación y la tabla de dispersión para generar el mensaje.'
+    return
+  }
+  const coin = document.getElementById('otc-coin')?.value || 'USDT'
+  const qty  = document.getElementById('otc-qty')?.value || '0'
+  const tc   = document.getElementById('otc-tc')?.value || '0'
+  const feeR = document.getElementById('otc-fee-reported')?.value || '0.90'
+
+  let msg = ''
+  msg += '📊 PRE-APROBACIÓN DE OPERACIÓN - OTC Nexus OS\n'
+  msg += '---------------------------------------------\n'
+  msg += '• Recibido: ' + qty + ' ' + coin + ' @ $' + tc + '\n'
+  msg += '• Venta Total MXN: $' + _fmt$(_otcData.ventaBruta) + '\n'
+  msg += '• Comisión Operación (' + feeR + '%): $' + _fmt$(_otcData.comisionCliente) + '\n'
+  msg += '• TOTAL DISPONIBLE PARA REPARTO: $' + _fmt$(_otcData.ventaReportada) + '\n'
+  msg += '\nPROPUESTA DE DISPERSIÓN BANCARIA:\n'
+  _otcRows.forEach((row, i) => {
+    const last4 = row.clabe ? '····' + row.clabe.slice(-4) : ''
+    msg += (i+1) + '. ' + (row.contactName || 'Beneficiario') + ' -> $' + _fmt$(row.montoMXN) + ' (' + (row.bank||'—') + ' • CLABE: *' + last4 + '*)\n'
+  })
+  msg += '\n¿Confirmado el esquema y las cuentas para proceder con los SPEI?'
+
+  el.textContent = msg
+}
+
+window.otcCopyWhatsApp = function() {
+  const el = document.getElementById('otc-wa-preview')
+  if (!el) return
+  navigator.clipboard.writeText(el.textContent).then(() => showToast('Mensaje copiado al portapapeles'))
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ORQUESTADOR OTC — BLOQUE D: RECEIPTS + PDF EXPORT
+// ═══════════════════════════════════════════════════════════════════
+window.otcReceiptDrop = function(ev, rowId) {
+  ev.preventDefault()
+  ev.currentTarget.style.borderColor = ''
+  const file = ev.dataTransfer?.files?.[0]
+  if (!file || !file.type.startsWith('image/')) { showToast('Solo imágenes'); return }
+  _otcReadReceiptFile(file, rowId)
+}
+
+window.otcReceiptClick = function(rowId) {
+  const inp = document.createElement('input')
+  inp.type = 'file'; inp.accept = 'image/*'
+  inp.onchange = () => { if (inp.files[0]) _otcReadReceiptFile(inp.files[0], rowId) }
+  inp.click()
+}
+
+function _otcReadReceiptFile(file, rowId) {
+  const reader = new FileReader()
+  reader.onload = () => {
+    const row = _otcRows.find(r => r.id === rowId)
+    if (row) { row.receiptDataUrl = reader.result }
+    otcRenderTable()
+  }
+  reader.readAsDataURL(file)
+}
+
+window.otcClearReceipt = function(rowId) {
+  const row = _otcRows.find(r => r.id === rowId)
+  if (row) row.receiptDataUrl = ''
+  otcRenderTable()
+}
+
+window.otcExportPDF = function() {
+  if (_otcData.ventaReportada <= 0) { showToast('Calcula la operación primero'); return }
+  const coin = document.getElementById('otc-coin')?.value || 'USDT'
+  const qty  = document.getElementById('otc-qty')?.value || '0'
+  const tc   = document.getElementById('otc-tc')?.value || '0'
+  const ref  = document.getElementById('otc-ref')?.value.trim() || ('OTC-' + new Date().toISOString().slice(0,10).replace(/-/g,''))
+  const now  = new Date().toLocaleString('es-MX')
+  const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+
+  let rowsHtml = ''
+  _otcRows.forEach((row, i) => {
+    const last4 = row.clabe ? '····' + row.clabe.slice(-4) : ''
+    const receiptLink = row.receiptDataUrl ? '<a href="' + row.receiptDataUrl + '" target="_blank" style="color:#0284c7;font-size:10px;">Ver Comprobante SPEI</a>' : '<span style="color:#999;font-size:10px;">—</span>'
+    rowsHtml += '<tr>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;">' + (i+1) + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;font-weight:600;">' + esc(row.contactName || 'Sin nombre') + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;">' + esc(row.bank || '—') + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px;">' + esc(row.clabe || '—') + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:700;">$' + _fmt$(row.montoMXN) + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">' + (row.projectTag ? '#' + esc(row.projectTag) : '—') + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">' + receiptLink + '</td>'
+    rowsHtml += '</tr>'
+  })
+
+  const totalAssigned = _otcRows.reduce((s,r) => s + r.montoMXN, 0)
+
+  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/>'
+  h += '<title>OTC Report — ' + esc(ref) + '</title>'
+  h += '<style>body{font-family:system-ui,sans-serif;max-width:900px;margin:0 auto;padding:30px;color:#1a1a1a;font-size:13px;}'
+  h += 'h1{font-size:20px;margin-bottom:4px;}table{width:100%;border-collapse:collapse;margin-top:12px;}'
+  h += 'th{text-align:left;padding:8px;background:#f0f4f8;border-bottom:2px solid #ddd;font-size:11px;color:#666;}'
+  h += '.kpi{display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 20px;margin:6px;text-align:center;}'
+  h += '.kpi-label{font-size:10px;color:#666;font-weight:700;letter-spacing:0.5px;}.kpi-val{font-size:18px;font-weight:800;margin-top:4px;}'
+  h += '@media print{body{padding:10px;}}</style></head><body>'
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:20px;">'
+  h += '<div><h1>📊 Estado de Cuenta OTC</h1><p style="color:#666;margin:0;">Ref: ' + esc(ref) + ' — ' + now + '</p></div>'
+  h += '<div style="text-align:right;"><strong style="font-size:16px;">Nexus OS</strong><br/><span style="font-size:10px;color:#888;">Orquestador OTC</span></div>'
+  h += '</div>'
+
+  // KPIs
+  h += '<div style="text-align:center;margin-bottom:24px;">'
+  h += '<div class="kpi"><div class="kpi-label">RECIBIDO</div><div class="kpi-val">' + esc(qty) + ' ' + esc(coin) + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-label">T/C PACTADO</div><div class="kpi-val">$' + esc(tc) + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-label">VENTA BRUTA</div><div class="kpi-val">$' + _fmt$(_otcData.ventaBruta) + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-label">COMISIÓN</div><div class="kpi-val" style="color:#e67e22;">$' + _fmt$(_otcData.comisionCliente) + '</div></div>'
+  h += '<div class="kpi" style="border-color:#27ae60;"><div class="kpi-label">NETO A DISPERSAR</div><div class="kpi-val" style="color:#27ae60;">$' + _fmt$(_otcData.ventaReportada) + '</div></div>'
+  h += '</div>'
+
+  // Table
+  h += '<table>'
+  h += '<thead><tr><th>#</th><th>Beneficiario</th><th>Banco</th><th>CLABE</th><th style="text-align:right;">Monto</th><th>Proyecto</th><th>Comprobante</th></tr></thead>'
+  h += '<tbody>' + rowsHtml + '</tbody>'
+  h += '<tfoot><tr style="font-weight:800;border-top:2px solid #333;"><td colspan="4" style="padding:8px;text-align:right;">TOTAL DISPERSADO:</td>'
+  h += '<td style="padding:8px;text-align:right;font-size:14px;">$' + _fmt$(totalAssigned) + '</td><td colspan="2"></td></tr></tfoot>'
+  h += '</table>'
+
+  // Receipts
+  const rowsWithReceipts = _otcRows.filter(r => r.receiptDataUrl)
+  if (rowsWithReceipts.length) {
+    h += '<h2 style="margin-top:30px;font-size:16px;">🧾 Comprobantes SPEI</h2>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;">'
+    rowsWithReceipts.forEach(r => {
+      h += '<div style="border:1px solid #ddd;border-radius:8px;padding:12px;text-align:center;">'
+      h += '<div style="font-size:12px;font-weight:700;margin-bottom:8px;">' + esc(r.contactName) + '</div>'
+      h += '<img src="' + r.receiptDataUrl + '" style="max-width:100%;max-height:300px;border-radius:4px;"/>'
+      h += '</div>'
+    })
+    h += '</div>'
+  }
+
+  h += '<div style="text-align:center;margin-top:40px;padding-top:16px;border-top:1px solid #ddd;color:#999;font-size:10px;">Generado por Nexus OS — Orquestador OTC</div>'
+  h += '</body></html>'
+
+  const win = window.open('', '_blank')
+  if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
+}
+
+// Save OTC operation to Nexus nodes
+window.otcSaveToNodes = async function() {
+  if (_otcData.ventaReportada <= 0) { showToast('Calcula la operación primero'); return }
+  const coin = document.getElementById('otc-coin')?.value || 'USDT'
+  const qty  = document.getElementById('otc-qty')?.value || '0'
+  const tc   = document.getElementById('otc-tc')?.value || '0'
+  const ref  = document.getElementById('otc-ref')?.value.trim() || ('OTC-' + new Date().toISOString().slice(0,10).replace(/-/g,''))
+
+  // For each row linked to a project, inject as expense
+  for (const row of _otcRows) {
+    if (row.projectTag && row._pendingCotId && row.montoMXN > 0) {
+      // Register as abono on the cotización
+      const cotNode = allNodes.find(n => n.id === row._pendingCotId)
+      if (cotNode) {
+        const abonos = cotNode.metadata?.abonos || []
+        abonos.push({
+          date: new Date().toISOString().slice(0,10),
+          amount: row.montoMXN,
+          method: 'SPEI',
+          note: 'OTC dispersión — ' + ref,
+          receipt_url: row.receiptDataUrl || ''
+        })
+        cotNode.metadata.abonos = abonos
+        if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+          await supabase.from('nodes').update({ metadata: cotNode.metadata }).eq('id', cotNode.id)
+        }
+      }
+    }
+  }
+
+  showToast('Operación guardada — ' + _otcRows.filter(r=>r.projectTag).length + ' pagos vinculados a proyectos')
+  if (typeof renderAll === 'function') renderAll()
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CENTRO DE TRÁMITES — TAB 2 SUB-MÓDULO 1: DATOS DE PAGO
+// ═══════════════════════════════════════════════════════════════════
+function renderTramitesCuentas() {
+  const grid  = document.getElementById('tramites-cuentas-grid')
+  const empty = document.getElementById('tramites-cuentas-empty')
+  if (!grid) return
+
+  // Get user's own accounts (from settings)
+  const settings = JSON.parse(localStorage.getItem('nexus_settings') || '{}')
+  const accounts = settings.accounts || []
+  // Also get contacts marked as "own" or bank type accounts from the user
+  const ownContacts = allNodes.filter(n => n.type === 'contact' && (n.metadata?.roles || []).includes('propia'))
+
+  // Merge: settings accounts + own contact bank accounts
+  const allAccts = []
+  accounts.forEach(a => {
+    allAccts.push({
+      label: a.label || a.bank || 'Cuenta',
+      type: a.type || 'bank',
+      bank: a.bank || a.bank_name || '',
+      clabe: a.clabe || '',
+      account: a.account || a.card || '',
+      wallet: a.wallet || '',
+      network: a.network || '',
+      color: a.color || '#00f6ff'
+    })
+  })
+
+  if (allAccts.length === 0) {
+    grid.innerHTML = ''
+    if (empty) empty.style.display = ''
+    return
+  }
+  if (empty) empty.style.display = 'none'
+
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
+  let h = ''
+  allAccts.forEach((a, idx) => {
+    const isCrypto = a.type === 'crypto'
+    const icon = isCrypto ? '₿' : '🏦'
+    const primary = isCrypto ? (a.wallet || '') : (a.clabe || a.account || '')
+    const secondary = isCrypto ? (a.network || '') : (a.bank || '')
+
+    h += '<div class="tramite-acct-card">'
+    h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">'
+    h += '<span style="font-size:24px;">' + icon + '</span>'
+    h += '<div>'
+    h += '<div style="font-size:14px;font-weight:800;color:#fff;">' + esc(a.label) + '</div>'
+    h += '<div style="font-size:11px;color:var(--text-muted);">' + esc(secondary) + '</div>'
+    h += '</div>'
+    h += '</div>'
+
+    if (primary) {
+      h += '<div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-family:\'JetBrains Mono\',monospace;font-size:14px;color:#fff;letter-spacing:1px;word-break:break-all;">'
+      h += esc(primary)
+      h += '</div>'
+      h += '<button class="tramite-copy-btn" onclick="navigator.clipboard.writeText(\'' + esc(primary).replace(/'/g,"\\'") + '\');showToast(\'Copiado\')">'
+      h += '📋 Copiar ' + (isCrypto ? 'Wallet' : (a.clabe ? 'CLABE' : 'Cuenta'))
+      h += '</button>'
+    }
+
+    if (!isCrypto && a.account && a.clabe) {
+      h += '<button class="tramite-copy-btn" style="margin-top:8px;background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-muted);" '
+      h += 'onclick="navigator.clipboard.writeText(\'' + esc(a.account).replace(/'/g,"\\'") + '\');showToast(\'Copiado\')">'
+      h += '📋 Copiar No. Cuenta: ' + esc(a.account)
+      h += '</button>'
+    }
+
+    h += '</div>'
+  })
+  grid.innerHTML = h
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CENTRO DE TRÁMITES — TAB 2 SUB-MÓDULO 2: DOCUMENTOS LEGALES
+// ═══════════════════════════════════════════════════════════════════
+let _docGenType = ''
+
+window.openDocGen = function(type) {
+  _docGenType = type
+  const title = document.getElementById('docgen-title')
+  const body  = document.getElementById('docgen-body')
+  if (!body) return
+
+  const contacts = (typeof getContacts === 'function') ? getContacts() : allNodes.filter(n => n.type === 'contact' || n.type === 'persona')
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
+  const contactOpts = contacts.map(c => '<option value="' + esc(c.id) + '">' + esc(c.metadata?.name || c.content) + '</option>').join('')
+  const projects = allNodes.filter(n => n.type === 'proyecto')
+  const projOpts = projects.map(p => '<option value="' + esc(p.id) + '">' + esc(p.metadata?.name || p.content) + '</option>').join('')
+
+  const titles = {
+    pagare: '📜 Pagaré Electrónico',
+    arrendamiento: '🏠 Contrato de Arrendamiento',
+    compraventa: '🤝 Contrato de Compraventa',
+    cartapoder: '✍️ Carta Poder',
+    recomendacion: '⭐ Carta de Recomendación'
+  }
+  if (title) title.textContent = titles[type] || 'Documento'
+
+  let h = ''
+
+  // Common fields
+  h += '<div class="modal-field"><label class="modal-label">Parte A (Emisor / Acreedor) — seleccionar contacto</label>'
+  h += '<select id="dg-parteA" class="modal-input" onchange="docGenFillParty(\'A\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
+  h += '<div id="dg-parteA-info" style="font-size:11px;color:var(--text-muted);padding:4px 0;"></div>'
+
+  h += '<div class="modal-field"><label class="modal-label">Parte B (Receptor / Deudor) — seleccionar contacto</label>'
+  h += '<select id="dg-parteB" class="modal-input" onchange="docGenFillParty(\'B\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
+  h += '<div id="dg-parteB-info" style="font-size:11px;color:var(--text-muted);padding:4px 0;"></div>'
+
+  if (type === 'pagare') {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Monto ($)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Fecha de Vencimiento</label><input type="date" id="dg-fecha" class="modal-input"/></div>'
+    h += '</div>'
+    h += '<div class="modal-field"><label class="modal-label">Lugar de Pago</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, B.C.S."/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Interés Moratorio Mensual (%)</label><input type="number" id="dg-interes" class="modal-input" placeholder="2" value="2"/></div>'
+  } else if (type === 'arrendamiento' || type === 'compraventa') {
+    h += '<div class="modal-field"><label class="modal-label">Proyecto / Propiedad vinculada</label>'
+    h += '<select id="dg-proyecto" class="modal-input"><option value="">— Sin proyecto —</option>' + projOpts + '</select></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Monto ($)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">' + (type==='arrendamiento' ? 'Renta Mensual ($)' : 'Enganche ($)') + '</label><input type="number" id="dg-monto2" class="modal-input" placeholder="0.00"/></div>'
+    h += '</div>'
+    h += '<div class="modal-field"><label class="modal-label">Dirección del Inmueble</label><input type="text" id="dg-direccion" class="modal-input" placeholder="Calle, Número, Colonia, Ciudad, Estado"/></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Fecha Inicio</label><input type="date" id="dg-fecha" class="modal-input"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Fecha Fin</label><input type="date" id="dg-fecha2" class="modal-input"/></div>'
+    h += '</div>'
+  } else if (type === 'cartapoder') {
+    h += '<div class="modal-field"><label class="modal-label">Facultades Otorgadas</label>'
+    h += '<textarea id="dg-facultades" class="modal-input" rows="3" placeholder="Describa las facultades..."></textarea></div>'
+    h += '<div class="modal-field"><label class="modal-label">Lugar y Fecha</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, B.C.S., ' + new Date().toLocaleDateString('es-MX') + '"/></div>'
+  } else if (type === 'recomendacion') {
+    h += '<div class="modal-field"><label class="modal-label">Relación con el recomendado</label><input type="text" id="dg-relacion" class="modal-input" placeholder="Ej: Empleador, Colega, Cliente"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Tiempo de conocerlo</label><input type="text" id="dg-tiempo" class="modal-input" placeholder="Ej: 3 años"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Cualidades destacadas</label>'
+    h += '<textarea id="dg-cualidades" class="modal-input" rows="3" placeholder="Responsable, puntual, honesto..."></textarea></div>'
+  }
+
+  body.innerHTML = h
+  document.getElementById('docgen-modal').classList.remove('hidden')
+}
+
+window.closeDocGen = function() {
+  document.getElementById('docgen-modal')?.classList.add('hidden')
+}
+
+window.docGenFillParty = function(party) {
+  const sel = document.getElementById('dg-parte' + party)
+  const info = document.getElementById('dg-parte' + party + '-info')
+  if (!sel || !info) return
+  const contactId = sel.value
+  if (!contactId) { info.innerHTML = ''; return }
+  const c = allNodes.find(n => n.id === contactId)
+  if (!c) { info.innerHTML = ''; return }
+  const m = c.metadata || {}
+  const parts = []
+  if (m.rfc) parts.push('RFC: ' + m.rfc)
+  if (m.address_street) parts.push(m.address_street)
+  if (m.address_state) parts.push(m.address_state)
+  const accts = m.contact_accounts || []
+  const bank = accts.find(a => a.type === 'bank')
+  if (bank) parts.push('CLABE: ' + (bank.clabe || '—'))
+  info.textContent = parts.join(' · ') || 'Sin datos adicionales'
+}
+
+window.docGenExport = function() {
+  const type = _docGenType
+  const parteAId = document.getElementById('dg-parteA')?.value
+  const parteBId = document.getElementById('dg-parteB')?.value
+  const cA = parteAId ? allNodes.find(n => n.id === parteAId) : null
+  const cB = parteBId ? allNodes.find(n => n.id === parteBId) : null
+  const nameA = cA ? (cA.metadata?.name || cA.content) : '________________________'
+  const nameB = cB ? (cB.metadata?.name || cB.content) : '________________________'
+  const rfcA  = cA?.metadata?.rfc || '________________________'
+  const rfcB  = cB?.metadata?.rfc || '________________________'
+  const addrA = [cA?.metadata?.address_street, cA?.metadata?.address_state].filter(Boolean).join(', ') || '________________________'
+  const addrB = [cB?.metadata?.address_street, cB?.metadata?.address_state].filter(Boolean).join(', ') || '________________________'
+  const clabeA = (cA?.metadata?.contact_accounts||[]).find(a=>a.type==='bank')?.clabe || '________________________'
+
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  const today = new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
+
+  let docHtml = ''
+  const css = 'body{font-family:Georgia,serif;max-width:700px;margin:0 auto;padding:40px;color:#1a1a1a;font-size:14px;line-height:1.8;}'
+    + 'h1{text-align:center;font-size:22px;margin-bottom:30px;text-decoration:underline;}'
+    + '.sig{display:inline-block;width:250px;border-top:1px solid #333;text-align:center;padding-top:6px;margin-top:60px;}'
+    + '@media print{body{padding:20px;}}'
+
+  if (type === 'pagare') {
+    const monto = document.getElementById('dg-monto')?.value || '0'
+    const fecha = document.getElementById('dg-fecha')?.value || ''
+    const lugar = document.getElementById('dg-lugar')?.value || 'La Paz, B.C.S.'
+    const interes = document.getElementById('dg-interes')?.value || '2'
+    const fechaFmt = fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', {year:'numeric',month:'long',day:'numeric'}) : '________________________'
+
+    docHtml = '<h1>PAGARÉ</h1>'
+    docHtml += '<p style="text-align:right;font-size:13px;">Bueno por: <strong>$' + esc(parseFloat(monto).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN</strong></p>'
+    docHtml += '<p>En <strong>' + esc(lugar) + '</strong>, a <strong>' + today + '</strong>.</p>'
+    docHtml += '<p>Debo y pagaré incondicionalmente a la orden de <strong>' + esc(nameA) + '</strong> '
+    docHtml += '(RFC: ' + esc(rfcA) + ', con domicilio en ' + esc(addrA) + ') '
+    docHtml += 'la cantidad de <strong>$' + esc(parseFloat(monto).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN '
+    docHtml += '(' + _numberToWords(parseFloat(monto)) + ' pesos 00/100 M.N.)</strong>, '
+    docHtml += 'valor recibido a mi entera satisfacción.</p>'
+    docHtml += '<p>Este pagaré será exigible el día <strong>' + fechaFmt + '</strong> en <strong>' + esc(lugar) + '</strong>.</p>'
+    docHtml += '<p>En caso de falta de pago oportuno, el suscriptor se obliga a pagar un interés moratorio del <strong>' + esc(interes) + '% mensual</strong> sobre el saldo insoluto.</p>'
+    docHtml += '<br/><div style="display:flex;justify-content:space-between;margin-top:40px;">'
+    docHtml += '<div class="sig"><strong>' + esc(nameA) + '</strong><br/>Acreedor</div>'
+    docHtml += '<div class="sig"><strong>' + esc(nameB) + '</strong><br/>Suscriptor (Deudor)</div>'
+    docHtml += '</div>'
+  } else if (type === 'arrendamiento') {
+    const monto = document.getElementById('dg-monto')?.value || '0'
+    const renta = document.getElementById('dg-monto2')?.value || '0'
+    const dir   = document.getElementById('dg-direccion')?.value || '________________________'
+    const f1    = document.getElementById('dg-fecha')?.value || ''
+    const f2    = document.getElementById('dg-fecha2')?.value || ''
+    const fmtD  = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'}) : '________'
+
+    docHtml = '<h1>CONTRATO DE ARRENDAMIENTO</h1>'
+    docHtml += '<p>Contrato de arrendamiento que celebran, por una parte <strong>' + esc(nameA) + '</strong> '
+    docHtml += '(en adelante "EL ARRENDADOR"), con domicilio en ' + esc(addrA) + ', RFC: ' + esc(rfcA) + '; '
+    docHtml += 'y por la otra <strong>' + esc(nameB) + '</strong> (en adelante "EL ARRENDATARIO"), '
+    docHtml += 'con domicilio en ' + esc(addrB) + ', RFC: ' + esc(rfcB) + '.</p>'
+    docHtml += '<p><strong>PRIMERA. OBJETO.</strong> EL ARRENDADOR da en arrendamiento a EL ARRENDATARIO el inmueble ubicado en: <strong>' + esc(dir) + '</strong>.</p>'
+    docHtml += '<p><strong>SEGUNDA. VIGENCIA.</strong> Del <strong>' + fmtD(f1) + '</strong> al <strong>' + fmtD(f2) + '</strong>.</p>'
+    docHtml += '<p><strong>TERCERA. RENTA.</strong> EL ARRENDATARIO se obliga a pagar la cantidad de <strong>$' + esc(parseFloat(renta).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN mensuales</strong>, '
+    docHtml += 'pagaderos los primeros cinco días de cada mes.</p>'
+    docHtml += '<p><strong>CUARTA. DEPÓSITO.</strong> Se establece un depósito de garantía equivalente a <strong>$' + esc(parseFloat(monto).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN</strong>.</p>'
+    docHtml += '<p><strong>QUINTA. CUENTA DE DEPÓSITO.</strong> Los pagos se realizarán a la CLABE: <strong>' + esc(clabeA) + '</strong>.</p>'
+    docHtml += '<p>Leído que fue el presente contrato, lo firman las partes en ' + esc(today) + '.</p>'
+    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:50px;">'
+    docHtml += '<div class="sig"><strong>' + esc(nameA) + '</strong><br/>EL ARRENDADOR</div>'
+    docHtml += '<div class="sig"><strong>' + esc(nameB) + '</strong><br/>EL ARRENDATARIO</div></div>'
+  } else if (type === 'compraventa') {
+    const monto = document.getElementById('dg-monto')?.value || '0'
+    const enganche = document.getElementById('dg-monto2')?.value || '0'
+    const dir   = document.getElementById('dg-direccion')?.value || '________________________'
+
+    docHtml = '<h1>CONTRATO DE COMPRAVENTA</h1>'
+    docHtml += '<p>Contrato que celebran <strong>' + esc(nameA) + '</strong> ("EL VENDEDOR"), RFC: ' + esc(rfcA) + ', '
+    docHtml += 'y <strong>' + esc(nameB) + '</strong> ("EL COMPRADOR"), RFC: ' + esc(rfcB) + '.</p>'
+    docHtml += '<p><strong>PRIMERA.</strong> EL VENDEDOR vende a EL COMPRADOR el inmueble ubicado en: <strong>' + esc(dir) + '</strong>.</p>'
+    docHtml += '<p><strong>SEGUNDA.</strong> Precio total: <strong>$' + esc(parseFloat(monto).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN</strong>.</p>'
+    docHtml += '<p><strong>TERCERA.</strong> Enganche: <strong>$' + esc(parseFloat(enganche).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN</strong>, '
+    docHtml += 'saldo restante: $' + parseFloat(parseFloat(monto)-parseFloat(enganche)).toLocaleString('es-MX',{minimumFractionDigits:2}) + ' MXN.</p>'
+    docHtml += '<p><strong>CUARTA.</strong> Pagos a CLABE: <strong>' + esc(clabeA) + '</strong>.</p>'
+    docHtml += '<p>Firmado en ' + esc(today) + '.</p>'
+    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:50px;">'
+    docHtml += '<div class="sig"><strong>' + esc(nameA) + '</strong><br/>EL VENDEDOR</div>'
+    docHtml += '<div class="sig"><strong>' + esc(nameB) + '</strong><br/>EL COMPRADOR</div></div>'
+  } else if (type === 'cartapoder') {
+    const fac = document.getElementById('dg-facultades')?.value || '________________________'
+    const lugar = document.getElementById('dg-lugar')?.value || today
+
+    docHtml = '<h1>CARTA PODER</h1>'
+    docHtml += '<p>' + esc(lugar) + '</p>'
+    docHtml += '<p>Por medio de la presente, yo <strong>' + esc(nameA) + '</strong>, con RFC: ' + esc(rfcA) + ', '
+    docHtml += 'con domicilio en ' + esc(addrA) + ', otorgo <strong>PODER AMPLIO Y SUFICIENTE</strong> a:</p>'
+    docHtml += '<p><strong>' + esc(nameB) + '</strong>, con RFC: ' + esc(rfcB) + ', domiciliado en ' + esc(addrB) + ',</p>'
+    docHtml += '<p>para que en mi nombre y representación realice los siguientes actos:</p>'
+    docHtml += '<p style="padding:10px 20px;background:#f8f8f8;border-left:3px solid #333;"><em>' + esc(fac) + '</em></p>'
+    docHtml += '<p>Se firma ante dos testigos en ' + esc(lugar) + '.</p>'
+    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:50px;">'
+    docHtml += '<div class="sig"><strong>' + esc(nameA) + '</strong><br/>Poderdante</div>'
+    docHtml += '<div class="sig"><strong>' + esc(nameB) + '</strong><br/>Apoderado</div></div>'
+    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:40px;">'
+    docHtml += '<div class="sig">Testigo 1</div><div class="sig">Testigo 2</div></div>'
+  } else if (type === 'recomendacion') {
+    const rel = document.getElementById('dg-relacion')?.value || 'colega'
+    const tiempo = document.getElementById('dg-tiempo')?.value || 'varios años'
+    const cual = document.getElementById('dg-cualidades')?.value || 'responsable y profesional'
+
+    docHtml = '<h1>CARTA DE RECOMENDACIÓN</h1>'
+    docHtml += '<p style="text-align:right;">' + today + '</p>'
+    docHtml += '<p><strong>A QUIEN CORRESPONDA:</strong></p>'
+    docHtml += '<p>Por medio de la presente, yo <strong>' + esc(nameA) + '</strong> me permito recomendar ampliamente a '
+    docHtml += '<strong>' + esc(nameB) + '</strong>, a quien conozco desde hace <strong>' + esc(tiempo) + '</strong> en calidad de <strong>' + esc(rel) + '</strong>.</p>'
+    docHtml += '<p>Durante este tiempo he podido constatar que posee las siguientes cualidades: <strong>' + esc(cual) + '</strong>.</p>'
+    docHtml += '<p>Considero que es una persona íntegra y capaz, por lo que no dudo en extender la presente recomendación para los fines que al interesado convengan.</p>'
+    docHtml += '<p>Sin otro particular, quedo a sus órdenes.</p>'
+    docHtml += '<p><strong>Atentamente,</strong></p>'
+    docHtml += '<div class="sig" style="margin-top:40px;"><strong>' + esc(nameA) + '</strong></div>'
+  }
+
+  // Open print window
+  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/>'
+  h += '<title>' + esc(type) + '</title>'
+  h += '<style>' + css + '</style></head><body>'
+  h += docHtml
+  h += '<div style="text-align:center;margin-top:50px;color:#ccc;font-size:9px;">Documento generado por Nexus OS</div>'
+  h += '</body></html>'
+
+  const win = window.open('', '_blank')
+  if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
+  closeDocGen()
+}
+
+// Helper: number to Spanish words (simplified for amounts up to millions)
+function _numberToWords(n) {
+  if (n === 0) return 'cero'
+  const units = ['','un','dos','tres','cuatro','cinco','seis','siete','ocho','nueve']
+  const teens = ['diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve']
+  const tens  = ['','diez','veinte','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa']
+  const hundreds = ['','ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos']
+
+  function chunk(num) {
+    if (num === 0) return ''
+    if (num === 100) return 'cien'
+    let s = ''
+    if (num >= 100) { s += hundreds[Math.floor(num/100)] + ' '; num %= 100 }
+    if (num >= 20) {
+      s += tens[Math.floor(num/10)]
+      if (num % 10) s += ' y ' + units[num%10]
+    } else if (num >= 10) {
+      s += teens[num - 10]
+    } else if (num > 0) {
+      s += units[num]
+    }
+    return s.trim()
+  }
+
+  const int = Math.floor(n)
+  if (int >= 1000000) {
+    const mill = Math.floor(int / 1000000)
+    const rest = int % 1000000
+    return (mill === 1 ? 'un millón' : chunk(mill) + ' millones') + (rest > 0 ? ' ' + _numberToWords(rest) : '')
+  }
+  if (int >= 1000) {
+    const thou = Math.floor(int / 1000)
+    const rest = int % 1000
+    return (thou === 1 ? 'mil' : chunk(thou) + ' mil') + (rest > 0 ? ' ' + chunk(rest) : '')
+  }
+  return chunk(int)
+}
+
 // WMO weather code → descripción e ícono
 function wmoWeather(code) {
   const map = {

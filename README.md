@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.9.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.0.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -81,12 +81,17 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 📄 **Cotización detalle** | Vista rica universal para cotizaciones: historial de pagos, comprobantes, notas/prórrogas, impresión |
 | 🔗 **Auto-link a proyectos** | Al escribir en la línea de comandos dentro de un proyecto, el nodo se vincula automáticamente |
 | 🧠 **Notas full-page en proyectos** | Editor de notas a página completa dentro del contexto de cada proyecto |
+| 📊 **Orquestador OTC** | Calculadora cripto-fiat con comisiones, tabla de dispersión bancaria con semáforo, copiado rápido CLABE/monto, intersección con proyectos |
+| 💬 **Mensaje WhatsApp OTC** | Genera texto pre-aprobación para validar dispersión con socio antes de enviar SPEIs |
+| 🧾 **Comprobantes SPEI** | Drag & drop de capturas SPEI por beneficiario con export PDF ejecutivo |
+| 💳 **Centro de Pagos** | Vista limpia de cuentas propias con botón gigante de copiar CLABE/cuenta para compartir con clientes |
+| 📜 **Documentos legales** | Generador de pagarés, contratos de arrendamiento/compraventa, cartas poder y recomendación con auto-fill desde contactos |
 
 ---
 
 ## 🗂️ Vistas del Sistema
 
-Nexus OS tiene **8 vistas** accesibles desde la barra lateral:
+Nexus OS tiene **9 vistas** accesibles desde la barra lateral:
 
 | Vista | Descripción |
 |---|---|
@@ -97,6 +102,7 @@ Nexus OS tiene **8 vistas** accesibles desde la barra lateral:
 | 📅 **Calendario** | Línea de tiempo con vistas mes / semana / día. Sincronizado con tareas y eventos del parser |
 | 📜 **Crónica** | Histórico diario en 3 columnas: lo que pasó, decisiones tomadas, pendientes |
 | 👥 **Contactos** | Directorio con ficha completa: foto, teléfonos múltiples, documentos Drive, WhatsApp, historial de pagos |
+| 🧮 **Herramientas** | Módulo con 3 tabs: Orquestador OTC, Centro de Trámites y Plantillas, Utilidades |
 | ❓ **Ayuda** | Guía interactiva completa de la sintaxis del parser y todas las funciones del sistema |
 
 ---
@@ -193,6 +199,41 @@ Las notas se visualizan como tarjetas estilo Google Keep en una grilla. Al hacer
 
 ---
 
+## 🧮 Herramientas — Orquestador OTC + Centro de Trámites
+
+El módulo de Herramientas se organiza en **3 tabs**:
+
+### Tab 1: 📊 Orquestador OTC
+
+Calculadora de operaciones cripto-fiat con dispersión bancaria inteligente:
+
+| Bloque | Función |
+|---|---|
+| **Entrada de Operación** | Moneda, cantidad, T/C Bitso, comisión reportada vs. real — math truncada a 2 decimales |
+| **KPI Cards** | Venta bruta, comisión, neto a dispersar, ganancia operador (toggle oculto) |
+| **Tabla de Dispersión** | Beneficiarios con autocomplete de contactos, Banco/CLABE auto-fill, monto fijo o %, copiado rápido |
+| **Semáforo** | Barra visual: amarillo (<100%), verde (100%), rojo (>100%) — bloquea exceso de fondos |
+| **Intersección Proyectos** | Si el beneficiario tiene cotización pendiente, tag parpadeante `🔗 Vincular a Proyecto` |
+| **Mensaje WhatsApp** | Genera texto de pre-aprobación con dispersión completa — copy al portapapeles |
+| **Comprobantes SPEI** | Drag & drop de capturas por beneficiario |
+| **Export PDF** | Estado de cuenta ejecutivo con KPIs, tabla, comprobantes |
+| **Guardar en Nexus** | Inyecta abonos en cotizaciones vinculadas automáticamente |
+
+### Tab 2: 📄 Centro de Trámites y Plantillas
+
+| Sub-módulo | Función |
+|---|---|
+| **Datos de Pago** | Tus cuentas bancarias/crypto con botón gigante de copiar — para compartir con clientes |
+| **Documentos Legales** | Generador de pagarés, contratos (arrendamiento, compraventa), carta poder, carta de recomendación |
+
+Los documentos se auto-llenan con datos de tus **Contactos** (nombre, RFC, dirección, CLABE) y se exportan como PDF imprimible.
+
+### Tab 3: 🛠 Utilidades
+
+Herramientas de productividad: Cronómetro, Cuenta Regresiva, Conversor Universal (Fiat ↔ Crypto), Calculadora Directa e Inversa.
+
+---
+
 ## ⌨️ Sintaxis del Parser
 
 El campo de entrada principal acepta lenguaje natural. El parser detecta automáticamente el tipo:
@@ -268,7 +309,7 @@ npm install
 
 ```sql
 -- ============================================================
--- NEXUS OS — Schema v1.9
+-- NEXUS OS — Schema v2.0
 -- Ejecutar en: Supabase > SQL Editor
 -- ============================================================
 
@@ -379,6 +420,15 @@ nexus-os/
 | `importContactsCSV()` | Importación masiva CSV con detección de duplicados |
 | `_buildPaymentTimeline()` | Timeline de pagos con KPIs, tabla, comprobantes y duración |
 | `_initProjKanbanChart(d)` | Donut chart de tareas en Kanban de proyecto |
+| `switchHerrTab(tab)` | Navegación entre tabs de Herramientas (OTC / Trámites / Utilidades) |
+| `otcRecalc()` | Motor de cálculo OTC con truncamiento a 2 decimales |
+| `otcAddRow()` / `otcRenderTable()` | Tabla de dispersión bancaria con autocomplete de contactos |
+| `otcCopyWhatsApp()` | Genera y copia mensaje de pre-aprobación WhatsApp |
+| `otcExportPDF()` | Exporta estado de cuenta ejecutivo en PDF |
+| `otcSaveToNodes()` | Inyecta abonos en cotizaciones vinculadas a proyectos |
+| `renderTramitesCuentas()` | Renderiza cuentas propias con botón copiar |
+| `openDocGen(type)` | Generador de documentos legales con auto-fill desde Contactos |
+| `docGenExport()` | Exporta documento legal como PDF imprimible |
 
 ---
 
