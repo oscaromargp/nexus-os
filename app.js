@@ -5,6 +5,8 @@ import Fuse from 'fuse.js'
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
 import { getTransactions, calcBalance, buildRunningBalance, currentPeriod } from './src/finance-engine.js'
 import Sortable from 'sortablejs'
+import { Chart, DoughnutController, ArcElement, Tooltip, Legend, BarController, BarElement, CategoryScale, LinearScale } from 'chart.js'
+Chart.register(DoughnutController, ArcElement, Tooltip, Legend, BarController, BarElement, CategoryScale, LinearScale)
 
 // ─────────────────────────────────────────
 // Clientes y Estado
@@ -359,33 +361,114 @@ function renderKanban(nodes) {
   const root = document.getElementById('kanban-root')
   if (!root) return
 
-  // ── KPI strip ─────────────────────────────────────────────
+  // ── KPI strip with visual charts ─────────────────────────
   const kpiRoot = document.getElementById('kanban-kpi-root')
   if (kpiRoot) {
     const today0 = new Date().toISOString().slice(0,10)
     const kNodes  = allNodes.filter(n=>n.type==='kanban')
+    const kTotal  = kNodes.length
     const kTodo   = kNodes.filter(n=>(n.metadata?.status||'todo')==='todo').length
     const kProg   = kNodes.filter(n=>n.metadata?.status==='in_progress').length
+    const kDoneAll= kNodes.filter(n=>n.metadata?.status==='done').length
     const kDone   = kNodes.filter(n=>n.metadata?.status==='done'&&(n.metadata?.done_at||'')===today0).length
     const kOver   = kNodes.filter(n=>{const d=n.metadata?.date_deadline||n.metadata?.due_date;return d&&d<today0&&n.metadata?.status!=='done'}).length
-    const kpis = [
-      { label:'PENDIENTES', val:kTodo,  color:'#94a3b8', icon:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>` },
-      { label:'EN PROGRESO',val:kProg,  color:'#fbbf24', icon:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>` },
-      { label:'CERRADAS HOY',val:kDone, color:'#4ade80', icon:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>` },
-      { label:'VENCIDAS',   val:kOver,  color: kOver>0?'#f87171':'#94a3b8', icon:`<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${kOver>0?'#f87171':'#94a3b8'}" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
-    ]
-    kpiRoot.innerHTML = `<div style="display:flex;gap:0;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;overflow:hidden;">
-      ${kpis.map((k,i)=>`<div style="flex:1;padding:12px 14px;${i>0?'border-left:1px solid rgba(255,255,255,0.06);':''}display:flex;align-items:center;gap:10px;">
-        ${k.icon}
-        <div>
-          <div style="font-size:18px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1;">${k.val}</div>
-          <div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--text-muted);text-transform:uppercase;margin-top:2px;">${k.label}</div>
+    const pctDone = kTotal ? Math.round(kDoneAll/kTotal*100) : 0
+
+    // Weekly completions (last 4 weeks)
+    const weekLabels = []
+    const weekCounts = []
+    for (let w = 3; w >= 0; w--) {
+      const d = new Date(); d.setDate(d.getDate() - w*7)
+      const wStart = new Date(d); wStart.setDate(d.getDate() - d.getDay())
+      const wEnd = new Date(wStart); wEnd.setDate(wStart.getDate() + 6)
+      const ws = wStart.toISOString().slice(0,10), we = wEnd.toISOString().slice(0,10)
+      weekLabels.push(w===0?'Esta sem':w===1?'Sem -1':`Sem -${w}`)
+      weekCounts.push(kNodes.filter(n=>n.metadata?.status==='done'&&n.metadata?.done_at>=ws&&n.metadata?.done_at<=we).length)
+    }
+
+    kpiRoot.innerHTML = `<div style="display:grid;grid-template-columns:200px 1fr 200px;gap:12px;align-items:stretch;">
+      <!-- Donut chart -->
+      <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <div style="font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--text-dim);text-transform:uppercase;">Distribución</div>
+        <div style="position:relative;width:110px;height:110px;">
+          <canvas id="kanban-donut" width="110" height="110"></canvas>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div style="font-size:22px;font-weight:900;color:#fff;font-family:'JetBrains Mono',monospace;line-height:1;">${kTotal}</div>
+            <div style="font-size:8px;color:var(--text-dim);font-weight:700;">TOTAL</div>
+          </div>
         </div>
-      </div>`).join('')}
-      <div style="flex:1;padding:12px 14px;border-left:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:flex-end;">
-        <button onclick="openQuickCreate('kanban')" style="font-size:11px;font-weight:700;padding:5px 14px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:8px;cursor:pointer;">+ Nueva tarea</button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+          <span style="font-size:9px;color:#94a3b8;display:flex;align-items:center;gap:3px;"><span style="width:6px;height:6px;border-radius:50%;background:#94a3b8;"></span>${kTodo}</span>
+          <span style="font-size:9px;color:#fbbf24;display:flex;align-items:center;gap:3px;"><span style="width:6px;height:6px;border-radius:50%;background:#fbbf24;"></span>${kProg}</span>
+          <span style="font-size:9px;color:#4ade80;display:flex;align-items:center;gap:3px;"><span style="width:6px;height:6px;border-radius:50%;background:#4ade80;"></span>${kDoneAll}</span>
+        </div>
+      </div>
+
+      <!-- Center: KPI cards + progress bar -->
+      <div style="display:flex;flex-direction:column;gap:10px;justify-content:center;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+          ${[
+            {label:'Pendientes',val:kTodo,color:'#94a3b8',icon:'⏳'},
+            {label:'En progreso',val:kProg,color:'#fbbf24',icon:'⚡'},
+            {label:'Cerradas hoy',val:kDone,color:'#4ade80',icon:'✅'},
+            {label:'Vencidas',val:kOver,color:kOver>0?'#f87171':'#94a3b8',icon:'🔥'},
+          ].map(k=>`<div style="background:${k.color}0a;border:1px solid ${k.color}25;border-radius:10px;padding:10px 12px;text-align:center;">
+            <div style="font-size:16px;margin-bottom:2px;">${k.icon}</div>
+            <div style="font-size:20px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1;">${k.val}</div>
+            <div style="font-size:8px;font-weight:800;color:var(--text-dim);text-transform:uppercase;margin-top:3px;letter-spacing:.05em;">${k.label}</div>
+          </div>`).join('')}
+        </div>
+        <!-- Progress bar -->
+        <div style="background:rgba(255,255,255,0.04);border-radius:10px;padding:10px 14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+            <span style="font-size:10px;font-weight:700;color:var(--text-muted);">Progreso general</span>
+            <span style="font-size:13px;font-weight:900;color:${pctDone>=75?'#4ade80':pctDone>=40?'#fbbf24':'#94a3b8'};font-family:'JetBrains Mono',monospace;">${pctDone}%</span>
+          </div>
+          <div style="height:8px;background:rgba(255,255,255,0.06);border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${pctDone}%;background:linear-gradient(90deg,#00f6ff,#4ade80);border-radius:4px;transition:width .5s;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Weekly bar chart -->
+      <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px;">
+        <div style="font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--text-dim);text-transform:uppercase;">Completadas/semana</div>
+        <div style="width:160px;height:100px;">
+          <canvas id="kanban-weekly" width="160" height="100"></canvas>
+        </div>
+        <button onclick="openQuickCreate('kanban')" style="font-size:11px;font-weight:700;padding:5px 14px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:8px;cursor:pointer;margin-top:auto;">+ Nueva tarea</button>
       </div>
     </div>`
+
+    // Initialize charts after DOM insertion
+    setTimeout(() => {
+      // Donut chart
+      const donutCtx = document.getElementById('kanban-donut')?.getContext('2d')
+      if (donutCtx) {
+        if (window._kanbanDonut) window._kanbanDonut.destroy()
+        window._kanbanDonut = new Chart(donutCtx, {
+          type:'doughnut',
+          data: {
+            labels:['Pendientes','En progreso','Completadas'],
+            datasets:[{data:[kTodo,kProg,kDoneAll],backgroundColor:['#94a3b8','#fbbf24','#4ade80'],borderWidth:0,hoverOffset:4}]
+          },
+          options:{responsive:false,cutout:'65%',plugins:{legend:{display:false},tooltip:{bodyFont:{size:11}}}}
+        })
+      }
+      // Weekly bar chart
+      const barCtx = document.getElementById('kanban-weekly')?.getContext('2d')
+      if (barCtx) {
+        if (window._kanbanWeekly) window._kanbanWeekly.destroy()
+        window._kanbanWeekly = new Chart(barCtx, {
+          type:'bar',
+          data: {
+            labels: weekLabels,
+            datasets:[{data:weekCounts,backgroundColor:'rgba(0,246,255,0.3)',borderColor:'#00f6ff',borderWidth:1,borderRadius:4}]
+          },
+          options:{responsive:false,plugins:{legend:{display:false},tooltip:{bodyFont:{size:11}}},scales:{x:{ticks:{color:'#64748b',font:{size:8}},grid:{display:false}},y:{ticks:{color:'#64748b',font:{size:9},stepSize:1},grid:{color:'rgba(255,255,255,0.04)'}}}}
+        })
+      }
+    }, 50)
   }
 
   const today = new Date().toISOString().split('T')[0]
@@ -645,6 +728,10 @@ window.confirmQuickAdd = (listId) => {
 window.openCardModal = (id) => {
   const node = allNodes.find(n => n.id === id)
   if (!node) return
+  // Route financial nodes to the finance detail modal (has CEP)
+  if (node.type === 'income' || node.type === 'expense' || node.type === 'bill' || node.type === 'subscription') {
+    openFinanceDetail(id); return
+  }
   // Si es una tarjeta Kanban vinculada a una cotización → abrir la cotización
   if (node.metadata?.cot_id) {
     const cot = allNodes.find(n => n.id === node.metadata.cot_id)
@@ -1011,6 +1098,20 @@ async function insertNodeRaw(raw, metadataOverrides={}) {
     delete finalMetadata.account_hint
   }
   if (type === 'income' || type === 'expense') resolveContactInMetadata(finalMetadata, raw)
+
+  // ── Auto-link to open project if user is inside a project dashboard ──
+  if (_projDashId && !finalMetadata.project_tag) {
+    const proj = allNodes.find(n => n.id === _projDashId)
+    if (proj) {
+      const pm = proj.metadata || {}
+      const slug = pm.project_slug || (pm.tags||[]).filter(t=>t.startsWith('#')).map(t=>t.slice(1).toLowerCase()).find(t=>t!=='proyecto') || ''
+      if (slug) {
+        finalMetadata.project_tag = slug
+        if (!finalMetadata.tags) finalMetadata.tags = []
+        if (!finalMetadata.tags.includes('#' + slug)) finalMetadata.tags.push('#' + slug)
+      }
+    }
+  }
 
   // ── OPTIMISTIC: muestra el nodo AL INSTANTE ──────────────────────────────
   const tempId = '_tmp_' + Date.now()
@@ -2355,7 +2456,9 @@ function buildNoteBlockEditor(textareaId, toolbarContainerId) {
   })
   blockSel.addEventListener('change', () => {
     editor.focus()
-    document.execCommand('formatBlock', false, blockSel.value)
+    const tag = blockSel.value
+    // Some browsers need angle-bracket wrapping for formatBlock
+    document.execCommand('formatBlock', false, `<${tag}>`)
     syncBlockTypeSelect()
   })
   toolbarEl.appendChild(blockSel)
@@ -2455,6 +2558,8 @@ function buildNoteBlockEditor(textareaId, toolbarContainerId) {
     { cmd:'insertHorizontalRule', html:'— —',          title:'Separador horizontal' },
     { sep: true },
     { cmd:'createLink',        html:'🔗',              title:'Hipervínculo', prompt:'URL del enlace:' },
+    { sep: true },
+    { cmd:'removeFormat',      html:'🧹',              title:'Limpiar formato de selección' },
   ]
   INLINE.forEach(t => {
     if (t.sep) { const s = document.createElement('div'); s.className = 'nbe-sep'; toolbarEl.appendChild(s); return }
@@ -2470,7 +2575,8 @@ function buildNoteBlockEditor(textareaId, toolbarContainerId) {
 
   function syncBlockTypeSelect() {
     try {
-      const tag = document.queryCommandValue('formatBlock').toLowerCase()
+      let tag = document.queryCommandValue('formatBlock').toLowerCase().replace(/[<>]/g, '')
+      if (!tag || tag === 'div' || tag === 'normal') tag = 'p'
       const match = BLOCK_OPTS.find(o => o.val === tag)
       if (match) blockSel.value = tag
       else blockSel.value = 'p'
@@ -2544,7 +2650,7 @@ function buildNoteBlockEditor(textareaId, toolbarContainerId) {
     if (type === 'ul') document.execCommand('insertUnorderedList', false, null)
     else if (type === 'ol') document.execCommand('insertOrderedList', false, null)
     else if (type === 'hr') document.execCommand('insertHorizontalRule', false, null)
-    else document.execCommand('formatBlock', false, type)
+    else document.execCommand('formatBlock', false, `<${type}>`)
     textarea.value = editor.innerHTML
     syncBlockTypeSelect()
   }
@@ -2618,6 +2724,31 @@ function buildNoteBlockEditor(textareaId, toolbarContainerId) {
 
   editor.addEventListener('focus', () => syncBlockTypeSelect())
   editor.addEventListener('blur',  () => { textarea.value = editor.innerHTML; hideSlashMenu(); selBar.style.display = 'none' })
+
+  // ── Paste as plain text by default ──────────────────────
+  editor.addEventListener('paste', e => {
+    e.preventDefault()
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain')
+    // Insert plain text at cursor position
+    const sel = window.getSelection()
+    if (sel?.rangeCount) {
+      const range = sel.getRangeAt(0)
+      range.deleteContents()
+      // Split text by newlines and insert as paragraphs
+      const lines = text.split(/\r?\n/)
+      const frag = document.createDocumentFragment()
+      lines.forEach((line, i) => {
+        frag.appendChild(document.createTextNode(line))
+        if (i < lines.length - 1) frag.appendChild(document.createElement('br'))
+      })
+      range.insertNode(frag)
+      // Move cursor to end of inserted content
+      range.collapse(false)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    }
+    textarea.value = editor.innerHTML
+  })
 
   // Store refs for cleanup
   editor._slashMenu = slashMenu
@@ -2713,6 +2844,7 @@ window.openNoteEdit = (id) => {
   const node = allNodes.find(n => n.id === id)
   if (!node) return
   if (node.type === 'kanban') { openCardModal(id); return }
+  if (node.type === 'income' || node.type === 'expense' || node.type === 'bill' || node.type === 'subscription') { openFinanceDetail(id); return }
   // Open full-page editor instead of modal
   openNoteFullPage(id)
 }
@@ -6370,7 +6502,7 @@ window.attachImageFromFile = (input, context) => {
 }
 
 async function addAttachment(base64, context) {
-  const id = context === 'card' ? editingCardId : context === 'nfp' ? _noteProfileId : context === 'note' ? editingNoteId : editingFinanceId
+  const id = context === 'card' ? editingCardId : context === 'pnfp' ? _projNoteEditorId : context === 'nfp' ? _noteProfileId : context === 'note' ? editingNoteId : editingFinanceId
   if (!id) return
   const node = allNodes.find(n => n.id === id)
   if (!node) return
@@ -6391,7 +6523,7 @@ window.addAttachmentUrl = async function(context) {
 }
 
 function renderAttachments(images, context) {
-  const containerId = context === 'card' ? 'tm-attachments' : context === 'nfp' ? 'nfp-attachments' : context === 'note' ? 'ne-attachments' : 'fd-attachments'
+  const containerId = context === 'card' ? 'tm-attachments' : context === 'pnfp' ? 'pnfp-attachments' : context === 'nfp' ? 'nfp-attachments' : context === 'note' ? 'ne-attachments' : 'fd-attachments'
   const container = document.getElementById(containerId)
   if (!container) return
   container.innerHTML = (images || []).map((src, i) => {
@@ -6448,7 +6580,7 @@ window.viewImage = (src) => {
 }
 
 window.removeAttachment = async (idx, context) => {
-  const id = context === 'card' ? editingCardId : context === 'nfp' ? _noteProfileId : context === 'note' ? editingNoteId : editingFinanceId
+  const id = context === 'card' ? editingCardId : context === 'pnfp' ? _projNoteEditorId : context === 'nfp' ? _noteProfileId : context === 'note' ? editingNoteId : editingFinanceId
   const node = allNodes.find(n => n.id === id)
   if (!node) return
   node.metadata.images.splice(idx, 1)
@@ -10479,6 +10611,7 @@ window.openProjectDashboard = (projectId) => {
     </div>`
   if (_projDashTab === 'kanban') {
     try { initProjKanbanSortable(_projDashId) } catch (e) { /* ignore */ }
+    _initProjKanbanChart(d)
   }
 }
 
@@ -10499,7 +10632,33 @@ window.switchProjTab = (tab) => {
   if (content) content.innerHTML = _renderProjTab(tab, d)
   if (tab === 'kanban') {
     try { initProjKanbanSortable(_projDashId) } catch (e) { /* ignore */ }
+    _initProjKanbanChart(d)
   }
+}
+
+function _initProjKanbanChart(d) {
+  setTimeout(() => {
+    const ctx = document.getElementById('proj-kanban-donut')?.getContext('2d')
+    if (!ctx) return
+    const { m, tagStr } = d
+    const linkedIds = new Set(m.linkedTo || [])
+    const tasks = allNodes.filter(n => {
+      if (n.type !== 'kanban' && n.type !== 'tarea') return false
+      if (linkedIds.has(n.id)) return true
+      if (tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)) return true
+      if ((n.metadata?.tags||[]).some(t => tagStr.includes(t.replace(/^#/,'').toLowerCase()))) return true
+      return false
+    })
+    const todo = tasks.filter(n=>(n.metadata?.status||'todo')==='todo').length
+    const prog = tasks.filter(n=>n.metadata?.status==='in_progress').length
+    const done = tasks.filter(n=>n.metadata?.status==='done').length
+    if (window._projKanbanDonut) window._projKanbanDonut.destroy()
+    window._projKanbanDonut = new Chart(ctx, {
+      type:'doughnut',
+      data:{labels:['Pendientes','En progreso','Completadas'],datasets:[{data:[todo,prog,done],backgroundColor:['#94a3b8','#fbbf24','#4ade80'],borderWidth:0}]},
+      options:{responsive:false,cutout:'60%',plugins:{legend:{display:false},tooltip:{bodyFont:{size:11}}}}
+    })
+  }, 80)
 }
 
 function _renderProjTab(tab, d) {
@@ -11202,7 +11361,10 @@ function _renderProjFinanzas(d) {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           <span style="font-size:12px;font-weight:800;color:var(--text-muted);letter-spacing:.07em;text-transform:uppercase;">Financiero</span>
         </div>
-        ${budget === 0 ? `<button onclick="openProyectoModal('${p.id}')" style="display:flex;align-items:center;gap:6px;font-size:11px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:600;">${ICON_BRIEFCASE} Definir presupuesto</button>` : ''}
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${budget === 0 ? `<button onclick="openProyectoModal('${p.id}')" style="display:flex;align-items:center;gap:6px;font-size:11px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:600;">${ICON_BRIEFCASE} Definir presupuesto</button>` : ''}
+          <button onclick="printProjectReport('${p.id}')" style="display:flex;align-items:center;gap:5px;font-size:11px;color:#60a5fa;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;padding:4px 12px;cursor:pointer;font-weight:600;">📊 Reporte Financiero</button>
+        </div>
       </div>
       ${gaugeSVG}
       ${kpisHTML}
@@ -11568,8 +11730,48 @@ function _renderProjKanban(d) {
   ]
   const columns = [...defaultCols, ...customCols.map(c=>({id:c.id||c.label?.toLowerCase().replace(/\s/g,'_'), label:c.label, color:c.color||'#60a5fa'}))]
 
-  return `<div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-    <span style="font-size:12px;font-weight:800;color:var(--text-muted);">KANBAN DEL PROYECTO — ${esc(m.label||p.content)}</span>
+  // Stats
+  const total = allTasks.length
+  const todo  = allTasks.filter(n=>(n.metadata?.status||'todo')==='todo').length
+  const prog  = allTasks.filter(n=>n.metadata?.status==='in_progress').length
+  const done  = allTasks.filter(n=>n.metadata?.status==='done').length
+  const pctDone = total ? Math.round(done/total*100) : 0
+  const today2 = new Date().toISOString().slice(0,10)
+  const overdue = allTasks.filter(n=>{const dl=n.metadata?.date_deadline||n.metadata?.due_date;return dl&&dl<today2&&n.metadata?.status!=='done'}).length
+
+  return `
+  <!-- Stats bar -->
+  <div style="display:grid;grid-template-columns:140px 1fr;gap:12px;margin-bottom:16px;align-items:center;">
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px;text-align:center;">
+      <canvas id="proj-kanban-donut" width="100" height="100"></canvas>
+      <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:6px;">${done}/${total} completadas</div>
+    </div>
+    <div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
+        ${[
+          {label:'Pendientes',val:todo,color:'#94a3b8',icon:'⏳'},
+          {label:'En progreso',val:prog,color:'#fbbf24',icon:'⚡'},
+          {label:'Completadas',val:done,color:'#4ade80',icon:'✅'},
+          {label:'Vencidas',val:overdue,color:overdue>0?'#f87171':'#94a3b8',icon:'🔥'},
+        ].map(k=>`<div style="background:${k.color}0a;border:1px solid ${k.color}25;border-radius:10px;padding:8px 10px;text-align:center;">
+          <div style="font-size:14px;">${k.icon}</div>
+          <div style="font-size:18px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;">${k.val}</div>
+          <div style="font-size:8px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.05em;">${k.label}</div>
+        </div>`).join('')}
+      </div>
+      <div style="background:rgba(255,255,255,0.04);border-radius:8px;padding:8px 12px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-size:10px;font-weight:700;color:var(--text-muted);">Progreso</span>
+          <span style="font-size:12px;font-weight:900;color:${pctDone>=75?'#4ade80':pctDone>=40?'#fbbf24':'#94a3b8'};font-family:'JetBrains Mono',monospace;">${pctDone}%</span>
+        </div>
+        <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+          <div style="height:100%;width:${pctDone}%;background:linear-gradient(90deg,#00f6ff,#4ade80);border-radius:3px;transition:width .5s;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+    <span style="font-size:12px;font-weight:800;color:var(--text-muted);">KANBAN — ${esc(m.label||p.content)}</span>
     <div style="display:flex;gap:8px;">
       <button onclick="addProjKanbanColumn('${p.id}')" style="font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Columna</button>
       <button onclick="_projAddKanbanTask('${projSlug}','${p.id}')" style="font-size:12px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Tarea</button>
@@ -11729,9 +11931,84 @@ function _renderProjNotas(d) {
     if ((n.metadata?.tags||[]).some(t => tagStr.includes(t.replace(/^#/,'').toLowerCase()))) return true
     return false
   })
+
+  // ── Full-page note editor within project ───────────────
+  if (_projNoteEditorId) {
+    const note = allNodes.find(n => n.id === _projNoteEditorId)
+    if (!note) { _projNoteEditorId = null; return _renderProjNotas(d) }
+    const nm = note.metadata || {}
+    const title = nm.label || note.content?.replace(/<[^>]+>/g,' ').trim() || ''
+    const color = nm.color || ''
+    const colorStyle = NOTE_COLORS[color] || ''
+    const tags = (nm.tags || [])
+
+    // Schedule rich editor init after DOM insertion
+    setTimeout(() => {
+      if (_richEditors['pnfp-body']) {
+        const old = _richEditors['pnfp-body']
+        if (old._slashMenu) old._slashMenu.remove()
+        if (old._selBar) old._selBar.remove()
+        old.parentElement?.remove()
+        delete _richEditors['pnfp-body']
+      }
+      buildNoteBlockEditor('pnfp-body', 'pnfp-toolbar')
+      syncRichEditor('pnfp-body')
+      renderAttachments(nm.images || [], 'pnfp')
+    }, 50)
+
+    return `
+    <div style="max-width:900px;margin:0 auto;animation:fadeIn .25s;">
+      <button onclick="closeProjNoteEditor()" style="display:inline-flex;align-items:center;gap:6px;background:none;border:none;color:#a78bfa;cursor:pointer;font-size:13px;font-weight:700;padding:8px 0;margin-bottom:16px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        Volver a notas del proyecto
+      </button>
+      <div style="${colorStyle};background:${colorStyle ? '' : 'rgba(255,255,255,0.02)'};border:1px solid var(--glass-border);border-radius:16px;padding:24px 28px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+          <span style="font-size:24px;">📝</span>
+          <input type="text" id="pnfp-title" value="${esc(title)}" placeholder="Título de la nota"
+            style="flex:1;background:none;border:none;color:var(--text-main);font-size:20px;font-weight:800;outline:none;font-family:inherit;" />
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <label style="font-size:11px;color:var(--text-dim);font-weight:700;">ETIQUETAS</label>
+          <input type="text" id="pnfp-tags" value="${esc(tags.join(' '))}" placeholder="#idea #importante"
+            style="flex:1;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:8px;padding:5px 10px;color:var(--text-primary);font-size:12px;outline:none;" />
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="font-size:11px;color:var(--text-dim);font-weight:700;">COLOR</label>
+          <div style="display:flex;gap:4px;">
+            ${Object.keys(NOTE_COLORS).filter(c => c).map(c => `
+              <div onclick="setProjNoteColor('${_projNoteEditorId}','${c}')" style="${NOTE_COLORS[c]} width:20px;height:20px;border-radius:50%;border:2px solid ${color===c?'white':'transparent'};cursor:pointer;display:inline-block;box-sizing:border-box;"></div>
+            `).join('')}
+            <div onclick="setProjNoteColor('${_projNoteEditorId}','')" style="width:20px;height:20px;border-radius:50%;border:2px solid ${color===''?'white':'rgba(255,255,255,0.2)'};cursor:pointer;display:inline-block;background:transparent;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="background:rgba(255,255,255,0.02);border:1px solid var(--glass-border);border-radius:16px;overflow:hidden;margin-bottom:20px;display:flex;flex-direction:column;min-height:400px;">
+        <div id="pnfp-toolbar"></div>
+        <textarea id="pnfp-body" style="display:none;">${note.content || ''}</textarea>
+      </div>
+      <div style="background:rgba(255,255,255,0.02);border:1px solid var(--glass-border);border-radius:16px;padding:20px 24px;margin-bottom:20px;">
+        <label style="font-size:11px;color:var(--text-dim);font-weight:700;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:10px;">📎 Adjuntos</label>
+        <div id="pnfp-attachments" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <label style="cursor:pointer;background:rgba(255,255,255,0.05);border:1px dashed var(--glass-border);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--text-muted);">
+            📎 Imagen / PDF
+            <input type="file" accept="image/*,.pdf,application/pdf" style="display:none;" onchange="attachImageFromFile(this, 'pnfp')" />
+          </label>
+          <button onclick="addAttachmentUrl('pnfp')" style="background:rgba(255,255,255,0.05);border:1px dashed var(--glass-border);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--text-muted);cursor:pointer;">🔗 Agregar link</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;padding:16px 0;">
+        <button onclick="deleteProjNote_fp('${_projNoteEditorId}','${p.id}')" class="btn-danger" style="font-size:12px;padding:7px 18px;">🗑 Eliminar</button>
+        <button onclick="saveProjNote_fp('${_projNoteEditorId}','${projSlug}','${p.id}')" class="btn-primary" style="font-size:13px;padding:9px 28px;font-weight:800;">💾 Guardar</button>
+      </div>
+    </div>`
+  }
+
+  // ── Grid mode (default) ────────────────────────────────
   return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
     <span style="font-size:12px;font-weight:800;color:var(--text-muted);">NOTAS DEL PROYECTO (${notes.length})</span>
-    <button onclick="openProjNoteModal('${projSlug}','${p.id}',null)" style="font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Nueva nota</button>
+    <button onclick="createProjNote_fp('${projSlug}','${p.id}')" style="font-size:12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Nueva nota</button>
   </div>
   ${notes.length === 0 ? `<div style="text-align:center;padding:40px;color:var(--text-dim);">
     <div style="font-size:32px;margin-bottom:12px;">🧠</div>
@@ -11740,28 +12017,20 @@ function _renderProjNotas(d) {
   </div>` :
   `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
     ${notes.map(n => {
-      const m = n.metadata || {}
-      const imgs = m.images || []
+      const nm = n.metadata || {}
+      const imgs = nm.images || []
       const src = imgs.length ? (typeof imgs[0]==='string'?imgs[0]:imgs[0].url||'') : ''
-      const title = m.label || n.content?.split('\n')[0]?.slice(0,60) || 'Sin título'
-      // Bóveda Neural-style bg color support
-      const noteColor = m.color || m.bg_color || ''
-      const noteCssMap = (typeof NOTE_COLORS !== 'undefined') ? NOTE_COLORS : {}
-      const colorCss = noteCssMap[noteColor] || ''
-      const baseStyle = colorCss
-        ? colorCss
-        : `background:var(--surface);border-color:var(--border);`
-      // Markdown-lite preview: bold + headers
-      const rawBody = (n.content || '').replace(/^#\s+(.+)$/gm, '$1').slice(0, 200)
-      const previewBody = esc(rawBody)
-        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-        .replace(/\n/g, ' ')
-      return `<div onclick="openProjNoteModal('${projSlug}','${p.id}','${n.id}')" style="${baseStyle}border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all .2s;"
+      const title = nm.label || n.content?.replace(/<[^>]+>/g,' ').trim().slice(0,60) || 'Sin título'
+      const noteColor = nm.color || ''
+      const colorCss = NOTE_COLORS[noteColor] || ''
+      const baseStyle = colorCss || `background:var(--surface);border-color:var(--border);`
+      const rawBody = (n.content || '').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0, 200)
+      return `<div onclick="openProjNote_fp('${n.id}')" style="${baseStyle}border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:all .2s;"
         onmouseenter="this.style.borderColor='rgba(167,139,250,0.4)'"
         onmouseleave="this.style.borderColor='var(--border)'">
         ${src?`<img src="${src}" style="width:100%;height:80px;object-fit:cover;border-radius:8px;margin-bottom:10px;" onerror="this.style.display='none'" />`:''}
         <div style="font-size:12px;font-weight:700;color:var(--text-primary);margin-bottom:6px;">${esc(title)}</div>
-        <div style="font-size:11px;color:var(--text-muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${previewBody}</div>
+        <div style="font-size:11px;color:var(--text-muted);overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;">${esc(rawBody)}</div>
         <div style="font-size:10px;color:var(--text-dim);margin-top:8px;">${(n.created_at||'').slice(0,10)}</div>
       </div>`
     }).join('')}
@@ -12058,6 +12327,82 @@ window.deleteProjNote = async () => {
   closeProjNoteModal()
   showToast('🗑️ Nota eliminada')
   openProjectDashboard(projId)
+}
+
+// ── Project note full-page editor actions ─────────────────────────────────────
+window.openProjNote_fp = function(noteId) {
+  _projNoteEditorId = noteId
+  switchProjTab('notas')
+}
+
+window.closeProjNoteEditor = function() {
+  if (_richEditors['pnfp-body']) {
+    const ed = _richEditors['pnfp-body']
+    if (ed._slashMenu) ed._slashMenu.remove()
+    if (ed._selBar) ed._selBar.remove()
+    delete _richEditors['pnfp-body']
+  }
+  _projNoteEditorId = null
+  switchProjTab('notas')
+}
+
+window.createProjNote_fp = async function(projSlug, projId) {
+  const meta = {
+    label: '',
+    project_tag: projSlug,
+    tags: ['#'+projSlug],
+  }
+  let newNote
+  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+    newNote = { id: Math.random().toString(36).substr(2,9), type:'note', content:'', metadata:meta, created_at:new Date().toISOString() }
+    allNodes.unshift(newNote)
+    await autoLinkToProject(newNote.id, projSlug)
+  } else {
+    const { data } = await supabase.from('nodes').insert({ owner_id:currentUser?.id, type:'note', content:'', metadata:meta }).select()
+    if (data?.[0]) { newNote = data[0]; allNodes.unshift(newNote); await autoLinkToProject(newNote.id, projSlug) }
+  }
+  if (newNote) {
+    _projNoteEditorId = newNote.id
+    switchProjTab('notas')
+  }
+}
+
+window.saveProjNote_fp = async function(noteId, projSlug, projId) {
+  const note = allNodes.find(n => n.id === noteId)
+  if (!note) return
+  const title = (document.getElementById('pnfp-title')?.value || '').trim()
+  const richEditor = _richEditors['pnfp-body']
+  const body = richEditor ? richEditor.innerHTML : (document.getElementById('pnfp-body')?.value || '').trim()
+  const tagsRaw = document.getElementById('pnfp-tags')?.value || ''
+  const tags = tagsRaw.split(/\s+/).filter(t => t.startsWith('#'))
+  if (!tags.includes('#'+projSlug)) tags.push('#'+projSlug)
+
+  note.content = body
+  note.metadata = { ...(note.metadata||{}), label: title || body.replace(/<[^>]+>/g,' ').trim().slice(0,60), tags, project_tag: projSlug }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ content: body, metadata: note.metadata }).eq('id', noteId)
+  }
+  showToast('✅ Nota guardada')
+  switchProjTab('notas')
+}
+
+window.deleteProjNote_fp = async function(noteId, projId) {
+  if (!confirm('¿Eliminar esta nota?')) return
+  allNodes = allNodes.filter(n => n.id !== noteId)
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').delete().eq('id', noteId)
+  showToast('🗑️ Nota eliminada')
+  _projNoteEditorId = null
+  switchProjTab('notas')
+}
+
+window.setProjNoteColor = async function(noteId, color) {
+  const note = allNodes.find(n => n.id === noteId)
+  if (!note) return
+  note.metadata = { ...(note.metadata || {}), color }
+  if (localStorage.getItem('nexus_admin_bypass') !== 'true')
+    await supabase.from('nodes').update({ metadata: note.metadata }).eq('id', noteId)
+  switchProjTab('notas')
 }
 
 // ── Helpers for project kanban ────────────────────────────────────────────────
@@ -12430,6 +12775,71 @@ window.resetAllData = async () => {
 }
 
 // ═══════════════════════════════════════════════════════════
+// ── Helper: build payment timeline HTML for print report ──────────
+function _buildPaymentTimeline(allPayments, pagado, paidPct, daysElapsed, startDate, todayISO, budget, pendientePago, totalTarget) {
+  if (!allPayments.length) return ''
+  const fmtP = n => '$' + Math.abs(n||0).toLocaleString('es-MX',{maximumFractionDigits:0})
+  const saldoKpi = budget > 0
+    ? '<div class="kpi"><div class="kpi-val" style="color:' + (pendientePago>0?'#dc2626':'#15803d') + ';">' + fmtP(pendientePago) + '</div><div class="kpi-lbl">Saldo pendiente</div></div>'
+    : ''
+  const budgetBar = budget > 0
+    ? '<div style="margin-top:10px;"><div style="display:flex;justify-content:space-between;font-size:11px;color:#64748b;margin-bottom:4px;"><span>Avance financiero</span><span>' + paidPct + '% — ' + fmtP(pagado) + ' de ' + fmtP(totalTarget) + '</span></div><div class="bar-wrap" style="height:10px;"><div class="bar-fill" style="width:' + paidPct + '%;background:' + (paidPct>=100?'#22c55e':paidPct>60?'#3b82f6':'#f97316') + ';height:100%;"></div></div></div>'
+    : ''
+  const rows = allPayments.map((pay, i) =>
+    '<tr><td style="color:#94a3b8;font-weight:700;">' + (i+1) + '</td>' +
+    '<td>' + pay.date + '</td>' +
+    '<td>' + esc(pay.label) + '</td>' +
+    '<td>' + esc(pay.provider || '—') + '</td>' +
+    '<td>' + (pay.method || '—') + '</td>' +
+    '<td style="text-align:right;font-weight:700;font-family:monospace;color:#1e40af;">' + fmtP(pay.amount) + '</td>' +
+    '<td style="text-align:right;font-family:monospace;color:#475569;">' + fmtP(pay.cumulative) + '</td></tr>'
+  ).join('')
+  const weeks = Math.round(daysElapsed / 7)
+
+  return '<div class="section" style="page-break-before:auto;">' +
+    '<h2>📊 Historial de Pagos — Timeline</h2>' +
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">' +
+      '<div class="kpi"><div class="kpi-val">' + allPayments.length + '</div><div class="kpi-lbl">Pagos realizados</div></div>' +
+      '<div class="kpi"><div class="kpi-val">' + fmtP(pagado) + '</div><div class="kpi-lbl">Total pagado</div></div>' +
+      '<div class="kpi"><div class="kpi-val">' + paidPct + '%</div><div class="kpi-lbl">Avance financiero</div></div>' +
+      '<div class="kpi"><div class="kpi-val">' + daysElapsed + '</div><div class="kpi-lbl">Días del proyecto</div></div>' +
+      saldoKpi +
+    '</div>' +
+    '<div style="margin:16px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;">' +
+      '<canvas id="paymentChart" width="800" height="280"></canvas>' +
+    '</div>' +
+    '<table><tr><th>#</th><th>Fecha</th><th>Concepto</th><th>Proveedor</th><th>Método</th><th style="text-align:right;">Monto</th><th style="text-align:right;">Acumulado</th></tr>' +
+      rows +
+      '<tr style="font-weight:700;background:#f1f5f9;"><td colspan="5">Total</td><td style="text-align:right;font-family:monospace;font-size:14px;color:#1e40af;">' + fmtP(pagado) + '</td><td></td></tr>' +
+    '</table>' +
+    '<div style="margin-top:14px;padding:12px;background:#f1f5f9;border-radius:8px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+        '<div><strong>Inicio:</strong> ' + startDate + ' → <strong>Hoy:</strong> ' + todayISO + '</div>' +
+        '<div><strong>' + daysElapsed + ' días</strong> (' + weeks + ' semanas)</div>' +
+      '</div>' +
+      budgetBar +
+    '</div>' +
+  '</div>'
+}
+
+// ── Helper: build Chart.js script for payment timeline ──────────
+function _buildPaymentChartScript(allPayments, chartLabels, chartAmounts, chartCumulative, budget) {
+  if (!allPayments.length) return ''
+  const budgetDataset = budget > 0
+    ? ',{type:"line",label:"Presupuesto",data:' + JSON.stringify(allPayments.map(() => budget)) + ',borderColor:"#94a3b8",borderDash:[6,4],borderWidth:1.5,pointRadius:0,fill:false,order:0}'
+    : ''
+  return '<script>' +
+    'window.addEventListener("load",function(){' +
+    'var ctx=document.getElementById("paymentChart");' +
+    'if(!ctx||typeof Chart==="undefined")return;' +
+    'new Chart(ctx,{type:"bar",data:{labels:' + chartLabels + ',' +
+    'datasets:[{type:"bar",label:"Monto del pago",data:' + chartAmounts + ',backgroundColor:"rgba(59,130,246,0.6)",borderColor:"#3b82f6",borderWidth:1,borderRadius:4,order:2},' +
+    '{type:"line",label:"Acumulado",data:' + chartCumulative + ',borderColor:"#f97316",backgroundColor:"rgba(249,115,22,0.1)",borderWidth:2,pointRadius:4,pointBackgroundColor:"#f97316",fill:true,tension:0.3,order:1}' +
+    budgetDataset + ']},' +
+    'options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{font:{size:11}}},tooltip:{callbacks:{label:function(c){return c.dataset.label+": $"+c.raw.toLocaleString("es-MX")}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{beginAtZero:true,ticks:{font:{size:10},callback:function(v){return "$"+v.toLocaleString("es-MX")}},grid:{color:"rgba(0,0,0,0.06)"}}}}});});' +
+    '<\/script>'
+}
+
 window.printProjectReport = (projectId) => {
   const d = _computeProjData(projectId)
   if (!d) return
@@ -12455,11 +12865,56 @@ window.printProjectReport = (projectId) => {
     tagStr.some(t => (n.metadata?.project_tag||'').toLowerCase()===t)
   ).sort((a,b) => (a.metadata?.dayOfMonth||99)-(b.metadata?.dayOfMonth||99))
 
+  // ── Payment timeline: collect ALL individual payments with dates ──
+  const allPayments = []
+  // Direct expense payments
+  pagos.forEach(pg => {
+    allPayments.push({
+      date: (pg.metadata?.date || pg.created_at || '').slice(0, 10),
+      amount: +(pg.metadata?.amount || 0),
+      label: pg.metadata?.label || pg.content || 'Pago',
+      method: pg.metadata?.method || '',
+      provider: (() => { const c = pg.metadata?.contact_id ? allNodes.find(n => n.id === pg.metadata.contact_id) : null; return c ? (c.metadata?.name || c.content) : '' })()
+    })
+  })
+  // Abonos from cotizaciones
+  cots.forEach(c => {
+    const cm = c.metadata || {}
+    const provNode = cm.provider_id ? allNodes.find(n => n.id === cm.provider_id) : null
+    const provName = provNode ? (provNode.metadata?.name || provNode.content) : ''
+    ;(cm.abonos || []).forEach(a => {
+      allPayments.push({
+        date: (a.date || '').slice(0, 10),
+        amount: +(a.amount || 0),
+        label: a.notes || cm.label || cm.description || c.content || 'Abono',
+        method: a.method || '',
+        provider: provName
+      })
+    })
+  })
+  // Sort by date ascending
+  allPayments.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+  // Compute running totals
+  let runningTotal = 0
+  allPayments.forEach(pay => { runningTotal += pay.amount; pay.cumulative = runningTotal })
+  // Project duration
+  const projCreated = (p.created_at || '').slice(0, 10)
+  const todayISO = new Date().toISOString().split('T')[0]
+  const startDate = m.start_date || projCreated || todayISO
+  const daysElapsed = Math.max(0, Math.round((new Date(todayISO) - new Date(startDate)) / 86400000))
+  const totalTarget = budget > 0 ? budget : comprometido
+  const paidPct = totalTarget > 0 ? Math.min(100, Math.round(pagado / totalTarget * 100)) : 0
+  // Chart data for timeline
+  const chartLabels = JSON.stringify(allPayments.map(pay => pay.date.slice(5)))
+  const chartAmounts = JSON.stringify(allPayments.map(pay => pay.amount))
+  const chartCumulative = JSON.stringify(allPayments.map(pay => pay.cumulative))
+
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8"/>
   <title>Reporte — ${projName}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"><\/script>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family: 'Helvetica Neue', Arial, sans-serif; color:#1a1a2e; background:#fff; font-size:13px; }
@@ -12595,7 +13050,12 @@ window.printProjectReport = (projectId) => {
   <!-- Notas del health -->
   ${health.note ? `<div class="section"><h2>Nota de Estado</h2><p style="color:#475569;font-style:italic;border-left:3px solid #3b82f6;padding-left:12px;">"${esc(health.note)}"</p></div>` : ''}
 
+  <!-- Timeline de pagos con gráfica -->
+  ${_buildPaymentTimeline(allPayments, pagado, paidPct, daysElapsed, startDate, todayISO, budget, pendientePago, totalTarget)}
+
   <div class="footer">Nexus OS — ${projName} — ${today}</div>
+
+  ${_buildPaymentChartScript(allPayments, chartLabels, chartAmounts, chartCumulative, budget)}
 </body>
 </html>`
 
@@ -12603,7 +13063,7 @@ window.printProjectReport = (projectId) => {
   if (!win) { showToast('⚠️ Permite ventanas emergentes para ver el reporte'); return }
   win.document.write(html)
   win.document.close()
-  win.onload = () => setTimeout(() => win.print(), 400)
+  win.onload = () => setTimeout(() => win.print(), 600)
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -13415,6 +13875,7 @@ window.changeCotizacionStatus = async (id, status) => {
 let currentProyectoId = null
 let _projDashTab  = 'resumen'   // active tab inside project dashboard
 let _projDashId   = null        // project ID currently open
+let _projNoteEditorId = null    // note ID open in project full-page editor (null = grid)
 
 window.openProyectoModal = (id) => {
   const node = allNodes.find(n => n.id === id)
