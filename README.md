@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.0.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-1.5.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -21,6 +21,7 @@
   <a href="#-acerca-del-proyecto">Acerca</a> •
   <a href="#-características">Características</a> •
   <a href="#-vistas-del-sistema">Vistas</a> •
+  <a href="#-contactos--ficha-completa">Contactos</a> •
   <a href="#-sintaxis-del-parser">Parser</a> •
   <a href="#-comenzando">Comenzando</a> •
   <a href="#-stack">Stack</a> •
@@ -61,27 +62,106 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 🔄 **Transform Note** | Convierte cualquier nodo en otro tipo sin perder datos (`nota → tarea`, `gasto → evento`) |
 | 🔒 **Auth completa** | Login/registro con Supabase Auth — cada usuario solo ve sus propios datos (RLS) |
 | 🖼️ **Adjuntos con Ctrl+V** | Pega imágenes directamente desde el portapapeles con compresión automática |
-| 🔍 **Búsqueda global** | Fuzzy search con Fuse.js sobre todo el contenido, filtros por tipo y por tag |
-| 📊 **Dashboard ejecutivo** | Panel de Comandos con gauge de saldo, KPIs, próximos pagos y proyectos activos |
+| 🔍 **Búsqueda global** | Fuzzy search con Fuse.js sobre todo el contenido, filtros por tipo y tag |
+| 📊 **Dashboard ejecutivo** | KPIs, próximos pagos, proyectos activos, eventos de contactos próximos (30 días) |
 | 📤 **Print / Export CSV** | Exporta transacciones y movimientos financieros en un clic |
-| 🌐 **Reconocimiento de fechas** | Chrono-node detecta fechas naturales: "mañana", "el viernes", "en 2 semanas" |
 | 📱 **PWA-ready** | Diseño responsivo, usable en móvil y tablet |
+| 🎨 **Editor rico** | Bóveda Neural con colores de texto, resaltado, tamaños y formato completo |
+| 👤 **Ficha de contacto** | Perfil completo con foto, documentos Drive, WhatsApp directo e historial de pagos |
+| 💎 **Portafolio Crypto** | Seguimiento multi-moneda con edición de compras y precio actual |
 
 ---
 
 ## 🗂️ Vistas del Sistema
 
-Nexus OS tiene **7 vistas** accesibles desde la barra lateral:
+Nexus OS tiene **8 vistas** accesibles desde la barra lateral:
 
 | Vista | Descripción |
 |---|---|
-| 🖥️ **Panel de Comandos** | Dashboard ejecutivo con gauge de saldo consolidado, KPI strip, widgets de próximos pagos y proyectos activos |
+| 🖥️ **Panel de Comandos** | Dashboard ejecutivo con KPI strip, próximos pagos, proyectos y widget de cumpleaños/aniversarios (30 días) |
 | 🗂️ **Muro Táctico** | Kanban drag & drop por columnas (Pendiente / En Progreso / Hecho). Modal de detalle por tarjeta |
-| 💰 **Bio-Finanzas** | Registro financiero multi-cuenta. Vista de cuentas con saldo disponible y modal de detalle por transacción |
-| 🧠 **Bóveda Neural** | Notas estilo Google Keep con colores, etiquetas y pin. Soporta texto enriquecido |
+| 💰 **Bio-Finanzas** | Registro financiero multi-cuenta. Vista de cuentas con saldo disponible, modal de detalle y portafolio crypto |
+| 🧠 **Bóveda Neural** | Notas estilo Google Keep con colores, etiquetas, pin, editor rico (tamaños, colores de texto, resaltado, negritas) |
 | 📅 **Calendario** | Línea de tiempo con vistas mes / semana / día. Sincronizado con tareas y eventos del parser |
 | 📜 **Crónica** | Histórico diario en 3 columnas: lo que pasó, decisiones tomadas, pendientes |
+| 👥 **Contactos** | Directorio con ficha completa: foto, teléfonos múltiples, documentos Drive, WhatsApp, historial de pagos |
 | ❓ **Ayuda** | Guía interactiva completa de la sintaxis del parser y todas las funciones del sistema |
+
+---
+
+## 👤 Contactos — Ficha Completa
+
+El módulo de contactos es un **CRM ligero** integrado con el resto del sistema:
+
+### Datos del contacto
+- **Foto de perfil** — URL (Google Drive, Dropbox, cualquier imagen pública)
+- **Múltiples teléfonos** — con etiqueta (Personal, Trabajo, WhatsApp, Casa, Otro)
+- **Múltiples emails** — con etiqueta (Personal, Trabajo, Facturación, Otro)
+- **Dirección postal** — calle, C.P., estado, país
+- **Fechas especiales** — 🎂 Cumpleaños y 💑 Aniversario
+- **Cuentas de cobro** — CLABE, wallet crypto, efectivo (con botón copiar)
+- **Roles** — Persona, Proveedor, Cliente, Colaborador (multi-selección)
+- **Calificación** — 1 a 5 estrellas
+- **Especialidades** — catálogo editable
+
+### 📎 Documentos vinculados a Google Drive
+
+Vincula archivos del contacto directamente desde Drive, Dropbox o cualquier servicio:
+
+| Tipo | Descripción |
+|---|---|
+| 🪪 INE / Credencial | Identificación oficial |
+| 📋 CURP | Clave Única de Registro de Población |
+| 📜 Acta de Nacimiento | Documento de nacimiento |
+| 🛂 Pasaporte | Documento de viaje |
+| 🧾 RFC / SAT | Registro fiscal |
+| 📝 Contrato | Acuerdo de trabajo o servicios |
+| ✍️ Firma | Rúbrica digitalizada |
+| ⚖️ Poder Notarial | Representación legal |
+| 🏠 Comprobante de Domicilio | Dirección verificada |
+| 📷 Fotografía | Foto adicional |
+
+### Ficha de Perfil (Modal completo)
+
+Al hacer clic en cualquier tarjeta de contacto se abre la **Ficha de Perfil**:
+
+- **Hero**: foto grande, nombre, roles, rating, especialidades
+- **Acciones rápidas**: 📞 Llamar, 💬 WhatsApp, ✉️ Email, 🧾 Copiar RFC
+- **Grid de documentos**: iconos grandes con botón "↗ Abrir" hacia Drive
+- **Historial de pagos**: transacciones vinculadas a este contacto con totales
+- **Proyectos vinculados**: proyectos donde aparece como equipo/cliente
+- **Botón ✏️ Editar**: abre el modal de edición desde la ficha
+
+---
+
+## 💰 Bio-Finanzas — Portafolio Crypto
+
+Seguimiento de inversiones en criptomonedas sin depender de APIs externas:
+
+- **KPIs**: total invertido, valor actual, ganancia/pérdida, rendimiento %
+- **Tabla de monedas**: holdings, invertido, valor actual, ganancia por moneda
+- **Historial de compras**: editable (✏️) y eliminable (✕)
+- **Precio actual**: actualizable manualmente por moneda
+- Monedas soportadas: XRP, BTC, ETH, USDT, SOL, MANA, ADA + cualquier otra
+
+---
+
+## 🧠 Bóveda Neural — Editor Rico
+
+El editor de notas tiene capacidades de formato completo:
+
+| Control | Función |
+|---|---|
+| Selector XS/Sm/Md/Lg/XL/2X/3X | Tamaño de texto |
+| Botón **A** (color) | Color de texto (foreColor) |
+| Botón **M** (resaltado) | Color de fondo / marcador (hiliteColor) |
+| **B** / **I** / **U** / **S** | Negrita, Cursiva, Subrayado, Tachado |
+| `• ≡` / `1. ≡` | Lista de viñetas / Lista numerada |
+| `— —` | Separador horizontal |
+| 🔗 | Insertar hipervínculo |
+| `H1` / `H2` / `H3` / `¶` | Encabezados y párrafo (selector de bloque) |
+| `/` en el editor | Menú de bloques estilo Notion |
+| ⤢ | Maximizar a pantalla completa |
 
 ---
 
@@ -160,7 +240,7 @@ npm install
 
 ```sql
 -- ============================================================
--- NEXUS OS — Schema v1.0
+-- NEXUS OS — Schema v1.5
 -- Ejecutar en: Supabase > SQL Editor
 -- ============================================================
 
@@ -172,7 +252,11 @@ CREATE TABLE IF NOT EXISTS public.nodes (
   owner_id     UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   content      TEXT        NOT NULL,
   type         TEXT        NOT NULL DEFAULT 'note'
-                           CHECK (type IN ('note','task','income','expense','kanban','persona','proyecto','cotizacion')),
+                           CHECK (type IN (
+                             'note','task','income','expense','kanban',
+                             'persona','proyecto','cotizacion','milestone',
+                             'bill','subscription','calendar','feedback'
+                           )),
   metadata     JSONB       NOT NULL DEFAULT '{}'::jsonb,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -220,7 +304,7 @@ Abre [http://localhost:5173](http://localhost:5173) — crea tu cuenta y empieza
 
 ```
 nexus-os/
-├── app.js              # Lógica principal — parser, render engine, todas las vistas
+├── app.js              # Lógica principal — parser, render engine, todas las vistas (~13,000 líneas)
 ├── app.html            # Shell HTML — estructura de vistas y modales
 ├── main.js             # Entry point Vite — Supabase init, auth, router
 ├── style.css           # Design tokens y clases base (complementa Tailwind)
@@ -236,17 +320,21 @@ nexus-os/
 └── .env.example        # Plantilla de variables de entorno
 ```
 
-**Vistas en `app.js`** (funciones de render):
+**Funciones principales en `app.js`:**
 
-| Función | Vista |
+| Función | Vista / Módulo |
 |---|---|
 | `renderPanelDashboard()` | Panel de Comandos — dashboard ejecutivo |
 | `renderKanban()` | Muro Táctico — board Kanban |
 | `renderFinance()` | Bio-Finanzas — cuentas y transacciones |
+| `renderCryptoPortfolio()` | Portafolio Crypto (dentro de Bio-Finanzas) |
 | `renderNotes()` | Bóveda Neural — notas tipo Keep |
 | `renderCalendar()` | Calendario / Línea de Tiempo |
 | `renderCronica()` | Crónica — histórico diario |
-| `renderProyectos()` | Proyectos — dashboard + proveedores + finanzas |
+| `renderProyectos()` | Proyectos — dashboard + finanzas |
+| `renderContacts()` | Contactos — tarjetas del directorio |
+| `openContactProfile(id)` | Ficha completa de contacto |
+| `buildNoteBlockEditor()` | Editor rico con colores/tamaños |
 
 ---
 
