@@ -15,16 +15,17 @@
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
   <img src="https://img.shields.io/badge/PRs-welcome-orange?style=for-the-badge" alt="PRs Welcome"/>
+  <img src="https://img.shields.io/badge/made%20with-❤️-red?style=for-the-badge" alt="Made with love"/>
 </p>
 
 <p align="center">
   <a href="#-acerca-del-proyecto">Acerca</a> •
   <a href="#-características">Características</a> •
   <a href="#-vistas-del-sistema">Vistas</a> •
-  <a href="#-contactos--ficha-completa">Contactos</a> •
+  <a href="#-demo">Demo</a> •
   <a href="#-sintaxis-del-parser">Parser</a> •
   <a href="#-comenzando">Comenzando</a> •
-  <a href="#-stack">Stack</a> •
+  <a href="#-estructura-del-proyecto">Estructura</a> •
   <a href="#-deploy">Deploy</a> •
   <a href="#-contacto">Contacto</a>
 </p>
@@ -34,7 +35,7 @@
 ## 📖 Acerca del Proyecto
 
 <p align="center">
-  <img src="https://via.placeholder.com/800x450?text=Nexus+OS+Demo" alt="Nexus OS Demo" width="800"/>
+  <img src="assets/screenshots/01-panel-comandos.png" alt="Nexus OS — Panel de Comandos" width="800"/>
 </p>
 
 **Nexus OS** es un sistema operativo personal que vive en el navegador. Nació de una pregunta simple: *¿y si no tuvieras que decidir dónde guardar algo?* Solo escribes — el parser semántico detecta si es una tarea, un gasto, un ingreso, una nota o un evento, y lo enruta automáticamente a la vista correcta.
@@ -49,6 +50,9 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS"/>
   <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase"/>
   <img src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel"/>
+  <img src="https://img.shields.io/badge/Chart.js-FF6384?style=for-the-badge&logo=chart.js&logoColor=white" alt="Chart.js"/>
+  <img src="https://img.shields.io/badge/Fuse.js-1B1F23?style=for-the-badge&logo=github&logoColor=white" alt="Fuse.js"/>
+  <img src="https://img.shields.io/badge/SortableJS-FF4500?style=for-the-badge" alt="SortableJS"/>
 </p>
 
 ---
@@ -57,39 +61,27 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 
 | Característica | Descripción |
 |---|---|
-| ⚡ **Parser semántico** | Detecta tipo de entrada por prefijos: `#tarea`, `-$gasto`, `+$ingreso`, `@cuenta` |
+| ⚡ **Parser semántico** | Detecta tipo de entrada por prefijos: `#tarea`, `-$gasto @cuenta`, `+$ingreso @cuenta`, `#persona`, `#proyecto` |
 | 🏗️ **Everything is a Node** | Un único modelo de datos fluye entre todas las vistas del sistema |
 | 🔄 **Transform Note** | Convierte cualquier nodo en otro tipo sin perder datos (`nota → tarea`, `gasto → evento`) |
 | 🔒 **Auth completa** | Login/registro con Supabase Auth — cada usuario solo ve sus propios datos (RLS) |
 | 🖼️ **Adjuntos con Ctrl+V** | Pega imágenes directamente desde el portapapeles con compresión automática |
 | 🔍 **Búsqueda global** | Fuzzy search con Fuse.js sobre todo el contenido, filtros por tipo y tag |
-| 📊 **Dashboard ejecutivo** | KPIs, próximos pagos, proyectos activos, eventos de contactos próximos (30 días) |
+| 📊 **Dashboard ejecutivo** | KPIs, próximos pagos, proyectos activos, distribución Kanban, eventos de contactos próximos (30 días) |
 | 📤 **Print / Export CSV** | Exporta transacciones y movimientos financieros en un clic |
 | 📱 **PWA-ready** | Diseño responsivo, usable en móvil y tablet |
-| 🎨 **Editor rico** | Bóveda Neural con colores de texto, resaltado, tamaños y formato completo |
-| 📝 **Bóveda Neural full-page** | Editor de notas a página completa (igual que Contactos/Proyectos) con retorno a grilla |
+| 🎨 **Editor rico** | Bóveda Neural con colores de texto, resaltado, tamaños XS–3X y formato completo |
 | 👤 **Ficha de contacto** | Perfil de página completa con tabs (Info/Docs/Pagos/Proyectos), upload de foto, preview docs e impresión |
-| 🖼️ **Upload de foto** | Sube fotos directamente (compresión automática + Supabase Storage) o pega URLs de Drive |
-| 👁️ **Preview de documentos** | Lightbox con iframe para ver documentos Drive, PDFs e imágenes sin salir de la app |
-| 🧾 **CEP universal** | Comprobante Electrónico de Pago accesible desde cualquier vista — clic en ingreso/gasto/cotización abre el detalle |
-| 📥 **CSV masivo** | Importación masiva de contactos con 48 columnas y detección de duplicados por nombre (fuzzy) |
+| 🧾 **CEP universal** | Comprobante Electrónico de Pago accesible desde cualquier vista |
+| 📥 **CSV masivo** | Importación masiva de contactos con 48 columnas y detección de duplicados (fuzzy) |
 | 💎 **Portafolio Crypto** | Seguimiento multi-moneda con edición de compras y precio actual |
-| 📋 **Paste limpio** | Pega texto sin formato por defecto — mantiene tu estilo limpio sin heredar fuentes externas |
-| 🧹 **Limpiar formato** | Botón en la barra de herramientas del editor para eliminar formato de selección |
-| 📊 **Stats visuales Kanban** | Donut chart, progress bar y gráfica semanal con Chart.js en Muro Táctico y Kanban de proyectos |
-| 📈 **Reporte financiero** | Timeline de pagos con gráfica Chart.js, filtros por proveedor/fecha, comprobantes, deduplicación inteligente |
-| 📄 **Cotización detalle** | Vista rica universal para cotizaciones: historial de pagos, comprobantes, notas/prórrogas, impresión |
-| 🔗 **Auto-link a proyectos** | Al escribir en la línea de comandos dentro de un proyecto, el nodo se vincula automáticamente |
-| 🧠 **Notas full-page en proyectos** | Editor de notas a página completa dentro del contexto de cada proyecto |
-| 📊 **Orquestador OTC** | Calculadora cripto-fiat con comisiones, tabla de dispersión bancaria con semáforo, copiado rápido CLABE/monto, intersección con proyectos |
-| 💬 **Mensaje WhatsApp OTC** | Genera texto pre-aprobación para validar dispersión con socio antes de enviar SPEIs |
-| 🧾 **Comprobantes SPEI** | Drag & drop de capturas SPEI por beneficiario con export PDF ejecutivo |
-| 💳 **Centro de Pagos** | Vista limpia de cuentas propias con botón gigante de copiar CLABE/cuenta para compartir con clientes |
-| 📜 **Documentos legales** | Generador de pagarés, contratos de arrendamiento/compraventa, cartas poder y recomendación con auto-fill desde contactos |
-| 🪙 **Bitso real-time** | Precio de venta USDT/BTC/ETH/XRP/SOL desde API Bitso en el OTC, editable manualmente |
-| 📋 **Histórico legal** | Documentos generados se guardan como nodos — busca, reimprime o elimina del historial |
-| 📊 **Stats en Panel** | Distribución de tareas Kanban (pendientes/progreso/completadas/vencidas) visible desde el Panel de Comandos |
-| 🔍 **Resumen por proyecto** | Expandir cualquier proyecto en el Panel para ver tareas, deuda y botón de acceso directo |
+| 📊 **Stats visuales** | Donut chart, progress bar y gráfica semanal con Chart.js en Kanban y proyectos |
+| 📈 **Reporte financiero** | Timeline de pagos con gráfica, filtros por proveedor/fecha, comprobantes |
+| 📊 **Orquestador OTC** | Calculadora cripto-fiat con dispersión bancaria, semáforo, WhatsApp, PDF ejecutivo |
+| 💳 **Centro de Pagos** | Cuentas propias con botón copiar CLABE/cuenta para compartir con clientes |
+| 📜 **Documentos legales** | Pagarés, contratos, cartas poder y recomendación con auto-fill desde contactos |
+| 🪙 **Bitso real-time** | Precio de venta USDT/BTC/ETH/XRP/SOL desde API Bitso en el OTC |
+| 📋 **Histórico legal** | Documentos generados se guardan como nodos — busca, reimprime o elimina |
 
 ---
 
@@ -97,17 +89,59 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 
 Nexus OS tiene **9 vistas** accesibles desde la barra lateral:
 
-| Vista | Descripción |
-|---|---|
-| 🖥️ **Panel de Comandos** | Dashboard ejecutivo con KPI strip, próximos pagos, proyectos y widget de cumpleaños/aniversarios (30 días) |
-| 🗂️ **Muro Táctico** | Kanban drag & drop por columnas (Pendiente / En Progreso / Hecho). Modal de detalle por tarjeta |
-| 💰 **Bio-Finanzas** | Registro financiero multi-cuenta. Vista de cuentas con saldo disponible, modal de detalle y portafolio crypto |
-| 🧠 **Bóveda Neural** | Notas estilo Google Keep con vista de página completa, editor rico, colores, etiquetas, pin y recordatorios |
-| 📅 **Calendario** | Línea de tiempo con vistas mes / semana / día. Sincronizado con tareas y eventos del parser |
-| 📜 **Crónica** | Histórico diario en 3 columnas: lo que pasó, decisiones tomadas, pendientes |
-| 👥 **Contactos** | Directorio con ficha completa: foto, teléfonos múltiples, documentos Drive, WhatsApp, historial de pagos |
-| 🧮 **Herramientas** | Módulo con 3 tabs: Orquestador OTC, Centro de Trámites y Plantillas, Utilidades |
-| ❓ **Ayuda** | Guía interactiva completa de la sintaxis del parser y todas las funciones del sistema |
+| # | Vista | Descripción |
+|---|---|---|
+| 1 | 🖥️ **Panel de Comandos** | Dashboard ejecutivo con KPIs, próximos pagos, distribución de tareas Kanban, proyectos expandibles con deuda |
+| 2 | 🗂️ **Muro Táctico** | Kanban drag & drop (Pendiente / En Progreso / Hecho). Modal de detalle por tarjeta |
+| 3 | 💰 **Bio-Finanzas** | Registro financiero multi-cuenta. Saldo disponible, modal de detalle, portafolio crypto |
+| 4 | 🧠 **Bóveda Neural** | Notas estilo Google Keep con editor de página completa, colores, etiquetas, pin y recordatorios |
+| 5 | 📅 **Calendario** | Línea de tiempo con vistas mes / semana / día, sincronizado con tareas y eventos |
+| 6 | 📜 **Crónica** | Histórico diario en 3 columnas: lo que pasó, decisiones tomadas, pendientes |
+| 7 | 👥 **Contactos** | Directorio con ficha completa: foto, teléfonos, documentos, WhatsApp, historial de pagos |
+| 8 | 🧮 **Herramientas** | Orquestador OTC, Centro de Trámites y Plantillas, Utilidades |
+| 9 | ❓ **Ayuda** | Guía interactiva completa de la sintaxis del parser y todas las funciones |
+
+---
+
+## 🎬 Demo
+
+<p align="center">
+  <img src="assets/demo.gif" alt="Nexus OS — Demo animado" width="800"/>
+</p>
+
+> ¿No puedes ver el GIF? Revisa las capturas de pantalla por vista más abajo.
+
+### 📸 Capturas por vista
+
+<p align="center">
+  <img src="assets/screenshots/01-panel-comandos.png" alt="Panel de Comandos" width="45%"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/02-muro-tactico.png" alt="Muro Táctico" width="45%"/>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/03-bio-finanzas.png" alt="Bio-Finanzas" width="45%"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/04-boveda-neural.png" alt="Bóveda Neural" width="45%"/>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/05-linea-de-tiempo.png" alt="Calendario" width="45%"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/06-cronica.png" alt="Crónica" width="45%"/>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/07-contactos.png" alt="Contactos" width="45%"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/08-herramientas.png" alt="Herramientas" width="45%"/>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/09-configuracion.png" alt="Configuración" width="45%"/>
+  &nbsp;&nbsp;
+  <img src="assets/screenshots/10-ayuda.png" alt="Ayuda" width="45%"/>
+</p>
 
 ---
 
@@ -116,7 +150,7 @@ Nexus OS tiene **9 vistas** accesibles desde la barra lateral:
 El módulo de contactos es un **CRM ligero** integrado con el resto del sistema:
 
 ### Datos del contacto
-- **Foto de perfil** — URL (Google Drive, Dropbox, cualquier imagen pública)
+- **Foto de perfil** — URL (Google Drive, Dropbox) o subir archivo (compresión automática + Supabase Storage)
 - **Múltiples teléfonos** — con etiqueta (Personal, Trabajo, WhatsApp, Casa, Otro)
 - **Múltiples emails** — con etiqueta (Personal, Trabajo, Facturación, Otro)
 - **Dirección postal** — calle, C.P., estado, país
@@ -126,9 +160,7 @@ El módulo de contactos es un **CRM ligero** integrado con el resto del sistema:
 - **Calificación** — 1 a 5 estrellas
 - **Especialidades** — catálogo editable
 
-### 📎 Documentos vinculados a Google Drive
-
-Vincula archivos del contacto directamente desde Drive, Dropbox o cualquier servicio:
+### 📎 Documentos vinculados
 
 | Tipo | Descripción |
 |---|---|
@@ -143,68 +175,20 @@ Vincula archivos del contacto directamente desde Drive, Dropbox o cualquier serv
 | 🏠 Comprobante de Domicilio | Dirección verificada |
 | 📷 Fotografía | Foto adicional |
 
-### 📄 Ficha de Perfil — Página completa con Tabs
-
-Al hacer clic en cualquier tarjeta de contacto se abre la **Ficha de Perfil como vista completa** (igual que Proyectos):
+### Ficha de Perfil — Página completa con Tabs
 
 - **Hero**: foto grande, nombre, roles, rating, especialidades, ciudad, RFC
-- **Acciones rápidas**: 📞 Llamar, 💬 WhatsApp, ✉️ Email, 🧾 Copiar RFC, 🖨️ Imprimir, ✏️ Editar
+- **Acciones rápidas**: 📞 Llamar · 💬 WhatsApp · ✉️ Email · 🧾 Copiar RFC · 🖨️ Imprimir · ✏️ Editar
 - **Tab 📋 Info**: teléfonos, correos, dirección, fechas especiales, cuentas de cobro, notas
-- **Tab 📎 Docs**: grid de documentos — clic abre **lightbox iframe** para preview dentro de la app
-- **Tab 💰 Pagos**: historial financiero con totales de ingresos y egresos vinculados al contacto
+- **Tab 📎 Docs**: grid de documentos con lightbox iframe para preview dentro de la app
+- **Tab 💰 Pagos**: historial financiero con totales de ingresos y egresos vinculados
 - **Tab 🏗️ Proyectos**: proyectos donde aparece como equipo/cliente con acceso directo
-
-### 📸 Foto de perfil — Dos métodos
-
-1. **URL directa**: pega link de Google Drive (se auto-convierte), Dropbox o imagen pública
-2. **Subir archivo**: botón `📎 Subir` → comprime a 400×400 JPEG → sube a Supabase Storage → se guarda como URL pública
-
-### 🖨️ Impresión
-
-Botón **🖨️ Imprimir** en la ficha genera una ventana de impresión limpia con todos los datos del contacto.
-
----
-
-## 💰 Bio-Finanzas — Portafolio Crypto
-
-Seguimiento de inversiones en criptomonedas sin depender de APIs externas:
-
-- **KPIs**: total invertido, valor actual, ganancia/pérdida, rendimiento %
-- **Tabla de monedas**: holdings, invertido, valor actual, ganancia por moneda
-- **Historial de compras**: editable (✏️) y eliminable (✕)
-- **Precio actual**: actualizable manualmente por moneda
-- Monedas soportadas: XRP, BTC, ETH, USDT, SOL, MANA, ADA + cualquier otra
-
----
-
-## 🧠 Bóveda Neural — Editor de Notas
-
-Las notas se visualizan como tarjetas estilo Google Keep en una grilla. Al hacer clic en cualquier nota se abre un **editor de página completa** (igual que Contactos y Proyectos) con botón de retorno a la grilla.
-
-### Vista de página completa
-- **Header**: título editable, botón fijar/archivar, etiquetas, selector de color, recordatorio
-- **Editor rico**: toolbar completa con formato de texto profesional
-- **Adjuntos**: imágenes, PDFs y links — igual que en finanzas
-- **Acciones**: guardar, eliminar, imprimir, copiar como Markdown
-
-### Toolbar del editor
-
-| Control | Función |
-|---|---|
-| Selector XS/Sm/Md/Lg/XL/2X/3X | Tamaño de texto |
-| Botón **A** (color) | Color de texto (foreColor) |
-| Botón **M** (resaltado) | Color de fondo / marcador (hiliteColor) |
-| **B** / **I** / **U** / **S** | Negrita, Cursiva, Subrayado, Tachado |
-| `• ≡` / `1. ≡` | Lista de viñetas / Lista numerada |
-| `— —` | Separador horizontal |
-| 🔗 | Insertar hipervínculo |
-| `/` en el editor | Menú de bloques estilo Notion (párrafo, cita, listas, separador) |
 
 ---
 
 ## 🧮 Herramientas — Orquestador OTC + Centro de Trámites
 
-El módulo de Herramientas se organiza en **3 tabs**:
+El módulo se organiza en **3 tabs**:
 
 ### Tab 1: 📊 Orquestador OTC
 
@@ -212,12 +196,12 @@ Calculadora de operaciones cripto-fiat con dispersión bancaria inteligente:
 
 | Bloque | Función |
 |---|---|
-| **Entrada de Operación** | Moneda, cantidad, T/C Bitso, comisión reportada vs. real — math truncada a 2 decimales |
-| **KPI Cards** | Venta bruta, comisión, neto a dispersar, ganancia operador (toggle oculto) |
-| **Tabla de Dispersión** | Beneficiarios con autocomplete de contactos, Banco/CLABE auto-fill, monto fijo o %, copiado rápido |
-| **Semáforo** | Barra visual: amarillo (<100%), verde (100%), rojo (>100%) — bloquea exceso de fondos |
-| **Intersección Proyectos** | Si el beneficiario tiene cotización pendiente, tag parpadeante `🔗 Vincular a Proyecto` |
-| **Mensaje WhatsApp** | Genera texto de pre-aprobación con dispersión completa — copy al portapapeles |
+| **Entrada de Operación** | Moneda, cantidad, T/C Bitso real-time, comisión reportada vs. real |
+| **KPI Cards (2×2)** | Venta bruta, comisión cliente, neto a dispersar, ganancia operador (toggle oculto) |
+| **Tabla de Dispersión** | Beneficiarios con autocomplete de contactos, Banco/CLABE auto-fill, monto fijo o %, copiar rápido |
+| **Semáforo** | Barra visual: 🟡 <100% · 🟢 100% · 🔴 >100% — bloquea exceso de fondos |
+| **Intersección Proyectos** | Si el beneficiario tiene cotización pendiente → tag parpadeante `🔗 Vincular a Proyecto` |
+| **Mensaje WhatsApp** | Texto de pre-aprobación con dispersión completa — copiar al portapapeles |
 | **Comprobantes SPEI** | Drag & drop de capturas por beneficiario |
 | **Export PDF** | Estado de cuenta ejecutivo con KPIs, tabla, comprobantes |
 | **Guardar en Nexus** | Inyecta abonos en cotizaciones vinculadas automáticamente |
@@ -226,14 +210,15 @@ Calculadora de operaciones cripto-fiat con dispersión bancaria inteligente:
 
 | Sub-módulo | Función |
 |---|---|
-| **Datos de Pago** | Tus cuentas bancarias/crypto con botón gigante de copiar — para compartir con clientes |
-| **Documentos Legales** | Generador de pagarés, contratos (arrendamiento, compraventa), carta poder, carta de recomendación |
+| **Datos de Pago** | Tus cuentas bancarias/crypto con botón gigante copiar — para compartir con clientes |
+| **Documentos Legales** | Pagarés, contratos (arrendamiento, compraventa), carta poder, carta de recomendación |
+| **Histórico** | Documentos generados se guardan como nodos — busca, reimprime o elimina |
 
 Los documentos se auto-llenan con datos de tus **Contactos** (nombre, RFC, dirección, CLABE) y se exportan como PDF imprimible.
 
 ### Tab 3: 🛠 Utilidades
 
-Herramientas de productividad: Cronómetro, Cuenta Regresiva, Conversor Universal (Fiat ↔ Crypto), Calculadora Directa e Inversa.
+Cronómetro, Cuenta Regresiva, Conversor Universal (Fiat ↔ Crypto), Calculadora Directa e Inversa.
 
 ---
 
@@ -246,12 +231,12 @@ El campo de entrada principal acepta lenguaje natural. El parser detecta automá
 #tarea reunión con cliente el viernes a las 10am
 #proyecto rediseño web — para crear un proyecto nuevo
 
-# Finanzas — gastos
+# Finanzas — gastos (con cuenta destino)
 -$500 cena con equipo @efectivo
 -$1200 renta mensual @banco
 -$350.50 gasolina @tarjeta
 
-# Finanzas — ingresos
+# Finanzas — ingresos (con cuenta origen)
 +$8000 sueldo quincenal @banco
 +$2500 freelance logo @paypal @#proyecto-web
 
@@ -266,7 +251,7 @@ idea: hacer una landing page para el cliente
 #cotizacion logo + branding $4500 @cliente-abc
 ```
 
-**Modificadores de cuentas:**
+### Modificadores de cuentas
 
 | Prefijo | Tipo | Ejemplo |
 |---|---|---|
@@ -274,12 +259,20 @@ idea: hacer una landing page para el cliente
 | `+$monto @cuenta` | Ingreso | `+$5000 proyecto @banco` |
 | `@cuenta` sin monto | Tag de referencia | `@tarjeta` en cualquier nodo |
 
-**Modificadores de fecha (via chrono-node):**
+### Modificadores de fecha (chrono-node)
 
 ```
 #tarea entregar propuesta mañana
 #tarea llamar al cliente el lunes a las 9
 #tarea pago de renta el 1 de cada mes
+```
+
+### Filtros de búsqueda
+
+```
+tipo:tarea                — solo tareas
+tipo:gasto @efectivo      — gastos de una cuenta
+#etiqueta                 — nodos con un tag específico
 ```
 
 ---
@@ -307,7 +300,7 @@ npm install
 
 ### 3. Crear el proyecto en Supabase
 
-1. Ve a [supabase.com](https://supabase.com) → crea un proyecto
+1. Ve a [supabase.com](https://supabase.com) → crea un proyecto nuevo
 2. En el **SQL Editor**, ejecuta esta migración completa:
 
 ```sql
@@ -341,10 +334,15 @@ CREATE INDEX IF NOT EXISTS idx_nodes_metadata ON public.nodes USING gin (metadat
 -- Row Level Security — cada usuario solo ve sus nodos
 ALTER TABLE public.nodes ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "nodes_select_own" ON public.nodes FOR SELECT USING (auth.uid() = owner_id);
-CREATE POLICY "nodes_insert_own" ON public.nodes FOR INSERT WITH CHECK (auth.uid() = owner_id);
-CREATE POLICY "nodes_update_own" ON public.nodes FOR UPDATE USING (auth.uid() = owner_id) WITH CHECK (auth.uid() = owner_id);
-CREATE POLICY "nodes_delete_own" ON public.nodes FOR DELETE USING (auth.uid() = owner_id);
+CREATE POLICY "nodes_select_own" ON public.nodes
+  FOR SELECT USING (auth.uid() = owner_id);
+CREATE POLICY "nodes_insert_own" ON public.nodes
+  FOR INSERT WITH CHECK (auth.uid() = owner_id);
+CREATE POLICY "nodes_update_own" ON public.nodes
+  FOR UPDATE USING (auth.uid() = owner_id)
+  WITH CHECK (auth.uid() = owner_id);
+CREATE POLICY "nodes_delete_own" ON public.nodes
+  FOR DELETE USING (auth.uid() = owner_id);
 ```
 
 3. En **Settings → API**, copia tu `Project URL` y `anon public key`
@@ -376,61 +374,59 @@ Abre [http://localhost:5173](http://localhost:5173) — crea tu cuenta y empieza
 
 ```
 nexus-os/
-├── app.js              # Lógica principal — parser, render engine, todas las vistas
-├── app.html            # Shell HTML — estructura de vistas y modales
-├── main.js             # Entry point Vite — Supabase init, auth, router
-├── style.css           # Design tokens y clases base (complementa Tailwind)
-├── index.html          # Landing / login page
-├── reset-password.html # Flujo de recuperación de contraseña
+├── app.js                  # Lógica principal — parser, render engine, todas las vistas
+├── app.html                # Shell HTML — estructura de vistas y modales
+├── main.js                 # Entry point Vite — Supabase init, auth, router
+├── style.css               # Design tokens y clases base (complementa Tailwind)
+├── index.html              # Landing / login page
+├── reset-password.html     # Flujo de recuperación de contraseña
 ├── src/
-│   ├── parser.js       # Parser semántico v2 — detecta tipos, fechas, montos
-│   ├── finance-engine.js # Motor financiero — balances, running balance, periodos
-│   ├── logic.js        # Lógica auxiliar compartida
-│   └── __tests__/      # Tests unitarios (Vitest)
-├── vite.config.js      # Config Vite
-├── tailwind.config.js  # Config Tailwind CSS
-├── vercel.json         # Config deploy Vercel (SPA routing)
+│   ├── parser.js           # Parser semántico v2 — detecta tipos, fechas, montos
+│   ├── finance-engine.js   # Motor financiero — balances, running balance, periodos
+│   ├── logic.js            # Lógica auxiliar compartida
+│   └── __tests__/          # Tests unitarios (Vitest)
+├── vite.config.js          # Config Vite (multi-page)
+├── tailwind.config.js      # Config Tailwind CSS
+├── vercel.json             # Config deploy Vercel (SPA routing)
 ├── docs/
-│   └── database_schema.md   # Esquema SQL completo documentado
+│   └── database_schema.md  # Esquema SQL completo documentado
 ├── scripts/
 │   └── take-screenshots.mjs # Utilidad para generar screenshots
-├── assets/             # Banner, screenshots por vista
-├── public/             # manifest.json, service worker
-└── .env.example        # Plantilla de variables de entorno
+├── assets/
+│   ├── banner.png          # Banner del proyecto
+│   └── screenshots/        # Capturas por vista (01 a 10)
+├── public/                 # manifest.json, service worker
+└── .env.example            # Plantilla de variables de entorno
 ```
 
-**Funciones principales en `app.js`:**
+### Funciones principales en `app.js`
 
 | Función | Vista / Módulo |
 |---|---|
-| `renderPanelDashboard()` | Panel de Comandos — dashboard ejecutivo |
-| `renderKanban()` | Muro Táctico — board Kanban |
+| `renderPanelDashboard()` | Panel de Comandos — dashboard ejecutivo con stats Kanban |
+| `renderKanban()` | Muro Táctico — board Kanban drag & drop |
 | `renderFinance()` | Bio-Finanzas — cuentas y transacciones |
 | `renderCryptoPortfolio()` | Portafolio Crypto (dentro de Bio-Finanzas) |
 | `renderNotes()` | Bóveda Neural — grilla o editor full-page |
 | `renderCalendar()` | Calendario / Línea de Tiempo |
 | `renderCronica()` | Crónica — histórico diario |
-| `renderProyectos()` | Proyectos — dashboard + finanzas |
+| `renderProyectos()` | Proyectos — dashboard + finanzas + Kanban |
 | `renderContacts()` | Contactos — tarjetas del directorio |
-| `openContactProfile(id)` | Ficha completa de contacto |
-| `openNoteFullPage(id)` | Editor full-page de nota (Bóveda Neural) |
-| `openProjNote_fp(id)` | Editor full-page de nota dentro de proyecto |
+| `openContactProfile(id)` | Ficha completa de contacto con tabs |
 | `buildNoteBlockEditor()` | Editor rico con colores/tamaños/paste limpio |
-| `printFinanceCEP()` | Comprobante Electrónico de Pago (accesible desde cualquier vista) |
-| `printProjectReport(id)` | Reporte financiero con filtros (proveedor, fecha), gráfica Chart.js y deduplicación |
-| `openCotizacionDetail(id)` | Vista detalle rica de cotización con historial de pagos y comprobantes |
-| `printCotizacionDetail(id)` | Imprimir historial de pagos de una cotización con tabla detallada |
+| `printFinanceCEP()` | Comprobante Electrónico de Pago |
+| `printProjectReport(id)` | Reporte financiero con Chart.js |
+| `openCotizacionDetail(id)` | Detalle de cotización con historial de pagos |
 | `importContactsCSV()` | Importación masiva CSV con detección de duplicados |
-| `_buildPaymentTimeline()` | Timeline de pagos con KPIs, tabla, comprobantes y duración |
-| `_initProjKanbanChart(d)` | Donut chart de tareas en Kanban de proyecto |
-| `switchHerrTab(tab)` | Navegación entre tabs de Herramientas (OTC / Trámites / Utilidades) |
+| `switchHerrTab(tab)` | Navegación entre tabs de Herramientas |
 | `otcRecalc()` | Motor de cálculo OTC con truncamiento a 2 decimales |
-| `otcAddRow()` / `otcRenderTable()` | Tabla de dispersión bancaria con autocomplete de contactos |
-| `otcCopyWhatsApp()` | Genera y copia mensaje de pre-aprobación WhatsApp |
+| `otcFetchBitso()` | Consulta precio Bitso real-time |
+| `otcAddRow()` / `otcRenderTable()` | Tabla de dispersión con autocomplete de contactos |
+| `otcCopyWhatsApp()` | Genera mensaje de pre-aprobación WhatsApp |
 | `otcExportPDF()` | Exporta estado de cuenta ejecutivo en PDF |
-| `otcSaveToNodes()` | Inyecta abonos en cotizaciones vinculadas a proyectos |
-| `renderTramitesCuentas()` | Renderiza cuentas propias con botón copiar |
-| `openDocGen(type)` | Generador de documentos legales con auto-fill desde Contactos |
+| `otcSaveToNodes()` | Inyecta abonos en cotizaciones vinculadas |
+| `renderTramitesCuentas()` | Cuentas propias con botón copiar CLABE |
+| `openDocGen(type)` | Generador de documentos legales con auto-fill |
 | `docGenExport()` | Exporta documento legal como PDF imprimible |
 
 ---
@@ -482,7 +478,7 @@ npm run preview # Preview local del build
 
 1. Haz un fork del repositorio
 2. Crea tu rama: `git checkout -b feature/mi-mejora`
-3. Haz commit con mensaje descriptivo: `git commit -m 'feat: descripción clara del cambio'`
+3. Haz commit: `git commit -m 'feat: descripción clara del cambio'`
 4. Push: `git push origin feature/mi-mejora`
 5. Abre un Pull Request describiendo el cambio y por qué lo propones
 
@@ -539,6 +535,14 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para m�
 
 ---
 
+## 👥 Contribuidores
+
+<a href="https://github.com/oscaromargp">
+  <img src="https://github.com/oscaromargp.png" width="60" style="border-radius:50%" alt="oscaromargp"/>
+</a>
+
+---
+
 ## 🙏 Agradecimientos
 
 <p align="center">
@@ -567,4 +571,4 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para m�
 - [SortableJS](https://sortablejs.github.io/Sortable/) — por el drag & drop del Kanban
 - [Chart.js](https://www.chartjs.org) — por los gráficos interactivos (donut, barras, líneas)
 - [Shields.io](https://shields.io) — por los badges
-- [awesome-readme](https://github.com/matiassingers/awesome-readme) — por la inspiración
+- [Bitso API](https://bitso.com/api_info) — por los precios crypto en tiempo real
