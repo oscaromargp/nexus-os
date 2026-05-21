@@ -1582,6 +1582,37 @@ function renderPanelDashboard() {
     </div>`).join('')}
   </div>`
 
+  // ── A2) Task distribution (Kanban summary) ─────────────────
+  const kNodes  = allNodes.filter(n=>n.type==='kanban')
+  const kTotal  = kNodes.length
+  const kTodo   = kNodes.filter(n=>(n.metadata?.status||'todo')==='todo').length
+  const kProg   = kNodes.filter(n=>n.metadata?.status==='in_progress').length
+  const kDoneAll= kNodes.filter(n=>n.metadata?.status==='done').length
+  const kOver   = kNodes.filter(n=>{const d=n.metadata?.date_deadline||n.metadata?.due_date;return d&&d<todayStr&&n.metadata?.status!=='done'}).length
+  const kPctDone= kTotal ? Math.round(kDoneAll/kTotal*100) : 0
+
+  const taskDistHTML = `<div style="display:flex;gap:0;margin-bottom:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden;align-items:center;">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;flex:1;">
+      ${[
+        {label:'Pendientes',val:kTodo,color:'#94a3b8',icon:'⏳'},
+        {label:'En progreso',val:kProg,color:'#fbbf24',icon:'⚡'},
+        {label:'Completadas',val:kDoneAll,color:'#4ade80',icon:'✅'},
+        {label:'Vencidas',val:kOver,color:kOver>0?'#f87171':'#94a3b8',icon:'🔥'},
+      ].map((k,i)=>`<div style="padding:12px;text-align:center;${i>0?'border-left:1px solid rgba(255,255,255,0.06);':''}">
+        <div style="font-size:14px;margin-bottom:2px;">${k.icon}</div>
+        <div style="font-size:18px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1;">${k.val}</div>
+        <div style="font-size:8px;font-weight:800;color:var(--text-dim);text-transform:uppercase;margin-top:3px;">${k.label}</div>
+      </div>`).join('')}
+    </div>
+    <div style="padding:12px 18px;border-left:1px solid rgba(255,255,255,0.06);text-align:center;min-width:90px;">
+      <div style="font-size:9px;font-weight:800;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">Progreso</div>
+      <div style="font-size:22px;font-weight:900;color:${kPctDone>=75?'#4ade80':kPctDone>=40?'#fbbf24':'#94a3b8'};font-family:'JetBrains Mono',monospace;">${kPctDone}%</div>
+      <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-top:6px;">
+        <div style="height:100%;width:${kPctDone}%;background:linear-gradient(90deg,#00f6ff,#4ade80);border-radius:2px;"></div>
+      </div>
+    </div>
+  </div>`
+
   // ── B) Próximos pagos fijos ───────────────────────────────
   const bills = allNodes
     .filter(n => (n.type==='bill'||n.type==='subscription') && !n.metadata?.paid)
@@ -1614,8 +1645,8 @@ function renderPanelDashboard() {
     </div>`
   }).join('') : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin pagos próximos</div>`
 
-  // ── C) Proyectos activos ──────────────────────────────────
-  const proyectos = allNodes.filter(n=>n.type==='proyecto').slice(0,4)
+  // ── C) Proyectos activos (con resumen expandible) ──────────
+  const proyectos = allNodes.filter(n=>n.type==='proyecto').slice(0,6)
   const projHTML = proyectos.length ? proyectos.map(p => {
     const m = p.metadata||{}
     const label = m.label||p.content
@@ -1628,15 +1659,49 @@ function renderPanelDashboard() {
     const barClr = pct>90?'#f87171':pct>60?'#fb923c':'#4ade80'
     const miles  = allNodes.filter(n=>n.type==='milestone'&&tags.some(t=>(n.metadata?.project_tag||'').toLowerCase()===t))
     const mDone  = miles.filter(n=>n.metadata?.done).length
-    return `<div style="padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="openProjectView('${p.id}')">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+    // Task stats for this project
+    const projTasks = allNodes.filter(n=>n.type==='kanban'&&tags.some(t=>(n.metadata?.project_tag||'').toLowerCase()===t||(n.metadata?.tags||[]).some(tg=>tg.toLowerCase()==='#'+t)))
+    const pTodo = projTasks.filter(n=>(n.metadata?.status||'todo')==='todo').length
+    const pProg = projTasks.filter(n=>n.metadata?.status==='in_progress').length
+    const pDone = projTasks.filter(n=>n.metadata?.status==='done').length
+    // Debt
+    const debtTotal = cots.reduce((s,c) => {
+      const total = +(c.metadata?.amount||0)
+      const paid  = (c.metadata?.abonos||[]).reduce((s2,a)=>s2+(+(a.amount||0)),0)
+      return s + Math.max(0, total - paid)
+    }, 0)
+    const pid = p.id
+    return `<div style="border-bottom:1px solid rgba(255,255,255,0.04);">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer;" onclick="document.getElementById('pd-expand-${pid}').style.display=document.getElementById('pd-expand-${pid}').style.display==='none'?'':'none'">
         <div style="flex:1;font-size:12px;font-weight:700;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(label)}</div>
         ${budget>0?`<span style="font-size:10px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${barClr};flex-shrink:0;">${pct}%</span>`:''}
         ${miles.length>0?`<span style="font-size:10px;color:var(--text-dim,#475569);flex-shrink:0;">${mDone}/${miles.length}</span>`:''}
+        <span style="font-size:10px;color:var(--text-dim);flex-shrink:0;">▾</span>
       </div>
       <div style="height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;">
         ${budget>0?`<div style="height:100%;width:${pct}%;background:${barClr};border-radius:2px;transition:width .5s;"></div>`:
           `<div style="height:100%;width:100%;background:rgba(255,255,255,0.05);border-radius:2px;"></div>`}
+      </div>
+      <div id="pd-expand-${pid}" style="display:none;padding:8px 0 10px;border-top:1px solid rgba(255,255,255,0.03);margin-top:6px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;">
+          <div style="text-align:center;background:rgba(148,163,184,0.06);border-radius:6px;padding:6px;">
+            <div style="font-size:14px;font-weight:900;color:#94a3b8;font-family:'JetBrains Mono',monospace;">${pTodo}</div>
+            <div style="font-size:8px;color:var(--text-dim);font-weight:700;">PENDIENTES</div>
+          </div>
+          <div style="text-align:center;background:rgba(251,191,36,0.06);border-radius:6px;padding:6px;">
+            <div style="font-size:14px;font-weight:900;color:#fbbf24;font-family:'JetBrains Mono',monospace;">${pProg}</div>
+            <div style="font-size:8px;color:var(--text-dim);font-weight:700;">EN CURSO</div>
+          </div>
+          <div style="text-align:center;background:rgba(74,222,128,0.06);border-radius:6px;padding:6px;">
+            <div style="font-size:14px;font-weight:900;color:#4ade80;font-family:'JetBrains Mono',monospace;">${pDone}</div>
+            <div style="font-size:8px;color:var(--text-dim);font-weight:700;">HECHAS</div>
+          </div>
+          <div style="text-align:center;background:rgba(248,113,113,0.06);border-radius:6px;padding:6px;">
+            <div style="font-size:14px;font-weight:900;color:${debtTotal>0?'#f87171':'#4ade80'};font-family:'JetBrains Mono',monospace;">${fmtM(debtTotal)}</div>
+            <div style="font-size:8px;color:var(--text-dim);font-weight:700;">DEUDA</div>
+          </div>
+        </div>
+        <button onclick="openProjectView('${pid}')" style="width:100%;padding:6px;font-size:11px;font-weight:700;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:6px;cursor:pointer;">Abrir proyecto →</button>
       </div>
     </div>`
   }).join('') : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin proyectos registrados</div>`
@@ -1718,6 +1783,7 @@ function renderPanelDashboard() {
   // ── Render ────────────────────────────────────────────────
   root.innerHTML = `
     ${kpiStrip}
+    ${taskDistHTML}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div style="${NX_CARD}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
@@ -2443,29 +2509,8 @@ function buildNoteBlockEditor(textareaId, toolbarContainerId) {
   toolbarEl.className = 'nbe-toolbar'
   toolbarEl.innerHTML = ''
 
-  const BLOCK_OPTS = [
-    { val:'p',          txt:'¶ Párrafo' },
-    { val:'h1',         txt:'H1 — Título grande' },
-    { val:'h2',         txt:'H2 — Título mediano' },
-    { val:'h3',         txt:'H3 — Título pequeño' },
-    { val:'blockquote', txt:'" Cita' },
-  ]
-  const blockSel = document.createElement('select')
-  blockSel.className = 'nbe-btn'
-  blockSel.style.cssText = 'padding:0 6px;font-size:11px;cursor:pointer;border-radius:5px;height:26px;min-width:auto;width:auto;'
-  BLOCK_OPTS.forEach(o => {
-    const opt = document.createElement('option')
-    opt.value = o.val; opt.textContent = o.txt
-    blockSel.appendChild(opt)
-  })
-  blockSel.addEventListener('change', () => {
-    editor.focus()
-    const tag = blockSel.value
-    // Some browsers need angle-bracket wrapping for formatBlock
-    document.execCommand('formatBlock', false, `<${tag}>`)
-    syncBlockTypeSelect()
-  })
-  toolbarEl.appendChild(blockSel)
+  // Block type selector removed (H1/H2/H3 incompatible with Tailwind Preflight)
+  // Users prefer the font-size selector (XS/Sm/Md/Lg/XL/2X/3X) which works reliably
 
   const sep0 = document.createElement('div'); sep0.className = 'nbe-sep'; toolbarEl.appendChild(sep0)
 
@@ -2577,15 +2622,7 @@ function buildNoteBlockEditor(textareaId, toolbarContainerId) {
     toolbarEl.appendChild(btn)
   })
 
-  function syncBlockTypeSelect() {
-    try {
-      let tag = document.queryCommandValue('formatBlock').toLowerCase().replace(/[<>]/g, '')
-      if (!tag || tag === 'div' || tag === 'normal') tag = 'p'
-      const match = BLOCK_OPTS.find(o => o.val === tag)
-      if (match) blockSel.value = tag
-      else blockSel.value = 'p'
-    } catch(e) {}
-  }
+  function syncBlockTypeSelect() { /* no-op — block selector removed */ }
 
   // ── Editor container ──────────────────────────────────────
   const wrap = document.createElement('div'); wrap.className = 'nbe-wrap'
@@ -2604,9 +2641,6 @@ function buildNoteBlockEditor(textareaId, toolbarContainerId) {
   const slashMenu = document.createElement('div'); slashMenu.className = 'nbe-slash-menu'
   const SLASH_ITEMS = [
     { type:'p',           icon:'¶',   label:'Párrafo',         desc:'Texto normal' },
-    { type:'h1',          icon:'H1',  label:'Título 1',        desc:'Encabezado grande' },
-    { type:'h2',          icon:'H2',  label:'Título 2',        desc:'Encabezado mediano' },
-    { type:'h3',          icon:'H3',  label:'Título 3',        desc:'Encabezado pequeño' },
     { type:'blockquote',  icon:'"',   label:'Cita',            desc:'Texto destacado en bloque' },
     { type:'ul',          icon:'•',   label:'Lista viñetas',   desc:'Lista con puntos' },
     { type:'ol',          icon:'1.',  label:'Lista numerada',  desc:'Lista con números' },
@@ -5784,6 +5818,7 @@ window.switchHerrSubtab = function(sub) {
   document.querySelectorAll('.herr-subpanel').forEach(p => p.style.display = 'none')
   const panel = document.getElementById('herr-sub-' + sub)
   if (panel) panel.style.display = ''
+  if (sub === 'docs' && typeof renderDocHistory === 'function') renderDocHistory()
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -5792,8 +5827,44 @@ window.switchHerrSubtab = function(sub) {
 let _otcData = { ventaBruta:0, comisionCliente:0, ventaReportada:0, comisionBitso:0, gananciaOp:0 }
 let _otcRows = []
 let _otcAdminVisible = false
+let _otcBitsoCache = {}
 const _floor2 = v => Math.floor(v * 100) / 100
 const _fmt$ = v => v.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2})
+
+// Bitso real-time price fetch
+const BITSO_BOOKS = { USDT:'usdt_mxn', BTC:'btc_mxn', ETH:'eth_mxn', XRP:'xrp_mxn', SOL:'sol_mxn' }
+window.otcFetchBitso = async function() {
+  const coin = document.getElementById('otc-coin')?.value || 'USDT'
+  const book = BITSO_BOOKS[coin]
+  const tcInput = document.getElementById('otc-tc')
+  const hint = document.getElementById('otc-bitso-hint')
+  if (!book) {
+    if (hint) hint.textContent = 'Sin precio Bitso para ' + coin + ' — ingresa T/C manual'
+    return
+  }
+  if (hint) hint.textContent = 'Consultando Bitso...'
+  try {
+    if (_otcBitsoCache[book] && (Date.now() - _otcBitsoCache[book].ts < 30000)) {
+      const price = _otcBitsoCache[book].ask
+      if (tcInput && !tcInput._userEdited) tcInput.value = price
+      if (hint) hint.innerHTML = 'Bitso ask: <strong>$' + _fmt$(price) + '</strong> — <span style="cursor:pointer;text-decoration:underline;" onclick="otcFetchBitso()">actualizar</span>'
+      otcRecalc()
+      return
+    }
+    const resp = await fetch('https://api.bitso.com/v3/ticker/?book=' + book)
+    const json = await resp.json()
+    if (json.success && json.payload) {
+      const ask = parseFloat(json.payload.ask) || 0
+      _otcBitsoCache[book] = { ask, ts: Date.now() }
+      if (tcInput && !tcInput._userEdited) tcInput.value = ask.toFixed(2)
+      if (hint) hint.innerHTML = 'Bitso ask: <strong>$' + _fmt$(ask) + '</strong> — <span style="cursor:pointer;text-decoration:underline;" onclick="otcFetchBitso()">actualizar</span>'
+      otcRecalc()
+    }
+  } catch(e) {
+    console.warn('Bitso fetch error', e)
+    if (hint) hint.textContent = 'Error al consultar Bitso — ingresa T/C manual'
+  }
+}
 
 window.otcRecalc = function() {
   const qty = parseFloat(document.getElementById('otc-qty')?.value) || 0
@@ -6582,7 +6653,81 @@ window.docGenExport = function() {
 
   const win = window.open('', '_blank')
   if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
+
+  // Save to history as a node
+  const docTitles = { pagare:'Pagaré', arrendamiento:'Contrato Arrendamiento', compraventa:'Contrato Compraventa', cartapoder:'Carta Poder', recomendacion:'Carta Recomendación' }
+  const docNode = {
+    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+    content: (docTitles[type]||type) + ' — ' + nameA + ' / ' + nameB,
+    type: 'note',
+    metadata: {
+      doc_type: type,
+      doc_title: docTitles[type] || type,
+      parteA: nameA, parteA_id: parteAId || '',
+      parteB: nameB, parteB_id: parteBId || '',
+      doc_date: new Date().toISOString().slice(0,10),
+      doc_html: docHtml,
+      tags: ['#documento', '#' + type],
+      is_legal_doc: true
+    },
+    created_at: new Date().toISOString()
+  }
+  allNodes.push(docNode)
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    supabase.from('nodes').insert([{ id: docNode.id, owner_id: currentUser?.id, content: docNode.content, type: docNode.type, metadata: docNode.metadata }])
+  }
+  showToast('Documento guardado en histórico')
+  renderDocHistory()
   closeDocGen()
+}
+
+// Render doc history in Centro de Trámites
+function renderDocHistory() {
+  const grid = document.getElementById('docgen-history')
+  if (!grid) return
+  const docs = allNodes.filter(n => n.metadata?.is_legal_doc).sort((a,b) => (b.metadata?.doc_date||'').localeCompare(a.metadata?.doc_date||''))
+  if (docs.length === 0) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Sin documentos generados aún.</div>'; return }
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
+  const icons = { pagare:'📜', arrendamiento:'🏠', compraventa:'🤝', cartapoder:'✍️', recomendacion:'⭐' }
+  let h = ''
+  docs.forEach(d => {
+    const m = d.metadata || {}
+    h += '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="reprintDoc(\'' + esc(d.id) + '\')">'
+    h += '<span style="font-size:20px;">' + (icons[m.doc_type]||'📄') + '</span>'
+    h += '<div style="flex:1;min-width:0;">'
+    h += '<div style="font-size:12px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(m.doc_title) + '</div>'
+    h += '<div style="font-size:10px;color:var(--text-muted);">' + esc(m.parteA) + ' ↔ ' + esc(m.parteB) + ' — ' + esc(m.doc_date) + '</div>'
+    h += '</div>'
+    h += '<button onclick="event.stopPropagation();reprintDoc(\'' + esc(d.id) + '\')" style="background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.2);color:var(--accent-cyan);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:10px;font-weight:700;">🖨 Reimprimir</button>'
+    h += '<button onclick="event.stopPropagation();deleteDoc(\'' + esc(d.id) + '\')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;" title="Eliminar">✕</button>'
+    h += '</div>'
+  })
+  grid.innerHTML = h
+}
+
+window.reprintDoc = function(id) {
+  const node = allNodes.find(n => n.id === id)
+  if (!node?.metadata?.doc_html) { showToast('Documento no encontrado'); return }
+  const css = 'body{font-family:Georgia,serif;max-width:700px;margin:0 auto;padding:40px;color:#1a1a1a;font-size:14px;line-height:1.8;}'
+    + 'h1{text-align:center;font-size:22px;margin-bottom:30px;text-decoration:underline;}'
+    + '.sig{display:inline-block;width:250px;border-top:1px solid #333;text-align:center;padding-top:6px;margin-top:60px;}'
+    + '@media print{body{padding:10px;}}'
+  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>' + (node.metadata.doc_title||'Documento') + '</title><style>' + css + '</style></head><body>'
+  h += node.metadata.doc_html
+  h += '<div style="text-align:center;margin-top:50px;color:#ccc;font-size:9px;">Documento generado por Nexus OS</div>'
+  h += '</body></html>'
+  const win = window.open('', '_blank')
+  if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
+}
+
+window.deleteDoc = async function(id) {
+  if (!confirm('¿Eliminar este documento del histórico?')) return
+  allNodes = allNodes.filter(n => n.id !== id)
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').delete().eq('id', id)
+  }
+  renderDocHistory()
+  showToast('Documento eliminado')
 }
 
 // Helper: number to Spanish words (simplified for amounts up to millions)

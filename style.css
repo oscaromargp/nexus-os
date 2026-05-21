@@ -158,23 +158,24 @@ body {
   animation: fadeIn 0.5s ease forwards;
 }
 
-/* ── Herramientas Tab System ── */
+/* ── Herramientas Tab System (pill) ── */
 .herr-tab {
-  padding: 10px 22px;
-  font-size: 13px;
+  padding: 8px 20px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-muted, #94a3b8);
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 8px;
   cursor: pointer;
   font-family: 'JetBrains Mono', monospace;
   transition: all 0.2s ease;
 }
-.herr-tab:hover { color: #fff; }
+.herr-tab:hover { color: #fff; background: rgba(255,255,255,0.04); }
 .herr-tab.active {
-  color: var(--accent-cyan, #00f6ff);
-  border-bottom-color: var(--accent-cyan, #00f6ff);
+  color: #fff;
+  background: rgba(0,246,255,0.12);
+  box-shadow: 0 0 12px rgba(0,246,255,0.15);
 }
 .herr-subtab {
   padding: 8px 18px;

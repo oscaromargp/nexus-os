@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.1.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -86,6 +86,10 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 🧾 **Comprobantes SPEI** | Drag & drop de capturas SPEI por beneficiario con export PDF ejecutivo |
 | 💳 **Centro de Pagos** | Vista limpia de cuentas propias con botón gigante de copiar CLABE/cuenta para compartir con clientes |
 | 📜 **Documentos legales** | Generador de pagarés, contratos de arrendamiento/compraventa, cartas poder y recomendación con auto-fill desde contactos |
+| 🪙 **Bitso real-time** | Precio de venta USDT/BTC/ETH/XRP/SOL desde API Bitso en el OTC, editable manualmente |
+| 📋 **Histórico legal** | Documentos generados se guardan como nodos — busca, reimprime o elimina del historial |
+| 📊 **Stats en Panel** | Distribución de tareas Kanban (pendientes/progreso/completadas/vencidas) visible desde el Panel de Comandos |
+| 🔍 **Resumen por proyecto** | Expandir cualquier proyecto en el Panel para ver tareas, deuda y botón de acceso directo |
 
 ---
 
@@ -194,8 +198,7 @@ Las notas se visualizan como tarjetas estilo Google Keep en una grilla. Al hacer
 | `• ≡` / `1. ≡` | Lista de viñetas / Lista numerada |
 | `— —` | Separador horizontal |
 | 🔗 | Insertar hipervínculo |
-| `H1` / `H2` / `H3` / `¶` | Encabezados y párrafo (selector de bloque) |
-| `/` en el editor | Menú de bloques estilo Notion |
+| `/` en el editor | Menú de bloques estilo Notion (párrafo, cita, listas, separador) |
 
 ---
 

@@ -2493,10 +2493,10 @@
         <h1 class="view-title">🧮 Herramientas</h1>
       </div>
 
-      <!-- TAB BAR -->
-      <div id="herr-tabs" style="display:flex;gap:0;margin-bottom:20px;border-bottom:1px solid var(--glass-border);">
-        <button class="herr-tab active" data-tab="otc" onclick="switchHerrTab('otc')">📊 Orquestador OTC</button>
-        <button class="herr-tab" data-tab="tramites" onclick="switchHerrTab('tramites')">📄 Centro de Trámites</button>
+      <!-- TAB BAR — pill style -->
+      <div id="herr-tabs" style="display:inline-flex;gap:4px;margin-bottom:20px;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:12px;padding:4px;">
+        <button class="herr-tab active" data-tab="otc" onclick="switchHerrTab('otc')">📊 OTC</button>
+        <button class="herr-tab" data-tab="tramites" onclick="switchHerrTab('tramites')">📄 Trámites</button>
         <button class="herr-tab" data-tab="utilidades" onclick="switchHerrTab('utilidades')">🛠 Utilidades</button>
       </div>
 
@@ -2508,10 +2508,10 @@
         <!-- BLOQUE A: ENTRADA Y COTIZACIÓN -->
         <div class="settings-card" style="margin-bottom:20px;">
           <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:14px;">📥 Entrada de Operación</h2>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
             <div>
               <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">MONEDA RECIBIDA</label>
-              <select id="otc-coin" class="modal-input">
+              <select id="otc-coin" class="modal-input" onchange="otcFetchBitso()">
                 <option value="USDT">🔵 USDT</option><option value="BTC">₿ BTC</option>
                 <option value="SOL">◎ SOL</option><option value="XRP">🔷 XRP</option>
                 <option value="ETH">Ξ ETH</option><option value="TRX">🔴 TRX</option>
@@ -2521,10 +2521,11 @@
               <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">CANTIDAD CRIPTO</label>
               <input type="number" id="otc-qty" class="modal-input" placeholder="0.00" step="any" oninput="otcRecalc()"/>
             </div>
-            <div>
-              <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">T/C BITSO PACTADO</label>
-              <input type="number" id="otc-tc" class="modal-input" placeholder="Ej: 17.15" step="any" oninput="otcRecalc()"/>
-            </div>
+          </div>
+          <div style="margin-bottom:10px;">
+            <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">T/C PACTADO (MXN) — editable</label>
+            <input type="number" id="otc-tc" class="modal-input" placeholder="Se carga de Bitso..." step="any" oninput="this._userEdited=true;otcRecalc()"/>
+            <div id="otc-bitso-hint" style="font-size:10px;color:var(--text-dim);margin-top:4px;">Selecciona moneda para consultar Bitso</div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
             <div>
@@ -2539,8 +2540,8 @@
           <button class="widget-btn-primary" style="width:100%;padding:12px;" onclick="otcRecalc()">Calcular Operación</button>
         </div>
 
-        <!-- KPI CARDS -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+        <!-- KPI CARDS — 2x2 grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
           <div class="settings-card" style="text-align:center;padding:16px 10px;">
             <div style="font-size:9px;color:var(--text-muted);font-weight:700;letter-spacing:1px;">VENTA BRUTA</div>
             <div id="otc-kpi-bruta" style="font-size:22px;font-weight:800;color:#fff;font-family:'JetBrains Mono',monospace;margin-top:6px;">$0.00</div>
@@ -2702,6 +2703,12 @@
               <p style="font-size:11px;color:var(--text-muted);text-align:center;">Carta profesional con datos de tu contacto seleccionado.</p>
             </div>
 
+          </div>
+
+          <!-- Histórico de documentos generados -->
+          <div class="settings-card" style="margin-top:20px;">
+            <h2 style="font-size:14px;font-weight:800;color:var(--accent-cyan);margin-bottom:12px;">📋 Histórico de Documentos</h2>
+            <div id="docgen-history"></div>
           </div>
         </div>
 
