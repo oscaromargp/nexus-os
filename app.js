@@ -6814,57 +6814,150 @@ window.openDocGen = function(type) {
   const contacts = (typeof getContacts === 'function') ? getContacts() : allNodes.filter(n => n.type === 'contact' || n.type === 'persona')
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
   const contactOpts = contacts.map(c => '<option value="' + esc(c.id) + '">' + esc(c.metadata?.name || c.content) + '</option>').join('')
-  const projects = allNodes.filter(n => n.type === 'proyecto')
-  const projOpts = projects.map(p => '<option value="' + esc(p.id) + '">' + esc(p.metadata?.name || p.content) + '</option>').join('')
 
   const titles = {
-    pagare: '📜 Pagaré Electrónico',
-    arrendamiento: '🏠 Contrato de Arrendamiento',
-    compraventa: '🤝 Contrato de Compraventa',
-    cartapoder: '✍️ Carta Poder',
-    recomendacion: '⭐ Carta de Recomendación'
+    prorroga: '📋 Prórroga de Pago de Renta',
+    pagare: '📜 Pagaré',
+    recibo: '💰 Recibo de Dinero',
+    cartapoder: '✍️ Carta Poder'
   }
   if (title) title.textContent = titles[type] || 'Documento'
 
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+  const mesOpts = meses.map(m => '<option value="' + m + '">' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>').join('')
+
   let h = ''
 
-  // Common fields
-  h += '<div class="modal-field"><label class="modal-label">Parte A (Emisor / Acreedor) — seleccionar contacto</label>'
-  h += '<select id="dg-parteA" class="modal-input" onchange="docGenFillParty(\'A\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
-  h += '<div id="dg-parteA-info" style="font-size:11px;color:var(--text-muted);padding:4px 0;"></div>'
+  if (type === 'prorroga') {
+    h += '<div style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:14px;margin-bottom:14px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:4px;">📌 DESTINATARIO FIJO</div>'
+    h += '<div style="font-size:13px;color:#fff;font-weight:700;">Luis Moreno Lacalle Zaldívar</div>'
+    h += '<div style="font-size:11px;color:var(--text-muted);">Arrendador del inmueble comercial</div>'
+    h += '</div>'
 
-  h += '<div class="modal-field"><label class="modal-label">Parte B (Receptor / Deudor) — seleccionar contacto</label>'
-  h += '<select id="dg-parteB" class="modal-input" onchange="docGenFillParty(\'B\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
-  h += '<div id="dg-parteB-info" style="font-size:11px;color:var(--text-muted);padding:4px 0;"></div>'
+    h += '<div class="modal-field"><label class="modal-label">Arrendatario — seleccionar contacto</label>'
+    h += '<select id="dg-arrendatario" class="modal-input" onchange="docGenFillProrroga()"><option value="">— Seleccionar o escribir abajo —</option>' + contactOpts + '</select></div>'
+    h += '<div class="modal-field"><label class="modal-label">Nombre del arrendatario (manual)</label>'
+    h += '<input type="text" id="dg-arrendatario-name" class="modal-input" placeholder="Nombre completo del arrendatario"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Domicilio del arrendatario</label>'
+    h += '<input type="text" id="dg-arrendatario-dom" class="modal-input" placeholder="Dirección completa"/></div>'
 
-  if (type === 'pagare') {
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-    h += '<div class="modal-field"><label class="modal-label">Monto ($)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00"/></div>'
-    h += '<div class="modal-field"><label class="modal-label">Fecha de Vencimiento</label><input type="date" id="dg-fecha" class="modal-input"/></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Día</label><input type="number" id="dg-dia" class="modal-input" min="1" max="31" placeholder="__"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Mes</label><select id="dg-mes" class="modal-input"><option value="">— Mes —</option>' + mesOpts + '</select></div>'
+    h += '<div class="modal-field"><label class="modal-label">Año</label><input type="number" id="dg-anio" class="modal-input" value="' + new Date().getFullYear() + '"/></div>'
     h += '</div>'
-    h += '<div class="modal-field"><label class="modal-label">Lugar de Pago</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, B.C.S."/></div>'
-    h += '<div class="modal-field"><label class="modal-label">Interés Moratorio Mensual (%)</label><input type="number" id="dg-interes" class="modal-input" placeholder="2" value="2"/></div>'
-  } else if (type === 'arrendamiento' || type === 'compraventa') {
-    h += '<div class="modal-field"><label class="modal-label">Proyecto / Propiedad vinculada</label>'
-    h += '<select id="dg-proyecto" class="modal-input"><option value="">— Sin proyecto —</option>' + projOpts + '</select></div>'
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-    h += '<div class="modal-field"><label class="modal-label">Monto ($)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00"/></div>'
-    h += '<div class="modal-field"><label class="modal-label">' + (type==='arrendamiento' ? 'Renta Mensual ($)' : 'Enganche ($)') + '</label><input type="number" id="dg-monto2" class="modal-input" placeholder="0.00"/></div>'
+
+    h += '<div class="modal-field"><label class="modal-label">Mes de renta a prorrogar</label>'
+    h += '<select id="dg-mes-renta" class="modal-input"><option value="">— Mes —</option>' + mesOpts + '</select></div>'
+
+    h += '<div class="modal-field"><label class="modal-label">Motivo de la prórroga</label>'
+    h += '<textarea id="dg-motivo" class="modal-input" rows="3" placeholder="Ej: atraso en flujo de efectivo, situación médica, demora en cobro, etc."></textarea></div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Día pago estimado</label><input type="number" id="dg-dia-pago" class="modal-input" min="1" max="31" placeholder="__"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Mes pago</label><select id="dg-mes-pago" class="modal-input"><option value="">— Mes —</option>' + mesOpts + '</select></div>'
+    h += '<div class="modal-field"><label class="modal-label">Año pago</label><input type="number" id="dg-anio-pago" class="modal-input" value="' + new Date().getFullYear() + '"/></div>'
     h += '</div>'
-    h += '<div class="modal-field"><label class="modal-label">Dirección del Inmueble</label><input type="text" id="dg-direccion" class="modal-input" placeholder="Calle, Número, Colonia, Ciudad, Estado"/></div>'
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-    h += '<div class="modal-field"><label class="modal-label">Fecha Inicio</label><input type="date" id="dg-fecha" class="modal-input"/></div>'
-    h += '<div class="modal-field"><label class="modal-label">Fecha Fin</label><input type="date" id="dg-fecha2" class="modal-input"/></div>'
+
+  } else if (type === 'pagare') {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+
+    // Left: Beneficiario
+    h += '<div style="background:rgba(74,222,128,0.04);border:1px solid rgba(74,222,128,0.15);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#4ade80;margin-bottom:8px;">💰 BENEFICIARIO (quien cobra)</div>'
+    h += '<select id="dg-beneficiario" class="modal-input" onchange="docGenFillPagare(\'beneficiario\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select>'
+    h += '<div id="dg-beneficiario-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
+    h += '<input type="text" id="dg-benef-curp" class="modal-input" placeholder="CURP" style="margin-top:6px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-benef-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
+    h += '<input type="text" id="dg-benef-electoral" class="modal-input" placeholder="Clave Electoral" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-benef-pasaporte" class="modal-input" placeholder="N. Pasaporte" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-benef-dir" class="modal-input" placeholder="Dirección" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
+
+    // Right: Emisor/Deudor
+    h += '<div style="background:rgba(248,113,113,0.04);border:1px solid rgba(248,113,113,0.15);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:8px;">📝 EMISOR / DEUDOR (quien paga)</div>'
+    h += '<select id="dg-deudor" class="modal-input" onchange="docGenFillPagare(\'deudor\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select>'
+    h += '<div id="dg-deudor-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
+    h += '<input type="text" id="dg-deudor-curp" class="modal-input" placeholder="CURP" style="margin-top:6px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-deudor-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
+    h += '<input type="text" id="dg-deudor-electoral" class="modal-input" placeholder="Clave Electoral" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-deudor-pasaporte" class="modal-input" placeholder="N. Pasaporte" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-deudor-dir" class="modal-input" placeholder="Dirección" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '</div>'
+
+    h += '<div class="modal-field" style="margin-top:14px;"><label class="modal-label">Lugar</label>'
+    h += '<input type="text" id="dg-lugar" class="modal-input" placeholder="Ej: La Paz, B.C.S."/></div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Monto ($)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Fecha de Pago</label><input type="date" id="dg-fecha-pago" class="modal-input"/></div>'
+    h += '</div>'
+
+    h += '<div class="modal-field"><label class="modal-label">Concepto</label>'
+    h += '<input type="text" id="dg-concepto" class="modal-input" placeholder="Ej: Préstamo personal, servicios profesionales, etc."/></div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Método de Pago</label><input type="text" id="dg-metodo" class="modal-input" placeholder="Transferencia bancaria, efectivo, etc."/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Referencia de Pago</label><input type="text" id="dg-referencia" class="modal-input" placeholder="Número de referencia o N/A"/></div>'
+    h += '</div>'
+
+  } else if (type === 'recibo') {
+    h += '<div class="modal-field"><label class="modal-label">Quien recibe el dinero (Parte A)</label>'
+    h += '<select id="dg-receptor" class="modal-input" onchange="docGenFillRecibo(\'receptor\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
+    h += '<input type="text" id="dg-receptor-name" class="modal-input" placeholder="O escribir nombre manualmente" style="margin-bottom:10px;"/>'
+
+    h += '<div class="modal-field"><label class="modal-label">Quien entrega el dinero (Parte B)</label>'
+    h += '<select id="dg-entregante" class="modal-input" onchange="docGenFillRecibo(\'entregante\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
+    h += '<input type="text" id="dg-entregante-name" class="modal-input" placeholder="O escribir nombre manualmente" style="margin-bottom:10px;"/>'
+
+    h += '<div class="modal-field"><label class="modal-label">Lugar</label>'
+    h += '<input type="text" id="dg-lugar" class="modal-input" placeholder="Ej: Saltillo, Coahuila"/></div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Fecha</label><input type="date" id="dg-fecha" class="modal-input"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Monto ($)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '</div>'
+
+    h += '<div class="modal-field"><label class="modal-label">Concepto</label>'
+    h += '<input type="text" id="dg-concepto" class="modal-input" placeholder="Ej: Bancalización de activos, pago de servicios, etc."/></div>'
+
   } else if (type === 'cartapoder') {
-    h += '<div class="modal-field"><label class="modal-label">Facultades Otorgadas</label>'
-    h += '<textarea id="dg-facultades" class="modal-input" rows="3" placeholder="Describa las facultades..."></textarea></div>'
-    h += '<div class="modal-field"><label class="modal-label">Lugar y Fecha</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, B.C.S., ' + new Date().toLocaleDateString('es-MX') + '"/></div>'
-  } else if (type === 'recomendacion') {
-    h += '<div class="modal-field"><label class="modal-label">Relación con el recomendado</label><input type="text" id="dg-relacion" class="modal-input" placeholder="Ej: Empleador, Colega, Cliente"/></div>'
-    h += '<div class="modal-field"><label class="modal-label">Tiempo de conocerlo</label><input type="text" id="dg-tiempo" class="modal-input" placeholder="Ej: 3 años"/></div>'
-    h += '<div class="modal-field"><label class="modal-label">Cualidades destacadas</label>'
-    h += '<textarea id="dg-cualidades" class="modal-input" rows="3" placeholder="Responsable, puntual, honesto..."></textarea></div>'
+    h += '<div class="modal-field"><label class="modal-label">Destinatario (a quien se dirige)</label>'
+    h += '<input type="text" id="dg-destinatario" class="modal-input" placeholder="Institución, persona o \'A QUIEN CORRESPONDA\'"/></div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+
+    // Left: Otorgante
+    h += '<div style="background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.15);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;">👤 OTORGANTE (quien da el poder)</div>'
+    h += '<select id="dg-otorgante" class="modal-input" onchange="docGenFillCartaPoder(\'otorgante\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select>'
+    h += '<div id="dg-otorgante-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
+    h += '<select id="dg-otorgante-idtype" class="modal-input" style="margin-top:6px;font-size:11px;"><option value="INE">INE</option><option value="Pasaporte">Pasaporte</option><option value="Cédula Profesional">Cédula Profesional</option><option value="Licencia de Conducir">Licencia de Conducir</option></select>'
+    h += '<input type="text" id="dg-otorgante-idnum" class="modal-input" placeholder="N° de identificación" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-otorgante-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+
+    // Right: Apoderado
+    h += '<div style="background:rgba(251,191,36,0.04);border:1px solid rgba(251,191,36,0.15);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:8px;">🤝 APODERADO (quien recibe el poder)</div>'
+    h += '<select id="dg-apoderado" class="modal-input" onchange="docGenFillCartaPoder(\'apoderado\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select>'
+    h += '<div id="dg-apoderado-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
+    h += '<select id="dg-apoderado-idtype" class="modal-input" style="margin-top:6px;font-size:11px;"><option value="INE">INE</option><option value="Pasaporte">Pasaporte</option><option value="Cédula Profesional">Cédula Profesional</option><option value="Licencia de Conducir">Licencia de Conducir</option></select>'
+    h += '<input type="text" id="dg-apoderado-idnum" class="modal-input" placeholder="N° de identificación" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-apoderado-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '</div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">'
+    h += '<div class="modal-field"><label class="modal-label">Lugar</label><input type="text" id="dg-lugar" class="modal-input" placeholder="Ej: Puerto Escondido, Oaxaca"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Fecha</label><input type="date" id="dg-fecha" class="modal-input"/></div>'
+    h += '</div>'
+
+    h += '<div class="modal-field"><label class="modal-label">Razón / Facultades otorgadas</label>'
+    h += '<textarea id="dg-razon" class="modal-input" rows="3" placeholder="Describa la razón específica del poder (cobrar, firmar, representar, etc.). El texto legal completo se incluirá automáticamente."></textarea></div>'
   }
 
   body.innerHTML = h
@@ -6875,166 +6968,286 @@ window.closeDocGen = function() {
   document.getElementById('docgen-modal')?.classList.add('hidden')
 }
 
-window.docGenFillParty = function(party) {
-  const sel = document.getElementById('dg-parte' + party)
-  const info = document.getElementById('dg-parte' + party + '-info')
-  if (!sel || !info) return
-  const contactId = sel.value
-  if (!contactId) { info.innerHTML = ''; return }
-  const c = allNodes.find(n => n.id === contactId)
-  if (!c) { info.innerHTML = ''; return }
+// ── Auto-fill helpers for each template ──────────────────────────
+window.docGenFillProrroga = function() {
+  const sel = document.getElementById('dg-arrendatario')
+  if (!sel?.value) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (!c) return
   const m = c.metadata || {}
-  const parts = []
-  if (m.rfc) parts.push('RFC: ' + m.rfc)
-  if (m.address_street) parts.push(m.address_street)
-  if (m.address_state) parts.push(m.address_state)
-  const accts = m.contact_accounts || []
-  const bank = accts.find(a => a.type === 'bank')
-  if (bank) parts.push('CLABE: ' + (bank.clabe || '—'))
-  info.textContent = parts.join(' · ') || 'Sin datos adicionales'
+  const nameEl = document.getElementById('dg-arrendatario-name')
+  const domEl = document.getElementById('dg-arrendatario-dom')
+  if (nameEl && !nameEl.value) nameEl.value = m.name || c.content || ''
+  if (domEl && !domEl.value) domEl.value = [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
 }
 
+window.docGenFillPagare = function(role) {
+  const prefix = role === 'beneficiario' ? 'dg-benef' : 'dg-deudor'
+  const selId = role === 'beneficiario' ? 'dg-beneficiario' : 'dg-deudor'
+  const sel = document.getElementById(selId)
+  if (!sel?.value) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (!c) return
+  const m = c.metadata || {}
+  const info = document.getElementById(selId + '-info')
+  if (info) info.textContent = m.name || c.content
+  const rfcEl = document.getElementById(prefix + '-rfc')
+  if (rfcEl && !rfcEl.value && m.rfc) rfcEl.value = m.rfc
+  const dirEl = document.getElementById(prefix + '-dir')
+  if (dirEl && !dirEl.value) dirEl.value = [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
+  // Try auto-fill CURP from documents array
+  const docs = m.documents || []
+  const curpDoc = docs.find(d => d.docType === 'curp')
+  const curpEl = document.getElementById(prefix + '-curp')
+  if (curpEl && !curpEl.value && curpDoc?.name) curpEl.value = curpDoc.name
+}
+
+window.docGenFillRecibo = function(role) {
+  const sel = document.getElementById('dg-' + role)
+  const nameEl = document.getElementById('dg-' + role + '-name')
+  if (!sel?.value || !nameEl) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (c && !nameEl.value) nameEl.value = (c.metadata?.name || c.content || '')
+}
+
+window.docGenFillCartaPoder = function(role) {
+  const sel = document.getElementById('dg-' + role)
+  if (!sel?.value) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (!c) return
+  const m = c.metadata || {}
+  const info = document.getElementById('dg-' + role + '-info')
+  if (info) info.textContent = (m.name || c.content) + (m.rfc ? ' · RFC: ' + m.rfc : '')
+  const domEl = document.getElementById('dg-' + role + '-dom')
+  if (domEl && !domEl.value) domEl.value = [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
+}
+
+// ── PDF CSS shared by export & reprint ───────────────────────────
+const _docGenCSS = `
+  body { font-family: Georgia, 'Times New Roman', serif; max-width: 700px; margin: 0 auto; padding: 40px 50px; color: #1a1a1a; font-size: 13px; line-height: 1.9; }
+  h1 { text-align: center; font-size: 18px; margin-bottom: 24px; letter-spacing: 2px; font-weight: 700; }
+  .sig { display: inline-block; width: 240px; border-top: 1px solid #333; text-align: center; padding-top: 8px; margin-top: 50px; font-size: 12px; }
+  .id-block { border: 1px solid #999; padding: 14px 18px; margin: 16px 0; font-size: 12px; line-height: 2; page-break-inside: avoid; }
+  .id-block h3 { font-size: 13px; font-weight: 700; margin-bottom: 8px; text-decoration: underline; }
+  .id-box { width: 140px; height: 100px; border: 1px solid #ccc; display: inline-block; vertical-align: top; text-align: center; line-height: 100px; font-size: 10px; color: #999; }
+  .footer-note { text-align: center; font-size: 9px; color: #999; margin-top: 40px; border-top: 1px solid #eee; padding-top: 8px; }
+  @media print { body { padding: 20px 30px; } .footer-note { display: none; } }
+`
+
+// ── Export / generate PDF ────────────────────────────────────────
 window.docGenExport = function() {
   const type = _docGenType
-  const parteAId = document.getElementById('dg-parteA')?.value
-  const parteBId = document.getElementById('dg-parteB')?.value
-  const cA = parteAId ? allNodes.find(n => n.id === parteAId) : null
-  const cB = parteBId ? allNodes.find(n => n.id === parteBId) : null
-  const nameA = cA ? (cA.metadata?.name || cA.content) : '________________________'
-  const nameB = cB ? (cB.metadata?.name || cB.content) : '________________________'
-  const rfcA  = cA?.metadata?.rfc || '________________________'
-  const rfcB  = cB?.metadata?.rfc || '________________________'
-  const addrA = [cA?.metadata?.address_street, cA?.metadata?.address_state].filter(Boolean).join(', ') || '________________________'
-  const addrB = [cB?.metadata?.address_street, cB?.metadata?.address_state].filter(Boolean).join(', ') || '________________________'
-  const clabeA = (cA?.metadata?.contact_accounts||[]).find(a=>a.type==='bank')?.clabe || '________________________'
-
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
-  const today = new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
+  const blank = '________________________'
 
-  let docHtml = ''
-  const css = 'body{font-family:Georgia,serif;max-width:700px;margin:0 auto;padding:40px;color:#1a1a1a;font-size:14px;line-height:1.8;}'
-    + 'h1{text-align:center;font-size:22px;margin-bottom:30px;text-decoration:underline;}'
-    + '.sig{display:inline-block;width:250px;border-top:1px solid #333;text-align:center;padding-top:6px;margin-top:60px;}'
-    + '@media print{body{padding:20px;}}'
+  let docHtml = '', docTitle = '', parteAName = '', parteBName = '', parteAId = '', parteBId = ''
 
-  if (type === 'pagare') {
-    const monto = document.getElementById('dg-monto')?.value || '0'
-    const fecha = document.getElementById('dg-fecha')?.value || ''
-    const lugar = document.getElementById('dg-lugar')?.value || 'La Paz, B.C.S.'
-    const interes = document.getElementById('dg-interes')?.value || '2'
-    const fechaFmt = fecha ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', {year:'numeric',month:'long',day:'numeric'}) : '________________________'
+  if (type === 'prorroga') {
+    const arrName = document.getElementById('dg-arrendatario-name')?.value || blank
+    const arrDom  = document.getElementById('dg-arrendatario-dom')?.value || blank
+    const dia     = document.getElementById('dg-dia')?.value || '___'
+    const mes     = document.getElementById('dg-mes')?.value || '____________'
+    const anio    = document.getElementById('dg-anio')?.value || '20__'
+    const mesRenta = document.getElementById('dg-mes-renta')?.value || '[mes]'
+    const motivo  = document.getElementById('dg-motivo')?.value || '[Describir brevemente el motivo]'
+    const diaPago = document.getElementById('dg-dia-pago')?.value || '[_]'
+    const mesPago = document.getElementById('dg-mes-pago')?.value || '[mes]'
+    const anioPago = document.getElementById('dg-anio-pago')?.value || '20__'
 
-    docHtml = '<h1>PAGARÉ</h1>'
-    docHtml += '<p style="text-align:right;font-size:13px;">Bueno por: <strong>$' + esc(parseFloat(monto).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN</strong></p>'
-    docHtml += '<p>En <strong>' + esc(lugar) + '</strong>, a <strong>' + today + '</strong>.</p>'
-    docHtml += '<p>Debo y pagaré incondicionalmente a la orden de <strong>' + esc(nameA) + '</strong> '
-    docHtml += '(RFC: ' + esc(rfcA) + ', con domicilio en ' + esc(addrA) + ') '
-    docHtml += 'la cantidad de <strong>$' + esc(parseFloat(monto).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN '
-    docHtml += '(' + _numberToWords(parseFloat(monto)) + ' pesos 00/100 M.N.)</strong>, '
-    docHtml += 'valor recibido a mi entera satisfacción.</p>'
-    docHtml += '<p>Este pagaré será exigible el día <strong>' + fechaFmt + '</strong> en <strong>' + esc(lugar) + '</strong>.</p>'
-    docHtml += '<p>En caso de falta de pago oportuno, el suscriptor se obliga a pagar un interés moratorio del <strong>' + esc(interes) + '% mensual</strong> sobre el saldo insoluto.</p>'
-    docHtml += '<br/><div style="display:flex;justify-content:space-between;margin-top:40px;">'
-    docHtml += '<div class="sig"><strong>' + esc(nameA) + '</strong><br/>Acreedor</div>'
-    docHtml += '<div class="sig"><strong>' + esc(nameB) + '</strong><br/>Suscriptor (Deudor)</div>'
+    parteAName = 'Luis Moreno Lacalle Zaldívar'
+    parteBName = arrName
+    parteAId = ''
+    parteBId = document.getElementById('dg-arrendatario')?.value || ''
+    docTitle = 'Prórroga de Pago de Renta'
+
+    docHtml = '<h1>FORMATO DE SOLICITUD DE PRÓRROGA DE PAGO DE RENTA</h1>'
+    docHtml += '<p style="text-align:right;">Puerto Escondido, Oaxaca, a ' + esc(dia) + ' de ' + esc(mes) + ' de ' + esc(anio) + '.</p>'
+    docHtml += '<p><strong>Para:</strong><br/>Luis Moreno Lacalle Zaldívar<br/>Arrendador del inmueble comercial</p>'
+    docHtml += '<p><strong>Asunto:</strong><br/>Solicitud formal de prórroga de pago de renta</p>'
+    docHtml += '<p>Yo, <strong>' + esc(arrName) + '</strong>, con domicilio en <strong>' + esc(arrDom) + '</strong>, en calidad de arrendatario del espacio en renta mencionado, comparezco para solicitar de manera respetuosa una prórroga en el pago correspondiente al mes de <strong>' + esc(mesRenta) + '</strong> del año ' + esc(anio) + '.</p>'
+    docHtml += '<p><strong>Motivo de la prórroga:</strong><br/>' + esc(motivo) + '</p>'
+    docHtml += '<p><strong>Fecha estimada de pago:</strong><br/>Me comprometo a realizar el pago completo, incluyendo el importe de la renta y, en su caso, la penalización correspondiente, a más tardar el día <strong>' + esc(diaPago) + '</strong> de <strong>' + esc(mesPago) + '</strong> de ' + esc(anioPago) + '.</p>'
+    docHtml += '<p>Manifiesto que esta solicitud no exime mi responsabilidad contractual ni elimina el cobro de la multa por morosidad si aplica conforme a las condiciones establecidas.</p>'
+    docHtml += '<p>Agradezco de antemano su comprensión.</p>'
+    docHtml += '<p>Atentamente,</p>'
+    docHtml += '<br/><div class="sig"><strong>' + esc(arrName) + '</strong><br/>Arrendatario</div>'
+
+  } else if (type === 'pagare') {
+    const benefSel  = document.getElementById('dg-beneficiario')?.value || ''
+    const deudorSel = document.getElementById('dg-deudor')?.value || ''
+    const cBenef  = benefSel  ? allNodes.find(n => n.id === benefSel)  : null
+    const cDeudor = deudorSel ? allNodes.find(n => n.id === deudorSel) : null
+    const benefName  = cBenef  ? (cBenef.metadata?.name  || cBenef.content)  : blank
+    const deudorName = cDeudor ? (cDeudor.metadata?.name || cDeudor.content) : blank
+
+    const lugar      = document.getElementById('dg-lugar')?.value || blank
+    const monto      = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const fechaPagoR = document.getElementById('dg-fecha-pago')?.value || ''
+    const fechaPago  = fechaPagoR ? new Date(fechaPagoR + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : blank
+    const fechaLarga = new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
+    const concepto   = document.getElementById('dg-concepto')?.value || blank
+    const metodo     = document.getElementById('dg-metodo')?.value || blank
+    const referencia = document.getElementById('dg-referencia')?.value || blank
+
+    const bCurp  = document.getElementById('dg-benef-curp')?.value || ''
+    const bRfc   = document.getElementById('dg-benef-rfc')?.value || ''
+    const bElect = document.getElementById('dg-benef-electoral')?.value || ''
+    const bPasap = document.getElementById('dg-benef-pasaporte')?.value || ''
+    const bDir   = document.getElementById('dg-benef-dir')?.value || ''
+    const dCurp  = document.getElementById('dg-deudor-curp')?.value || ''
+    const dRfc   = document.getElementById('dg-deudor-rfc')?.value || ''
+    const dElect = document.getElementById('dg-deudor-electoral')?.value || ''
+    const dPasap = document.getElementById('dg-deudor-pasaporte')?.value || ''
+    const dDir   = document.getElementById('dg-deudor-dir')?.value || ''
+
+    const montoFmt   = monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })
+    const montoLetra = _numberToWords(monto) + ' pesos 00/100 M.N.'
+
+    parteAName = benefName
+    parteBName = deudorName
+    parteAId   = benefSel
+    parteBId   = deudorSel
+    docTitle   = 'Pagaré'
+
+    function _pgIdBlock(title, name, curp, rfc, elect, pasap, dir) {
+      let b = '<div class="id-block">'
+      b += '<h3>Datos del ' + title + '</h3>'
+      b += '<table style="width:100%;border-collapse:collapse;"><tr>'
+      b += '<td style="width:50%;vertical-align:top;padding-right:20px;">'
+      b += '<strong>Nombre:</strong><br/>' + esc(name) + '<br/><br/>'
+      b += '<strong>Identificación:</strong><br/>'
+      b += 'CURP: ' + esc(curp || blank) + '<br/>'
+      b += 'RFC: ' + esc(rfc || blank) + '<br/>'
+      b += 'CLAVE ELECTORAL: ' + esc(elect || blank) + '<br/>'
+      b += 'N. PASAPORTE: ' + esc(pasap || blank) + '<br/>'
+      b += 'DIRECCIÓN: ' + esc(dir || blank) + '<br/>'
+      b += '</td><td style="width:50%;vertical-align:top;">'
+      b += '<div style="display:flex;gap:16px;margin-bottom:12px;">'
+      b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID FRENTE:</div><div class="id-box">ID Frente</div></div>'
+      b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID REVERSO:</div><div class="id-box">ID Reverso</div></div>'
+      b += '</div>'
+      b += '<div style="margin-top:20px;"><strong>FIRMA:</strong><br/><div style="width:200px;height:60px;border-bottom:1px solid #333;margin-top:30px;"></div></div>'
+      b += '</td></tr></table></div>'
+      return b
+    }
+
+    docHtml = '<h1 style="letter-spacing:12px;">P  A  G  A  R  É</h1>'
+    docHtml += '<p style="text-align:right;font-size:12px;">Bueno por: <strong>$' + esc(montoFmt) + ' MXN</strong></p>'
+    docHtml += '<p><strong>Lugar:</strong> ' + esc(lugar) + '<br/><strong>Fecha:</strong> ' + esc(fechaLarga) + '</p>'
+    docHtml += '<p>A través de este pagaré yo <strong>' + esc(deudorName) + '</strong>, me comprometo a pagar incondicionalmente la cantidad de <strong>$' + esc(montoFmt) + '</strong> (' + esc(montoLetra) + ') a la orden de <strong>' + esc(benefName) + '</strong> por concepto de <strong>' + esc(concepto) + '</strong>. Dicha cantidad será liquidada el día <strong>' + esc(fechaPago) + '</strong>.</p>'
+    docHtml += '<p><strong>El pago será realizado a través de los siguientes medios:</strong><br/>Método de Pago: <strong>' + esc(metodo) + '</strong><br/>Referencia de Pago: <strong>' + esc(referencia) + '</strong></p>'
+    docHtml += _pgIdBlock('BENEFICIARIO', benefName, bCurp, bRfc, bElect, bPasap, bDir)
+    docHtml += _pgIdBlock('EMISOR', deudorName, dCurp, dRfc, dElect, dPasap, dDir)
+    docHtml += '<p style="margin-top:20px;font-size:12px;font-style:italic;">En caso de incumplimiento en el pago, este pagaré causará un interés moratorio del <strong>2.5% mensual</strong> sobre el saldo insoluto, contado a partir de la fecha de vencimiento o requerimiento de pago.</p>'
+    docHtml += '<p style="text-align:center;font-size:10px;margin-top:20px;color:#666;">Original - Beneficiario &nbsp;|&nbsp; Copia - Quien suscribe</p>'
+
+  } else if (type === 'recibo') {
+    const receptorSel   = document.getElementById('dg-receptor')?.value || ''
+    const entreganteSel = document.getElementById('dg-entregante')?.value || ''
+    const receptorName  = document.getElementById('dg-receptor-name')?.value
+      || (receptorSel ? (allNodes.find(n => n.id === receptorSel)?.metadata?.name || allNodes.find(n => n.id === receptorSel)?.content) : '') || blank
+    const entreganteName = document.getElementById('dg-entregante-name')?.value
+      || (entreganteSel ? (allNodes.find(n => n.id === entreganteSel)?.metadata?.name || allNodes.find(n => n.id === entreganteSel)?.content) : '') || blank
+
+    const lugar    = document.getElementById('dg-lugar')?.value || blank
+    const fechaRaw = document.getElementById('dg-fecha')?.value || ''
+    const monto    = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const concepto = document.getElementById('dg-concepto')?.value || blank
+
+    let fechaFmt = blank
+    if (fechaRaw) {
+      const d = new Date(fechaRaw + 'T12:00:00')
+      fechaFmt = d.getDate() + ' de ' + d.toLocaleDateString('es-MX', { month: 'long' }) + ' de ' + d.getFullYear()
+    }
+
+    const montoFmt   = monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })
+    const mlRaw      = _numberToWords(monto)
+    const montoLetra = mlRaw.charAt(0).toUpperCase() + mlRaw.slice(1) + ' pesos 00/100 M.N.'
+
+    parteAName = receptorName
+    parteBName = entreganteName
+    parteAId   = receptorSel
+    parteBId   = entreganteSel
+    docTitle   = 'Recibo de Dinero'
+
+    docHtml = '<h1>RECIBO DE DINERO</h1>'
+    docHtml += '<p style="text-align:right;">En ' + esc(lugar) + ', a ' + esc(fechaFmt) + '</p>'
+    docHtml += '<p>Por medio del presente, hago constar que he recibido de: <strong>' + esc(entreganteName) + '</strong>. La cantidad de: <strong>$' + esc(montoFmt) + ' M.N.</strong> (' + esc(montoLetra) + ')</p>'
+    docHtml += '<p>Por concepto de: <strong>' + esc(concepto) + '</strong></p>'
+    docHtml += '<p>Este recibo se extiende para los fines legales a que haya lugar, en la fecha antes mencionada.</p>'
+    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:60px;">'
+    docHtml += '<div class="sig"><strong>' + esc(receptorName) + '</strong><br/>(Nombre y Firma)</div>'
+    docHtml += '<div class="sig"><strong>' + esc(entreganteName) + '</strong><br/>(Nombre y Firma)</div>'
     docHtml += '</div>'
-  } else if (type === 'arrendamiento') {
-    const monto = document.getElementById('dg-monto')?.value || '0'
-    const renta = document.getElementById('dg-monto2')?.value || '0'
-    const dir   = document.getElementById('dg-direccion')?.value || '________________________'
-    const f1    = document.getElementById('dg-fecha')?.value || ''
-    const f2    = document.getElementById('dg-fecha2')?.value || ''
-    const fmtD  = d => d ? new Date(d+'T12:00:00').toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'}) : '________'
 
-    docHtml = '<h1>CONTRATO DE ARRENDAMIENTO</h1>'
-    docHtml += '<p>Contrato de arrendamiento que celebran, por una parte <strong>' + esc(nameA) + '</strong> '
-    docHtml += '(en adelante "EL ARRENDADOR"), con domicilio en ' + esc(addrA) + ', RFC: ' + esc(rfcA) + '; '
-    docHtml += 'y por la otra <strong>' + esc(nameB) + '</strong> (en adelante "EL ARRENDATARIO"), '
-    docHtml += 'con domicilio en ' + esc(addrB) + ', RFC: ' + esc(rfcB) + '.</p>'
-    docHtml += '<p><strong>PRIMERA. OBJETO.</strong> EL ARRENDADOR da en arrendamiento a EL ARRENDATARIO el inmueble ubicado en: <strong>' + esc(dir) + '</strong>.</p>'
-    docHtml += '<p><strong>SEGUNDA. VIGENCIA.</strong> Del <strong>' + fmtD(f1) + '</strong> al <strong>' + fmtD(f2) + '</strong>.</p>'
-    docHtml += '<p><strong>TERCERA. RENTA.</strong> EL ARRENDATARIO se obliga a pagar la cantidad de <strong>$' + esc(parseFloat(renta).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN mensuales</strong>, '
-    docHtml += 'pagaderos los primeros cinco días de cada mes.</p>'
-    docHtml += '<p><strong>CUARTA. DEPÓSITO.</strong> Se establece un depósito de garantía equivalente a <strong>$' + esc(parseFloat(monto).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN</strong>.</p>'
-    docHtml += '<p><strong>QUINTA. CUENTA DE DEPÓSITO.</strong> Los pagos se realizarán a la CLABE: <strong>' + esc(clabeA) + '</strong>.</p>'
-    docHtml += '<p>Leído que fue el presente contrato, lo firman las partes en ' + esc(today) + '.</p>'
-    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:50px;">'
-    docHtml += '<div class="sig"><strong>' + esc(nameA) + '</strong><br/>EL ARRENDADOR</div>'
-    docHtml += '<div class="sig"><strong>' + esc(nameB) + '</strong><br/>EL ARRENDATARIO</div></div>'
-  } else if (type === 'compraventa') {
-    const monto = document.getElementById('dg-monto')?.value || '0'
-    const enganche = document.getElementById('dg-monto2')?.value || '0'
-    const dir   = document.getElementById('dg-direccion')?.value || '________________________'
-
-    docHtml = '<h1>CONTRATO DE COMPRAVENTA</h1>'
-    docHtml += '<p>Contrato que celebran <strong>' + esc(nameA) + '</strong> ("EL VENDEDOR"), RFC: ' + esc(rfcA) + ', '
-    docHtml += 'y <strong>' + esc(nameB) + '</strong> ("EL COMPRADOR"), RFC: ' + esc(rfcB) + '.</p>'
-    docHtml += '<p><strong>PRIMERA.</strong> EL VENDEDOR vende a EL COMPRADOR el inmueble ubicado en: <strong>' + esc(dir) + '</strong>.</p>'
-    docHtml += '<p><strong>SEGUNDA.</strong> Precio total: <strong>$' + esc(parseFloat(monto).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN</strong>.</p>'
-    docHtml += '<p><strong>TERCERA.</strong> Enganche: <strong>$' + esc(parseFloat(enganche).toLocaleString('es-MX',{minimumFractionDigits:2})) + ' MXN</strong>, '
-    docHtml += 'saldo restante: $' + parseFloat(parseFloat(monto)-parseFloat(enganche)).toLocaleString('es-MX',{minimumFractionDigits:2}) + ' MXN.</p>'
-    docHtml += '<p><strong>CUARTA.</strong> Pagos a CLABE: <strong>' + esc(clabeA) + '</strong>.</p>'
-    docHtml += '<p>Firmado en ' + esc(today) + '.</p>'
-    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:50px;">'
-    docHtml += '<div class="sig"><strong>' + esc(nameA) + '</strong><br/>EL VENDEDOR</div>'
-    docHtml += '<div class="sig"><strong>' + esc(nameB) + '</strong><br/>EL COMPRADOR</div></div>'
   } else if (type === 'cartapoder') {
-    const fac = document.getElementById('dg-facultades')?.value || '________________________'
-    const lugar = document.getElementById('dg-lugar')?.value || today
+    const otorganteSel = document.getElementById('dg-otorgante')?.value || ''
+    const apoderadoSel = document.getElementById('dg-apoderado')?.value || ''
+    const cOtorg = otorganteSel ? allNodes.find(n => n.id === otorganteSel) : null
+    const cApod  = apoderadoSel ? allNodes.find(n => n.id === apoderadoSel) : null
+    const otorgName = cOtorg ? (cOtorg.metadata?.name || cOtorg.content) : blank
+    const apodName  = cApod  ? (cApod.metadata?.name  || cApod.content)  : blank
 
-    docHtml = '<h1>CARTA PODER</h1>'
-    docHtml += '<p>' + esc(lugar) + '</p>'
-    docHtml += '<p>Por medio de la presente, yo <strong>' + esc(nameA) + '</strong>, con RFC: ' + esc(rfcA) + ', '
-    docHtml += 'con domicilio en ' + esc(addrA) + ', otorgo <strong>PODER AMPLIO Y SUFICIENTE</strong> a:</p>'
-    docHtml += '<p><strong>' + esc(nameB) + '</strong>, con RFC: ' + esc(rfcB) + ', domiciliado en ' + esc(addrB) + ',</p>'
-    docHtml += '<p>para que en mi nombre y representación realice los siguientes actos:</p>'
-    docHtml += '<p style="padding:10px 20px;background:#f8f8f8;border-left:3px solid #333;"><em>' + esc(fac) + '</em></p>'
-    docHtml += '<p>Se firma ante dos testigos en ' + esc(lugar) + '.</p>'
-    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:50px;">'
-    docHtml += '<div class="sig"><strong>' + esc(nameA) + '</strong><br/>Poderdante</div>'
-    docHtml += '<div class="sig"><strong>' + esc(nameB) + '</strong><br/>Apoderado</div></div>'
-    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:40px;">'
-    docHtml += '<div class="sig">Testigo 1</div><div class="sig">Testigo 2</div></div>'
-  } else if (type === 'recomendacion') {
-    const rel = document.getElementById('dg-relacion')?.value || 'colega'
-    const tiempo = document.getElementById('dg-tiempo')?.value || 'varios años'
-    const cual = document.getElementById('dg-cualidades')?.value || 'responsable y profesional'
+    const destinatario = document.getElementById('dg-destinatario')?.value || blank
+    const lugar      = document.getElementById('dg-lugar')?.value || blank
+    const fechaRaw   = document.getElementById('dg-fecha')?.value || ''
+    const otorgIdType = document.getElementById('dg-otorgante-idtype')?.value || 'INE'
+    const otorgIdNum  = document.getElementById('dg-otorgante-idnum')?.value || blank
+    const otorgDom    = document.getElementById('dg-otorgante-dom')?.value || blank
+    const apodIdType  = document.getElementById('dg-apoderado-idtype')?.value || 'INE'
+    const apodIdNum   = document.getElementById('dg-apoderado-idnum')?.value || blank
+    const apodDom     = document.getElementById('dg-apoderado-dom')?.value || blank
+    const razon       = document.getElementById('dg-razon')?.value || blank
 
-    docHtml = '<h1>CARTA DE RECOMENDACIÓN</h1>'
-    docHtml += '<p style="text-align:right;">' + today + '</p>'
-    docHtml += '<p><strong>A QUIEN CORRESPONDA:</strong></p>'
-    docHtml += '<p>Por medio de la presente, yo <strong>' + esc(nameA) + '</strong> me permito recomendar ampliamente a '
-    docHtml += '<strong>' + esc(nameB) + '</strong>, a quien conozco desde hace <strong>' + esc(tiempo) + '</strong> en calidad de <strong>' + esc(rel) + '</strong>.</p>'
-    docHtml += '<p>Durante este tiempo he podido constatar que posee las siguientes cualidades: <strong>' + esc(cual) + '</strong>.</p>'
-    docHtml += '<p>Considero que es una persona íntegra y capaz, por lo que no dudo en extender la presente recomendación para los fines que al interesado convengan.</p>'
-    docHtml += '<p>Sin otro particular, quedo a sus órdenes.</p>'
-    docHtml += '<p><strong>Atentamente,</strong></p>'
-    docHtml += '<div class="sig" style="margin-top:40px;"><strong>' + esc(nameA) + '</strong></div>'
+    let fechaFmt = blank
+    if (fechaRaw) {
+      const d = new Date(fechaRaw + 'T12:00:00')
+      fechaFmt = d.getDate() + ' de ' + d.toLocaleDateString('es-MX', { month: 'long' }) + ' de ' + d.getFullYear()
+    }
+
+    parteAName = otorgName
+    parteBName = apodName
+    parteAId   = otorganteSel
+    parteBId   = apoderadoSel
+    docTitle   = 'Carta Poder'
+
+    const legalSuffix = ' y asimismo para que conteste las demandas y reconvenciones que se entablen en mi contra, oponga excepciones dilatorias y perentorias, rinda toda clase de pruebas, reconozca firmas y documentos, redarguya de falsos a los que se presenten por la contraria, presente testigos, vea protestar a los de la contraria y los repregunte y tache, articule y absuelva posiciones, recuse Jueces superiores o inferiores, oiga autor interlocutorios y definitivos, consienta de los favorables y pida revocación por contrario imperio, apele, interponga el recurso de amparo y se desista de los que interponga, pida aclaración de las sentencias, ejecute, embargue y me (nos) represente en los embargos que contra mí se decreten, pida el remate de los bienes embargados; nombre peritos y recuse a los de la contraria, asista a almonedas, trance este juicio, perciba valores y otorgue recibos y cartas de pago, someta el presente juicio a la decisión de Jueces árbitros y arbitradores, gestione el otorgamiento de garantías, y en fin, para que promueva todos los recursos que favorezcan mis derechos así como para que sustituya este poder, ratificando desde hoy todo lo que haga sobre este particular.'
+
+    docHtml = '<h1 style="letter-spacing:10px;">C A R T A &nbsp; P O D E R</h1>'
+    docHtml += '<p>' + esc(lugar) + ' a ' + esc(fechaFmt) + '</p>'
+    docHtml += '<p><strong>' + esc(destinatario) + '</strong></p>'
+    docHtml += '<p>Presente:</p>'
+    docHtml += '<p>Yo <strong>' + esc(otorgName) + '</strong> identificado con <strong>' + esc(otorgIdType) + '</strong> N° <strong>' + esc(otorgIdNum) + '</strong> con domicilio en <strong>' + esc(otorgDom) + '</strong>, declaro ser mayor de edad y estar en plenas facultades físicas y mentales, exponiendo ante la presente carta otorgar el poder en favor de: <strong>' + esc(apodName) + '</strong> identificado(a) con <strong>' + esc(apodIdType) + '</strong> N° <strong>' + esc(apodIdNum) + '</strong> con domicilio en <strong>' + esc(apodDom) + '</strong> poder especial, amplio y suficiente para que, conjunta o indistintamente, en mi nombre y representación: <strong>' + esc(razon) + '</strong>' + esc(legalSuffix) + '</p>'
+    docHtml += '<p style="text-align:center;letter-spacing:4px;margin-top:30px;">A t e n t a m e n t e</p>'
+    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:60px;">'
+    docHtml += '<div class="sig"><strong>' + esc(otorgName) + '</strong><br/>Otorgó el poder</div>'
+    docHtml += '<div class="sig"><strong>' + esc(apodName) + '</strong><br/>Acepto el poder</div>'
+    docHtml += '</div>'
+    docHtml += '<p style="font-size:11px;font-style:italic;margin-top:40px;text-align:center;color:#666;">Nota: El presente documento debe entregarse con copias de las identificaciones</p>'
   }
 
   // Open print window
   let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/>'
-  h += '<title>' + esc(type) + '</title>'
-  h += '<style>' + css + '</style></head><body>'
+  h += '<title>' + esc(docTitle) + '</title>'
+  h += '<style>' + _docGenCSS + '</style></head><body>'
   h += docHtml
-  h += '<div style="text-align:center;margin-top:50px;color:#ccc;font-size:9px;">Documento generado por Nexus OS</div>'
+  h += '<div class="footer-note">Documento generado por Nexus OS — ' + new Date().toLocaleString('es-MX') + '</div>'
   h += '</body></html>'
 
   const win = window.open('', '_blank')
   if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
 
   // Save to history as a node
-  const docTitles = { pagare:'Pagaré', arrendamiento:'Contrato Arrendamiento', compraventa:'Contrato Compraventa', cartapoder:'Carta Poder', recomendacion:'Carta Recomendación' }
   const docNode = {
-    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
-    content: (docTitles[type]||type) + ' — ' + nameA + ' / ' + nameB,
+    id: 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    content: docTitle + ' — ' + parteAName + ' / ' + parteBName,
     type: 'note',
     metadata: {
       doc_type: type,
-      doc_title: docTitles[type] || type,
-      parteA: nameA, parteA_id: parteAId || '',
-      parteB: nameB, parteB_id: parteBId || '',
-      doc_date: new Date().toISOString().slice(0,10),
+      doc_title: docTitle,
+      parteA: parteAName, parteA_id: parteAId,
+      parteB: parteBName, parteB_id: parteBId,
+      doc_date: new Date().toISOString().slice(0, 10),
       doc_html: docHtml,
       tags: ['#documento', '#' + type],
       is_legal_doc: true
@@ -7054,15 +7267,15 @@ window.docGenExport = function() {
 function renderDocHistory() {
   const grid = document.getElementById('docgen-history')
   if (!grid) return
-  const docs = allNodes.filter(n => n.metadata?.is_legal_doc).sort((a,b) => (b.metadata?.doc_date||'').localeCompare(a.metadata?.doc_date||''))
+  const docs = allNodes.filter(n => n.metadata?.is_legal_doc).sort((a, b) => (b.metadata?.doc_date || '').localeCompare(a.metadata?.doc_date || ''))
   if (docs.length === 0) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Sin documentos generados aún.</div>'; return }
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
-  const icons = { pagare:'📜', arrendamiento:'🏠', compraventa:'🤝', cartapoder:'✍️', recomendacion:'⭐' }
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
+  const icons = { prorroga: '📋', pagare: '📜', recibo: '💰', cartapoder: '✍️', arrendamiento: '🏠', compraventa: '🤝', recomendacion: '⭐' }
   let h = ''
   docs.forEach(d => {
     const m = d.metadata || {}
     h += '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onclick="reprintDoc(\'' + esc(d.id) + '\')">'
-    h += '<span style="font-size:20px;">' + (icons[m.doc_type]||'📄') + '</span>'
+    h += '<span style="font-size:20px;">' + (icons[m.doc_type] || '📄') + '</span>'
     h += '<div style="flex:1;min-width:0;">'
     h += '<div style="font-size:12px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(m.doc_title) + '</div>'
     h += '<div style="font-size:10px;color:var(--text-muted);">' + esc(m.parteA) + ' ↔ ' + esc(m.parteB) + ' — ' + esc(m.doc_date) + '</div>'
@@ -7077,13 +7290,9 @@ function renderDocHistory() {
 window.reprintDoc = function(id) {
   const node = allNodes.find(n => n.id === id)
   if (!node?.metadata?.doc_html) { showToast('Documento no encontrado'); return }
-  const css = 'body{font-family:Georgia,serif;max-width:700px;margin:0 auto;padding:40px;color:#1a1a1a;font-size:14px;line-height:1.8;}'
-    + 'h1{text-align:center;font-size:22px;margin-bottom:30px;text-decoration:underline;}'
-    + '.sig{display:inline-block;width:250px;border-top:1px solid #333;text-align:center;padding-top:6px;margin-top:60px;}'
-    + '@media print{body{padding:10px;}}'
-  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>' + (node.metadata.doc_title||'Documento') + '</title><style>' + css + '</style></head><body>'
+  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>' + (node.metadata.doc_title || 'Documento') + '</title><style>' + _docGenCSS + '</style></head><body>'
   h += node.metadata.doc_html
-  h += '<div style="text-align:center;margin-top:50px;color:#ccc;font-size:9px;">Documento generado por Nexus OS</div>'
+  h += '<div class="footer-note">Documento generado por Nexus OS</div>'
   h += '</body></html>'
   const win = window.open('', '_blank')
   if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
