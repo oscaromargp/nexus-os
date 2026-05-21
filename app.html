@@ -2493,11 +2493,20 @@
         <h1 class="view-title">🧮 Herramientas</h1>
       </div>
 
-      <!-- TAB BAR — pill style -->
-      <div id="herr-tabs" style="display:inline-flex;gap:4px;margin-bottom:20px;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:12px;padding:4px;">
-        <button class="herr-tab active" data-tab="otc" onclick="switchHerrTab('otc')">📊 OTC</button>
-        <button class="herr-tab" data-tab="tramites" onclick="switchHerrTab('tramites')">📄 Trámites</button>
-        <button class="herr-tab" data-tab="utilidades" onclick="switchHerrTab('utilidades')">🛠 Utilidades</button>
+      <!-- TAB BAR — polished cards -->
+      <div id="herr-tabs" style="display:flex;gap:10px;margin-bottom:24px;">
+        <button class="herr-tab active" data-tab="otc" onclick="switchHerrTab('otc')" style="flex:1;display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:14px;">
+          <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,rgba(0,246,255,0.2),rgba(0,246,255,0.05));display:grid;place-items:center;font-size:18px;flex-shrink:0;">💱</div>
+          <div style="text-align:left;"><div style="font-size:13px;font-weight:800;line-height:1.2;">Orquestador OTC</div><div style="font-size:10px;opacity:0.6;font-weight:400;">Dispersión cripto-fiat</div></div>
+        </button>
+        <button class="herr-tab" data-tab="tramites" onclick="switchHerrTab('tramites')" style="flex:1;display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:14px;">
+          <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,rgba(96,165,250,0.2),rgba(96,165,250,0.05));display:grid;place-items:center;font-size:18px;flex-shrink:0;">📋</div>
+          <div style="text-align:left;"><div style="font-size:13px;font-weight:800;line-height:1.2;">Trámites</div><div style="font-size:10px;opacity:0.6;font-weight:400;">Pagos y documentos legales</div></div>
+        </button>
+        <button class="herr-tab" data-tab="utilidades" onclick="switchHerrTab('utilidades')" style="flex:1;display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:14px;">
+          <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.05));display:grid;place-items:center;font-size:18px;flex-shrink:0;">⚙️</div>
+          <div style="text-align:left;"><div style="font-size:13px;font-weight:800;line-height:1.2;">Utilidades</div><div style="font-size:10px;opacity:0.6;font-weight:400;">Conversor, cronómetro, calc</div></div>
+        </button>
       </div>
 
       <!-- ═══════════════════════════════════════════════════════ -->
@@ -2614,8 +2623,8 @@
           <div class="settings-card">
             <h2 style="font-size:14px;font-weight:800;color:#4ade80;margin-bottom:12px;">💬 Mensaje WhatsApp</h2>
             <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Genera el texto de pre-aprobación para enviar a tu socio antes de dispersar.</p>
-            <div id="otc-wa-preview" style="background:rgba(0,0,0,0.3);border:1px solid var(--glass-border);border-radius:8px;padding:12px;font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;white-space:pre-wrap;max-height:220px;overflow-y:auto;margin-bottom:12px;">Completa la operación y la tabla de dispersión para generar el mensaje.</div>
-            <button class="widget-btn-primary" style="width:100%;padding:10px;" onclick="otcCopyWhatsApp()">📋 Copiar Mensaje</button>
+            <div id="otc-wa-preview" style="background:rgba(0,0,0,0.3);border:1px solid var(--glass-border);border-radius:8px;padding:12px;font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;white-space:pre-wrap;max-height:320px;overflow-y:auto;margin-bottom:12px;">Completa la operación y la tabla de dispersión para generar el mensaje.</div>
+            <button class="widget-btn-primary" style="width:100%;padding:12px;font-size:13px;font-weight:800;background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.4);color:#4ade80;border-radius:10px;cursor:pointer;" onclick="otcCopyWhatsApp()">📋 Copiar Mensaje WhatsApp</button>
           </div>
           <!-- Export -->
           <div class="settings-card">
@@ -4371,8 +4380,8 @@
 <!-- Input oculto para subir foto de contacto -->
 <input type="file" id="contact-photo-upload" accept="image/*" style="display:none;" onchange="handleContactPhotoUpload(this)"/>
 
-<!-- MODAL: ONBOARDING -->
-<div id="onboarding-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9000; display:flex; align-items:center; justify-content:center; padding:24px; backdrop-filter:blur(8px);">
+<!-- MODAL: ONBOARDING (legacy — hidden, replaced by welcome-modal) -->
+<div id="onboarding-modal" style="display:none !important; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:9000; align-items:center; justify-content:center; padding:24px; backdrop-filter:blur(8px);">
   <div style="background:#0d1117; border:1px solid rgba(0,246,255,0.25); border-radius:24px; padding:40px; max-width:560px; width:100%; box-shadow:0 0 80px rgba(0,246,255,0.1);">
     <div style="text-align:center; margin-bottom:28px;">
       <div style="font-size:32px; margin-bottom:12px;">⬡</div>

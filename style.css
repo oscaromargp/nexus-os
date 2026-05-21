@@ -160,22 +160,26 @@ body {
 
 /* ── Herramientas Tab System (pill) ── */
 .herr-tab {
-  padding: 8px 20px;
   font-size: 12px;
   font-weight: 700;
   color: var(--text-muted, #94a3b8);
-  background: transparent;
-  border: none;
-  border-radius: 8px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--glass-border);
   cursor: pointer;
   font-family: 'JetBrains Mono', monospace;
-  transition: all 0.2s ease;
+  transition: all 0.25s ease;
 }
-.herr-tab:hover { color: #fff; background: rgba(255,255,255,0.04); }
+.herr-tab:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.15);
+  transform: translateY(-1px);
+}
 .herr-tab.active {
   color: #fff;
-  background: rgba(0,246,255,0.12);
-  box-shadow: 0 0 12px rgba(0,246,255,0.15);
+  background: rgba(0,246,255,0.08);
+  border-color: rgba(0,246,255,0.3);
+  box-shadow: 0 0 20px rgba(0,246,255,0.1), inset 0 0 20px rgba(0,246,255,0.03);
 }
 .herr-subtab {
   padding: 8px 18px;

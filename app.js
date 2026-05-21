@@ -341,6 +341,9 @@ async function loadNodes() {
 window.closeWelcomeModal = () => {
   const m = document.getElementById('welcome-modal')
   if (m) { m.style.opacity = '0'; setTimeout(() => { m.style.display = 'none'; m.style.opacity = '' }, 300) }
+  // Also hide legacy onboarding modal if open
+  const ob = document.getElementById('onboarding-modal')
+  if (ob) ob.style.display = 'none'
   localStorage.setItem('nexus_onboarded', '1')
 }
 window.trywelcomeExample = (txt) => {
@@ -349,6 +352,13 @@ window.trywelcomeExample = (txt) => {
     if (nexusInput) { nexusInput.value = txt; nexusInput.focus(); nexusInput.dispatchEvent(new Event('input')) }
   }, 350)
 }
+// Close with Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const wm = document.getElementById('welcome-modal')
+    if (wm && wm.style.display !== 'none') closeWelcomeModal()
+  }
+})
 
 // ─────────────────────────────────────────
 // Muro Táctico (Trello Logic)
@@ -5814,7 +5824,13 @@ window.switchHerrTab = function(tab) {
   if (tab === 'tramites') renderTramitesCuentas()
   if (tab === 'otc') {
     // Auto-fetch Bitso price when opening OTC tab (onchange alone won't fire if coin already selected)
-    setTimeout(() => { if (typeof otcFetchBitso === 'function') otcFetchBitso() }, 100)
+    // Reset _userEdited flag so Bitso price auto-fills, and clear cache to force fresh fetch
+    setTimeout(() => {
+      const tcInput = document.getElementById('otc-tc')
+      if (tcInput && !tcInput.value) tcInput._userEdited = false
+      _otcBitsoCache = {} // Force fresh fetch
+      if (typeof otcFetchBitso === 'function') otcFetchBitso()
+    }, 200)
     if (typeof renderOtcHistory === 'function') renderOtcHistory()
   }
 }
@@ -6086,21 +6102,9 @@ window.otcSelectContact = function(rowId, contactId) {
 
   const m = contact.metadata || {}
   row.contactId = contactId
-  row.contactName = m.name || contact.content || ''
+  row.contactName = (m.name || contact.content || '').replace(/^#persona\s*/i, '')
 
-  // Find best bank account
   const accts = m.contact_accounts || []
-  const bankAcct = accts.find(a => a.type === 'bank') || accts[0]
-  if (bankAcct) {
-    row.bank  = bankAcct.bank || bankAcct.label || ''
-    row.clabe = bankAcct.clabe || bankAcct.wallet || ''
-  } else {
-    row.bank  = m.bank_name || ''
-    row.clabe = m.clabe || ''
-  }
-
-  // Intersección proactiva con proyectos
-  _otcDetectProjectLink(row)
 
   // Close autocomplete (both old div and new float)
   const acEl = document.getElementById('otc-ac-' + rowId)
@@ -6108,12 +6112,90 @@ window.otcSelectContact = function(rowId, contactId) {
   const floatAc = document.getElementById('otc-ac-float')
   if (floatAc) floatAc.remove()
 
-  // Also clean up contactName for old '#persona' prefix
-  row.contactName = row.contactName.replace(/^#persona\s*/i, '')
+  // If contact has multiple accounts, show account picker
+  if (accts.length > 1) {
+    _otcShowAccountPicker(rowId, row, accts)
+  } else {
+    // Single account or none — auto-select
+    const bankAcct = accts.find(a => a.type === 'bank') || accts[0]
+    if (bankAcct) {
+      row.bank  = bankAcct.bank || bankAcct.label || ''
+      row.clabe = bankAcct.clabe || bankAcct.wallet || ''
+    } else {
+      row.bank  = m.bank_name || ''
+      row.clabe = m.clabe || ''
+    }
+    _otcDetectProjectLink(row)
+    otcRenderTable()
+    otcUpdateSemaforo()
+    otcUpdateWhatsApp()
+  }
+}
 
-  otcRenderTable()
-  otcUpdateSemaforo()
-  otcUpdateWhatsApp()
+// Account picker for contacts with multiple accounts
+function _otcShowAccountPicker(rowId, row, accts) {
+  const existingPicker = document.getElementById('otc-acct-picker')
+  if (existingPicker) existingPicker.remove()
+
+  // Find the row's name input to position the picker
+  const tbody = document.getElementById('otc-disp-body')
+  if (!tbody) return
+  const inputs = tbody.querySelectorAll('input[type="text"]')
+  let targetInput = null
+  inputs.forEach(inp => { if (inp.value === row.contactName) targetInput = inp })
+  if (!targetInput) targetInput = inputs[0]
+  const rect = targetInput ? targetInput.getBoundingClientRect() : { bottom: 200, left: 100, width: 250 }
+
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
+  const picker = document.createElement('div')
+  picker.id = 'otc-acct-picker'
+  picker.style.cssText = 'position:fixed;z-index:9999;background:var(--bg-panel,#0B132B);border:1px solid rgba(0,246,255,0.3);border-radius:12px;max-height:220px;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.6);padding:6px;'
+  picker.style.top = (rect.bottom + 4) + 'px'
+  picker.style.left = rect.left + 'px'
+  picker.style.width = Math.max(rect.width + 80, 300) + 'px'
+
+  const header = document.createElement('div')
+  header.style.cssText = 'padding:6px 10px;font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:0.06em;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:4px;'
+  header.textContent = '🏦 Selecciona cuenta de ' + row.contactName
+  picker.appendChild(header)
+
+  const accIcon = { bank:'🏦', crypto:'₿', cash:'💵' }
+  accts.forEach((acct, idx) => {
+    const item = document.createElement('div')
+    item.style.cssText = 'padding:10px 12px;cursor:pointer;font-size:11px;border-radius:8px;margin-bottom:2px;transition:background 0.15s;'
+    const icon = accIcon[acct.type] || '💳'
+    const label = acct.bank || acct.network || acct.label || acct.type || 'Cuenta ' + (idx+1)
+    const detail = acct.clabe || acct.wallet || ''
+    const last6 = detail.length > 6 ? '···' + detail.slice(-6) : detail
+    item.innerHTML = '<div style="display:flex;align-items:center;gap:8px;">'
+      + '<span style="font-size:16px;">' + icon + '</span>'
+      + '<div style="flex:1;"><div style="font-weight:700;color:#fff;">' + esc(label) + '</div>'
+      + '<div style="font-size:10px;color:var(--text-dim);font-family:\'JetBrains Mono\',monospace;">' + esc(detail) + '</div></div>'
+      + '</div>'
+    item.onmouseenter = () => { item.style.background = 'rgba(0,246,255,0.08)' }
+    item.onmouseleave = () => { item.style.background = '' }
+    item.onmousedown = (e) => {
+      e.preventDefault()
+      row.bank  = acct.bank || acct.network || acct.label || ''
+      row.clabe = acct.clabe || acct.wallet || ''
+      picker.remove()
+      _otcDetectProjectLink(row)
+      otcRenderTable()
+      otcUpdateSemaforo()
+      otcUpdateWhatsApp()
+    }
+    picker.appendChild(item)
+  })
+
+  document.body.appendChild(picker)
+
+  // Auto-close on click outside
+  setTimeout(() => {
+    const closer = (e) => {
+      if (!picker.contains(e.target)) { picker.remove(); document.removeEventListener('mousedown', closer) }
+    }
+    document.addEventListener('mousedown', closer)
+  }, 100)
 }
 
 function _otcDetectProjectLink(row) {
@@ -6263,9 +6345,16 @@ function otcUpdateWhatsApp() {
   msg += '• TOTAL DISPONIBLE PARA REPARTO: $' + _fmt$(_otcData.ventaReportada) + '\n'
   msg += '\nPROPUESTA DE DISPERSIÓN BANCARIA:\n'
   _otcRows.forEach((row, i) => {
-    const last4 = row.clabe ? '····' + row.clabe.slice(-4) : ''
-    msg += (i+1) + '. ' + (row.contactName || 'Beneficiario') + ' -> $' + _fmt$(row.montoMXN) + ' (' + (row.bank||'—') + ' • CLABE: *' + last4 + '*)\n'
+    msg += (i+1) + '. ' + (row.contactName || 'Beneficiario') + '\n'
+    msg += '   💰 Monto: $' + _fmt$(row.montoMXN) + ' MXN\n'
+    msg += '   🏦 Banco: ' + (row.bank||'—') + '\n'
+    msg += '   🔢 CLABE: ' + (row.clabe||'—') + '\n'
+    if (row.projectTag) msg += '   📂 Proyecto: #' + row.projectTag + '\n'
+    msg += '\n'
   })
+  const totalAssigned = _otcRows.reduce((s,r) => s + r.montoMXN, 0)
+  msg += '📊 TOTAL A DISPERSAR: $' + _fmt$(totalAssigned) + ' MXN\n'
+  msg += '💰 RESTANTE: $' + _fmt$(_otcData.ventaReportada - totalAssigned) + ' MXN\n'
   msg += '\n¿Confirmado el esquema y las cuentas para proceder con los SPEI?'
 
   el.textContent = msg
@@ -6340,73 +6429,132 @@ window.otcExportPDF = function() {
   const coin = document.getElementById('otc-coin')?.value || 'USDT'
   const qty  = document.getElementById('otc-qty')?.value || '0'
   const tc   = document.getElementById('otc-tc')?.value || '0'
+  const feeR = document.getElementById('otc-fee-reported')?.value || '0'
   const ref  = document.getElementById('otc-ref')?.value.trim() || ('OTC-' + new Date().toISOString().slice(0,10).replace(/-/g,''))
-  const now  = new Date().toLocaleString('es-MX')
+  const nowFull = new Date()
+  const dateStr = nowFull.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+  const timeStr = nowFull.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
   const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 
+  const totalAssigned = _otcRows.reduce((s,r) => s + r.montoMXN, 0)
+  const remaining = _floor2(_otcData.ventaReportada - totalAssigned)
+  const pctDisp = _otcData.ventaReportada > 0 ? Math.min((totalAssigned / _otcData.ventaReportada) * 100, 100) : 0
+  const statusColor = remaining <= 0.01 && remaining >= -0.01 ? '#16a34a' : remaining > 0 ? '#d97706' : '#dc2626'
+  const statusText = remaining <= 0.01 && remaining >= -0.01 ? '✅ COMPLETO' : remaining > 0 ? '⏳ PENDIENTE' : '🔴 EXCESO'
+  const linkedProjects = [...new Set(_otcRows.filter(r=>r.projectTag).map(r=>r.projectTag))]
+
+  // Build rows
   let rowsHtml = ''
   _otcRows.forEach((row, i) => {
-    const last4 = row.clabe ? '····' + row.clabe.slice(-4) : ''
-    const receiptLink = row.receiptDataUrl ? '<a href="' + row.receiptDataUrl + '" target="_blank" style="color:#0284c7;font-size:10px;">Ver Comprobante SPEI</a>' : '<span style="color:#999;font-size:10px;">—</span>'
-    rowsHtml += '<tr>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;">' + (i+1) + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;font-weight:600;">' + esc(row.contactName || 'Sin nombre') + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;">' + esc(row.bank || '—') + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px;">' + esc(row.clabe || '—') + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:700;">$' + _fmt$(row.montoMXN) + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">' + (row.projectTag ? '#' + esc(row.projectTag) : '—') + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:center;">' + receiptLink + '</td>'
+    const projBadge = row.projectTag ? '<span style="background:#ede9fe;color:#7c3aed;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">#' + esc(row.projectTag) + '</span>' : '<span style="color:#ccc;">—</span>'
+    const receiptBadge = row.receiptDataUrl
+      ? (row.receiptIsUrl ? '<a href="'+esc(row.receiptDataUrl)+'" target="_blank" style="color:#0284c7;font-size:10px;text-decoration:none;">🔗 Ver</a>' : '✅')
+      : '<span style="color:#ccc;font-size:10px;">sin comprobante</span>'
+    rowsHtml += '<tr style="border-bottom:1px solid #f1f5f9;">'
+    rowsHtml += '<td style="padding:8px;font-weight:700;color:#64748b;">' + (i+1) + '</td>'
+    rowsHtml += '<td style="padding:8px;font-weight:700;">' + esc(row.contactName || 'Sin nombre') + '</td>'
+    rowsHtml += '<td style="padding:8px;">' + esc(row.bank || '—') + '</td>'
+    rowsHtml += '<td style="padding:8px;font-family:\'Courier New\',monospace;font-size:11px;letter-spacing:0.03em;">' + esc(row.clabe || '—') + '</td>'
+    rowsHtml += '<td style="padding:8px;text-align:right;font-weight:800;font-size:13px;">$' + _fmt$(row.montoMXN) + '</td>'
+    rowsHtml += '<td style="padding:8px;text-align:center;">' + projBadge + '</td>'
+    rowsHtml += '<td style="padding:8px;text-align:center;">' + receiptBadge + '</td>'
     rowsHtml += '</tr>'
   })
 
-  const totalAssigned = _otcRows.reduce((s,r) => s + r.montoMXN, 0)
-
   let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/>'
-  h += '<title>OTC Report — ' + esc(ref) + '</title>'
-  h += '<style>body{font-family:system-ui,sans-serif;max-width:900px;margin:0 auto;padding:30px;color:#1a1a1a;font-size:13px;}'
-  h += 'h1{font-size:20px;margin-bottom:4px;}table{width:100%;border-collapse:collapse;margin-top:12px;}'
-  h += 'th{text-align:left;padding:8px;background:#f0f4f8;border-bottom:2px solid #ddd;font-size:11px;color:#666;}'
-  h += '.kpi{display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 20px;margin:6px;text-align:center;}'
-  h += '.kpi-label{font-size:10px;color:#666;font-weight:700;letter-spacing:0.5px;}.kpi-val{font-size:18px;font-weight:800;margin-top:4px;}'
-  h += '@media print{body{padding:10px;}}</style></head><body>'
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:20px;">'
-  h += '<div><h1>📊 Estado de Cuenta OTC</h1><p style="color:#666;margin:0;">Ref: ' + esc(ref) + ' — ' + now + '</p></div>'
-  h += '<div style="text-align:right;"><strong style="font-size:16px;">Nexus OS</strong><br/><span style="font-size:10px;color:#888;">Orquestador OTC</span></div>'
+  h += '<title>OTC — ' + esc(ref) + '</title>'
+  h += '<style>'
+  h += '*{box-sizing:border-box;margin:0;padding:0}'
+  h += 'body{font-family:"Segoe UI",system-ui,sans-serif;max-width:900px;margin:0 auto;padding:30px;color:#1e293b;font-size:13px;}'
+  h += 'table{width:100%;border-collapse:collapse;} th{text-align:left;padding:8px 8px;background:#f8fafc;font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e2e8f0;}'
+  h += '.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;}'
+  h += '.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;text-align:center;}'
+  h += '.kpi-l{font-size:9px;font-weight:800;color:#94a3b8;letter-spacing:.5px;text-transform:uppercase;} .kpi-v{font-size:20px;font-weight:800;margin-top:6px;} .kpi-s{font-size:9px;color:#94a3b8;margin-top:2px;}'
+  h += '.bar-bg{height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden;margin-top:6px;} .bar-fill{height:100%;border-radius:5px;transition:width 0.3s;}'
+  h += '.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;}'
+  h += '@media print{body{padding:12px;}}'
+  h += '</style></head><body>'
+
+  // ── Header ──
+  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:16px;margin-bottom:24px;">'
+  h += '<div>'
+  h += '<h1 style="font-size:22px;font-weight:900;color:#0f172a;margin-bottom:4px;">📊 Estado de Cuenta — Operación OTC</h1>'
+  h += '<div style="font-size:12px;color:#64748b;margin-bottom:2px;">📝 Referencia: <b style="color:#0f172a;">' + esc(ref) + '</b></div>'
+  h += '<div style="font-size:12px;color:#64748b;">📅 ' + dateStr + ' · ⏰ ' + timeStr + '</div>'
+  if (linkedProjects.length) h += '<div style="margin-top:6px;">' + linkedProjects.map(p => '<span class="badge" style="background:#ede9fe;color:#7c3aed;">📂 #' + esc(p) + '</span>').join(' ') + '</div>'
+  h += '</div>'
+  h += '<div style="text-align:right;"><div style="font-size:18px;font-weight:900;color:#0f172a;">NEXUS OS</div><div style="font-size:10px;color:#94a3b8;">Orquestador OTC v2.1</div>'
+  h += '<div class="badge" style="margin-top:6px;background:' + (statusColor==='#16a34a'?'#dcfce7':'#fef3c7') + ';color:' + statusColor + ';">' + statusText + '</div>'
+  h += '</div></div>'
+
+  // ── KPIs ──
+  h += '<div class="kpi-grid">'
+  h += '<div class="kpi"><div class="kpi-l">💱 Recibido</div><div class="kpi-v">' + esc(qty) + '</div><div class="kpi-s">' + esc(coin) + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-l">📈 Tipo de Cambio</div><div class="kpi-v">$' + esc(tc) + '</div><div class="kpi-s">MXN por ' + esc(coin) + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-l">💰 Venta Bruta</div><div class="kpi-v">$' + _fmt$(_otcData.ventaBruta) + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-l">📊 Comisión (' + esc(feeR) + '%)</div><div class="kpi-v" style="color:#d97706;">$' + _fmt$(_otcData.comisionCliente) + '</div></div>'
+  h += '<div class="kpi" style="border-color:#16a34a;"><div class="kpi-l">✅ Neto a Dispersar</div><div class="kpi-v" style="color:#16a34a;">$' + _fmt$(_otcData.ventaReportada) + '</div></div>'
   h += '</div>'
 
-  // KPIs
-  h += '<div style="text-align:center;margin-bottom:24px;">'
-  h += '<div class="kpi"><div class="kpi-label">RECIBIDO</div><div class="kpi-val">' + esc(qty) + ' ' + esc(coin) + '</div></div>'
-  h += '<div class="kpi"><div class="kpi-label">T/C PACTADO</div><div class="kpi-val">$' + esc(tc) + '</div></div>'
-  h += '<div class="kpi"><div class="kpi-label">VENTA BRUTA</div><div class="kpi-val">$' + _fmt$(_otcData.ventaBruta) + '</div></div>'
-  h += '<div class="kpi"><div class="kpi-label">COMISIÓN</div><div class="kpi-val" style="color:#e67e22;">$' + _fmt$(_otcData.comisionCliente) + '</div></div>'
-  h += '<div class="kpi" style="border-color:#27ae60;"><div class="kpi-label">NETO A DISPERSAR</div><div class="kpi-val" style="color:#27ae60;">$' + _fmt$(_otcData.ventaReportada) + '</div></div>'
+  // ── Dispersion progress bar ──
+  h += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 18px;margin-bottom:20px;">'
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+  h += '<span style="font-size:11px;font-weight:700;color:#64748b;">Progreso de Dispersión</span>'
+  h += '<span style="font-size:13px;font-weight:800;color:' + statusColor + ';">' + pctDisp.toFixed(1) + '% — $' + _fmt$(totalAssigned) + ' de $' + _fmt$(_otcData.ventaReportada) + '</span>'
+  h += '</div>'
+  h += '<div class="bar-bg"><div class="bar-fill" style="width:' + pctDisp.toFixed(1) + '%;background:' + statusColor + ';"></div></div>'
+  if (remaining > 0.01) h += '<div style="text-align:right;font-size:10px;color:#d97706;margin-top:4px;">Restante: $' + _fmt$(remaining) + ' MXN</div>'
   h += '</div>'
 
-  // Table
+  // ── Table ──
+  h += '<div style="margin-bottom:20px;">'
+  h += '<div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:8px;">💸 Detalle de Dispersión — ' + _otcRows.length + ' beneficiario' + (_otcRows.length!==1?'s':'') + '</div>'
   h += '<table>'
-  h += '<thead><tr><th>#</th><th>Beneficiario</th><th>Banco</th><th>CLABE</th><th style="text-align:right;">Monto</th><th>Proyecto</th><th>Comprobante</th></tr></thead>'
+  h += '<thead><tr><th>#</th><th>Beneficiario</th><th>Banco</th><th>CLABE / Cuenta</th><th style="text-align:right;">Monto MXN</th><th style="text-align:center;">Proyecto</th><th style="text-align:center;">SPEI</th></tr></thead>'
   h += '<tbody>' + rowsHtml + '</tbody>'
-  h += '<tfoot><tr style="font-weight:800;border-top:2px solid #333;"><td colspan="4" style="padding:8px;text-align:right;">TOTAL DISPERSADO:</td>'
-  h += '<td style="padding:8px;text-align:right;font-size:14px;">$' + _fmt$(totalAssigned) + '</td><td colspan="2"></td></tr></tfoot>'
-  h += '</table>'
+  h += '<tfoot><tr style="border-top:3px solid #0f172a;background:#f8fafc;"><td colspan="4" style="padding:10px 8px;text-align:right;font-weight:800;font-size:12px;">TOTAL DISPERSADO:</td>'
+  h += '<td style="padding:10px 8px;text-align:right;font-size:16px;font-weight:900;">$' + _fmt$(totalAssigned) + '</td><td colspan="2"></td></tr></tfoot>'
+  h += '</table></div>'
 
-  // Receipts
-  const rowsWithReceipts = _otcRows.filter(r => r.receiptDataUrl)
-  if (rowsWithReceipts.length) {
-    h += '<h2 style="margin-top:30px;font-size:16px;">🧾 Comprobantes SPEI</h2>'
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;">'
-    rowsWithReceipts.forEach(r => {
-      h += '<div style="border:1px solid #ddd;border-radius:8px;padding:12px;text-align:center;">'
-      h += '<div style="font-size:12px;font-weight:700;margin-bottom:8px;">' + esc(r.contactName) + '</div>'
-      h += '<img src="' + r.receiptDataUrl + '" style="max-width:100%;max-height:300px;border-radius:4px;"/>'
+  // ── Per-beneficiary breakdown bars ──
+  if (_otcRows.length > 1) {
+    h += '<div style="margin-bottom:20px;"><div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:10px;">📊 Distribución por Beneficiario</div>'
+    _otcRows.forEach(row => {
+      const pct = totalAssigned > 0 ? (row.montoMXN / totalAssigned * 100) : 0
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+      h += '<div style="font-size:11px;font-weight:600;min-width:120px;text-align:right;color:#475569;">' + esc(row.contactName||'—') + '</div>'
+      h += '<div style="flex:1;height:18px;background:#f1f5f9;border-radius:4px;overflow:hidden;position:relative;">'
+      h += '<div style="height:100%;width:' + pct.toFixed(1) + '%;background:linear-gradient(90deg,#3b82f6,#60a5fa);border-radius:4px;"></div>'
+      h += '<span style="position:absolute;right:6px;top:1px;font-size:10px;font-weight:700;color:#475569;">' + pct.toFixed(1) + '%</span>'
+      h += '</div>'
+      h += '<div style="font-size:11px;font-weight:700;min-width:80px;text-align:right;">$' + _fmt$(row.montoMXN) + '</div>'
       h += '</div>'
     })
     h += '</div>'
   }
 
-  h += '<div style="text-align:center;margin-top:40px;padding-top:16px;border-top:1px solid #ddd;color:#999;font-size:10px;">Generado por Nexus OS — Orquestador OTC</div>'
-  h += '</body></html>'
+  // ── Receipts ──
+  const rowsWithReceipts = _otcRows.filter(r => r.receiptDataUrl)
+  if (rowsWithReceipts.length) {
+    h += '<div style="margin-bottom:20px;page-break-before:auto;"><div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:10px;">🧾 Comprobantes SPEI</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+    rowsWithReceipts.forEach(r => {
+      h += '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center;">'
+      h += '<div style="font-size:11px;font-weight:700;margin-bottom:6px;">' + esc(r.contactName) + ' · $' + _fmt$(r.montoMXN) + '</div>'
+      if (r.receiptIsUrl && !r.receiptDataUrl.match(/\.(png|jpg|jpeg|gif|webp)/i)) {
+        h += '<a href="' + esc(r.receiptDataUrl) + '" target="_blank" style="color:#3b82f6;font-size:11px;">🔗 Ver comprobante</a>'
+      } else {
+        h += '<img src="' + r.receiptDataUrl + '" style="max-width:100%;max-height:250px;border-radius:6px;"/>'
+      }
+      h += '</div>'
+    })
+    h += '</div></div>'
+  }
+
+  // ── Footer ──
+  h += '<div style="text-align:center;margin-top:30px;padding-top:14px;border-top:2px solid #e2e8f0;color:#94a3b8;font-size:10px;">'
+  h += 'Generado por <b>Nexus OS — Orquestador OTC v2.1</b> · ' + dateStr + ' · ' + timeStr
+  h += '</div></body></html>'
 
   const win = window.open('', '_blank')
   if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
@@ -9961,11 +10109,12 @@ window.openContactByName = (name) => {
 // Onboarding
 // ─────────────────────────────────────────
 ;(function initOnboarding() {
+  // Legacy onboarding disabled — replaced by welcome-modal
   const modal = document.getElementById('onboarding-modal')
-  if (!modal) return
+  if (modal) { modal.style.display = 'none'; return }
   const dismissed = localStorage.getItem('nexus_onboarded')
   if (!dismissed) {
-    modal.style.display = 'flex'
+    // modal.style.display = 'flex' // disabled
   } else {
     modal.style.display = 'none'
   }
