@@ -5812,6 +5812,11 @@ window.switchHerrTab = function(tab) {
   const panel = document.getElementById('herr-panel-' + tab)
   if (panel) panel.style.display = ''
   if (tab === 'tramites') renderTramitesCuentas()
+  if (tab === 'otc') {
+    // Auto-fetch Bitso price when opening OTC tab (onchange alone won't fire if coin already selected)
+    setTimeout(() => { if (typeof otcFetchBitso === 'function') otcFetchBitso() }, 100)
+    if (typeof renderOtcHistory === 'function') renderOtcHistory()
+  }
 }
 window.switchHerrSubtab = function(sub) {
   document.querySelectorAll('.herr-subtab').forEach(t => t.classList.toggle('active', t.dataset.subtab === sub))
@@ -5986,21 +5991,33 @@ function otcRenderTable() {
   })
   tbody.innerHTML = html
 
-  // Render receipts dropzones
+  // Render receipts dropzones (file drag + URL paste)
   if (receiptsGrid) {
     let rhtml = ''
     _otcRows.forEach(row => {
+      const bName = row.contactName || 'Beneficiario ' + (_otcRows.indexOf(row)+1)
       rhtml += '<div style="border:1px dashed var(--glass-border);border-radius:10px;padding:12px;text-align:center;min-height:100px;position:relative;" '
       rhtml += 'ondragover="event.preventDefault();this.style.borderColor=\'#00f6ff\'" '
       rhtml += 'ondragleave="this.style.borderColor=\'\'" '
-      rhtml += 'ondrop="otcReceiptDrop(event,\'' + row.id + '\')" '
-      rhtml += 'onclick="otcReceiptClick(\'' + row.id + '\')">'
-      rhtml += '<div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:6px;">' + (row.contactName || 'Beneficiario ' + (_otcRows.indexOf(row)+1)) + '</div>'
+      rhtml += 'ondrop="otcReceiptDrop(event,\'' + row.id + '\')">'
+      rhtml += '<div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:6px;">' + esc(bName) + '</div>'
       if (row.receiptDataUrl) {
-        rhtml += '<img src="' + row.receiptDataUrl + '" style="max-width:100%;max-height:120px;border-radius:6px;"/>'
+        // Show image or link depending on type
+        if (row.receiptDataUrl.match(/\.(pdf)/i) || (row.receiptIsUrl && !row.receiptDataUrl.match(/\.(png|jpg|jpeg|gif|webp|bmp)/i) && !row.receiptDataUrl.startsWith('data:'))) {
+          rhtml += '<a href="' + esc(row.receiptDataUrl) + '" target="_blank" style="color:#60a5fa;font-size:11px;text-decoration:underline;display:block;padding:10px 0;">📄 Ver comprobante (PDF/Link)</a>'
+        } else {
+          rhtml += '<img src="' + esc(row.receiptDataUrl) + '" style="max-width:100%;max-height:120px;border-radius:6px;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'"/>'
+          rhtml += '<a href="' + esc(row.receiptDataUrl) + '" target="_blank" style="display:none;color:#60a5fa;font-size:11px;padding:10px 0;">🔗 Ver enlace</a>'
+        }
         rhtml += '<button onclick="event.stopPropagation();otcClearReceipt(\'' + row.id + '\')" style="position:absolute;top:4px;right:6px;background:rgba(0,0,0,0.6);border:none;color:#f87171;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;">✕</button>'
       } else {
-        rhtml += '<div style="color:var(--text-dim);font-size:11px;padding:16px 0;">📎 Arrastra o haz clic<br/>para subir comprobante SPEI</div>'
+        rhtml += '<div onclick="otcReceiptClick(\'' + row.id + '\')" style="cursor:pointer;color:var(--text-dim);font-size:11px;padding:10px 0;">📎 Arrastra imagen o haz clic para subir</div>'
+        // URL input row
+        rhtml += '<div style="margin-top:6px;display:flex;gap:4px;">'
+        rhtml += '<input type="text" class="modal-input" style="font-size:10px;padding:4px 8px;flex:1;" placeholder="🔗 Pegar URL de imagen o PDF..." '
+        rhtml += 'id="otc-receipt-url-' + row.id + '" />'
+        rhtml += '<button onclick="event.stopPropagation();otcReceiptUrl(\'' + row.id + '\')" style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);border-radius:6px;padding:4px 8px;color:#60a5fa;font-size:10px;font-weight:700;cursor:pointer;">OK</button>'
+        rhtml += '</div>'
       }
       rhtml += '</div>'
     })
@@ -6008,39 +6025,57 @@ function otcRenderTable() {
   }
 }
 
-// Contact autocomplete for OTC
+// Contact autocomplete for OTC — uses fixed positioning to escape overflow containers
 window.otcContactSearch = function(input, rowId) {
   const val = (input.value || '').toLowerCase().trim()
-  const acEl = document.getElementById('otc-ac-' + rowId)
-  if (!acEl) return
   const row = _otcRows.find(r => r.id === rowId)
   if (row) { row.contactName = input.value; row.contactId = '' }
 
-  if (val.length < 1) { acEl.innerHTML = ''; return }
+  // Remove any existing dropdown
+  const existing = document.getElementById('otc-ac-float')
+  if (existing) existing.remove()
+
+  if (val.length < 1) return
 
   const contacts = (typeof getContacts === 'function') ? getContacts() : allNodes.filter(n => n.type === 'contact' || n.type === 'persona')
   const matches = contacts.filter(c => {
-    const name = (c.metadata?.name || c.content || '').toLowerCase()
-    return name.includes(val)
+    const name = (c.metadata?.name || c.content || '').toLowerCase().replace(/^#persona\s*/,'')
+    const company = (c.metadata?.company || '').toLowerCase()
+    return name.includes(val) || company.includes(val)
   }).slice(0, 6)
 
-  if (matches.length === 0) { acEl.innerHTML = ''; return }
+  if (matches.length === 0) return
 
+  // Position dropdown using fixed positioning (escapes overflow-x:auto parent)
+  const rect = input.getBoundingClientRect()
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
-  let h = '<div style="position:absolute;z-index:100;background:var(--bg-panel,#0B132B);border:1px solid var(--glass-border);border-radius:8px;width:100%;max-height:160px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.4);">'
+  const dd = document.createElement('div')
+  dd.id = 'otc-ac-float'
+  dd.setAttribute('data-row', rowId)
+  dd.style.cssText = 'position:fixed;z-index:9999;background:var(--bg-panel,#0B132B);border:1px solid var(--glass-border);border-radius:8px;max-height:180px;overflow-y:auto;box-shadow:0 8px 30px rgba(0,0,0,0.6);'
+  dd.style.top = (rect.bottom + 2) + 'px'
+  dd.style.left = rect.left + 'px'
+  dd.style.width = Math.max(rect.width, 220) + 'px'
+
   matches.forEach(c => {
-    const name = c.metadata?.name || c.content || ''
+    const name = c.metadata?.name || (c.content || '').replace(/^#persona\s*/,'')
     const accts = c.metadata?.contact_accounts || []
     const bankAcct = accts.find(a => a.type === 'bank') || accts[0]
     const desc = bankAcct ? (bankAcct.bank || bankAcct.label || '') : (c.metadata?.company || '')
-    h += '<div style="padding:8px 10px;cursor:pointer;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;justify-content:space-between;align-items:center;" '
-    h += 'onmousedown="otcSelectContact(\'' + rowId + '\',\'' + esc(c.id) + '\')">'
-    h += '<span style="color:#fff;font-weight:600;">' + esc(name) + '</span>'
-    h += '<span style="color:var(--text-dim);font-size:10px;">' + esc(desc) + '</span>'
-    h += '</div>'
+    const item = document.createElement('div')
+    item.style.cssText = 'padding:8px 10px;cursor:pointer;font-size:11px;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;justify-content:space-between;align-items:center;'
+    item.innerHTML = '<span style="color:#fff;font-weight:600;">' + esc(name) + '</span><span style="color:var(--text-dim);font-size:10px;">' + esc(desc) + '</span>'
+    item.onmousedown = (e) => { e.preventDefault(); otcSelectContact(rowId, c.id) }
+    item.onmouseenter = () => { item.style.background = 'rgba(0,246,255,0.08)' }
+    item.onmouseleave = () => { item.style.background = '' }
+    dd.appendChild(item)
   })
-  h += '</div>'
-  acEl.innerHTML = h
+
+  document.body.appendChild(dd)
+
+  // Close on blur (slight delay so click registers)
+  const closeHandler = () => { setTimeout(() => { const el = document.getElementById('otc-ac-float'); if (el) el.remove() }, 150) }
+  input.addEventListener('blur', closeHandler, { once: true })
 }
 
 window.otcSelectContact = function(rowId, contactId) {
@@ -6067,9 +6102,14 @@ window.otcSelectContact = function(rowId, contactId) {
   // Intersección proactiva con proyectos
   _otcDetectProjectLink(row)
 
-  // Close autocomplete
+  // Close autocomplete (both old div and new float)
   const acEl = document.getElementById('otc-ac-' + rowId)
   if (acEl) acEl.innerHTML = ''
+  const floatAc = document.getElementById('otc-ac-float')
+  if (floatAc) floatAc.remove()
+
+  // Also clean up contactName for old '#persona' prefix
+  row.contactName = row.contactName.replace(/^#persona\s*/i, '')
 
   otcRenderTable()
   otcUpdateSemaforo()
@@ -6172,6 +6212,31 @@ function otcUpdateSemaforo() {
     if (pctEl) { pctEl.textContent = pct.toFixed(1) + '%'; pctEl.style.color = '#f87171' }
     if (msg) { msg.textContent = 'Exceso: $' + _fmt$(Math.abs(remaining)) + ' MXN en negativo'; msg.style.color = '#f87171' }
   }
+
+  // Update the prominent remaining strip below table
+  const strip = document.getElementById('otc-remaining-strip')
+  const stripVal = document.getElementById('otc-remaining-val')
+  if (strip && stripVal) {
+    if (_otcRows.length > 0 && total > 0) {
+      strip.style.display = 'flex'
+      stripVal.textContent = '$' + _fmt$(remaining)
+      if (pct >= 100 - 0.001 && pct <= 100 + 0.001) {
+        strip.style.borderColor = 'rgba(74,222,128,0.3)'
+        strip.style.background = 'rgba(74,222,128,0.08)'
+        stripVal.style.color = '#4ade80'
+      } else if (pct > 100) {
+        strip.style.borderColor = 'rgba(248,113,113,0.3)'
+        strip.style.background = 'rgba(248,113,113,0.08)'
+        stripVal.style.color = '#f87171'
+      } else {
+        strip.style.borderColor = 'rgba(251,191,36,0.25)'
+        strip.style.background = 'rgba(251,191,36,0.08)'
+        stripVal.style.color = '#fbbf24'
+      }
+    } else {
+      strip.style.display = 'none'
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -6219,22 +6284,46 @@ window.otcReceiptDrop = function(ev, rowId) {
   ev.preventDefault()
   ev.currentTarget.style.borderColor = ''
   const file = ev.dataTransfer?.files?.[0]
-  if (!file || !file.type.startsWith('image/')) { showToast('Solo imágenes'); return }
-  _otcReadReceiptFile(file, rowId)
+  if (file && file.type.startsWith('image/')) {
+    _otcReadReceiptFile(file, rowId)
+  } else if (file && file.type === 'application/pdf') {
+    _otcReadReceiptFile(file, rowId)
+  } else {
+    // Check for dropped text/URL
+    const text = ev.dataTransfer?.getData('text/plain') || ''
+    if (text.startsWith('http')) {
+      const row = _otcRows.find(r => r.id === rowId)
+      if (row) { row.receiptDataUrl = text; row.receiptIsUrl = true }
+      otcRenderTable()
+    } else {
+      showToast('Arrastra una imagen, PDF o URL')
+    }
+  }
 }
 
 window.otcReceiptClick = function(rowId) {
   const inp = document.createElement('input')
-  inp.type = 'file'; inp.accept = 'image/*'
+  inp.type = 'file'; inp.accept = 'image/*,application/pdf'
   inp.onchange = () => { if (inp.files[0]) _otcReadReceiptFile(inp.files[0], rowId) }
   inp.click()
+}
+
+window.otcReceiptUrl = function(rowId) {
+  const input = document.getElementById('otc-receipt-url-' + rowId)
+  if (!input) return
+  const url = input.value.trim()
+  if (!url || !url.startsWith('http')) { showToast('Ingresa una URL válida (http/https)'); return }
+  const row = _otcRows.find(r => r.id === rowId)
+  if (row) { row.receiptDataUrl = url; row.receiptIsUrl = true }
+  otcRenderTable()
+  showToast('Comprobante vinculado por URL')
 }
 
 function _otcReadReceiptFile(file, rowId) {
   const reader = new FileReader()
   reader.onload = () => {
     const row = _otcRows.find(r => r.id === rowId)
-    if (row) { row.receiptDataUrl = reader.result }
+    if (row) { row.receiptDataUrl = reader.result; row.receiptIsUrl = false }
     otcRenderTable()
   }
   reader.readAsDataURL(file)
@@ -6353,8 +6442,140 @@ window.otcSaveToNodes = async function() {
     }
   }
 
+  // ── Save operation history as a Nexus node ──
+  const now = new Date()
+  const autoName = now.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) + ' '
+                 + now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) + ' — '
+                 + qty + ' ' + coin + ' ($' + _fmt$(_otcData.ventaReportada) + ')'
+  const histNode = {
+    id: 'otc_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+    owner_id: (typeof currentUser !== 'undefined' && currentUser?.id) || '',
+    content: autoName,
+    type: 'note',
+    metadata: {
+      is_otc_history: true,
+      otc_ref: ref,
+      coin, qty: parseFloat(qty), tc: parseFloat(tc),
+      ventaBruta: _otcData.ventaBruta,
+      comisionCliente: _otcData.comisionCliente,
+      ventaReportada: _otcData.ventaReportada,
+      gananciaOp: _otcData.gananciaOp,
+      rows: _otcRows.map(r => ({ contactName:r.contactName, bank:r.bank, clabe:r.clabe, montoMXN:r.montoMXN, projectTag:r.projectTag })),
+      saved_at: now.toISOString()
+    },
+    created_at: now.toISOString()
+  }
+
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    const { data, error } = await supabase.from('nodes').insert([{
+      owner_id: histNode.owner_id, content: histNode.content, type: 'note', metadata: histNode.metadata
+    }]).select()
+    if (data?.[0]) histNode.id = data[0].id
+    if (error) console.warn('OTC history save error', error)
+  }
+  allNodes.push(histNode)
+
   showToast('Operación guardada — ' + _otcRows.filter(r=>r.projectTag).length + ' pagos vinculados a proyectos')
+  renderOtcHistory()
   if (typeof renderAll === 'function') renderAll()
+}
+
+// ── OTC History Render ──────────────────────────────────────────
+function renderOtcHistory() {
+  const list  = document.getElementById('otc-history-list')
+  const empty = document.getElementById('otc-history-empty')
+  if (!list) return
+
+  const ops = allNodes.filter(n => n.metadata?.is_otc_history === true)
+    .sort((a,b) => new Date(b.metadata?.saved_at || b.created_at) - new Date(a.metadata?.saved_at || a.created_at))
+
+  if (ops.length === 0) {
+    list.innerHTML = ''
+    if (empty) empty.style.display = ''
+    return
+  }
+  if (empty) empty.style.display = 'none'
+
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  let h = ''
+  ops.forEach(op => {
+    const m = op.metadata || {}
+    const rows = m.rows || []
+    const benefCount = rows.length
+    const totalDisp = rows.reduce((s,r) => s + (r.montoMXN||0), 0)
+    const d = new Date(m.saved_at || op.created_at)
+    const dateStr = d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
+    h += '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:6px;cursor:pointer;transition:border-color 0.15s;" '
+    h += 'onmouseenter="this.style.borderColor=\'rgba(167,139,250,0.4)\'" onmouseleave="this.style.borderColor=\'rgba(255,255,255,0.06)\'" '
+    h += 'onclick="otcViewHistory(\'' + esc(op.id) + '\')">'
+    h += '<div style="font-size:20px;">📊</div>'
+    h += '<div style="flex:1;min-width:0;">'
+    h += '<div style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(m.otc_ref || 'OTC') + ' — ' + esc(m.coin||'') + '</div>'
+    h += '<div style="font-size:10px;color:var(--text-muted);">' + dateStr + ' · ' + benefCount + ' beneficiario' + (benefCount!==1?'s':'') + '</div>'
+    h += '</div>'
+    h += '<div style="text-align:right;">'
+    h += '<div style="font-size:14px;font-weight:800;color:#4ade80;font-family:\'JetBrains Mono\',monospace;">$' + _fmt$(totalDisp) + '</div>'
+    h += '<div style="font-size:10px;color:var(--text-dim);">dispersado</div>'
+    h += '</div>'
+    h += '<button onclick="event.stopPropagation();otcDeleteHistory(\'' + esc(op.id) + '\')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:4px;" title="Eliminar">🗑️</button>'
+    h += '</div>'
+  })
+  list.innerHTML = h
+}
+
+window.otcViewHistory = function(nodeId) {
+  const op = allNodes.find(n => n.id === nodeId)
+  if (!op || !op.metadata?.is_otc_history) return
+  const m = op.metadata
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  const rows = m.rows || []
+  const d = new Date(m.saved_at || op.created_at)
+
+  let rowsHtml = ''
+  rows.forEach((r, i) => {
+    rowsHtml += '<tr><td style="padding:6px 8px;border-bottom:1px solid #eee;">' + (i+1) + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;font-weight:600;">' + esc(r.contactName||'—') + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;">' + esc(r.bank||'—') + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px;">' + esc(r.clabe||'—') + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:700;">$' + _fmt$(r.montoMXN||0) + '</td>'
+    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;">' + (r.projectTag ? '#' + esc(r.projectTag) : '—') + '</td></tr>'
+  })
+  const totalDisp = rows.reduce((s,r) => s + (r.montoMXN||0), 0)
+
+  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>OTC — ' + esc(m.otc_ref||'') + '</title>'
+  h += '<style>body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:30px;color:#1a1a1a;font-size:13px;}'
+  h += 'h1{font-size:20px;margin-bottom:4px;}table{width:100%;border-collapse:collapse;margin-top:12px;}'
+  h += 'th{text-align:left;padding:8px;background:#f0f4f8;border-bottom:2px solid #ddd;font-size:11px;color:#666;}'
+  h += '.kpi{display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 20px;margin:6px;text-align:center;}'
+  h += '.kpi-label{font-size:10px;color:#666;font-weight:700;letter-spacing:0.5px;}.kpi-val{font-size:18px;font-weight:800;margin-top:4px;}'
+  h += '@media print{body{padding:10px;}}</style></head><body>'
+  h += '<div style="border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:20px;">'
+  h += '<h1>📊 Operación OTC — ' + esc(m.otc_ref||'') + '</h1>'
+  h += '<p style="color:#666;margin:0;">' + d.toLocaleString('es-MX') + '</p></div>'
+  h += '<div style="text-align:center;margin-bottom:24px;">'
+  h += '<div class="kpi"><div class="kpi-label">MONEDA</div><div class="kpi-val">' + esc(m.qty||0) + ' ' + esc(m.coin||'') + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-label">T/C</div><div class="kpi-val">$' + (m.tc||0).toFixed(2) + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-label">VENTA BRUTA</div><div class="kpi-val">$' + _fmt$(m.ventaBruta||0) + '</div></div>'
+  h += '<div class="kpi" style="border-color:#27ae60;"><div class="kpi-label">NETO</div><div class="kpi-val" style="color:#27ae60;">$' + _fmt$(m.ventaReportada||0) + '</div></div>'
+  h += '</div>'
+  h += '<table><thead><tr><th>#</th><th>Beneficiario</th><th>Banco</th><th>CLABE</th><th style="text-align:right;">Monto</th><th>Proyecto</th></tr></thead>'
+  h += '<tbody>' + rowsHtml + '</tbody>'
+  h += '<tfoot><tr style="font-weight:800;border-top:2px solid #333;"><td colspan="4" style="padding:8px;text-align:right;">TOTAL:</td><td style="padding:8px;text-align:right;">$' + _fmt$(totalDisp) + '</td><td></td></tr></tfoot></table>'
+  h += '<div style="text-align:center;margin-top:40px;color:#999;font-size:10px;border-top:1px solid #ddd;padding-top:8px;">Nexus OS — Histórico OTC</div></body></html>'
+
+  const win = window.open('', '_blank')
+  if (win) { win.document.write(h); win.document.close() }
+}
+
+window.otcDeleteHistory = async function(nodeId) {
+  const idx = allNodes.findIndex(n => n.id === nodeId)
+  if (idx === -1) return
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').delete().eq('id', nodeId)
+  }
+  allNodes.splice(idx, 1)
+  renderOtcHistory()
+  showToast('Operación eliminada del histórico')
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -7907,30 +8128,164 @@ window.printContactProfile = function(id) {
   const c = allNodes.find(n => n.id === id)
   if (!c) return
   const m = c.metadata || {}
-  const name = m.name || c.content || 'Contacto'
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
+  const name = esc(m.name || c.content || 'Contacto')
   const phones   = m.phones   || (m.phone  ? [{ label:'Personal', number:m.phone  }] : [])
   const emails   = m.emails   || (m.email  ? [{ label:'Personal', address:m.email }] : [])
   const docs     = m.documents || []
   const accounts = m.contact_accounts || []
+  const roles    = m.roles || (m.cType ? [m.cType] : ['persona'])
+  const specs    = m.specialties || (m.specialty ? [m.specialty] : [])
+  const rating   = m.rating || 0
   const fmtDate  = d => { if (!d) return ''; const [y,mo,dy] = d.split('-'); return `${dy}/${mo}/${y}` }
+
+  // ── Financial summary ──
+  const relatedFinance = allNodes.filter(n =>
+    (n.type === 'income' || n.type === 'expense') &&
+    (n.metadata?.contact_id === id || n.metadata?.provider_id === id || (n.metadata?.tags||[]).includes(name))
+  )
+  const totalIncome  = relatedFinance.filter(n => n.type === 'income').reduce((s,n) => s + (+(n.metadata?.amount||0)), 0)
+  const totalExpense = relatedFinance.filter(n => n.type === 'expense').reduce((s,n) => s + (+(n.metadata?.amount||0)), 0)
+  const txnCount     = relatedFinance.length
+  const dates = relatedFinance.map(n => new Date(n.created_at)).sort((a,b) => a-b)
+  const firstDate = dates.length ? fmtDate(dates[0].toISOString().slice(0,10)) : '—'
+  const lastDate  = dates.length > 1 ? fmtDate(dates[dates.length-1].toISOString().slice(0,10)) : firstDate
+
+  // ── Related projects ──
+  const relatedProjects = allNodes.filter(n => n.type === 'proyecto' && (
+    (n.metadata?.team||[]).includes(id) || (n.metadata?.client_id === id)
+  ))
+
+  // ── Related cotizaciones ──
+  const relatedCots = allNodes.filter(n => n.type === 'cotizacion' && n.metadata?.provider_id === id)
+  const totalCotizado = relatedCots.reduce((s,n) => s + (+(n.metadata?.total||n.metadata?.amount||0)), 0)
+  const totalAbonado  = relatedCots.reduce((s,n) => s + ((n.metadata?.abonos||[]).reduce((a,b) => a+(+(b.amount||0)),0)), 0)
+
+  // ── Avatar ──
+  const photoUrl = m.photo_url || m.photoUrl || ''
+  const initials = (name.split(' ').slice(0,2).map(w => w[0]).join('') || '?').toUpperCase()
+  const avatarHtml = photoUrl
+    ? `<img src="${esc(photoUrl)}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0;"/>`
+    : `<div style="width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,#60a5fa,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#fff;">${initials}</div>`
+
+  const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating)
+
   const w = window.open('', '_blank')
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name} — Ficha Nexus OS</title>
-    <style>body{font-family:system-ui,sans-serif;color:#111;padding:24px;max-width:700px;margin:0 auto}h1{font-size:22px;margin-bottom:4px}
-    table{width:100%;border-collapse:collapse;margin:10px 0}td,th{padding:6px 10px;border-bottom:1px solid #eee;font-size:13px}
-    th{text-align:left;font-size:10px;color:#666;font-weight:700;text-transform:uppercase;background:#f9f9f9}
-    h3{margin:16px 0 4px;font-size:12px;color:#555;text-transform:uppercase;letter-spacing:.06em}
-    @media print{body{padding:0}.no-print{display:none}}</style></head><body>
-    <h1>${name}</h1>
-    <p style="font-size:12px;color:#666;margin:2px 0">${m.city||''}${m.rfc?' · RFC: '+m.rfc:''}</p>
-    ${m.birthday?`<p style="font-size:12px;color:#666;margin:2px 0">🎂 ${fmtDate(m.birthday)}</p>`:''}
-    ${phones.length?`<h3>📞 Teléfonos</h3><table>${phones.map(p=>`<tr><td style="color:#888;width:100px">${p.label}</td><td>${p.number}</td></tr>`).join('')}</table>`:''}
-    ${emails.length?`<h3>✉️ Correos</h3><table>${emails.map(e=>`<tr><td style="color:#888;width:100px">${e.label}</td><td>${e.address}</td></tr>`).join('')}</table>`:''}
-    ${(m.address_street||m.city)?`<h3>📍 Dirección</h3><p style="font-size:13px">${[m.address_street,[m.address_postal,m.city].filter(Boolean).join(' '),[m.address_state,m.address_country].filter(Boolean).join(', ')].filter(Boolean).join('<br>')}</p>`:''}
-    ${accounts.length?`<h3>🏦 Cuentas de Cobro</h3><table><tr><th>Tipo</th><th>Banco / Red</th><th>CLABE / Wallet</th></tr>${accounts.map(a=>`<tr><td>${a.type||''}</td><td>${a.bank||a.network||''}</td><td style="font-family:monospace;font-size:11px">${a.clabe||a.wallet||''}</td></tr>`).join('')}</table>`:''}
-    ${docs.length?`<h3>📎 Documentos</h3><table>${docs.map(d=>`<tr><td>${DOC_ICONS[d.docType]||'📎'} ${d.name||d.docType}</td><td><a href="${d.url||'#'}">${d.url||'Sin enlace'}</a></td></tr>`).join('')}</table>`:''}
-    ${m.notes?`<h3>📝 Notas</h3><p style="font-size:13px;white-space:pre-wrap">${m.notes}</p>`:''}
-    <p style="margin-top:24px;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:8px;">Generado por Nexus OS · ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}</p>
-    </body></html>`)
+  let h = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name} — Dossier Nexus OS</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',system-ui,sans-serif;color:#1a1a1a;max-width:800px;margin:0 auto;padding:30px;font-size:13px}
+    .header{display:flex;align-items:center;gap:20px;padding-bottom:20px;border-bottom:2px solid #1a1a1a;margin-bottom:20px;}
+    .header-info{flex:1;}
+    .header-info h1{font-size:24px;font-weight:800;margin-bottom:4px;}
+    .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;margin-right:4px;margin-bottom:4px;}
+    .badge-role{background:#e0f2fe;color:#0284c7;} .badge-spec{background:#f0fdf4;color:#16a34a;}
+    .stars{color:#f59e0b;font-size:16px;letter-spacing:2px;margin-top:2px;}
+    .section{margin-bottom:18px;} .section-title{font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #e2e8f0;}
+    table{width:100%;border-collapse:collapse;} td,th{padding:6px 10px;border-bottom:1px solid #f1f5f9;font-size:12px;text-align:left;}
+    th{font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;background:#f8fafc;}
+    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+    .kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center;}
+    .kpi-label{font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.5px;text-transform:uppercase;} .kpi-val{font-size:18px;font-weight:800;margin-top:4px;}
+    .kpi-sub{font-size:9px;color:#94a3b8;margin-top:2px;}
+    @media print{body{padding:12px;} .no-print{display:none;}}
+  </style></head><body>`
+
+  // Header with avatar
+  h += `<div class="header">
+    ${avatarHtml}
+    <div class="header-info">
+      <h1>${name}</h1>
+      <div style="margin:4px 0;">${roles.map(r => `<span class="badge badge-role">${esc(r)}</span>`).join('')}${specs.map(s => `<span class="badge badge-spec">${esc(s)}</span>`).join('')}</div>
+      <div style="font-size:12px;color:#64748b;">${[m.city, m.address_state, m.address_country].filter(Boolean).map(s=>esc(s)).join(', ')}</div>
+      ${m.rfc ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px;">RFC: <b>${esc(m.rfc)}</b></div>` : ''}
+      ${rating ? `<div class="stars">${stars}</div>` : ''}
+    </div>
+    <div style="text-align:right;font-size:10px;color:#94a3b8;">
+      <div style="font-weight:700;font-size:14px;color:#1a1a1a;">NEXUS OS</div>
+      <div>Dossier de Contacto</div>
+      <div>${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}</div>
+    </div>
+  </div>`
+
+  // KPI strip
+  h += `<div class="kpi-grid">
+    <div class="kpi"><div class="kpi-label">Transacciones</div><div class="kpi-val">${txnCount}</div><div class="kpi-sub">${firstDate} → ${lastDate}</div></div>
+    <div class="kpi"><div class="kpi-label">Ingresos</div><div class="kpi-val" style="color:#16a34a;">$${_fmt$(totalIncome)}</div></div>
+    <div class="kpi"><div class="kpi-label">Egresos</div><div class="kpi-val" style="color:#dc2626;">$${_fmt$(totalExpense)}</div></div>
+    <div class="kpi"><div class="kpi-label">Cotizado</div><div class="kpi-val" style="color:#7c3aed;">$${_fmt$(totalCotizado)}</div><div class="kpi-sub">Abonado: $${_fmt$(totalAbonado)}</div></div>
+  </div>`
+
+  // Contact info
+  if (phones.length || emails.length) {
+    h += `<div class="section"><div class="section-title">📞 Contacto</div><table>`
+    phones.forEach(p => { h += `<tr><td style="color:#94a3b8;width:90px;">${esc(p.label)}</td><td style="font-weight:600;">${esc(p.number)}</td></tr>` })
+    emails.forEach(e => { h += `<tr><td style="color:#94a3b8;width:90px;">${esc(e.label)}</td><td>${esc(e.address)}</td></tr>` })
+    h += `</table></div>`
+  }
+
+  // Address
+  if (m.address_street || m.city) {
+    const parts = [m.address_street, [m.address_postal, m.city].filter(Boolean).join(' '), [m.address_state, m.address_country].filter(Boolean).join(', ')].filter(Boolean)
+    h += `<div class="section"><div class="section-title">📍 Dirección</div><p style="font-size:13px;line-height:1.6;">${parts.map(p=>esc(p)).join('<br>')}</p></div>`
+  }
+
+  // Dates
+  if (m.birthday || m.anniversary) {
+    h += `<div class="section"><div class="section-title">🎉 Fechas Especiales</div><div style="display:flex;gap:30px;">`
+    if (m.birthday) h += `<div><span style="font-size:10px;color:#94a3b8;">🎂 Cumpleaños</span><br><b style="font-size:14px;">${fmtDate(m.birthday)}</b></div>`
+    if (m.anniversary) h += `<div><span style="font-size:10px;color:#94a3b8;">💑 Aniversario</span><br><b style="font-size:14px;">${fmtDate(m.anniversary)}</b></div>`
+    h += `</div></div>`
+  }
+
+  // Bank accounts
+  if (accounts.length) {
+    h += `<div class="section"><div class="section-title">🏦 Cuentas de Cobro</div><table><tr><th>Tipo</th><th>Banco / Red</th><th>CLABE / Wallet</th></tr>`
+    accounts.forEach(a => {
+      h += `<tr><td>${esc(a.type||'')}</td><td>${esc(a.bank||a.network||'')}</td><td style="font-family:monospace;font-size:11px;">${esc(a.clabe||a.wallet||'')}</td></tr>`
+    })
+    h += `</table></div>`
+  }
+
+  // Related projects
+  if (relatedProjects.length) {
+    h += `<div class="section"><div class="section-title">🏗️ Proyectos Vinculados</div><table><tr><th>Proyecto</th><th>Estado</th></tr>`
+    relatedProjects.forEach(p => {
+      const pm = p.metadata || {}
+      h += `<tr><td style="font-weight:600;">${esc(pm.name||p.content)}</td><td>${esc(pm.status||'activo')}</td></tr>`
+    })
+    h += `</table></div>`
+  }
+
+  // Cotizaciones
+  if (relatedCots.length) {
+    h += `<div class="section"><div class="section-title">🧾 Cotizaciones</div><table><tr><th>Concepto</th><th style="text-align:right;">Total</th><th style="text-align:right;">Abonado</th><th style="text-align:right;">Saldo</th></tr>`
+    relatedCots.forEach(ct => {
+      const cm = ct.metadata || {}
+      const total = +(cm.total||cm.amount||0)
+      const paid = (cm.abonos||[]).reduce((s,a)=>s+(+(a.amount||0)),0)
+      h += `<tr><td>${esc(cm.description||ct.content)}</td><td style="text-align:right;font-weight:600;">$${_fmt$(total)}</td><td style="text-align:right;color:#16a34a;">$${_fmt$(paid)}</td><td style="text-align:right;color:${paid>=total?'#16a34a':'#dc2626'};">$${_fmt$(total-paid)}</td></tr>`
+    })
+    h += `</table></div>`
+  }
+
+  // Docs
+  if (docs.length) {
+    h += `<div class="section"><div class="section-title">📎 Documentos</div><table>`
+    docs.forEach(d => { h += `<tr><td>${esc(d.name||d.docType)}</td><td style="font-size:11px;color:#64748b;">${d.url ? 'Vinculado' : 'Sin enlace'}</td></tr>` })
+    h += `</table></div>`
+  }
+
+  // Notes
+  if (m.notes) {
+    h += `<div class="section"><div class="section-title">📝 Notas</div><p style="font-size:12px;white-space:pre-wrap;color:#475569;line-height:1.6;">${esc(m.notes)}</p></div>`
+  }
+
+  h += `<div style="margin-top:24px;text-align:center;font-size:10px;color:#cbd5e1;border-top:1px solid #e2e8f0;padding-top:12px;">
+    Dossier generado por <b>Nexus OS</b> · ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}
+  </div></body></html>`
+
+  w.document.write(h)
   w.document.close()
   w.focus()
   setTimeout(() => w.print(), 600)
