@@ -482,12 +482,12 @@
 
     /* ── WIDGET BUTTONS ── */
     .widget-btn-primary {
-      background:linear-gradient(135deg,var(--accent-cyan),var(--p300));
+      background:linear-gradient(135deg,var(--accent-cyan),#00b8d4);
       color:#000; border:none; border-radius:8px; padding:7px 14px;
-      font-weight:800; font-size:11px; cursor:pointer; font-family:inherit; flex:1;
-      transition:all 0.2s;
+      font-weight:800; font-size:12px; cursor:pointer; font-family:inherit; flex:1;
+      transition:all 0.2s; text-transform:uppercase; letter-spacing:0.04em;
     }
-    .widget-btn-primary:hover { filter:brightness(1.1); transform:translateY(-1px); }
+    .widget-btn-primary:hover { filter:brightness(1.15); transform:translateY(-1px); box-shadow:0 4px 16px rgba(0,240,255,0.3); }
     .widget-btn-secondary {
       background:rgba(255,255,255,0.06); color:var(--text-secondary);
       border:1px solid var(--glass-border); border-radius:8px; padding:7px 14px;
@@ -495,6 +495,47 @@
       transition:all 0.2s;
     }
     .widget-btn-secondary:hover { background:rgba(255,255,255,0.1); }
+    /* OTC action buttons — high visibility */
+    .otc-btn-action {
+      background:linear-gradient(135deg,var(--accent-cyan),#00b8d4);
+      color:#000; border:none; border-radius:10px; padding:12px 18px;
+      font-weight:800; font-size:13px; cursor:pointer; font-family:inherit;
+      letter-spacing:0.03em; transition:all 0.2s; width:100%;
+    }
+    .otc-btn-action:hover { filter:brightness(1.15); transform:translateY(-1px); box-shadow:0 4px 16px rgba(0,240,255,0.35); }
+    .otc-btn-save {
+      background:rgba(167,139,250,0.15); border:1px solid rgba(167,139,250,0.4);
+      color:#c084fc; border-radius:10px; padding:10px 18px;
+      font-weight:700; font-size:12px; cursor:pointer; font-family:inherit;
+      transition:all 0.2s; display:flex; align-items:center; gap:6px;
+    }
+    .otc-btn-save:hover { background:rgba(167,139,250,0.25); box-shadow:0 0 12px rgba(167,139,250,0.2); }
+    .otc-btn-export {
+      background:rgba(96,165,250,0.12); border:1px solid rgba(96,165,250,0.35);
+      color:#60a5fa; border-radius:10px; padding:10px 18px;
+      font-weight:700; font-size:12px; cursor:pointer; font-family:inherit;
+      transition:all 0.2s; flex:1;
+    }
+    .otc-btn-export:hover { background:rgba(96,165,250,0.22); box-shadow:0 0 12px rgba(96,165,250,0.2); }
+    .otc-btn-wa {
+      background:rgba(74,222,128,0.12); border:1px solid rgba(74,222,128,0.35);
+      color:#4ade80; border-radius:10px; padding:12px 18px;
+      font-weight:800; font-size:13px; cursor:pointer; font-family:inherit;
+      transition:all 0.2s; width:100%;
+    }
+    .otc-btn-wa:hover { background:rgba(74,222,128,0.22); box-shadow:0 0 12px rgba(74,222,128,0.2); }
+    .otc-btn-reopen {
+      background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.3);
+      color:#fbbf24; border-radius:6px; padding:4px 10px;
+      font-weight:700; font-size:10px; cursor:pointer; font-family:inherit;
+      transition:all 0.15s;
+    }
+    .otc-btn-reopen:hover { background:rgba(251,191,36,0.2); }
+    .otc-draft-banner {
+      background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.3);
+      border-radius:12px; padding:14px 18px; margin-bottom:16px;
+      display:flex; align-items:center; gap:12px;
+    }
     .widget-btn-danger {
       background:rgba(248,113,113,0.12); color:#f87171;
       border:1px solid rgba(248,113,113,0.25); border-radius:8px; padding:7px 14px;
@@ -2514,6 +2555,17 @@
       <!-- ═══════════════════════════════════════════════════════ -->
       <div id="herr-panel-otc" class="herr-panel">
 
+        <!-- Draft restore banner (hidden by default) -->
+        <div id="otc-draft-banner" class="otc-draft-banner" style="display:none;">
+          <span style="font-size:22px;">📋</span>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:700;color:#fbbf24;">Operación en progreso</div>
+            <div id="otc-draft-info" style="font-size:11px;color:var(--text-muted);margin-top:2px;">Tienes una operación sin guardar</div>
+          </div>
+          <button onclick="otcRestoreDraft()" style="background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:8px;padding:6px 14px;font-weight:700;font-size:11px;cursor:pointer;">↩ Restaurar</button>
+          <button onclick="otcDiscardDraft()" style="background:none;border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;padding:6px 14px;font-weight:700;font-size:11px;cursor:pointer;">✕ Descartar</button>
+        </div>
+
         <!-- BLOQUE A: ENTRADA Y COTIZACIÓN -->
         <div class="settings-card" style="margin-bottom:20px;">
           <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:14px;">📥 Entrada de Operación</h2>
@@ -2523,7 +2575,7 @@
               <select id="otc-coin" class="modal-input" onchange="otcFetchBitso()">
                 <option value="USDT">🔵 USDT</option><option value="BTC">₿ BTC</option>
                 <option value="SOL">◎ SOL</option><option value="XRP">🔷 XRP</option>
-                <option value="ETH">Ξ ETH</option><option value="TRX">🔴 TRX</option>
+                <option value="ETH">Ξ ETH</option>
               </select>
             </div>
             <div>
@@ -2543,10 +2595,10 @@
             </div>
             <div>
               <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">COMISIÓN REAL BITSO (%)</label>
-              <input type="number" id="otc-fee-real" class="modal-input" placeholder="0.60" value="0.60" step="any" oninput="otcRecalc()"/>
+              <input type="number" id="otc-fee-real" class="modal-input" placeholder="0.75" value="0.75" step="any" oninput="otcRecalc()"/>
             </div>
           </div>
-          <button class="widget-btn-primary" style="width:100%;padding:12px;" onclick="otcRecalc()">Calcular Operación</button>
+          <button class="otc-btn-action" onclick="otcRecalc()">⚡ Calcular Operación</button>
         </div>
 
         <!-- KPI CARDS — 2x2 grid -->
@@ -2608,7 +2660,7 @@
             </table>
           </div>
           <!-- Remaining amount strip -->
-          <div id="otc-remaining-strip" style="display:none;margin-top:10px;padding:12px 16px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:10px;display:flex;justify-content:space-between;align-items:center;">
+          <div id="otc-remaining-strip" style="display:none;margin-top:10px;padding:12px 16px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:10px;justify-content:space-between;align-items:center;">
             <span style="font-size:12px;font-weight:700;color:var(--text-muted);">💰 Restante por repartir</span>
             <span id="otc-remaining-val" style="font-size:18px;font-weight:800;color:#fbbf24;font-family:'JetBrains Mono',monospace;">$0.00</span>
           </div>
@@ -2624,7 +2676,7 @@
             <h2 style="font-size:14px;font-weight:800;color:#4ade80;margin-bottom:12px;">💬 Mensaje WhatsApp</h2>
             <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Genera el texto de pre-aprobación para enviar a tu socio antes de dispersar.</p>
             <div id="otc-wa-preview" style="background:rgba(0,0,0,0.3);border:1px solid var(--glass-border);border-radius:8px;padding:12px;font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;white-space:pre-wrap;max-height:320px;overflow-y:auto;margin-bottom:12px;">Completa la operación y la tabla de dispersión para generar el mensaje.</div>
-            <button class="widget-btn-primary" style="width:100%;padding:12px;font-size:13px;font-weight:800;background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.4);color:#4ade80;border-radius:10px;cursor:pointer;" onclick="otcCopyWhatsApp()">📋 Copiar Mensaje WhatsApp</button>
+            <button class="otc-btn-wa" onclick="otcCopyWhatsApp()">📋 Copiar Mensaje WhatsApp</button>
           </div>
           <!-- Export -->
           <div class="settings-card">
@@ -2637,8 +2689,8 @@
               </div>
             </div>
             <div style="display:flex;gap:8px;">
-              <button class="widget-btn-primary" style="flex:1;padding:10px;" onclick="otcExportPDF()">🖨 Exportar PDF</button>
-              <button class="btn-ghost" style="padding:10px 16px;" onclick="otcSaveToNodes()" title="Guardar operación en Nexus OS">💾</button>
+              <button class="otc-btn-export" onclick="otcExportPDF()">🖨 Exportar PDF</button>
+              <button class="otc-btn-save" onclick="otcSaveToNodes()" title="Guardar operación en Nexus OS">💾 Guardar</button>
             </div>
           </div>
         </div>

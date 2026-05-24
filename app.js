@@ -5832,6 +5832,7 @@ window.switchHerrTab = function(tab) {
       if (typeof otcFetchBitso === 'function') otcFetchBitso()
     }, 200)
     if (typeof renderOtcHistory === 'function') renderOtcHistory()
+    if (typeof _otcCheckDraftOnOpen === 'function') _otcCheckDraftOnOpen()
   }
 }
 window.switchHerrSubtab = function(sub) {
@@ -5908,6 +5909,7 @@ window.otcRecalc = function() {
 
   otcUpdateSemaforo()
   otcUpdateWhatsApp()
+  _otcSaveDraft()  // auto-persist draft to localStorage
 }
 
 window.toggleOtcAdmin = function() {
@@ -5922,6 +5924,7 @@ window.otcAddRow = function() {
   const id = 'odr_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
   _otcRows.push({ id, contactId:'', contactName:'', bank:'', clabe:'', assignType:'fixed', value:0, montoMXN:0, receiptDataUrl:'', projectTag:'' })
   otcRenderTable()
+  _otcSaveDraft()
 }
 
 window.otcRemoveRow = function(id) {
@@ -5929,6 +5932,7 @@ window.otcRemoveRow = function(id) {
   otcRenderTable()
   otcUpdateSemaforo()
   otcUpdateWhatsApp()
+  _otcSaveDraft()
 }
 
 function otcRenderTable() {
@@ -6129,6 +6133,7 @@ window.otcSelectContact = function(rowId, contactId) {
     otcRenderTable()
     otcUpdateSemaforo()
     otcUpdateWhatsApp()
+    _otcSaveDraft()
   }
 }
 
@@ -6183,6 +6188,7 @@ function _otcShowAccountPicker(rowId, row, accts) {
       otcRenderTable()
       otcUpdateSemaforo()
       otcUpdateWhatsApp()
+      _otcSaveDraft()
     }
     picker.appendChild(item)
   })
@@ -6245,6 +6251,7 @@ window.otcChangeValue = function(rowId, val) {
   if (montoEl) montoEl.textContent = '$' + _fmt$(row.montoMXN)
   otcUpdateSemaforo()
   otcUpdateWhatsApp()
+  _otcSaveDraft()
 }
 
 // Copy helpers
@@ -6383,7 +6390,7 @@ window.otcReceiptDrop = function(ev, rowId) {
     if (text.startsWith('http')) {
       const row = _otcRows.find(r => r.id === rowId)
       if (row) { row.receiptDataUrl = text; row.receiptIsUrl = true }
-      otcRenderTable()
+      otcRenderTable(); _otcSaveDraft()
     } else {
       showToast('Arrastra una imagen, PDF o URL')
     }
@@ -6404,7 +6411,7 @@ window.otcReceiptUrl = function(rowId) {
   if (!url || !url.startsWith('http')) { showToast('Ingresa una URL válida (http/https)'); return }
   const row = _otcRows.find(r => r.id === rowId)
   if (row) { row.receiptDataUrl = url; row.receiptIsUrl = true }
-  otcRenderTable()
+  otcRenderTable(); _otcSaveDraft()
   showToast('Comprobante vinculado por URL')
 }
 
@@ -6413,7 +6420,7 @@ function _otcReadReceiptFile(file, rowId) {
   reader.onload = () => {
     const row = _otcRows.find(r => r.id === rowId)
     if (row) { row.receiptDataUrl = reader.result; row.receiptIsUrl = false }
-    otcRenderTable()
+    otcRenderTable(); _otcSaveDraft()
   }
   reader.readAsDataURL(file)
 }
@@ -6623,6 +6630,7 @@ window.otcSaveToNodes = async function() {
   }
   allNodes.push(histNode)
 
+  _otcClearDraft()  // Clear draft after successful save
   showToast('Operación guardada — ' + _otcRows.filter(r=>r.projectTag).length + ' pagos vinculados a proyectos')
   renderOtcHistory()
   if (typeof renderAll === 'function') renderAll()
@@ -6653,19 +6661,21 @@ function renderOtcHistory() {
     const totalDisp = rows.reduce((s,r) => s + (r.montoMXN||0), 0)
     const d = new Date(m.saved_at || op.created_at)
     const dateStr = d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
-    h += '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:6px;cursor:pointer;transition:border-color 0.15s;" '
-    h += 'onmouseenter="this.style.borderColor=\'rgba(167,139,250,0.4)\'" onmouseleave="this.style.borderColor=\'rgba(255,255,255,0.06)\'" '
-    h += 'onclick="otcViewHistory(\'' + esc(op.id) + '\')">'
-    h += '<div style="font-size:20px;">📊</div>'
-    h += '<div style="flex:1;min-width:0;">'
+    h += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:6px;transition:border-color 0.15s;" '
+    h += 'onmouseenter="this.style.borderColor=\'rgba(167,139,250,0.4)\'" onmouseleave="this.style.borderColor=\'rgba(255,255,255,0.06)\'">'
+    h += '<div style="font-size:20px;cursor:pointer;" onclick="otcViewHistory(\'' + esc(op.id) + '\')" title="Ver estado de cuenta">📊</div>'
+    h += '<div style="flex:1;min-width:0;cursor:pointer;" onclick="otcViewHistory(\'' + esc(op.id) + '\')">'
     h += '<div style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(m.otc_ref || 'OTC') + ' — ' + esc(m.coin||'') + '</div>'
     h += '<div style="font-size:10px;color:var(--text-muted);">' + dateStr + ' · ' + benefCount + ' beneficiario' + (benefCount!==1?'s':'') + '</div>'
     h += '</div>'
-    h += '<div style="text-align:right;">'
+    h += '<div style="text-align:right;flex-shrink:0;">'
     h += '<div style="font-size:14px;font-weight:800;color:#4ade80;font-family:\'JetBrains Mono\',monospace;">$' + _fmt$(totalDisp) + '</div>'
     h += '<div style="font-size:10px;color:var(--text-dim);">dispersado</div>'
     h += '</div>'
-    h += '<button onclick="event.stopPropagation();otcDeleteHistory(\'' + esc(op.id) + '\')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:4px;" title="Eliminar">🗑️</button>'
+    h += '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">'
+    h += '<button onclick="event.stopPropagation();otcReopenHistory(\'' + esc(op.id) + '\')" class="otc-btn-reopen" title="Reabrir para editar">↩ Reabrir</button>'
+    h += '<button onclick="event.stopPropagation();otcDeleteHistory(\'' + esc(op.id) + '\')" style="background:none;border:1px solid rgba(248,113,113,0.2);color:#f87171;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:600;" title="Eliminar">🗑 Borrar</button>'
+    h += '</div>'
     h += '</div>'
   })
   list.innerHTML = h
@@ -6724,6 +6734,134 @@ window.otcDeleteHistory = async function(nodeId) {
   allNodes.splice(idx, 1)
   renderOtcHistory()
   showToast('Operación eliminada del histórico')
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ORQUESTADOR OTC — DRAFT PERSISTENCE (localStorage)
+// ═══════════════════════════════════════════════════════════════════
+const OTC_DRAFT_KEY = 'nexus_otc_draft'
+
+function _otcSaveDraft() {
+  // Only save when there's meaningful data
+  const coin = document.getElementById('otc-coin')?.value || 'USDT'
+  const qty  = document.getElementById('otc-qty')?.value || ''
+  const tc   = document.getElementById('otc-tc')?.value || ''
+  const feeR = document.getElementById('otc-fee-reported')?.value || '0.90'
+  const feeB = document.getElementById('otc-fee-real')?.value || '0.75'
+  const ref  = document.getElementById('otc-ref')?.value || ''
+  if (!qty && _otcRows.length === 0) return // nothing to save
+  const draft = {
+    coin, qty, tc, feeReported: feeR, feeReal: feeB, ref,
+    data: { ..._otcData },
+    rows: _otcRows.map(r => ({
+      id: r.id, contactId: r.contactId, contactName: r.contactName,
+      bank: r.bank, clabe: r.clabe, assignType: r.assignType,
+      value: r.value, montoMXN: r.montoMXN, projectTag: r.projectTag,
+      receiptDataUrl: r.receiptDataUrl || '',
+      _pendingCotId: r._pendingCotId || ''
+    })),
+    savedAt: new Date().toISOString()
+  }
+  try { localStorage.setItem(OTC_DRAFT_KEY, JSON.stringify(draft)) } catch(e) { /* quota */ }
+}
+
+function _otcHasDraft() {
+  try {
+    const raw = localStorage.getItem(OTC_DRAFT_KEY)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch(e) { return null }
+}
+
+function _otcClearDraft() {
+  localStorage.removeItem(OTC_DRAFT_KEY)
+  const banner = document.getElementById('otc-draft-banner')
+  if (banner) banner.style.display = 'none'
+}
+
+window.otcRestoreDraft = function() {
+  const draft = _otcHasDraft()
+  if (!draft) return
+  _otcLoadState(draft)
+  _otcClearDraft()
+  showToast('Operación restaurada')
+}
+
+window.otcDiscardDraft = function() {
+  _otcClearDraft()
+  showToast('Borrador descartado')
+}
+
+function _otcLoadState(draft) {
+  // Populate form fields
+  const coinEl = document.getElementById('otc-coin')
+  const qtyEl  = document.getElementById('otc-qty')
+  const tcEl   = document.getElementById('otc-tc')
+  const feeREl = document.getElementById('otc-fee-reported')
+  const feeBEl = document.getElementById('otc-fee-real')
+  const refEl  = document.getElementById('otc-ref')
+  if (coinEl) coinEl.value = draft.coin || 'USDT'
+  if (qtyEl)  qtyEl.value  = draft.qty || ''
+  if (tcEl)   { tcEl.value = draft.tc || ''; tcEl._userEdited = true }
+  if (feeREl) feeREl.value = draft.feeReported || '0.90'
+  if (feeBEl) feeBEl.value = draft.feeReal || '0.75'
+  if (refEl)  refEl.value  = draft.ref || ''
+
+  // Restore rows
+  _otcRows = (draft.rows || []).map(r => ({ ...r }))
+
+  // Recalc to update KPIs, semáforo, and WhatsApp
+  otcRecalc()
+  // Re-render dispersion table
+  if (typeof otcRenderTable === 'function') otcRenderTable()
+}
+
+function _otcCheckDraftOnOpen() {
+  const draft = _otcHasDraft()
+  const banner = document.getElementById('otc-draft-banner')
+  const info = document.getElementById('otc-draft-info')
+  if (!draft || !banner) return
+  // Show banner with info
+  const d = new Date(draft.savedAt)
+  const timeStr = d.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' })
+  const dateStr = d.toLocaleDateString('es-MX', { day:'2-digit', month:'short' })
+  const amt = draft.qty ? (draft.qty + ' ' + (draft.coin||'USDT')) : ''
+  banner.style.display = 'flex'
+  if (info) info.textContent = dateStr + ' ' + timeStr + (amt ? ' — ' + amt : '') + ' · ' + (draft.rows?.length||0) + ' beneficiario(s)'
+}
+
+// ── Reopen saved operation from history ──
+window.otcReopenHistory = function(nodeId) {
+  const op = allNodes.find(n => n.id === nodeId)
+  if (!op || !op.metadata?.is_otc_history) return
+  const m = op.metadata
+  const draft = {
+    coin: m.coin || 'USDT',
+    qty: String(m.qty || ''),
+    tc: String(m.tc || ''),
+    feeReported: '0.90',
+    feeReal: '0.75',
+    ref: m.otc_ref || '',
+    rows: (m.rows || []).map((r, i) => ({
+      id: 'reopen_' + Date.now() + '_' + i,
+      contactId: r.contactId || '',
+      contactName: r.contactName || '',
+      bank: r.bank || '',
+      clabe: r.clabe || '',
+      assignType: 'fixed',
+      value: r.montoMXN || 0,
+      montoMXN: r.montoMXN || 0,
+      projectTag: r.projectTag || '',
+      receiptDataUrl: r.receiptDataUrl || '',
+      _pendingCotId: r._pendingCotId || ''
+    })),
+    savedAt: new Date().toISOString()
+  }
+  _otcLoadState(draft)
+  _otcClearDraft()
+  // Scroll to top of OTC panel
+  document.getElementById('herr-panel-otc')?.scrollIntoView({ behavior:'smooth', block:'start' })
+  showToast('Operación cargada — puedes editar y volver a guardar')
 }
 
 // ═══════════════════════════════════════════════════════════════════
