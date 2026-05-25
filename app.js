@@ -1880,6 +1880,9 @@ function renderAll() {
     safe(renderCronica, nodes); safe(renderContacts)
     safe(renderAgenda, allNodes)
   }
+  // Herramientas sub-renderers — siempre actualizar aunque no sea la vista activa
+  if (typeof renderOtcHistory === 'function') safe(renderOtcHistory)
+  if (typeof renderDocHistory === 'function') safe(renderDocHistory)
 }
 
 function renderFilterBar() {
@@ -6992,18 +6995,27 @@ window.openDocGen = function(type) {
   let h = ''
 
   if (type === 'prorroga') {
-    h += '<div style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:14px;margin-bottom:14px;">'
-    h += '<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:4px;">📌 DESTINATARIO FIJO</div>'
-    h += '<div style="font-size:13px;color:#fff;font-weight:700;">Luis Moreno Lacalle Zaldívar</div>'
-    h += '<div style="font-size:11px;color:var(--text-muted);">Arrendador del inmueble comercial</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+
+    // Arrendador (Para:)
+    h += '<div style="background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:8px;">🏠 ARRENDADOR (Para:)</div>'
+    h += '<select id="dg-arrendador" class="modal-input" onchange="docGenFillProrroga(\'arrendador\')"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<div id="dg-arrendador-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
+    h += '<input type="text" id="dg-arrendador-name" class="modal-input" placeholder="Nombre completo..." style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-arrendador-cargo" class="modal-input" placeholder="Cargo / rol" value="Arrendador del inmueble comercial" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
 
-    h += '<div class="modal-field"><label class="modal-label">Arrendatario — seleccionar contacto</label>'
-    h += '<select id="dg-arrendatario" class="modal-input" onchange="docGenFillProrroga()"><option value="">— Seleccionar o escribir abajo —</option>' + contactOpts + '</select></div>'
-    h += '<div class="modal-field"><label class="modal-label">Nombre del arrendatario (manual)</label>'
-    h += '<input type="text" id="dg-arrendatario-name" class="modal-input" placeholder="Nombre completo del arrendatario"/></div>'
-    h += '<div class="modal-field"><label class="modal-label">Domicilio del arrendatario</label>'
-    h += '<input type="text" id="dg-arrendatario-dom" class="modal-input" placeholder="Dirección completa"/></div>'
+    // Arrendatario (Yo,...)
+    h += '<div style="background:rgba(250,204,21,0.04);border:1px solid rgba(250,204,21,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#fbbf24;margin-bottom:8px;">👤 ARRENDATARIO (Quien solicita)</div>'
+    h += '<select id="dg-arrendatario" class="modal-input" onchange="docGenFillProrroga(\'arrendatario\')"><option value="">— Seleccionar o escribir —</option>' + contactOpts + '</select>'
+    h += '<div id="dg-arrendatario-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
+    h += '<input type="text" id="dg-arrendatario-name" class="modal-input" placeholder="Nombre completo..." style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-arrendatario-dom" class="modal-input" placeholder="Domicilio completo" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+
+    h += '</div>'
 
     h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
     h += '<div class="modal-field"><label class="modal-label">Día</label><input type="number" id="dg-dia" class="modal-input" min="1" max="31" placeholder="__"/></div>'
@@ -7070,7 +7082,14 @@ window.openDocGen = function(type) {
   } else if (type === 'recibo') {
     h += '<div class="modal-field"><label class="modal-label">Quien recibe el dinero (Parte A)</label>'
     h += '<select id="dg-receptor" class="modal-input" onchange="docGenFillRecibo(\'receptor\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
-    h += '<input type="text" id="dg-receptor-name" class="modal-input" placeholder="O escribir nombre manualmente" style="margin-bottom:10px;"/>'
+    h += '<input type="text" id="dg-receptor-name" class="modal-input" placeholder="O escribir nombre manualmente" style="margin-bottom:6px;"/>'
+    h += '<div class="modal-field"><label class="modal-label">¿A qué cuenta / método se recibe?</label>'
+    h += '<select id="dg-receptor-cuenta" class="modal-input" style="margin-bottom:4px;">'
+    h += '<option value="">— Sin especificar —</option>'
+    h += '<option value="__efectivo__">💵 Efectivo / Cash</option>'
+    h += '<option value="__otro__">📝 Otro (especificar manualmente abajo)</option>'
+    h += '</select></div>'
+    h += '<input type="text" id="dg-receptor-cuenta-manual" class="modal-input" placeholder="Cuenta, CLABE, plataforma... (opcional)" style="margin-bottom:10px;font-size:11px;"/>'
 
     h += '<div class="modal-field"><label class="modal-label">Quien entrega el dinero (Parte B)</label>'
     h += '<select id="dg-entregante" class="modal-input" onchange="docGenFillRecibo(\'entregante\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
@@ -7132,16 +7151,27 @@ window.closeDocGen = function() {
 }
 
 // ── Auto-fill helpers for each template ──────────────────────────
-window.docGenFillProrroga = function() {
-  const sel = document.getElementById('dg-arrendatario')
+window.docGenFillProrroga = function(role) {
+  const selId = role === 'arrendador' ? 'dg-arrendador' : 'dg-arrendatario'
+  const sel = document.getElementById(selId)
   if (!sel?.value) return
   const c = allNodes.find(n => n.id === sel.value)
   if (!c) return
   const m = c.metadata || {}
-  const nameEl = document.getElementById('dg-arrendatario-name')
-  const domEl = document.getElementById('dg-arrendatario-dom')
-  if (nameEl && !nameEl.value) nameEl.value = m.name || c.content || ''
-  if (domEl && !domEl.value) domEl.value = [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
+  const addr = m.domicilio_legal || [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
+  if (role === 'arrendador') {
+    const infoEl = document.getElementById('dg-arrendador-info')
+    if (infoEl) infoEl.textContent = m.name || c.content
+    const nameEl = document.getElementById('dg-arrendador-name')
+    if (nameEl) nameEl.value = m.name || c.content || ''
+  } else {
+    const infoEl = document.getElementById('dg-arrendatario-info')
+    if (infoEl) infoEl.textContent = m.name || c.content
+    const nameEl = document.getElementById('dg-arrendatario-name')
+    if (nameEl) nameEl.value = m.name || c.content || ''
+    const domEl = document.getElementById('dg-arrendatario-dom')
+    if (domEl) domEl.value = addr
+  }
 }
 
 window.docGenFillPagare = function(role) {
@@ -7154,24 +7184,25 @@ window.docGenFillPagare = function(role) {
   const m = c.metadata || {}
   const info = document.getElementById(selId + '-info')
   if (info) info.textContent = m.name || c.content
+  const addr = m.domicilio_legal || [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
   const rfcEl = document.getElementById(prefix + '-rfc')
-  if (rfcEl && !rfcEl.value && m.rfc) rfcEl.value = m.rfc
+  if (rfcEl) rfcEl.value = m.rfc || ''   // siempre actualiza al cambiar contacto
   const dirEl = document.getElementById(prefix + '-dir')
-  if (dirEl && !dirEl.value) dirEl.value = [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
-  // CURP — from direct metadata field, fallback to documents array
+  if (dirEl) dirEl.value = addr          // siempre actualiza
+  // CURP — del campo directo, fallback a documentos array
   const curpEl = document.getElementById(prefix + '-curp')
-  if (curpEl && !curpEl.value) {
+  if (curpEl) {
     if (m.curp) curpEl.value = m.curp
     else {
       const curpDoc = (m.documents||[]).find(d => d.docType === 'curp')
-      if (curpDoc?.name) curpEl.value = curpDoc.name
+      curpEl.value = curpDoc?.name || ''
     }
   }
-  // Electoral & Passport from direct metadata fields
+  // Electoral & Passport — siempre actualiza
   const electEl = document.getElementById(prefix + '-electoral')
-  if (electEl && !electEl.value && m.electoral) electEl.value = m.electoral
+  if (electEl) electEl.value = m.electoral || ''
   const pasapEl = document.getElementById(prefix + '-pasaporte')
-  if (pasapEl && !pasapEl.value && m.pasaporte) pasapEl.value = m.pasaporte
+  if (pasapEl) pasapEl.value = m.pasaporte || ''
 }
 
 window.docGenFillRecibo = function(role) {
@@ -7179,7 +7210,26 @@ window.docGenFillRecibo = function(role) {
   const nameEl = document.getElementById('dg-' + role + '-name')
   if (!sel?.value || !nameEl) return
   const c = allNodes.find(n => n.id === sel.value)
-  if (c && !nameEl.value) nameEl.value = (c.metadata?.name || c.content || '')
+  if (!c) return
+  nameEl.value = (c.metadata?.name || c.content || '')
+  // If receptor, populate account select with all their accounts
+  if (role === 'receptor') {
+    const cuentaSelect = document.getElementById('dg-receptor-cuenta')
+    if (cuentaSelect) {
+      const accounts = c.metadata?.contact_accounts || []
+      // Rebuild options
+      let opts = '<option value="">— Sin especificar —</option>'
+      opts += '<option value="__efectivo__">💵 Efectivo / Cash</option>'
+      accounts.forEach(a => {
+        const label = a.label || a.bank || (a.type === 'crypto' ? a.network : 'Cuenta')
+        const detail = a.clabe ? ' · CLABE: ' + a.clabe : a.wallet ? ' · ' + a.wallet.slice(0,10) + '...' : ''
+        const val = JSON.stringify({ bank: a.bank||'', clabe: a.clabe||'', wallet: a.wallet||'', label: a.label||label, network: a.network||'' })
+        opts += '<option value=\'' + val.replace(/'/g,'&#39;') + '\'>' + (a.type==='crypto'?'₿':'🏦') + ' ' + label + detail + '</option>'
+      })
+      opts += '<option value="__otro__">📝 Otro (especificar manualmente)</option>'
+      cuentaSelect.innerHTML = opts
+    }
+  }
 }
 
 window.docGenFillCartaPoder = function(role) {
@@ -7190,13 +7240,15 @@ window.docGenFillCartaPoder = function(role) {
   const m = c.metadata || {}
   const info = document.getElementById('dg-' + role + '-info')
   if (info) info.textContent = (m.name || c.content) + (m.rfc ? ' · RFC: ' + m.rfc : '')
+  // domicilio_legal toma precedencia; si no, construye desde campos separados
+  const addr = m.domicilio_legal || [m.address_street, m.city, m.address_state, m.address_country].filter(Boolean).join(', ')
   const domEl = document.getElementById('dg-' + role + '-dom')
-  if (domEl && !domEl.value) domEl.value = [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
-  // Auto-fill ID number from contact
+  if (domEl) domEl.value = addr   // siempre actualiza al cambiar el contacto
+  // ID number — siempre actualiza al cambiar de contacto
   const idNumEl = document.getElementById('dg-' + role + '-idnum')
-  if (idNumEl && !idNumEl.value) {
+  if (idNumEl) {
     const idNum = m.electoral || m.pasaporte || m.curp || ''
-    if (idNum) idNumEl.value = idNum
+    idNumEl.value = idNum
   }
 }
 
@@ -7231,16 +7283,18 @@ window.docGenExport = function() {
     const diaPago = document.getElementById('dg-dia-pago')?.value || '[_]'
     const mesPago = document.getElementById('dg-mes-pago')?.value || '[mes]'
     const anioPago = document.getElementById('dg-anio-pago')?.value || '20__'
+    const arrendadorName  = document.getElementById('dg-arrendador-name')?.value || blank
+    const arrendadorCargo = document.getElementById('dg-arrendador-cargo')?.value || 'Arrendador del inmueble'
 
-    parteAName = 'Luis Moreno Lacalle Zaldívar'
+    parteAName = arrendadorName
     parteBName = arrName
-    parteAId = ''
+    parteAId = document.getElementById('dg-arrendador')?.value || ''
     parteBId = document.getElementById('dg-arrendatario')?.value || ''
     docTitle = 'Prórroga de Pago de Renta'
 
     docHtml = '<h1>FORMATO DE SOLICITUD DE PRÓRROGA DE PAGO DE RENTA</h1>'
-    docHtml += '<p style="text-align:right;">Puerto Escondido, Oaxaca, a ' + esc(dia) + ' de ' + esc(mes) + ' de ' + esc(anio) + '.</p>'
-    docHtml += '<p><strong>Para:</strong><br/>Luis Moreno Lacalle Zaldívar<br/>Arrendador del inmueble comercial</p>'
+    docHtml += '<p style="text-align:right;">' + esc(dia) + ' de ' + esc(mes) + ' de ' + esc(anio) + '.</p>'
+    docHtml += '<p><strong>Para:</strong><br/>' + esc(arrendadorName) + '<br/>' + esc(arrendadorCargo) + '</p>'
     docHtml += '<p><strong>Asunto:</strong><br/>Solicitud formal de prórroga de pago de renta</p>'
     docHtml += '<p>Yo, <strong>' + esc(arrName) + '</strong>, con domicilio en <strong>' + esc(arrDom) + '</strong>, en calidad de arrendatario del espacio en renta mencionado, comparezco para solicitar de manera respetuosa una prórroga en el pago correspondiente al mes de <strong>' + esc(mesRenta) + '</strong> del año ' + esc(anio) + '.</p>'
     docHtml += '<p><strong>Motivo de la prórroga:</strong><br/>' + esc(motivo) + '</p>'
@@ -7249,6 +7303,7 @@ window.docGenExport = function() {
     docHtml += '<p>Agradezco de antemano su comprensión.</p>'
     docHtml += '<p>Atentamente,</p>'
     docHtml += '<br/><div class="sig"><strong>' + esc(arrName) + '</strong><br/>Arrendatario</div>'
+    docHtml += '<p style="font-size:10px;margin-top:20px;color:#555;border-top:1px solid #ddd;padding-top:8px;"><strong>Copia para el interesado original a:</strong> ' + esc(arrendadorName) + '</p>'
 
   } else if (type === 'pagare') {
     const benefSel  = document.getElementById('dg-beneficiario')?.value || ''
@@ -7368,20 +7423,26 @@ window.docGenExport = function() {
     parteBId   = entreganteSel
     docTitle   = 'Recibo de Dinero'
 
-    // Auto-fill bank account from receptor's contacts
+    // Read selected account/method from the form
     let receptorBankInfo = ''
-    if (receptorSel) {
-      const rContact = allNodes.find(n => n.id === receptorSel)
-      const rAccounts = rContact?.metadata?.contact_accounts || []
-      const rBank = rAccounts.find(a => a.type === 'bank' || a.clabe)
-      if (rBank) receptorBankInfo = (rBank.bank ? rBank.bank + ' · ' : '') + (rBank.clabe || rBank.wallet || '')
+    const cuentaVal = document.getElementById('dg-receptor-cuenta')?.value || ''
+    const cuentaManual = document.getElementById('dg-receptor-cuenta-manual')?.value.trim() || ''
+    if (cuentaVal === '__efectivo__') {
+      receptorBankInfo = 'Efectivo / Cash'
+    } else if (cuentaVal === '__otro__' || cuentaVal === '') {
+      receptorBankInfo = cuentaManual
+    } else {
+      try {
+        const acct = JSON.parse(cuentaVal)
+        receptorBankInfo = [acct.label||acct.bank, acct.clabe||acct.wallet].filter(Boolean).join(' · ')
+      } catch(e) { receptorBankInfo = cuentaManual }
     }
 
     docHtml = '<h1>RECIBO DE DINERO</h1>'
     docHtml += '<p style="text-align:right;">En ' + esc(lugar) + ', a ' + esc(fechaFmt) + '</p>'
     docHtml += '<p>Por medio del presente, hago constar que he recibido de: <strong>' + esc(entreganteName) + '</strong>. La cantidad de: <strong>$' + esc(montoFmt) + ' M.N.</strong> (' + esc(montoLetra) + ')</p>'
     docHtml += '<p>Por concepto de: <strong>' + esc(concepto) + '</strong></p>'
-    if (receptorBankInfo) docHtml += '<p>Depositado a la cuenta: <strong>' + esc(receptorBankInfo) + '</strong> a nombre de <strong>' + esc(receptorName) + '</strong></p>'
+    if (receptorBankInfo) docHtml += '<p>Vía: <strong>' + esc(receptorBankInfo) + '</strong>' + (receptorBankInfo !== 'Efectivo / Cash' ? ' a nombre de <strong>' + esc(receptorName) + '</strong>' : '') + '</p>'
     docHtml += '<p>Este recibo se extiende para los fines legales a que haya lugar, en la fecha antes mencionada.</p>'
     docHtml += '<div style="display:flex;justify-content:space-between;margin-top:60px;">'
     docHtml += '<div class="sig"><strong>' + esc(receptorName) + '</strong><br/>(Quien recibe)</div>'
@@ -8897,6 +8958,9 @@ window.openContactModal = (id = null) => {
   if (electoralEl) electoralEl.value = (m.electoral || '').toUpperCase()
   const pasaporteEl = document.getElementById('cm-pasaporte')
   if (pasaporteEl) pasaporteEl.value = (m.pasaporte || '').toUpperCase()
+  // Domicilio legal
+  const domLegalEl = document.getElementById('cm-domicilio-legal')
+  if (domLegalEl) domLegalEl.value = m.domicilio_legal || ''
 
   // Photo URL
   const photoInput = document.getElementById('cm-photo-url')
@@ -9324,9 +9388,10 @@ window.saveContact = async () => {
     city:       document.getElementById('cm-city')?.value.trim() || undefined,
     rfc:        document.getElementById('cm-rfc')?.value.trim().toUpperCase() || undefined,
     // Identity docs
-    curp:       document.getElementById('cm-curp')?.value.trim().toUpperCase() || undefined,
-    electoral:  document.getElementById('cm-electoral')?.value.trim().toUpperCase() || undefined,
-    pasaporte:  document.getElementById('cm-pasaporte')?.value.trim().toUpperCase() || undefined,
+    curp:            document.getElementById('cm-curp')?.value.trim().toUpperCase() || undefined,
+    electoral:       document.getElementById('cm-electoral')?.value.trim().toUpperCase() || undefined,
+    pasaporte:       document.getElementById('cm-pasaporte')?.value.trim().toUpperCase() || undefined,
+    domicilio_legal: document.getElementById('cm-domicilio-legal')?.value.trim() || undefined,
     // Address
     address_street:  addrStreet,
     address_postal:  addrPostal,

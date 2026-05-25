@@ -4324,7 +4324,7 @@
     </div>
 
     <!-- Dirección postal -->
-    <div style="margin-bottom:16px;">
+    <div style="margin-bottom:8px;">
       <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:8px;">DIRECCIÓN POSTAL</label>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <input type="text" id="cm-address-street" class="modal-input" placeholder="Calle, número, colonia..." />
@@ -4334,6 +4334,13 @@
           <input type="text" id="cm-address-country" class="modal-input" placeholder="País" />
         </div>
       </div>
+    </div>
+
+    <!-- Domicilio legal (para documentos) -->
+    <div style="margin-bottom:16px;">
+      <label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">📝 DOMICILIO LEGAL (para documentos)</label>
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px;">Si se llena, se usa en documentos en lugar de ensamblar los campos de arriba.</div>
+      <input type="text" id="cm-domicilio-legal" class="modal-input" placeholder="Ej: Calle 5 Sur #101 Col. Centro, Puerto Escondido, Oaxaca, C.P. 71980" />
     </div>
 
     <!-- Fechas especiales -->
