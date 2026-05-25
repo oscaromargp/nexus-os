@@ -5821,7 +5821,7 @@ window.switchHerrTab = function(tab) {
   document.querySelectorAll('.herr-panel').forEach(p => p.style.display = 'none')
   const panel = document.getElementById('herr-panel-' + tab)
   if (panel) panel.style.display = ''
-  if (tab === 'tramites') renderTramitesCuentas()
+  if (tab === 'tramites' && typeof renderDocHistory === 'function') renderDocHistory()
   if (tab === 'otc') {
     // Auto-fetch Bitso price when opening OTC tab (onchange alone won't fire if coin already selected)
     // Reset _userEdited flag so Bitso price auto-fills, and clear cache to force fresh fetch
@@ -5922,7 +5922,7 @@ window.toggleOtcAdmin = function() {
 // ═══════════════════════════════════════════════════════════════════
 window.otcAddRow = function() {
   const id = 'odr_' + Date.now() + '_' + Math.random().toString(36).slice(2,6)
-  _otcRows.push({ id, contactId:'', contactName:'', bank:'', clabe:'', assignType:'fixed', value:0, montoMXN:0, receiptDataUrl:'', projectTag:'' })
+  _otcRows.push({ id, contactId:'', contactName:'', bank:'', clabe:'', assignType:'fixed', value:0, montoMXN:0, receipts:[], projectTag:'' })
   otcRenderTable()
   _otcSaveDraft()
 }
@@ -6011,34 +6011,38 @@ function otcRenderTable() {
   })
   tbody.innerHTML = html
 
-  // Render receipts dropzones (file drag + URL paste)
+  // Render receipts dropzones — multiple receipts per beneficiary
   if (receiptsGrid) {
     let rhtml = ''
     _otcRows.forEach(row => {
       const bName = row.contactName || 'Beneficiario ' + (_otcRows.indexOf(row)+1)
-      rhtml += '<div style="border:1px dashed var(--glass-border);border-radius:10px;padding:12px;text-align:center;min-height:100px;position:relative;" '
-      rhtml += 'ondragover="event.preventDefault();this.style.borderColor=\'#00f6ff\'" '
-      rhtml += 'ondragleave="this.style.borderColor=\'\'" '
-      rhtml += 'ondrop="otcReceiptDrop(event,\'' + row.id + '\')">'
-      rhtml += '<div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:6px;">' + esc(bName) + '</div>'
-      if (row.receiptDataUrl) {
-        // Show image or link depending on type
-        if (row.receiptDataUrl.match(/\.(pdf)/i) || (row.receiptIsUrl && !row.receiptDataUrl.match(/\.(png|jpg|jpeg|gif|webp|bmp)/i) && !row.receiptDataUrl.startsWith('data:'))) {
-          rhtml += '<a href="' + esc(row.receiptDataUrl) + '" target="_blank" style="color:#60a5fa;font-size:11px;text-decoration:underline;display:block;padding:10px 0;">📄 Ver comprobante (PDF/Link)</a>'
-        } else {
-          rhtml += '<img src="' + esc(row.receiptDataUrl) + '" style="max-width:100%;max-height:120px;border-radius:6px;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'"/>'
-          rhtml += '<a href="' + esc(row.receiptDataUrl) + '" target="_blank" style="display:none;color:#60a5fa;font-size:11px;padding:10px 0;">🔗 Ver enlace</a>'
-        }
-        rhtml += '<button onclick="event.stopPropagation();otcClearReceipt(\'' + row.id + '\')" style="position:absolute;top:4px;right:6px;background:rgba(0,0,0,0.6);border:none;color:#f87171;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:12px;">✕</button>'
-      } else {
-        rhtml += '<div onclick="otcReceiptClick(\'' + row.id + '\')" style="cursor:pointer;color:var(--text-dim);font-size:11px;padding:10px 0;">📎 Arrastra imagen o haz clic para subir</div>'
-        // URL input row
-        rhtml += '<div style="margin-top:6px;display:flex;gap:4px;">'
-        rhtml += '<input type="text" class="modal-input" style="font-size:10px;padding:4px 8px;flex:1;" placeholder="🔗 Pegar URL de imagen o PDF..." '
-        rhtml += 'id="otc-receipt-url-' + row.id + '" />'
-        rhtml += '<button onclick="event.stopPropagation();otcReceiptUrl(\'' + row.id + '\')" style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);border-radius:6px;padding:4px 8px;color:#60a5fa;font-size:10px;font-weight:700;cursor:pointer;">OK</button>'
+      rhtml += '<div style="border:1px dashed var(--glass-border);border-radius:10px;padding:12px;">'
+      rhtml += '<div style="font-size:10px;color:var(--text-muted);font-weight:700;margin-bottom:8px;">' + esc(bName) + '</div>'
+      // Show existing receipts as thumbnails/links
+      if (row.receipts && row.receipts.length) {
+        rhtml += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
+        row.receipts.forEach((rc, idx) => {
+          rhtml += '<div style="position:relative;display:inline-block;">'
+          if (rc.isUrl && !rc.data.match(/\.(png|jpg|jpeg|gif|webp|bmp)/i) && !rc.data.startsWith('data:')) {
+            rhtml += '<a href="' + esc(rc.data) + '" target="_blank" style="color:#60a5fa;font-size:10px;text-decoration:underline;display:block;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:6px;padding:4px 22px 4px 8px;">📄 Comp. ' + (idx+1) + '</a>'
+          } else {
+            rhtml += '<img src="' + esc(rc.data) + '" style="max-width:100px;max-height:80px;border-radius:6px;display:block;border:1px solid var(--glass-border);" onerror="this.style.display=\'none\'"/>'
+          }
+          rhtml += '<button onclick="event.stopPropagation();otcRemoveReceipt(\'' + row.id + '\',' + idx + ')" style="position:absolute;top:1px;right:2px;background:rgba(0,0,0,0.7);border:none;color:#f87171;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:10px;line-height:18px;text-align:center;padding:0;" title="Quitar">✕</button>'
+          rhtml += '</div>'
+        })
         rhtml += '</div>'
       }
+      // Add controls: drag zone + URL input
+      rhtml += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+      rhtml += '<div onclick="otcReceiptClick(\'' + row.id + '\')" style="cursor:pointer;color:var(--text-dim);font-size:10px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.15);border-radius:6px;padding:5px 10px;white-space:nowrap;" '
+      rhtml += 'ondragover="event.preventDefault();this.style.borderColor=\'#00f6ff\'" '
+      rhtml += 'ondragleave="this.style.borderColor=\'\'" '
+      rhtml += 'ondrop="otcReceiptDrop(event,\'' + row.id + '\')">📎 + Agregar</div>'
+      rhtml += '<input type="text" class="modal-input" style="font-size:10px;padding:4px 8px;flex:1;min-width:110px;" placeholder="🔗 URL de imagen/PDF..." '
+      rhtml += 'id="otc-receipt-url-' + row.id + '" />'
+      rhtml += '<button onclick="event.stopPropagation();otcReceiptUrl(\'' + row.id + '\')" style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.3);border-radius:6px;padding:4px 8px;color:#60a5fa;font-size:10px;font-weight:700;cursor:pointer;">OK</button>'
+      rhtml += '</div>'
       rhtml += '</div>'
     })
     receiptsGrid.innerHTML = rhtml
@@ -6380,16 +6384,13 @@ window.otcReceiptDrop = function(ev, rowId) {
   ev.preventDefault()
   ev.currentTarget.style.borderColor = ''
   const file = ev.dataTransfer?.files?.[0]
-  if (file && file.type.startsWith('image/')) {
-    _otcReadReceiptFile(file, rowId)
-  } else if (file && file.type === 'application/pdf') {
+  if (file && (file.type.startsWith('image/') || file.type === 'application/pdf')) {
     _otcReadReceiptFile(file, rowId)
   } else {
-    // Check for dropped text/URL
     const text = ev.dataTransfer?.getData('text/plain') || ''
     if (text.startsWith('http')) {
       const row = _otcRows.find(r => r.id === rowId)
-      if (row) { row.receiptDataUrl = text; row.receiptIsUrl = true }
+      if (row) { if (!row.receipts) row.receipts = []; row.receipts.push({ data: text, isUrl: true }) }
       otcRenderTable(); _otcSaveDraft()
     } else {
       showToast('Arrastra una imagen, PDF o URL')
@@ -6410,24 +6411,25 @@ window.otcReceiptUrl = function(rowId) {
   const url = input.value.trim()
   if (!url || !url.startsWith('http')) { showToast('Ingresa una URL válida (http/https)'); return }
   const row = _otcRows.find(r => r.id === rowId)
-  if (row) { row.receiptDataUrl = url; row.receiptIsUrl = true }
+  if (row) { if (!row.receipts) row.receipts = []; row.receipts.push({ data: url, isUrl: true }) }
+  input.value = ''
   otcRenderTable(); _otcSaveDraft()
-  showToast('Comprobante vinculado por URL')
+  showToast('Comprobante vinculado')
 }
 
 function _otcReadReceiptFile(file, rowId) {
   const reader = new FileReader()
   reader.onload = () => {
     const row = _otcRows.find(r => r.id === rowId)
-    if (row) { row.receiptDataUrl = reader.result; row.receiptIsUrl = false }
+    if (row) { if (!row.receipts) row.receipts = []; row.receipts.push({ data: reader.result, isUrl: false }) }
     otcRenderTable(); _otcSaveDraft()
   }
   reader.readAsDataURL(file)
 }
 
-window.otcClearReceipt = function(rowId) {
+window.otcRemoveReceipt = function(rowId, idx) {
   const row = _otcRows.find(r => r.id === rowId)
-  if (row) row.receiptDataUrl = ''
+  if (row && row.receipts) row.receipts.splice(idx, 1)
   otcRenderTable()
 }
 
@@ -6454,9 +6456,10 @@ window.otcExportPDF = function() {
   let rowsHtml = ''
   _otcRows.forEach((row, i) => {
     const projBadge = row.projectTag ? '<span style="background:#ede9fe;color:#7c3aed;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">#' + esc(row.projectTag) + '</span>' : '<span style="color:#ccc;">—</span>'
-    const receiptBadge = row.receiptDataUrl
-      ? (row.receiptIsUrl ? '<a href="'+esc(row.receiptDataUrl)+'" target="_blank" style="color:#0284c7;font-size:10px;text-decoration:none;">🔗 Ver</a>' : '✅')
-      : '<span style="color:#ccc;font-size:10px;">sin comprobante</span>'
+    const recCount = row.receipts?.length || 0
+    const receiptBadge = recCount > 0
+      ? '<span style="color:#4ade80;font-size:10px;font-weight:700;">✅ ' + recCount + '</span>'
+      : '<span style="color:#ccc;font-size:10px;">—</span>'
     rowsHtml += '<tr style="border-bottom:1px solid #f1f5f9;">'
     rowsHtml += '<td style="padding:8px;font-weight:700;color:#64748b;">' + (i+1) + '</td>'
     rowsHtml += '<td style="padding:8px;font-weight:700;">' + esc(row.contactName || 'Sin nombre') + '</td>'
@@ -6541,19 +6544,21 @@ window.otcExportPDF = function() {
   }
 
   // ── Receipts ──
-  const rowsWithReceipts = _otcRows.filter(r => r.receiptDataUrl)
+  const rowsWithReceipts = _otcRows.filter(r => r.receipts?.length)
   if (rowsWithReceipts.length) {
     h += '<div style="margin-bottom:20px;page-break-before:auto;"><div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:10px;">🧾 Comprobantes SPEI</div>'
     h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
     rowsWithReceipts.forEach(r => {
-      h += '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center;">'
-      h += '<div style="font-size:11px;font-weight:700;margin-bottom:6px;">' + esc(r.contactName) + ' · $' + _fmt$(r.montoMXN) + '</div>'
-      if (r.receiptIsUrl && !r.receiptDataUrl.match(/\.(png|jpg|jpeg|gif|webp)/i)) {
-        h += '<a href="' + esc(r.receiptDataUrl) + '" target="_blank" style="color:#3b82f6;font-size:11px;">🔗 Ver comprobante</a>'
-      } else {
-        h += '<img src="' + r.receiptDataUrl + '" style="max-width:100%;max-height:250px;border-radius:6px;"/>'
-      }
-      h += '</div>'
+      ;(r.receipts || []).forEach((rc, idx) => {
+        h += '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center;">'
+        h += '<div style="font-size:11px;font-weight:700;margin-bottom:6px;">' + esc(r.contactName) + ' · $' + _fmt$(r.montoMXN) + (r.receipts.length > 1 ? ' · #' + (idx+1) : '') + '</div>'
+        if (rc.isUrl && !rc.data.match(/\.(png|jpg|jpeg|gif|webp)/i) && !rc.data.startsWith('data:')) {
+          h += '<a href="' + esc(rc.data) + '" target="_blank" style="color:#3b82f6;font-size:11px;">🔗 Ver comprobante</a>'
+        } else {
+          h += '<img src="' + rc.data + '" style="max-width:100%;max-height:250px;border-radius:6px;"/>'
+        }
+        h += '</div>'
+      })
     })
     h += '</div></div>'
   }
@@ -6587,7 +6592,7 @@ window.otcSaveToNodes = async function() {
           amount: row.montoMXN,
           method: 'SPEI',
           note: 'OTC dispersión — ' + ref,
-          receipt_url: row.receiptDataUrl || ''
+          receipt_url: row.receipts?.[0]?.data || ''
         })
         cotNode.metadata.abonos = abonos
         if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
@@ -6611,11 +6616,12 @@ window.otcSaveToNodes = async function() {
       is_otc_history: true,
       otc_ref: ref,
       coin, qty: parseFloat(qty), tc: parseFloat(tc),
+      feeReported: parseFloat(document.getElementById('otc-fee-reported')?.value || '0.90'),
       ventaBruta: _otcData.ventaBruta,
       comisionCliente: _otcData.comisionCliente,
       ventaReportada: _otcData.ventaReportada,
       gananciaOp: _otcData.gananciaOp,
-      rows: _otcRows.map(r => ({ contactName:r.contactName, bank:r.bank, clabe:r.clabe, montoMXN:r.montoMXN, projectTag:r.projectTag })),
+      rows: _otcRows.map(r => ({ contactId:r.contactId, contactName:r.contactName, bank:r.bank, clabe:r.clabe, montoMXN:r.montoMXN, projectTag:r.projectTag, receipts:r.receipts||[] })),
       saved_at: now.toISOString()
     },
     created_at: now.toISOString()
@@ -6688,41 +6694,129 @@ window.otcViewHistory = function(nodeId) {
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
   const rows = m.rows || []
   const d = new Date(m.saved_at || op.created_at)
+  const dateStr = d.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+  const timeStr = d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
+  const totalDisp = rows.reduce((s,r) => s + (r.montoMXN||0), 0)
+  const pctDisp = (m.ventaReportada||0) > 0 ? Math.min((totalDisp / m.ventaReportada) * 100, 100) : 100
+  const remaining = _floor2((m.ventaReportada||0) - totalDisp)
+  const statusColor = remaining <= 0.01 && remaining >= -0.01 ? '#16a34a' : remaining > 0 ? '#d97706' : '#dc2626'
+  const statusText  = remaining <= 0.01 && remaining >= -0.01 ? '✅ COMPLETO' : remaining > 0 ? '⏳ PENDIENTE' : '🔴 EXCESO'
+  const linkedProjects = [...new Set(rows.filter(r=>r.projectTag).map(r=>r.projectTag))]
+  const feeR = m.feeReported ?? 0.90
 
   let rowsHtml = ''
   rows.forEach((r, i) => {
-    rowsHtml += '<tr><td style="padding:6px 8px;border-bottom:1px solid #eee;">' + (i+1) + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;font-weight:600;">' + esc(r.contactName||'—') + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;">' + esc(r.bank||'—') + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;font-family:monospace;font-size:11px;">' + esc(r.clabe||'—') + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:700;">$' + _fmt$(r.montoMXN||0) + '</td>'
-    rowsHtml += '<td style="padding:6px 8px;border-bottom:1px solid #eee;">' + (r.projectTag ? '#' + esc(r.projectTag) : '—') + '</td></tr>'
+    const projBadge = r.projectTag ? '<span style="background:#ede9fe;color:#7c3aed;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">#' + esc(r.projectTag) + '</span>' : '<span style="color:#ccc;">—</span>'
+    const recCount = r.receipts?.length || 0
+    const receiptBadge = recCount > 0 ? '<span style="color:#16a34a;font-size:10px;font-weight:700;">✅ ' + recCount + '</span>' : '<span style="color:#ccc;font-size:10px;">—</span>'
+    rowsHtml += '<tr style="border-bottom:1px solid #f1f5f9;">'
+    rowsHtml += '<td style="padding:8px;font-weight:700;color:#64748b;">' + (i+1) + '</td>'
+    rowsHtml += '<td style="padding:8px;font-weight:700;">' + esc(r.contactName||'Sin nombre') + '</td>'
+    rowsHtml += '<td style="padding:8px;">' + esc(r.bank||'—') + '</td>'
+    rowsHtml += '<td style="padding:8px;font-family:\'Courier New\',monospace;font-size:11px;letter-spacing:0.03em;">' + esc(r.clabe||'—') + '</td>'
+    rowsHtml += '<td style="padding:8px;text-align:right;font-weight:800;font-size:13px;">$' + _fmt$(r.montoMXN||0) + '</td>'
+    rowsHtml += '<td style="padding:8px;text-align:center;">' + projBadge + '</td>'
+    rowsHtml += '<td style="padding:8px;text-align:center;">' + receiptBadge + '</td>'
+    rowsHtml += '</tr>'
   })
-  const totalDisp = rows.reduce((s,r) => s + (r.montoMXN||0), 0)
 
-  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>OTC — ' + esc(m.otc_ref||'') + '</title>'
-  h += '<style>body{font-family:system-ui,sans-serif;max-width:800px;margin:0 auto;padding:30px;color:#1a1a1a;font-size:13px;}'
-  h += 'h1{font-size:20px;margin-bottom:4px;}table{width:100%;border-collapse:collapse;margin-top:12px;}'
-  h += 'th{text-align:left;padding:8px;background:#f0f4f8;border-bottom:2px solid #ddd;font-size:11px;color:#666;}'
-  h += '.kpi{display:inline-block;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 20px;margin:6px;text-align:center;}'
-  h += '.kpi-label{font-size:10px;color:#666;font-weight:700;letter-spacing:0.5px;}.kpi-val{font-size:18px;font-weight:800;margin-top:4px;}'
-  h += '@media print{body{padding:10px;}}</style></head><body>'
-  h += '<div style="border-bottom:2px solid #1a1a1a;padding-bottom:12px;margin-bottom:20px;">'
-  h += '<h1>📊 Operación OTC — ' + esc(m.otc_ref||'') + '</h1>'
-  h += '<p style="color:#666;margin:0;">' + d.toLocaleString('es-MX') + '</p></div>'
-  h += '<div style="text-align:center;margin-bottom:24px;">'
-  h += '<div class="kpi"><div class="kpi-label">MONEDA</div><div class="kpi-val">' + esc(m.qty||0) + ' ' + esc(m.coin||'') + '</div></div>'
-  h += '<div class="kpi"><div class="kpi-label">T/C</div><div class="kpi-val">$' + (m.tc||0).toFixed(2) + '</div></div>'
-  h += '<div class="kpi"><div class="kpi-label">VENTA BRUTA</div><div class="kpi-val">$' + _fmt$(m.ventaBruta||0) + '</div></div>'
-  h += '<div class="kpi" style="border-color:#27ae60;"><div class="kpi-label">NETO</div><div class="kpi-val" style="color:#27ae60;">$' + _fmt$(m.ventaReportada||0) + '</div></div>'
+  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/>'
+  h += '<title>OTC — ' + esc(m.otc_ref||'') + '</title>'
+  h += '<style>'
+  h += '*{box-sizing:border-box;margin:0;padding:0}'
+  h += 'body{font-family:"Segoe UI",system-ui,sans-serif;max-width:900px;margin:0 auto;padding:30px;color:#1e293b;font-size:13px;}'
+  h += 'table{width:100%;border-collapse:collapse;} th{text-align:left;padding:8px;background:#f8fafc;font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e2e8f0;}'
+  h += '.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;}'
+  h += '.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;text-align:center;}'
+  h += '.kpi-l{font-size:9px;font-weight:800;color:#94a3b8;letter-spacing:.5px;text-transform:uppercase;} .kpi-v{font-size:20px;font-weight:800;margin-top:6px;} .kpi-s{font-size:9px;color:#94a3b8;margin-top:2px;}'
+  h += '.bar-bg{height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden;margin-top:6px;} .bar-fill{height:100%;border-radius:5px;}'
+  h += '.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;}'
+  h += '@media print{body{padding:12px;}}'
+  h += '</style></head><body>'
+
+  // Header
+  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:16px;margin-bottom:24px;">'
+  h += '<div>'
+  h += '<h1 style="font-size:22px;font-weight:900;color:#0f172a;margin-bottom:4px;">📊 Estado de Cuenta — Operación OTC</h1>'
+  h += '<div style="font-size:12px;color:#64748b;margin-bottom:2px;">📝 Referencia: <b style="color:#0f172a;">' + esc(m.otc_ref||'') + '</b></div>'
+  h += '<div style="font-size:12px;color:#64748b;">📅 ' + dateStr + ' · ⏰ ' + timeStr + '</div>'
+  if (linkedProjects.length) h += '<div style="margin-top:6px;">' + linkedProjects.map(p => '<span class="badge" style="background:#ede9fe;color:#7c3aed;">📂 #' + esc(p) + '</span>').join(' ') + '</div>'
   h += '</div>'
-  h += '<table><thead><tr><th>#</th><th>Beneficiario</th><th>Banco</th><th>CLABE</th><th style="text-align:right;">Monto</th><th>Proyecto</th></tr></thead>'
+  h += '<div style="text-align:right;"><div style="font-size:18px;font-weight:900;color:#0f172a;">NEXUS OS</div><div style="font-size:10px;color:#94a3b8;">Histórico OTC</div>'
+  h += '<div class="badge" style="margin-top:6px;background:' + (statusColor==='#16a34a'?'#dcfce7':'#fef3c7') + ';color:' + statusColor + ';">' + statusText + '</div>'
+  h += '</div></div>'
+
+  // KPIs
+  h += '<div class="kpi-grid">'
+  h += '<div class="kpi"><div class="kpi-l">💱 Recibido</div><div class="kpi-v">' + esc(m.qty||0) + '</div><div class="kpi-s">' + esc(m.coin||'') + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-l">📈 Tipo de Cambio</div><div class="kpi-v">$' + (m.tc||0).toFixed(2) + '</div><div class="kpi-s">MXN</div></div>'
+  h += '<div class="kpi"><div class="kpi-l">💰 Venta Bruta</div><div class="kpi-v">$' + _fmt$(m.ventaBruta||0) + '</div></div>'
+  h += '<div class="kpi"><div class="kpi-l">📊 Comisión (' + feeR + '%)</div><div class="kpi-v" style="color:#d97706;">$' + _fmt$(m.comisionCliente||0) + '</div></div>'
+  h += '<div class="kpi" style="border-color:#16a34a;"><div class="kpi-l">✅ Neto Dispersado</div><div class="kpi-v" style="color:#16a34a;">$' + _fmt$(m.ventaReportada||0) + '</div></div>'
+  h += '</div>'
+
+  // Progress bar
+  h += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 18px;margin-bottom:20px;">'
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+  h += '<span style="font-size:11px;font-weight:700;color:#64748b;">Dispersión Total</span>'
+  h += '<span style="font-size:13px;font-weight:800;color:' + statusColor + ';">' + pctDisp.toFixed(1) + '% — $' + _fmt$(totalDisp) + '</span>'
+  h += '</div>'
+  h += '<div class="bar-bg"><div class="bar-fill" style="width:' + pctDisp.toFixed(1) + '%;background:' + statusColor + ';"></div></div>'
+  h += '</div>'
+
+  // Table
+  h += '<div style="margin-bottom:20px;">'
+  h += '<div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:8px;">💸 Detalle — ' + rows.length + ' beneficiario' + (rows.length!==1?'s':'') + '</div>'
+  h += '<table><thead><tr><th>#</th><th>Beneficiario</th><th>Banco</th><th>CLABE / Cuenta</th><th style="text-align:right;">Monto MXN</th><th style="text-align:center;">Proyecto</th><th style="text-align:center;">SPEI</th></tr></thead>'
   h += '<tbody>' + rowsHtml + '</tbody>'
-  h += '<tfoot><tr style="font-weight:800;border-top:2px solid #333;"><td colspan="4" style="padding:8px;text-align:right;">TOTAL:</td><td style="padding:8px;text-align:right;">$' + _fmt$(totalDisp) + '</td><td></td></tr></tfoot></table>'
-  h += '<div style="text-align:center;margin-top:40px;color:#999;font-size:10px;border-top:1px solid #ddd;padding-top:8px;">Nexus OS — Histórico OTC</div></body></html>'
+  h += '<tfoot><tr style="border-top:3px solid #0f172a;background:#f8fafc;"><td colspan="4" style="padding:10px 8px;text-align:right;font-weight:800;font-size:12px;">TOTAL DISPERSADO:</td>'
+  h += '<td style="padding:10px 8px;text-align:right;font-size:16px;font-weight:900;">$' + _fmt$(totalDisp) + '</td><td colspan="2"></td></tr></tfoot>'
+  h += '</table></div>'
+
+  // Per-beneficiary bars
+  if (rows.length > 1) {
+    h += '<div style="margin-bottom:20px;"><div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:10px;">📊 Distribución por Beneficiario</div>'
+    rows.forEach(r => {
+      const pct = totalDisp > 0 ? (r.montoMXN / totalDisp * 100) : 0
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+      h += '<div style="font-size:11px;font-weight:600;min-width:120px;text-align:right;color:#475569;">' + esc(r.contactName||'—') + '</div>'
+      h += '<div style="flex:1;height:18px;background:#f1f5f9;border-radius:4px;overflow:hidden;position:relative;">'
+      h += '<div style="height:100%;width:' + pct.toFixed(1) + '%;background:linear-gradient(90deg,#3b82f6,#60a5fa);border-radius:4px;"></div>'
+      h += '<span style="position:absolute;right:6px;top:1px;font-size:10px;font-weight:700;color:#475569;">' + pct.toFixed(1) + '%</span>'
+      h += '</div>'
+      h += '<div style="font-size:11px;font-weight:700;min-width:80px;text-align:right;">$' + _fmt$(r.montoMXN||0) + '</div>'
+      h += '</div>'
+    })
+    h += '</div>'
+  }
+
+  // Receipts
+  const rowsWithRec = rows.filter(r => r.receipts?.length)
+  if (rowsWithRec.length) {
+    h += '<div style="margin-bottom:20px;"><div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:10px;">🧾 Comprobantes SPEI</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+    rowsWithRec.forEach(r => {
+      ;(r.receipts||[]).forEach((rc, idx) => {
+        h += '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center;">'
+        h += '<div style="font-size:11px;font-weight:700;margin-bottom:6px;">' + esc(r.contactName) + ' · $' + _fmt$(r.montoMXN||0) + (r.receipts.length>1?' · #'+(idx+1):'') + '</div>'
+        if (rc.isUrl && !rc.data.match(/\.(png|jpg|jpeg|gif|webp)/i) && !rc.data.startsWith('data:')) {
+          h += '<a href="' + esc(rc.data) + '" target="_blank" style="color:#3b82f6;font-size:11px;">🔗 Ver comprobante</a>'
+        } else {
+          h += '<img src="' + rc.data + '" style="max-width:100%;max-height:250px;border-radius:6px;"/>'
+        }
+        h += '</div>'
+      })
+    })
+    h += '</div></div>'
+  }
+
+  // Footer
+  h += '<div style="text-align:center;margin-top:30px;padding-top:14px;border-top:2px solid #e2e8f0;color:#94a3b8;font-size:10px;">'
+  h += 'Nexus OS — Histórico OTC · ' + dateStr + ' · ' + timeStr
+  h += '</div></body></html>'
 
   const win = window.open('', '_blank')
-  if (win) { win.document.write(h); win.document.close() }
+  if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
 }
 
 window.otcDeleteHistory = async function(nodeId) {
@@ -6757,7 +6851,7 @@ function _otcSaveDraft() {
       id: r.id, contactId: r.contactId, contactName: r.contactName,
       bank: r.bank, clabe: r.clabe, assignType: r.assignType,
       value: r.value, montoMXN: r.montoMXN, projectTag: r.projectTag,
-      receiptDataUrl: r.receiptDataUrl || '',
+      receipts: r.receipts || [],
       _pendingCotId: r._pendingCotId || ''
     })),
     savedAt: new Date().toISOString()
@@ -6852,7 +6946,7 @@ window.otcReopenHistory = function(nodeId) {
       value: r.montoMXN || 0,
       montoMXN: r.montoMXN || 0,
       projectTag: r.projectTag || '',
-      receiptDataUrl: r.receiptDataUrl || '',
+      receipts: r.receipts || [],
       _pendingCotId: r._pendingCotId || ''
     })),
     savedAt: new Date().toISOString()
@@ -6867,76 +6961,7 @@ window.otcReopenHistory = function(nodeId) {
 // ═══════════════════════════════════════════════════════════════════
 // CENTRO DE TRÁMITES — TAB 2 SUB-MÓDULO 1: DATOS DE PAGO
 // ═══════════════════════════════════════════════════════════════════
-function renderTramitesCuentas() {
-  const grid  = document.getElementById('tramites-cuentas-grid')
-  const empty = document.getElementById('tramites-cuentas-empty')
-  if (!grid) return
-
-  // Get user's own accounts (from settings)
-  const settings = JSON.parse(localStorage.getItem('nexus_settings') || '{}')
-  const accounts = settings.accounts || []
-  // Also get contacts marked as "own" or bank type accounts from the user
-  const ownContacts = allNodes.filter(n => n.type === 'contact' && (n.metadata?.roles || []).includes('propia'))
-
-  // Merge: settings accounts + own contact bank accounts
-  const allAccts = []
-  accounts.forEach(a => {
-    allAccts.push({
-      label: a.label || a.bank || 'Cuenta',
-      type: a.type || 'bank',
-      bank: a.bank || a.bank_name || '',
-      clabe: a.clabe || '',
-      account: a.account || a.card || '',
-      wallet: a.wallet || '',
-      network: a.network || '',
-      color: a.color || '#00f6ff'
-    })
-  })
-
-  if (allAccts.length === 0) {
-    grid.innerHTML = ''
-    if (empty) empty.style.display = ''
-    return
-  }
-  if (empty) empty.style.display = 'none'
-
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
-  let h = ''
-  allAccts.forEach((a, idx) => {
-    const isCrypto = a.type === 'crypto'
-    const icon = isCrypto ? '₿' : '🏦'
-    const primary = isCrypto ? (a.wallet || '') : (a.clabe || a.account || '')
-    const secondary = isCrypto ? (a.network || '') : (a.bank || '')
-
-    h += '<div class="tramite-acct-card">'
-    h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">'
-    h += '<span style="font-size:24px;">' + icon + '</span>'
-    h += '<div>'
-    h += '<div style="font-size:14px;font-weight:800;color:#fff;">' + esc(a.label) + '</div>'
-    h += '<div style="font-size:11px;color:var(--text-muted);">' + esc(secondary) + '</div>'
-    h += '</div>'
-    h += '</div>'
-
-    if (primary) {
-      h += '<div style="background:rgba(0,0,0,0.3);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-family:\'JetBrains Mono\',monospace;font-size:14px;color:#fff;letter-spacing:1px;word-break:break-all;">'
-      h += esc(primary)
-      h += '</div>'
-      h += '<button class="tramite-copy-btn" onclick="navigator.clipboard.writeText(\'' + esc(primary).replace(/'/g,"\\'") + '\');showToast(\'Copiado\')">'
-      h += '📋 Copiar ' + (isCrypto ? 'Wallet' : (a.clabe ? 'CLABE' : 'Cuenta'))
-      h += '</button>'
-    }
-
-    if (!isCrypto && a.account && a.clabe) {
-      h += '<button class="tramite-copy-btn" style="margin-top:8px;background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-muted);" '
-      h += 'onclick="navigator.clipboard.writeText(\'' + esc(a.account).replace(/'/g,"\\'") + '\');showToast(\'Copiado\')">'
-      h += '📋 Copiar No. Cuenta: ' + esc(a.account)
-      h += '</button>'
-    }
-
-    h += '</div>'
-  })
-  grid.innerHTML = h
-}
+// renderTramitesCuentas — REMOVED (Datos de Pago eliminated)
 
 // ═══════════════════════════════════════════════════════════════════
 // CENTRO DE TRÁMITES — TAB 2 SUB-MÓDULO 2: DOCUMENTOS LEGALES
@@ -7133,11 +7158,20 @@ window.docGenFillPagare = function(role) {
   if (rfcEl && !rfcEl.value && m.rfc) rfcEl.value = m.rfc
   const dirEl = document.getElementById(prefix + '-dir')
   if (dirEl && !dirEl.value) dirEl.value = [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
-  // Try auto-fill CURP from documents array
-  const docs = m.documents || []
-  const curpDoc = docs.find(d => d.docType === 'curp')
+  // CURP — from direct metadata field, fallback to documents array
   const curpEl = document.getElementById(prefix + '-curp')
-  if (curpEl && !curpEl.value && curpDoc?.name) curpEl.value = curpDoc.name
+  if (curpEl && !curpEl.value) {
+    if (m.curp) curpEl.value = m.curp
+    else {
+      const curpDoc = (m.documents||[]).find(d => d.docType === 'curp')
+      if (curpDoc?.name) curpEl.value = curpDoc.name
+    }
+  }
+  // Electoral & Passport from direct metadata fields
+  const electEl = document.getElementById(prefix + '-electoral')
+  if (electEl && !electEl.value && m.electoral) electEl.value = m.electoral
+  const pasapEl = document.getElementById(prefix + '-pasaporte')
+  if (pasapEl && !pasapEl.value && m.pasaporte) pasapEl.value = m.pasaporte
 }
 
 window.docGenFillRecibo = function(role) {
@@ -7158,6 +7192,12 @@ window.docGenFillCartaPoder = function(role) {
   if (info) info.textContent = (m.name || c.content) + (m.rfc ? ' · RFC: ' + m.rfc : '')
   const domEl = document.getElementById('dg-' + role + '-dom')
   if (domEl && !domEl.value) domEl.value = [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
+  // Auto-fill ID number from contact
+  const idNumEl = document.getElementById('dg-' + role + '-idnum')
+  if (idNumEl && !idNumEl.value) {
+    const idNum = m.electoral || m.pasaporte || m.curp || ''
+    if (idNum) idNumEl.value = idNum
+  }
 }
 
 // ── PDF CSS shared by export & reprint ───────────────────────────
@@ -7227,16 +7267,16 @@ window.docGenExport = function() {
     const metodo     = document.getElementById('dg-metodo')?.value || blank
     const referencia = document.getElementById('dg-referencia')?.value || blank
 
-    const bCurp  = document.getElementById('dg-benef-curp')?.value || ''
-    const bRfc   = document.getElementById('dg-benef-rfc')?.value || ''
-    const bElect = document.getElementById('dg-benef-electoral')?.value || ''
-    const bPasap = document.getElementById('dg-benef-pasaporte')?.value || ''
-    const bDir   = document.getElementById('dg-benef-dir')?.value || ''
-    const dCurp  = document.getElementById('dg-deudor-curp')?.value || ''
-    const dRfc   = document.getElementById('dg-deudor-rfc')?.value || ''
-    const dElect = document.getElementById('dg-deudor-electoral')?.value || ''
-    const dPasap = document.getElementById('dg-deudor-pasaporte')?.value || ''
-    const dDir   = document.getElementById('dg-deudor-dir')?.value || ''
+    const bCurp  = document.getElementById('dg-benef-curp')?.value  || cBenef?.metadata?.curp      || ''
+    const bRfc   = document.getElementById('dg-benef-rfc')?.value   || cBenef?.metadata?.rfc       || ''
+    const bElect = document.getElementById('dg-benef-electoral')?.value || cBenef?.metadata?.electoral || ''
+    const bPasap = document.getElementById('dg-benef-pasaporte')?.value || cBenef?.metadata?.pasaporte || ''
+    const bDir   = document.getElementById('dg-benef-dir')?.value   || [cBenef?.metadata?.address_street, cBenef?.metadata?.city, cBenef?.metadata?.address_state].filter(Boolean).join(', ')
+    const dCurp  = document.getElementById('dg-deudor-curp')?.value || cDeudor?.metadata?.curp      || ''
+    const dRfc   = document.getElementById('dg-deudor-rfc')?.value  || cDeudor?.metadata?.rfc       || ''
+    const dElect = document.getElementById('dg-deudor-electoral')?.value || cDeudor?.metadata?.electoral || ''
+    const dPasap = document.getElementById('dg-deudor-pasaporte')?.value || cDeudor?.metadata?.pasaporte || ''
+    const dDir   = document.getElementById('dg-deudor-dir')?.value  || [cDeudor?.metadata?.address_street, cDeudor?.metadata?.city, cDeudor?.metadata?.address_state].filter(Boolean).join(', ')
 
     const montoFmt   = monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })
     const montoLetra = _numberToWords(monto) + ' pesos 00/100 M.N.'
@@ -7247,7 +7287,7 @@ window.docGenExport = function() {
     parteBId   = deudorSel
     docTitle   = 'Pagaré'
 
-    function _pgIdBlock(title, name, curp, rfc, elect, pasap, dir) {
+    function _pgIdBlock(title, name, curp, rfc, elect, pasap, dir, ineFrente, ineReverso) {
       let b = '<div class="id-block">'
       b += '<h3>Datos del ' + title + '</h3>'
       b += '<table style="width:100%;border-collapse:collapse;"><tr>'
@@ -7261,23 +7301,43 @@ window.docGenExport = function() {
       b += 'DIRECCIÓN: ' + esc(dir || blank) + '<br/>'
       b += '</td><td style="width:50%;vertical-align:top;">'
       b += '<div style="display:flex;gap:16px;margin-bottom:12px;">'
-      b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID FRENTE:</div><div class="id-box">ID Frente</div></div>'
-      b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID REVERSO:</div><div class="id-box">ID Reverso</div></div>'
+      if (ineFrente) {
+        b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID FRENTE:</div><img src="' + esc(ineFrente) + '" style="width:140px;height:100px;object-fit:cover;border:1px solid #ccc;border-radius:4px;"/></div>'
+      } else {
+        b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID FRENTE:</div><div class="id-box">ID Frente</div></div>'
+      }
+      if (ineReverso) {
+        b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID REVERSO:</div><img src="' + esc(ineReverso) + '" style="width:140px;height:100px;object-fit:cover;border:1px solid #ccc;border-radius:4px;"/></div>'
+      } else {
+        b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID REVERSO:</div><div class="id-box">ID Reverso</div></div>'
+      }
       b += '</div>'
       b += '<div style="margin-top:20px;"><strong>FIRMA:</strong><br/><div style="width:200px;height:60px;border-bottom:1px solid #333;margin-top:30px;"></div></div>'
       b += '</td></tr></table></div>'
       return b
     }
 
+    // Helper to extract ID photo URLs from contact documents
+    const getIdPhotos = (c) => {
+      const docs = c?.metadata?.documents || []
+      return {
+        frente:  docs.find(d => d.docType==='ine_front'||d.docType==='id_front')?.url  || '',
+        reverso: docs.find(d => d.docType==='ine_back' ||d.docType==='id_back')?.url   || ''
+      }
+    }
+    const bPhotos = getIdPhotos(cBenef)
+    const dPhotos = getIdPhotos(cDeudor)
+
     docHtml = '<h1 style="letter-spacing:12px;">P  A  G  A  R  É</h1>'
     docHtml += '<p style="text-align:right;font-size:12px;">Bueno por: <strong>$' + esc(montoFmt) + ' MXN</strong></p>'
     docHtml += '<p><strong>Lugar:</strong> ' + esc(lugar) + '<br/><strong>Fecha:</strong> ' + esc(fechaLarga) + '</p>'
     docHtml += '<p>A través de este pagaré yo <strong>' + esc(deudorName) + '</strong>, me comprometo a pagar incondicionalmente la cantidad de <strong>$' + esc(montoFmt) + '</strong> (' + esc(montoLetra) + ') a la orden de <strong>' + esc(benefName) + '</strong> por concepto de <strong>' + esc(concepto) + '</strong>. Dicha cantidad será liquidada el día <strong>' + esc(fechaPago) + '</strong>.</p>'
     docHtml += '<p><strong>El pago será realizado a través de los siguientes medios:</strong><br/>Método de Pago: <strong>' + esc(metodo) + '</strong><br/>Referencia de Pago: <strong>' + esc(referencia) + '</strong></p>'
-    docHtml += _pgIdBlock('BENEFICIARIO', benefName, bCurp, bRfc, bElect, bPasap, bDir)
-    docHtml += _pgIdBlock('EMISOR', deudorName, dCurp, dRfc, dElect, dPasap, dDir)
+    docHtml += _pgIdBlock('BENEFICIARIO', benefName, bCurp, bRfc, bElect, bPasap, bDir, bPhotos.frente, bPhotos.reverso)
+    docHtml += _pgIdBlock('EMISOR', deudorName, dCurp, dRfc, dElect, dPasap, dDir, dPhotos.frente, dPhotos.reverso)
     docHtml += '<p style="margin-top:20px;font-size:12px;font-style:italic;">En caso de incumplimiento en el pago, este pagaré causará un interés moratorio del <strong>2.5% mensual</strong> sobre el saldo insoluto, contado a partir de la fecha de vencimiento o requerimiento de pago.</p>'
-    docHtml += '<p style="text-align:center;font-size:10px;margin-top:20px;color:#666;">Original - Beneficiario &nbsp;|&nbsp; Copia - Quien suscribe</p>'
+    docHtml += '<p style="text-align:center;font-size:10px;margin-top:20px;color:#666;">Original — Beneficiario (' + esc(benefName) + ') &nbsp;|&nbsp; Copia — Quien suscribe (' + esc(deudorName) + ')</p>'
+    docHtml += '<p style="font-size:10px;margin-top:8px;color:#555;border-top:1px solid #ddd;padding-top:8px;"><strong>Copia para el interesado original a:</strong> ' + esc(deudorName) + '</p>'
 
   } else if (type === 'recibo') {
     const receptorSel   = document.getElementById('dg-receptor')?.value || ''
@@ -7308,15 +7368,26 @@ window.docGenExport = function() {
     parteBId   = entreganteSel
     docTitle   = 'Recibo de Dinero'
 
+    // Auto-fill bank account from receptor's contacts
+    let receptorBankInfo = ''
+    if (receptorSel) {
+      const rContact = allNodes.find(n => n.id === receptorSel)
+      const rAccounts = rContact?.metadata?.contact_accounts || []
+      const rBank = rAccounts.find(a => a.type === 'bank' || a.clabe)
+      if (rBank) receptorBankInfo = (rBank.bank ? rBank.bank + ' · ' : '') + (rBank.clabe || rBank.wallet || '')
+    }
+
     docHtml = '<h1>RECIBO DE DINERO</h1>'
     docHtml += '<p style="text-align:right;">En ' + esc(lugar) + ', a ' + esc(fechaFmt) + '</p>'
     docHtml += '<p>Por medio del presente, hago constar que he recibido de: <strong>' + esc(entreganteName) + '</strong>. La cantidad de: <strong>$' + esc(montoFmt) + ' M.N.</strong> (' + esc(montoLetra) + ')</p>'
     docHtml += '<p>Por concepto de: <strong>' + esc(concepto) + '</strong></p>'
+    if (receptorBankInfo) docHtml += '<p>Depositado a la cuenta: <strong>' + esc(receptorBankInfo) + '</strong> a nombre de <strong>' + esc(receptorName) + '</strong></p>'
     docHtml += '<p>Este recibo se extiende para los fines legales a que haya lugar, en la fecha antes mencionada.</p>'
     docHtml += '<div style="display:flex;justify-content:space-between;margin-top:60px;">'
-    docHtml += '<div class="sig"><strong>' + esc(receptorName) + '</strong><br/>(Nombre y Firma)</div>'
-    docHtml += '<div class="sig"><strong>' + esc(entreganteName) + '</strong><br/>(Nombre y Firma)</div>'
+    docHtml += '<div class="sig"><strong>' + esc(receptorName) + '</strong><br/>(Quien recibe)</div>'
+    docHtml += '<div class="sig"><strong>' + esc(entreganteName) + '</strong><br/>(Quien entrega)</div>'
     docHtml += '</div>'
+    docHtml += '<p style="font-size:10px;margin-top:30px;color:#555;border-top:1px solid #ddd;padding-top:8px;"><strong>Copia para el interesado original a:</strong> ' + esc(entreganteName) + '</p>'
 
   } else if (type === 'cartapoder') {
     const otorganteSel = document.getElementById('dg-otorgante')?.value || ''
@@ -7361,7 +7432,8 @@ window.docGenExport = function() {
     docHtml += '<div class="sig"><strong>' + esc(otorgName) + '</strong><br/>Otorgó el poder</div>'
     docHtml += '<div class="sig"><strong>' + esc(apodName) + '</strong><br/>Acepto el poder</div>'
     docHtml += '</div>'
-    docHtml += '<p style="font-size:11px;font-style:italic;margin-top:40px;text-align:center;color:#666;">Nota: El presente documento debe entregarse con copias de las identificaciones</p>'
+    docHtml += '<p style="font-size:10px;margin-top:20px;color:#555;border-top:1px solid #ddd;padding-top:8px;"><strong>Copia para el interesado original a:</strong> ' + esc(apodName) + '</p>'
+    docHtml += '<p style="font-size:11px;font-style:italic;margin-top:16px;text-align:center;color:#666;">Nota: El presente documento debe entregarse con copias de las identificaciones</p>'
   }
 
   // Open print window
@@ -8818,6 +8890,13 @@ window.openContactModal = (id = null) => {
   document.getElementById('cm-rfc').value   = (m.rfc || '').toUpperCase()
   document.getElementById('cm-notes').value = m.notes || ''
   document.getElementById('cm-color').value = m.color || '#00f0ff'
+  // Identity document fields
+  const curpEl = document.getElementById('cm-curp')
+  if (curpEl) curpEl.value = (m.curp || '').toUpperCase()
+  const electoralEl = document.getElementById('cm-electoral')
+  if (electoralEl) electoralEl.value = (m.electoral || '').toUpperCase()
+  const pasaporteEl = document.getElementById('cm-pasaporte')
+  if (pasaporteEl) pasaporteEl.value = (m.pasaporte || '').toUpperCase()
 
   // Photo URL
   const photoInput = document.getElementById('cm-photo-url')
@@ -9106,17 +9185,19 @@ function renderCmEmails() {
 
 // ── Documents ─────────────────────────────────────────────────────────────────
 const DOC_TYPES = [
-  { val:'ine',       label:'🪪 INE / Credencial' },
-  { val:'curp',      label:'📋 CURP' },
-  { val:'acta',      label:'📜 Acta de Nacimiento' },
-  { val:'pasaporte', label:'🛂 Pasaporte' },
-  { val:'rfc',       label:'🧾 RFC / SAT' },
-  { val:'contrato',  label:'📝 Contrato' },
-  { val:'firma',     label:'✍️ Firma' },
-  { val:'poder',     label:'⚖️ Poder Notarial' },
-  { val:'domicilio', label:'🏠 Comprobante Dom.' },
-  { val:'foto',      label:'📷 Fotografía' },
-  { val:'otro',      label:'📎 Otro' },
+  { val:'ine_front',  label:'🪪 INE Frente' },
+  { val:'ine_back',   label:'🪪 INE Reverso' },
+  { val:'ine',        label:'🪪 INE (ambos lados)' },
+  { val:'curp',       label:'📋 CURP' },
+  { val:'acta',       label:'📜 Acta de Nacimiento' },
+  { val:'pasaporte',  label:'🛂 Pasaporte' },
+  { val:'rfc',        label:'🧾 RFC / SAT' },
+  { val:'contrato',   label:'📝 Contrato' },
+  { val:'firma',      label:'✍️ Firma' },
+  { val:'poder',      label:'⚖️ Poder Notarial' },
+  { val:'domicilio',  label:'🏠 Comprobante Dom.' },
+  { val:'foto',       label:'📷 Fotografía' },
+  { val:'otro',       label:'📎 Otro' },
 ]
 const DOC_ICONS = Object.fromEntries(DOC_TYPES.map(d => [d.val, d.label.split(' ')[0]]))
 
@@ -9242,6 +9323,10 @@ window.saveContact = async () => {
     email:      firstEmail,
     city:       document.getElementById('cm-city')?.value.trim() || undefined,
     rfc:        document.getElementById('cm-rfc')?.value.trim().toUpperCase() || undefined,
+    // Identity docs
+    curp:       document.getElementById('cm-curp')?.value.trim().toUpperCase() || undefined,
+    electoral:  document.getElementById('cm-electoral')?.value.trim().toUpperCase() || undefined,
+    pasaporte:  document.getElementById('cm-pasaporte')?.value.trim().toUpperCase() || undefined,
     // Address
     address_street:  addrStreet,
     address_postal:  addrPostal,
