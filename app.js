@@ -1771,6 +1771,74 @@ function renderPanelDashboard() {
       }).join('')
     : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin eventos en los próximos 30 días 🎉</div>`
 
+  // ── G) Abonos próximos a vencer (30 días) ────────────────────
+  const _cotsPendDash = allNodes.filter(n =>
+    n.type === 'cotizacion' && !['rechazada', 'pagada'].includes(n.metadata?.status || ''))
+  const _upcomingAbonosDash = _cotsPendDash
+    .flatMap(cot => (cot.metadata?.abonos || [])
+      .filter(a => a.due_date && !a.paid_at)
+      .map(a => ({
+        daysLeft: Math.ceil((new Date(a.due_date + 'T12:00:00') - today) / 86400000),
+        label:    cot.metadata?.label || cot.content || '?',
+        project:  cot.metadata?.project_tag || '',
+        amount:   +(a.amount || 0),
+        cotId:    cot.id
+      })))
+    .filter(a => a.daysLeft >= -7 && a.daysLeft <= 30)
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+    .slice(0, 5)
+
+  const abonosDashHTML = _upcomingAbonosDash.length
+    ? _upcomingAbonosDash.map(({ daysLeft, label, project, amount }) => {
+        const overdue = daysLeft < 0
+        const clr = overdue ? '#f87171' : daysLeft <= 3 ? '#fb923c' : daysLeft <= 7 ? '#fbbf24' : '#94a3b8'
+        const dayTxt = overdue ? `${Math.abs(daysLeft)}d` : daysLeft === 0 ? '¡HOY!' : `${daysLeft}d`
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <div style="min-width:36px;text-align:center;flex-shrink:0;">
+            <div style="font-size:15px;font-weight:900;color:${clr};font-family:'JetBrains Mono',monospace;line-height:1;">${dayTxt}</div>
+            <div style="font-size:8px;color:${clr};font-weight:700;text-transform:uppercase;">${overdue ? 'VENC' : daysLeft === 0 ? '' : 'días'}</div>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(label)}</div>
+            ${project ? `<div style="font-size:10px;color:var(--text-dim);">#${esc(project)}</div>` : ''}
+          </div>
+          <div style="font-size:12px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;flex-shrink:0;">${fmtM(amount)}</div>
+        </div>`
+      }).join('')
+    : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:12px 0;text-align:center;opacity:.7;">Sin abonos próximos</div>`
+
+  // ── H) Próximos a liquidar (≥ 70% pagado, saldo > 0) ─────────
+  const _nearLiq = _cotsPendDash
+    .map(cot => {
+      const total = +(cot.metadata?.amount || 0)
+      if (total === 0) return null
+      const paid  = (cot.metadata?.abonos || []).reduce((s, a) => s + (+(a.amount || 0)), 0)
+      const saldo = total - paid
+      const pct   = Math.round(paid / total * 100)
+      if (saldo <= 0 || pct < 70) return null
+      return { label: cot.metadata?.label || cot.content, project: cot.metadata?.project_tag || '', saldo, pct, cotId: cot.id }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, 5)
+
+  const nearLiqHTML = _nearLiq.length
+    ? _nearLiq.map(({ label, project, saldo, pct }) => {
+        const clr = pct >= 90 ? '#4ade80' : '#fbbf24'
+        return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
+          <div style="min-width:36px;text-align:center;flex-shrink:0;">
+            <div style="font-size:14px;font-weight:900;color:${clr};font-family:'JetBrains Mono',monospace;line-height:1;">${pct}%</div>
+            <div style="font-size:8px;color:${clr};font-weight:700;text-transform:uppercase;">pagado</div>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(label)}</div>
+            ${project ? `<div style="font-size:10px;color:var(--text-dim);">#${esc(project)}</div>` : ''}
+          </div>
+          <div style="font-size:12px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;flex-shrink:0;">${fmtM(saldo)}</div>
+        </div>`
+      }).join('')
+    : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:12px 0;text-align:center;opacity:.7;">Sin cotizaciones cerca de liquidación</div>`
+
   // ── F) Deudas a proveedores ───────────────────────────────
   const debtMap = {}
   allNodes.filter(n=>n.type==='cotizacion'&&!['rechazada','pagada'].includes(n.metadata?.status||'')).forEach(cot => {
@@ -1827,6 +1895,27 @@ function renderPanelDashboard() {
           ${debts.length?`<span style="margin-left:auto;font-size:10px;color:#f87171;font-weight:700;background:rgba(248,113,113,0.1);border-radius:8px;padding:1px 7px;">${debts.length}</span>`:''}
         </div>
         ${debtHTML}
+      </div>
+      <div style="${NX_CARD}grid-column:1/-1;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+              ${ISVG.clock.replace('stroke="currentColor"','stroke="#fb923c"')}
+              <span style="${NX_HEAD}color:#fb923c;">Abonos a vencer</span>
+              ${_upcomingAbonosDash.length ? `<span style="margin-left:auto;font-size:10px;color:#fb923c;font-weight:700;background:rgba(251,146,60,0.1);border-radius:8px;padding:1px 7px;">${_upcomingAbonosDash.length}</span>` : ''}
+              <button onclick="switchView('proyectos')" style="${_upcomingAbonosDash.length?'':'margin-left:auto;'}font-size:10px;color:#fb923c;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;">Proyectos</button>
+            </div>
+            ${abonosDashHTML}
+          </div>
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+              <span style="${NX_HEAD}color:#4ade80;">Próximos a liquidar</span>
+              ${_nearLiq.length ? `<span style="margin-left:auto;font-size:10px;color:#4ade80;font-weight:700;background:rgba(74,222,128,0.1);border-radius:8px;padding:1px 7px;">${_nearLiq.length}</span>` : ''}
+            </div>
+            ${nearLiqHTML}
+          </div>
+        </div>
       </div>
       <div style="${NX_CARD}grid-column:1/-1;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
@@ -3236,32 +3325,6 @@ function renderFinance(nodes) {
     : 0
   const { income, expense } = calcBalance(txs, _initBalForCalc)
 
-  // ── Phase 1 · Pending cotizaciones ────────────────────────────
-  const _todayFin = new Date().toISOString().split('T')[0]
-  const _allCots = nodes.filter(n => n.type === 'cotizacion' && !['rechazada'].includes(n.metadata?.status || ''))
-  const _pendingCots = _allCots.filter(c => {
-    const total = +(c.metadata?.amount || 0)
-    const paid  = (c.metadata?.abonos || []).reduce((s, a) => s + (+(a.amount || 0)), 0)
-    return paid < total && !['pagada'].includes(c.metadata?.status || '')
-  })
-  const _pendingTotal = _pendingCots.reduce((s, c) => {
-    const total = +(c.metadata?.amount || 0)
-    const paid  = (c.metadata?.abonos || []).reduce((s2, a) => s2 + (+(a.amount || 0)), 0)
-    return s + Math.max(0, total - paid)
-  }, 0)
-  // Earliest unpaid abono due date across all non-paid cots
-  const _upcomingAbonos = _allCots
-    .flatMap(c => (c.metadata?.abonos || [])
-      .filter(a => a.due_date && !a.paid_at)
-      .map(a => ({ ...a, cotLabel: c.metadata?.label || c.content, cotId: c.id })))
-    .sort((a, b) => a.due_date.localeCompare(b.due_date))
-  const _nextAbono   = _upcomingAbonos[0]
-  const _daysUntilDue = _nextAbono?.due_date
-    ? Math.ceil((new Date(_nextAbono.due_date + 'T12:00:00') - new Date(_todayFin + 'T12:00:00')) / 86400000)
-    : null
-  // Dates with abono events (for mini calendar)
-  const _abonoDateSet = new Set(_upcomingAbonos.map(a => a.due_date))
-
   const accountTabsHtml = `
     <div class="fin-tabs" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
       <button class="fin-tab ${activeAccount==='all'?'fin-tab-active':''}" onclick="setActiveAccount('all')">Todas las Cuentas</button>
@@ -3447,12 +3510,11 @@ function renderFinance(nodes) {
   const initBal = activeAccount !== 'all' ? (accounts.find(a=>a.id===activeAccount)?.metadata?.balance || 0) : 0
   const txsWithBalance = buildRunningBalance(txs, initBal)
 
-  // Phase 1 · Quick filter
+  // Phase 1 · Quick filter (solo movimientos de cuenta)
   const _filterPills = [
-    { key:'all',     label:'Todos',      icon:'⚡' },
-    { key:'income',  label:'Ingresos',   icon:'💰' },
-    { key:'expense', label:'Gastos',     icon:'💸' },
-    { key:'pending', label:'Pendientes', icon:'⏳' },
+    { key:'all',     label:'Todos',    icon:'⚡' },
+    { key:'income',  label:'Ingresos', icon:'💰' },
+    { key:'expense', label:'Gastos',   icon:'💸' },
   ]
   const _pillsHtml = _filterPills.map(p => {
     const active = finTxFilter === p.key
@@ -3464,42 +3526,11 @@ function renderFinance(nodes) {
                      : finTxFilter === 'expense' ? txsWithBalance.filter(t => t.type === 'expense')
                      : txsWithBalance
 
-  // Pending cotizaciones panel (shown when filter = 'pending')
-  const _pendingPanel = finTxFilter === 'pending' ? `
-    <div style="margin-top:4px;">
-      ${_pendingCots.length === 0
-        ? `<div style="text-align:center;padding:32px;color:var(--text-dim);font-size:13px;">✅ Sin cotizaciones pendientes</div>`
-        : _pendingCots.map(c => {
-            const total = +(c.metadata?.amount || 0)
-            const paid  = (c.metadata?.abonos || []).reduce((s,a) => s+(+(a.amount||0)),0)
-            const saldo = total - paid
-            const pct   = total > 0 ? Math.round((paid/total)*100) : 0
-            const proj  = c.metadata?.project_tag || ''
-            return `<div onclick="openCotizacionDetail('${c.id}')" style="cursor:pointer;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:12px;transition:background 0.1s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
-              <div style="font-size:18px;">📄</div>
-              <div style="flex:1;min-width:0;">
-                <div style="font-weight:600;font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(c.metadata?.label||c.content)}</div>
-                ${proj ? `<div style="font-size:10px;color:var(--text-dim);margin-top:1px;">#${esc(proj)}</div>` : ''}
-                <div style="margin-top:6px;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
-                  <div style="height:100%;width:${pct}%;background:#fb923c;border-radius:2px;transition:width 0.3s;"></div>
-                </div>
-              </div>
-              <div style="text-align:right;flex-shrink:0;">
-                <div style="font-size:13px;font-weight:800;color:#fb923c;font-family:'JetBrains Mono',monospace;">$${saldo.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
-                <div style="font-size:10px;color:var(--text-dim);">de $${total.toLocaleString()}</div>
-                <div style="font-size:10px;color:var(--text-muted);">${pct}% pagado</div>
-              </div>
-            </div>`
-          }).join('')}
-    </div>` : ''
-
   const txTableHtml = `
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
     <div style="display:flex;align-items:center;gap:8px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">
-        ${finTxFilter==='pending' ? `Cotizaciones pendientes (${_pendingCots.length})` : `Movimientos (${_filteredTxs.length})`}
-      </span>
+      <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Movimientos (${_filteredTxs.length})</span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button onclick="window.printFinanceReport()" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🖨 Imprimir</button>
@@ -3507,7 +3538,6 @@ function renderFinance(nodes) {
     </div>
   </div>
   <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">${_pillsHtml}</div>
-  ${finTxFilter === 'pending' ? _pendingPanel : `
   <div style="overflow-x:auto;">
     <table id="finance-tx-table" style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead>
@@ -3562,77 +3592,8 @@ function renderFinance(nodes) {
           }).join('')}
       </tbody>
     </table>
-  </div>`}
+  </div>
   `
-
-  // ── Phase 1 · Pending Cotizaciones KPI band ───────────────────
-  const _pendingBandHtml = (_pendingCots.length > 0 || _nextAbono) ? `
-    <div style="display:grid;grid-template-columns:${_nextAbono?'1fr 1fr':'1fr'};gap:12px;margin-bottom:20px;">
-      ${_pendingCots.length > 0 ? `
-      <div onclick="setFinTxFilter('pending')" style="cursor:pointer;background:rgba(251,146,60,0.07);border:1px solid rgba(251,146,60,0.25);border-radius:14px;padding:16px 18px;transition:transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
-        <div style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#fb923c;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          Cotizaciones por saldar
-        </div>
-        <div style="font-size:22px;font-weight:900;color:#fb923c;font-family:'JetBrains Mono',monospace;line-height:1;">$${_pendingTotal.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
-        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${_pendingCots.length} cotización${_pendingCots.length>1?'es':''} activa${_pendingCots.length>1?'s':''} · clic para ver</div>
-      </div>` : ''}
-      ${_nextAbono ? (() => {
-        const urgent = _daysUntilDue !== null && _daysUntilDue <= 7
-        const overdue = _daysUntilDue !== null && _daysUntilDue < 0
-        const clr = overdue ? '#f87171' : urgent ? '#fb923c' : '#facc15'
-        const dueLabel = overdue ? `Venció hace ${Math.abs(_daysUntilDue)} día${Math.abs(_daysUntilDue)>1?'s':''}`
-                       : _daysUntilDue === 0 ? 'Vence hoy'
-                       : `En ${_daysUntilDue} día${_daysUntilDue>1?'s':''}`
-        return `<div style="background:${clr}0d;border:1px solid ${clr}35;border-radius:14px;padding:16px 18px;">
-          <div style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:${clr};margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${clr}" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            ${overdue?'⚠️ Vencimiento crítico':'Próximo vencimiento'}
-          </div>
-          <div style="font-size:16px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${dueLabel}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(_nextAbono.cotLabel||'—')}</div>
-          <div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${_nextAbono.due_date} · $${(+((_nextAbono.amount)||0)).toLocaleString()}</div>
-        </div>`
-      })() : ''}
-    </div>` : ''
-
-  // ── Phase 3 · Mini Financial Calendar ─────────────────────────
-  const _buildMiniCal = () => {
-    const now   = new Date()
-    const yr    = now.getFullYear()
-    const mo    = now.getMonth()
-    const days  = new Date(yr, mo+1, 0).getDate()
-    const start = new Date(yr, mo, 1).getDay() // 0=Sun
-    const todD  = now.getDate()
-    const moName = now.toLocaleDateString('es-MX', {month:'long',year:'numeric'})
-    let cells = ''
-    for (let d = 0; d < start; d++) cells += `<div></div>`
-    for (let d = 1; d <= days; d++) {
-      const dStr = `${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-      const hasAbono = _abonoDateSet.has(dStr)
-      const isToday  = d === todD
-      cells += `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:10px;font-weight:${isToday?'800':'500'};
-        background:${hasAbono?'rgba(251,146,60,0.25)':isToday?'rgba(0,246,255,0.18)':'transparent'};
-        color:${hasAbono?'#fb923c':isToday?'var(--accent-cyan)':'var(--text-muted)'};
-        border:${hasAbono?'1px solid rgba(251,146,60,0.5)':isToday?'1px solid rgba(0,246,255,0.4)':'none'};
-        cursor:${hasAbono?'pointer':'default'};" ${hasAbono?`title="Abono vence ${dStr}"`:''}>${d}</div>`
-    }
-    return `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:14px 16px;margin-bottom:20px;">
-      <div style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        Calendario financiero · ${moName}
-        ${_abonoDateSet.size > 0 ? `<span style="margin-left:auto;font-size:9px;color:#fb923c;">● ${_abonoDateSet.size} vencimiento${_abonoDateSet.size>1?'s':''}</span>` : ''}
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(7,24px);gap:2px;justify-content:start;">
-        ${['D','L','M','M','J','V','S'].map(d=>`<div style="width:24px;text-align:center;font-size:9px;font-weight:700;color:var(--text-dim);padding-bottom:4px;">${d}</div>`).join('')}
-        ${cells}
-      </div>
-      <div style="margin-top:8px;font-size:9px;color:var(--text-dim);display:flex;gap:10px;">
-        <span>🟦 Hoy</span><span style="color:#fb923c;">🟠 Vencimiento abono</span>
-      </div>
-    </div>`
-  }
-  const _miniCalHtml = _buildMiniCal()
 
   // ── Phase 2 · Charts — always visible, more prominent ─────────
   const chartsBtn = `<button class="fin-action-btn" id="fin-charts-toggle" onclick="toggleFinanceCharts()" style="background:${finChartsVisible?'rgba(0,246,255,0.15)':'rgba(255,255,255,0.05)'};color:${finChartsVisible?'var(--accent-cyan)':'var(--text-muted)'};">📊 ${finChartsVisible?'Ocultar':'Ver'} gráficos</button>`
@@ -3666,13 +3627,11 @@ function renderFinance(nodes) {
 
   // ── ASSEMBLY: Information Pyramid (Top→Bottom) ─────────────────
   // 1. Account tabs
-  // 2. Pending cotizaciones KPI band (Phase 1)
-  // 3. Per-account / consolidated KPI cards
-  // 4. Action buttons
-  // 5. Charts (Phase 2)
-  // 6. Mini calendar (Phase 3)
-  // 7. Transaction log with filters + semaphore
-  root.innerHTML = accountTabsHtml + _pendingBandHtml + statsHtml + actionsHtmlFull + chartsHtml + _miniCalHtml +
+  // 2. Per-account / consolidated KPI cards
+  // 3. Action buttons
+  // 4. Charts (Phase 2)
+  // 5. Transaction log with filters + semaphore
+  root.innerHTML = accountTabsHtml + statsHtml + actionsHtmlFull + chartsHtml +
     `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:24px;">${txTableHtml}</div>`
 
   // Animate KPI numbers
