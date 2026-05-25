@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.1.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.2.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -68,6 +68,10 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 🖼️ **Adjuntos con Ctrl+V** | Pega imágenes directamente desde el portapapeles con compresión automática |
 | 🔍 **Búsqueda global** | Fuzzy search con Fuse.js sobre todo el contenido, filtros por tipo y tag |
 | 📊 **Dashboard ejecutivo** | KPIs, próximos pagos, proyectos activos, distribución Kanban, eventos de contactos próximos (30 días) |
+| 🔢 **KPI de cotizaciones** | Monto pendiente por saldar con barra de progreso + próximo vencimiento crítico con semáforo de días |
+| 📆 **Calendario financiero** | Mini-calendario en Bio-Finanzas con días que tienen abonos de cotizaciones marcados en naranja |
+| ⚡ **Filtros rápidos** | Filtra movimientos por Todos / Ingresos / Gastos / Pendientes (cotizaciones por saldar) con un clic |
+| 🟢 **Semáforo financiero** | Cada fila del log muestra 🟢 ingreso · 🔴 gasto · 🟡 préstamo — identificación instantánea |
 | 📤 **Print / Export CSV** | Exporta transacciones y movimientos financieros en un clic |
 | 📱 **PWA-ready** | Diseño responsivo, usable en móvil y tablet |
 | 🎨 **Editor rico** | Bóveda Neural con colores de texto, resaltado, tamaños XS–3X y formato completo |
@@ -93,7 +97,7 @@ Nexus OS tiene **9 vistas** accesibles desde la barra lateral:
 |---|---|---|
 | 1 | 🖥️ **Panel de Comandos** | Dashboard ejecutivo con KPIs, próximos pagos, distribución de tareas Kanban, proyectos expandibles con deuda |
 | 2 | 🗂️ **Muro Táctico** | Kanban drag & drop (Pendiente / En Progreso / Hecho). Modal de detalle por tarjeta |
-| 3 | 💰 **Bio-Finanzas** | Registro financiero multi-cuenta. Saldo disponible, modal de detalle, portafolio crypto |
+| 3 | 💰 **Bio-Finanzas** | Dashboard financiero con pirámide de información: KPIs de cotizaciones pendientes + vencimiento crítico, gráficos Chart.js (bar/donut/línea), mini-calendario financiero con abonos, filtros rápidos [Todos/Ingresos/Gastos/Pendientes] y semáforo visual 🟢🔴🟡 por movimiento |
 | 4 | 🧠 **Bóveda Neural** | Notas estilo Google Keep con editor de página completa, colores, etiquetas, pin y recordatorios |
 | 5 | 📅 **Calendario** | Línea de tiempo con vistas mes / semana / día, sincronizado con tareas y eventos |
 | 6 | 📜 **Crónica** | Histórico diario en 3 columnas: lo que pasó, decisiones tomadas, pendientes |

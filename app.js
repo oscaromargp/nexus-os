@@ -3236,6 +3236,32 @@ function renderFinance(nodes) {
     : 0
   const { income, expense } = calcBalance(txs, _initBalForCalc)
 
+  // ── Phase 1 · Pending cotizaciones ────────────────────────────
+  const _todayFin = new Date().toISOString().split('T')[0]
+  const _allCots = nodes.filter(n => n.type === 'cotizacion' && !['rechazada'].includes(n.metadata?.status || ''))
+  const _pendingCots = _allCots.filter(c => {
+    const total = +(c.metadata?.amount || 0)
+    const paid  = (c.metadata?.abonos || []).reduce((s, a) => s + (+(a.amount || 0)), 0)
+    return paid < total && !['pagada'].includes(c.metadata?.status || '')
+  })
+  const _pendingTotal = _pendingCots.reduce((s, c) => {
+    const total = +(c.metadata?.amount || 0)
+    const paid  = (c.metadata?.abonos || []).reduce((s2, a) => s2 + (+(a.amount || 0)), 0)
+    return s + Math.max(0, total - paid)
+  }, 0)
+  // Earliest unpaid abono due date across all non-paid cots
+  const _upcomingAbonos = _allCots
+    .flatMap(c => (c.metadata?.abonos || [])
+      .filter(a => a.due_date && !a.paid_at)
+      .map(a => ({ ...a, cotLabel: c.metadata?.label || c.content, cotId: c.id })))
+    .sort((a, b) => a.due_date.localeCompare(b.due_date))
+  const _nextAbono   = _upcomingAbonos[0]
+  const _daysUntilDue = _nextAbono?.due_date
+    ? Math.ceil((new Date(_nextAbono.due_date + 'T12:00:00') - new Date(_todayFin + 'T12:00:00')) / 86400000)
+    : null
+  // Dates with abono events (for mini calendar)
+  const _abonoDateSet = new Set(_upcomingAbonos.map(a => a.due_date))
+
   const accountTabsHtml = `
     <div class="fin-tabs" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
       <button class="fin-tab ${activeAccount==='all'?'fin-tab-active':''}" onclick="setActiveAccount('all')">Todas las Cuentas</button>
@@ -3417,31 +3443,76 @@ function renderFinance(nodes) {
   }
 
   // ── TRANSACTIONS TABLE ──────────────────────────────────────────────────────
-  const sortedTxs = [...txs].sort((a, b) => {
-    const da = a.metadata?.date || a.metadata?.fecha || a.created_at || ''
-    const db = b.metadata?.date || b.metadata?.fecha || b.created_at || ''
-    return db.localeCompare(da)
-  })
-
   // Running balance — unified FinancialEngine
   const initBal = activeAccount !== 'all' ? (accounts.find(a=>a.id===activeAccount)?.metadata?.balance || 0) : 0
   const txsWithBalance = buildRunningBalance(txs, initBal)
 
+  // Phase 1 · Quick filter
+  const _filterPills = [
+    { key:'all',     label:'Todos',      icon:'⚡' },
+    { key:'income',  label:'Ingresos',   icon:'💰' },
+    { key:'expense', label:'Gastos',     icon:'💸' },
+    { key:'pending', label:'Pendientes', icon:'⏳' },
+  ]
+  const _pillsHtml = _filterPills.map(p => {
+    const active = finTxFilter === p.key
+    return `<button onclick="setFinTxFilter('${p.key}')" style="font-size:11px;font-weight:700;padding:5px 13px;border-radius:20px;border:1px solid ${active?'var(--accent-cyan)':'rgba(255,255,255,0.1)'};background:${active?'rgba(0,246,255,0.15)':'rgba(255,255,255,0.04)'};color:${active?'var(--accent-cyan)':'var(--text-muted)'};cursor:pointer;transition:all 0.15s;">${p.icon} ${p.label}</button>`
+  }).join('')
+
+  // Apply filter
+  const _filteredTxs = finTxFilter === 'income'  ? txsWithBalance.filter(t => t.type === 'income')
+                     : finTxFilter === 'expense' ? txsWithBalance.filter(t => t.type === 'expense')
+                     : txsWithBalance
+
+  // Pending cotizaciones panel (shown when filter = 'pending')
+  const _pendingPanel = finTxFilter === 'pending' ? `
+    <div style="margin-top:4px;">
+      ${_pendingCots.length === 0
+        ? `<div style="text-align:center;padding:32px;color:var(--text-dim);font-size:13px;">✅ Sin cotizaciones pendientes</div>`
+        : _pendingCots.map(c => {
+            const total = +(c.metadata?.amount || 0)
+            const paid  = (c.metadata?.abonos || []).reduce((s,a) => s+(+(a.amount||0)),0)
+            const saldo = total - paid
+            const pct   = total > 0 ? Math.round((paid/total)*100) : 0
+            const proj  = c.metadata?.project_tag || ''
+            return `<div onclick="openCotizacionDetail('${c.id}')" style="cursor:pointer;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:12px;transition:background 0.1s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+              <div style="font-size:18px;">📄</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(c.metadata?.label||c.content)}</div>
+                ${proj ? `<div style="font-size:10px;color:var(--text-dim);margin-top:1px;">#${esc(proj)}</div>` : ''}
+                <div style="margin-top:6px;height:4px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
+                  <div style="height:100%;width:${pct}%;background:#fb923c;border-radius:2px;transition:width 0.3s;"></div>
+                </div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;">
+                <div style="font-size:13px;font-weight:800;color:#fb923c;font-family:'JetBrains Mono',monospace;">$${saldo.toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
+                <div style="font-size:10px;color:var(--text-dim);">de $${total.toLocaleString()}</div>
+                <div style="font-size:10px;color:var(--text-muted);">${pct}% pagado</div>
+              </div>
+            </div>`
+          }).join('')}
+    </div>` : ''
+
   const txTableHtml = `
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
     <div style="display:flex;align-items:center;gap:8px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">Movimientos (${txsWithBalance.length})</span>
+      <span style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);">
+        ${finTxFilter==='pending' ? `Cotizaciones pendientes (${_pendingCots.length})` : `Movimientos (${_filteredTxs.length})`}
+      </span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button onclick="window.printFinanceReport()" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🖨 Imprimir reporte</button>
+      <button onclick="window.printFinanceReport()" style="font-size:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">🖨 Imprimir</button>
       <button onclick="openTransactionModal()" style="font-size:11px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:var(--accent-cyan);border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">+ Movimiento</button>
     </div>
   </div>
+  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">${_pillsHtml}</div>
+  ${finTxFilter === 'pending' ? _pendingPanel : `
   <div style="overflow-x:auto;">
     <table id="finance-tx-table" style="width:100%;border-collapse:collapse;font-size:12px;">
       <thead>
         <tr style="background:rgba(255,255,255,0.04);">
+          <th style="text-align:center;padding:8px 6px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);width:28px;"></th>
           <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Fecha</th>
           <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Concepto</th>
           <th style="text-align:left;padding:8px 10px;color:var(--text-muted);font-weight:700;border-bottom:1px solid rgba(255,255,255,0.08);">Cuenta</th>
@@ -3453,9 +3524,9 @@ function renderFinance(nodes) {
         </tr>
       </thead>
       <tbody>
-      ${txsWithBalance.length === 0
-        ? `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-dim);">Sin movimientos. Registra un ingreso o gasto.</td></tr>`
-        : txsWithBalance.map(tx => {
+      ${_filteredTxs.length === 0
+        ? `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text-dim);">Sin movimientos. Registra un ingreso o gasto.</td></tr>`
+        : _filteredTxs.map(tx => {
             const m = tx.metadata || {}
             const isIncome = tx.type === 'income'
             const isExpense = tx.type === 'expense'
@@ -3468,7 +3539,10 @@ function renderFinance(nodes) {
             const balClr = bal >= 0 ? '#4ade80' : '#f87171'
             const comprobante = m.comprobante_url || m.receipt_url || ''
             const tags = (m.tags||[]).join(' ')
+            // Phase 1 · Semaphore badge
+            const semaphore = isIncome ? '🟢' : isExpense ? '🔴' : '🟡'
             return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.1s;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+              <td style="padding:8px 6px;text-align:center;font-size:13px;">${semaphore}</td>
               <td style="padding:8px 10px;color:var(--text-muted);white-space:nowrap;">${date}</td>
               <td style="padding:8px 10px;color:var(--text-primary);max-width:200px;">
                 <div style="font-weight:600;">${esc(concept)}</div>
@@ -3488,10 +3562,80 @@ function renderFinance(nodes) {
           }).join('')}
       </tbody>
     </table>
-  </div>`
+  </div>`}
+  `
 
-  // Charts toggle button in actions
-  const chartsBtn = `<button class="fin-action-btn" id="fin-charts-toggle" onclick="toggleFinanceCharts()" style="background:${finChartsVisible?'rgba(0,246,255,0.15)':'rgba(255,255,255,0.05)'};color:${finChartsVisible?'var(--accent-cyan)':'var(--text-muted)'};">📊 Gráficos</button>`
+  // ── Phase 1 · Pending Cotizaciones KPI band ───────────────────
+  const _pendingBandHtml = (_pendingCots.length > 0 || _nextAbono) ? `
+    <div style="display:grid;grid-template-columns:${_nextAbono?'1fr 1fr':'1fr'};gap:12px;margin-bottom:20px;">
+      ${_pendingCots.length > 0 ? `
+      <div onclick="setFinTxFilter('pending')" style="cursor:pointer;background:rgba(251,146,60,0.07);border:1px solid rgba(251,146,60,0.25);border-radius:14px;padding:16px 18px;transition:transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+        <div style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#fb923c;margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fb923c" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Cotizaciones por saldar
+        </div>
+        <div style="font-size:22px;font-weight:900;color:#fb923c;font-family:'JetBrains Mono',monospace;line-height:1;">$${_pendingTotal.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:6px;">${_pendingCots.length} cotización${_pendingCots.length>1?'es':''} activa${_pendingCots.length>1?'s':''} · clic para ver</div>
+      </div>` : ''}
+      ${_nextAbono ? (() => {
+        const urgent = _daysUntilDue !== null && _daysUntilDue <= 7
+        const overdue = _daysUntilDue !== null && _daysUntilDue < 0
+        const clr = overdue ? '#f87171' : urgent ? '#fb923c' : '#facc15'
+        const dueLabel = overdue ? `Venció hace ${Math.abs(_daysUntilDue)} día${Math.abs(_daysUntilDue)>1?'s':''}`
+                       : _daysUntilDue === 0 ? 'Vence hoy'
+                       : `En ${_daysUntilDue} día${_daysUntilDue>1?'s':''}`
+        return `<div style="background:${clr}0d;border:1px solid ${clr}35;border-radius:14px;padding:16px 18px;">
+          <div style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:${clr};margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${clr}" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            ${overdue?'⚠️ Vencimiento crítico':'Próximo vencimiento'}
+          </div>
+          <div style="font-size:16px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${dueLabel}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(_nextAbono.cotLabel||'—')}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${_nextAbono.due_date} · $${(+((_nextAbono.amount)||0)).toLocaleString()}</div>
+        </div>`
+      })() : ''}
+    </div>` : ''
+
+  // ── Phase 3 · Mini Financial Calendar ─────────────────────────
+  const _buildMiniCal = () => {
+    const now   = new Date()
+    const yr    = now.getFullYear()
+    const mo    = now.getMonth()
+    const days  = new Date(yr, mo+1, 0).getDate()
+    const start = new Date(yr, mo, 1).getDay() // 0=Sun
+    const todD  = now.getDate()
+    const moName = now.toLocaleDateString('es-MX', {month:'long',year:'numeric'})
+    let cells = ''
+    for (let d = 0; d < start; d++) cells += `<div></div>`
+    for (let d = 1; d <= days; d++) {
+      const dStr = `${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+      const hasAbono = _abonoDateSet.has(dStr)
+      const isToday  = d === todD
+      cells += `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:10px;font-weight:${isToday?'800':'500'};
+        background:${hasAbono?'rgba(251,146,60,0.25)':isToday?'rgba(0,246,255,0.18)':'transparent'};
+        color:${hasAbono?'#fb923c':isToday?'var(--accent-cyan)':'var(--text-muted)'};
+        border:${hasAbono?'1px solid rgba(251,146,60,0.5)':isToday?'1px solid rgba(0,246,255,0.4)':'none'};
+        cursor:${hasAbono?'pointer':'default'};" ${hasAbono?`title="Abono vence ${dStr}"`:''}>${d}</div>`
+    }
+    return `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:14px 16px;margin-bottom:20px;">
+      <div style="font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Calendario financiero · ${moName}
+        ${_abonoDateSet.size > 0 ? `<span style="margin-left:auto;font-size:9px;color:#fb923c;">● ${_abonoDateSet.size} vencimiento${_abonoDateSet.size>1?'s':''}</span>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,24px);gap:2px;justify-content:start;">
+        ${['D','L','M','M','J','V','S'].map(d=>`<div style="width:24px;text-align:center;font-size:9px;font-weight:700;color:var(--text-dim);padding-bottom:4px;">${d}</div>`).join('')}
+        ${cells}
+      </div>
+      <div style="margin-top:8px;font-size:9px;color:var(--text-dim);display:flex;gap:10px;">
+        <span>🟦 Hoy</span><span style="color:#fb923c;">🟠 Vencimiento abono</span>
+      </div>
+    </div>`
+  }
+  const _miniCalHtml = _buildMiniCal()
+
+  // ── Phase 2 · Charts — always visible, more prominent ─────────
+  const chartsBtn = `<button class="fin-action-btn" id="fin-charts-toggle" onclick="toggleFinanceCharts()" style="background:${finChartsVisible?'rgba(0,246,255,0.15)':'rgba(255,255,255,0.05)'};color:${finChartsVisible?'var(--accent-cyan)':'var(--text-muted)'};">📊 ${finChartsVisible?'Ocultar':'Ver'} gráficos</button>`
   const actionsHtmlFull = `
     <div style="display:flex; gap:10px; margin-bottom:24px; flex-wrap:wrap;">
       <button class="fin-action-btn" onclick="openTransferModal()">⇄ Transferir</button>
@@ -3502,7 +3646,7 @@ function renderFinance(nodes) {
     </div>
   `
 
-  // Charts panel (3 canvases)
+  // Charts panel — 3 canvases, shown above transactions
   const chartsHtml = `
     <div id="finance-charts-panel" style="display:${finChartsVisible?'grid':'none'};grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-bottom:28px;">
       <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:18px;">
@@ -3520,7 +3664,15 @@ function renderFinance(nodes) {
     </div>
   `
 
-  root.innerHTML = accountTabsHtml + statsHtml + actionsHtmlFull + chartsHtml +
+  // ── ASSEMBLY: Information Pyramid (Top→Bottom) ─────────────────
+  // 1. Account tabs
+  // 2. Pending cotizaciones KPI band (Phase 1)
+  // 3. Per-account / consolidated KPI cards
+  // 4. Action buttons
+  // 5. Charts (Phase 2)
+  // 6. Mini calendar (Phase 3)
+  // 7. Transaction log with filters + semaphore
+  root.innerHTML = accountTabsHtml + _pendingBandHtml + statsHtml + actionsHtmlFull + chartsHtml + _miniCalHtml +
     `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:24px;">${txTableHtml}</div>`
 
   // Animate KPI numbers
@@ -3528,7 +3680,7 @@ function renderFinance(nodes) {
   animateStatEl('fin-kpi-expense', expense)
   animateStatEl('fin-kpi-net',     net)
 
-  // Render charts after DOM is painted — filtradas por cuenta activa
+  // Render charts — always render when visible
   if (finChartsVisible) {
     const chartNodes = activeAccount === 'all' ? nodes : nodes.filter(n => n.metadata?.account_id === activeAccount || n.type === 'account')
     setTimeout(() => renderFinanceCharts(chartNodes), 0)
@@ -3537,6 +3689,11 @@ function renderFinance(nodes) {
 
 window.setActiveAccount = (id) => {
   activeAccount = id
+  renderAll()
+}
+
+window.setFinTxFilter = (f) => {
+  finTxFilter = f
   renderAll()
 }
 
@@ -4505,6 +4662,7 @@ function animateStatEl(id, target) {
 // Finance charts state
 const finCharts = { bar: null, donut: null, line: null }
 let finChartsVisible = true
+let finTxFilter = 'all'   // 'all' | 'income' | 'expense' | 'pending'
 let chartJsReady = false
 
 let agendaItemType = 'card'
