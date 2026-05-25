@@ -1600,16 +1600,25 @@
               <button type="button" class="freq-chip"        data-freq="trimestral"   onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">📅 Trimestral</button>
               <button type="button" class="freq-chip"        data-freq="semestral"    onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">📅 Semestral</button>
               <button type="button" class="freq-chip"        data-freq="anual"        onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">🗓 Anual</button>
+              <button type="button" class="freq-chip"        data-freq="bianual"      onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">🗓 Cada 2 años</button>
+              <button type="button" class="freq-chip"        data-freq="trianual"     onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">🗓 Cada 3 años</button>
               <button type="button" class="freq-chip"        data-freq="personalizado" onclick="agFreqSelect(this)" style="font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:var(--text-muted);cursor:pointer;">✏️ Cada X días</button>
             </div>
             <!-- input oculto que guarda el valor real -->
             <input type="hidden" id="ag-frequency" value="mensual" />
 
             <!-- Sub-campos condicionales según frecuencia -->
-            <!-- Día del mes (mensual, bimestral, trimestral, semestral, anual) -->
+            <!-- Día del mes (mensual, bimestral, trimestral, semestral) -->
             <div id="ag-freq-day-month" style="margin-top:4px;">
               <label class="modal-label" style="font-size:10px;">¿Qué día del mes?</label>
               <input id="ag-day" type="number" min="1" max="31" class="modal-input" placeholder="Ej: 5" style="max-width:120px;" />
+            </div>
+
+            <!-- Fecha específica (anual, bianual, trianual) -->
+            <div id="ag-freq-specific-date" style="display:none;margin-top:4px;">
+              <label class="modal-label" style="font-size:10px;">¿Qué día exacto se vence cada año? (mes + día)</label>
+              <input id="ag-specific-date" type="date" class="modal-input" style="max-width:200px;" />
+              <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">El sistema calculará automáticamente la próxima fecha de vencimiento.</div>
             </div>
 
             <!-- Quincenal: días 1 y 15 automático -->

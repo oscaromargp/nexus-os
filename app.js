@@ -1623,37 +1623,40 @@ function renderPanelDashboard() {
     </div>
   </div>`
 
-  // ── B) Próximos pagos fijos ───────────────────────────────
+  // ── B) Próximos pagos fijos — con estado pagado/pendiente ────
+  const freqLabelDash = { mensual:'Mensual', bimestral:'Bimestral', trimestral:'Trimestral', semestral:'Semestral', anual:'Anual', bianual:'Cada 2 años', trianual:'Cada 3 años', semanal:'Semanal', quincenal:'Quincenal', diario:'Diario', personalizado:'Personalizado' }
   const bills = allNodes
-    .filter(n => (n.type==='bill'||n.type==='subscription') && !n.metadata?.paid)
+    .filter(n => n.type==='bill' || n.type==='subscription')
     .map(n => {
-      const day = n.metadata?.dayOfMonth
-      const freq = n.metadata?.frequency || 'mensual'
-      const mos  = {mensual:1,bimestral:2,trimestral:3,semestral:6,anual:12}[freq]||1
-      if (!day) return null
-      let next = new Date(today.getFullYear(), today.getMonth(), day)
-      while (next <= today) next.setMonth(next.getMonth()+mos)
-      return { n, daysLeft: Math.ceil((next-today)/86400000) }
+      const m = n.metadata || {}
+      const freq = m.frequency || 'mensual'
+      const nextDate = calcNextDueDate(freq, m.dayOfMonth, m.weekday, m.customDays, m.specificDate)
+      const daysLeft = nextDate ? Math.ceil((new Date(nextDate + 'T12:00:00') - today) / 86400000) : 999
+      return { n, daysLeft, nextDate, paid: !!m.paid }
     })
-    .filter(Boolean)
-    .sort((a,b)=>a.daysLeft-b.daysLeft)
-    .slice(0,5)
+    .sort((a, b) => (a.paid ? 1000 + a.daysLeft : a.daysLeft) - (b.paid ? 1000 + b.daysLeft : b.daysLeft))
+    .slice(0, 6)
 
-  const billsHTML = bills.length ? bills.map(({n,daysLeft}) => {
+  const billsHTML = bills.length ? bills.map(({ n, daysLeft, nextDate, paid }) => {
     const amt = n.metadata?.amount
-    const clr = daysLeft<=3?'#f87171':daysLeft<=7?'#fb923c':'#94a3b8'
-    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);">
-      <div style="min-width:36px;text-align:center;flex-shrink:0;">
-        <div style="font-size:15px;font-weight:900;color:${clr};font-family:'JetBrains Mono',monospace;line-height:1;">${daysLeft}</div>
-        <div style="font-size:8px;color:${clr};font-weight:700;text-transform:uppercase;">${daysLeft===1?'día':'días'}</div>
+    const overdue = !paid && daysLeft < 0
+    const clr = paid ? '#4ade80' : overdue ? '#f87171' : daysLeft <= 3 ? '#f87171' : daysLeft <= 7 ? '#fb923c' : '#94a3b8'
+    const dayTxt = paid ? 'PAG' : overdue ? `${Math.abs(daysLeft)}d` : daysLeft === 0 ? '¡HOY!' : `${daysLeft}d`
+    const subTxt = paid ? '✓ pagado' : overdue ? 'VENCIDO' : n.metadata?.frequency ? freqLabelDash[n.metadata.frequency] || n.metadata.frequency : ''
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);opacity:${paid?0.55:1};">
+      <div style="min-width:38px;text-align:center;flex-shrink:0;">
+        <div style="font-size:${paid?10:15}px;font-weight:900;color:${clr};font-family:'JetBrains Mono',monospace;line-height:1;">${dayTxt}</div>
+        <div style="font-size:8px;color:${clr};font-weight:700;text-transform:uppercase;margin-top:1px;">${subTxt}</div>
       </div>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:12px;font-weight:600;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.label||n.content)}</div>
-        <div style="font-size:10px;color:var(--text-dim,#475569);">${n.metadata?.frequency||'mensual'}</div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-primary,#f0f6fc);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${paid?'text-decoration:line-through;':''}">${esc(n.metadata?.label||n.content)}</div>
+        ${nextDate && !paid ? `<div style="font-size:10px;color:var(--text-dim);">📅 ${nextDate}</div>` : ''}
       </div>
-      <div style="font-size:12px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;flex-shrink:0;">${amt!=null?fmtM(amt):'Variable'}</div>
+      <button onclick="toggleBillPaid('${n.id}')" style="font-size:10px;padding:2px 8px;border-radius:6px;border:1px solid ${paid?'rgba(74,222,128,0.4)':'rgba(255,255,255,0.15)'};background:${paid?'rgba(74,222,128,0.1)':'transparent'};color:${paid?'#4ade80':'var(--text-muted)'};cursor:pointer;font-weight:700;flex-shrink:0;">${paid?'↩ Reabrir':'✓ Pagar'}</button>
+      <div style="font-size:12px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;flex-shrink:0;">${amt!=null?fmtM(amt):'Var'}</div>
     </div>`
-  }).join('') : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin pagos próximos</div>`
+  }).join('')
+  : `<div style="font-size:12px;color:var(--text-dim,#475569);padding:16px 0;text-align:center;opacity:.7;">Sin pagos recurrentes registrados</div>`
 
   // ── C) Proyectos activos (con resumen expandible) ──────────
   const proyectos = allNodes.filter(n=>n.type==='proyecto').slice(0,6)
@@ -1680,6 +1683,27 @@ function renderPanelDashboard() {
       const paid  = (c.metadata?.abonos||[]).reduce((s2,a)=>s2+(+(a.amount||0)),0)
       return s + Math.max(0, total - paid)
     }, 0)
+    // Pagos fijos vinculados al proyecto
+    const projBills = allNodes
+      .filter(n => (n.type==='bill'||n.type==='subscription') && (n.metadata?.project_tag===slug || (n.metadata?.tags||[]).includes('#'+slug)))
+      .map(n => {
+        const fm = n.metadata || {}
+        const nextDate = calcNextDueDate(fm.frequency||'mensual', fm.dayOfMonth, fm.weekday, fm.customDays, fm.specificDate)
+        const dl = nextDate ? Math.ceil((new Date(nextDate+'T12:00:00') - today) / 86400000) : null
+        return { n, nextDate, dl, paid: !!fm.paid }
+      })
+      .sort((a,b) => (a.dl??999)-(b.dl??999))
+    const projBillsHtml = projBills.length
+      ? projBills.slice(0,3).map(({n,nextDate,dl,paid}) => {
+          const clr = paid?'#4ade80':dl!==null&&dl<=0?'#f87171':dl!==null&&dl<=7?'#fb923c':'#94a3b8'
+          const dayBadge = paid?'✅':dl===0?'¡HOY!':dl!==null&&dl<0?`${Math.abs(dl)}d VENC`:dl!==null?`${dl}d`:''
+          return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:10px;">
+            <span style="color:${clr};font-weight:800;font-family:'JetBrains Mono',monospace;min-width:42px;">${dayBadge}</span>
+            <span style="flex:1;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.label||n.content)}</span>
+            ${n.metadata?.amount!=null?`<span style="color:${clr};font-weight:800;font-family:'JetBrains Mono',monospace;">${fmtM(n.metadata.amount)}</span>`:''}
+          </div>`
+        }).join('')
+      : ''
     const pid = p.id
     return `<div style="border-bottom:1px solid rgba(255,255,255,0.04);">
       <div style="display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer;" onclick="document.getElementById('pd-expand-${pid}').style.display=document.getElementById('pd-expand-${pid}').style.display==='none'?'':'none'">
@@ -1711,6 +1735,10 @@ function renderPanelDashboard() {
             <div style="font-size:8px;color:var(--text-dim);font-weight:700;">DEUDA</div>
           </div>
         </div>
+        ${projBillsHtml ? `<div style="padding:6px 8px;background:rgba(251,146,60,0.04);border:1px solid rgba(251,146,60,0.15);border-radius:8px;margin-bottom:8px;">
+          <div style="font-size:8px;font-weight:800;color:#fb923c;letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px;">📅 Pagos vinculados</div>
+          ${projBillsHtml}
+        </div>` : ''}
         <button onclick="openProjectView('${pid}')" style="width:100%;padding:6px;font-size:11px;font-weight:700;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:6px;cursor:pointer;">Abrir proyecto →</button>
       </div>
     </div>`
@@ -5030,7 +5058,7 @@ window.agWeekdaySelect = (btn) => {
 }
 
 // ── Calcula próximo vencimiento para CUALQUIER frecuencia ────────────────────
-function calcNextDueDate(frequency, dayOfMonth, weekday, customDays) {
+function calcNextDueDate(frequency, dayOfMonth, weekday, customDays, specificDate) {
   const today = new Date(); today.setHours(0,0,0,0)
   if (frequency === 'diario') {
     const d = new Date(today); d.setDate(d.getDate() + 1)
@@ -5055,8 +5083,24 @@ function calcNextDueDate(frequency, dayOfMonth, weekday, customDays) {
     const d = new Date(today); d.setDate(d.getDate() + customDays)
     return d.toISOString().split('T')[0]
   }
-  // mensual, bimestral, trimestral, semestral, anual
-  const freqMonths = { mensual:1, bimestral:2, trimestral:3, semestral:6, anual:12 }
+  // Anual, bianual, trianual — con fecha específica (mes + día exacto)
+  if (['anual','bianual','trianual'].includes(frequency)) {
+    const yearStep = frequency === 'bianual' ? 2 : frequency === 'trianual' ? 3 : 1
+    if (specificDate) {
+      const ref = new Date(specificDate + 'T12:00:00')
+      // Advance from reference date by yearStep until future
+      let next = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate())
+      while (next <= today) next.setFullYear(next.getFullYear() + yearStep)
+      return next.toISOString().split('T')[0]
+    }
+    // Fallback: only dayOfMonth known (backward compat)
+    const dom = dayOfMonth || 1
+    const d = new Date(today.getFullYear(), today.getMonth(), dom)
+    while (d <= today) d.setMonth(d.getMonth() + yearStep * 12)
+    return d.toISOString().split('T')[0]
+  }
+  // mensual, bimestral, trimestral, semestral
+  const freqMonths = { mensual:1, bimestral:2, trimestral:3, semestral:6 }
   const months = freqMonths[frequency] || 1
   const dom = dayOfMonth || 1
   const d = new Date(today.getFullYear(), today.getMonth(), dom)
@@ -5074,11 +5118,14 @@ function _agInitFreqChips(freq = 'mensual') {
     if (active) c.classList.add('active'); else c.classList.remove('active')
   })
   document.getElementById('ag-frequency').value = freq
-  const showMonthDay = ['mensual','bimestral','trimestral','semestral','anual'].includes(freq)
-  document.getElementById('ag-freq-day-month').style.display  = showMonthDay        ? '' : 'none'
-  document.getElementById('ag-freq-weekday').style.display    = freq === 'semanal'       ? '' : 'none'
-  document.getElementById('ag-freq-quincenal').style.display  = freq === 'quincenal'     ? '' : 'none'
-  document.getElementById('ag-freq-custom').style.display     = freq === 'personalizado' ? '' : 'none'
+  const showMonthDay    = ['mensual','bimestral','trimestral','semestral'].includes(freq)
+  const showSpecificDate = ['anual','bianual','trianual'].includes(freq)
+  document.getElementById('ag-freq-day-month').style.display    = showMonthDay     ? '' : 'none'
+  const sdEl = document.getElementById('ag-freq-specific-date')
+  if (sdEl) sdEl.style.display                                   = showSpecificDate ? '' : 'none'
+  document.getElementById('ag-freq-weekday').style.display      = freq === 'semanal'       ? '' : 'none'
+  document.getElementById('ag-freq-quincenal').style.display    = freq === 'quincenal'     ? '' : 'none'
+  document.getElementById('ag-freq-custom').style.display       = freq === 'personalizado' ? '' : 'none'
 }
 
 // ── Helper para inicializar cuenta destino en cascada ────────────────────────
@@ -5135,6 +5182,7 @@ window.openAgendaModal = (type, prefillProjectTag = '') => {
     document.getElementById('ag-amount').value = ''
     document.getElementById('ag-day').value    = ''
     document.getElementById('ag-custom-days') && (document.getElementById('ag-custom-days').value = '')
+    document.getElementById('ag-specific-date') && (document.getElementById('ag-specific-date').value = '')
     _agInitFreqChips('mensual')
     // Reset weekday chips to Lunes
     document.querySelectorAll('#ag-weekday-btns .weekday-btn').forEach(b => {
@@ -5216,19 +5264,23 @@ window.saveAgendaItem = async () => {
       currency:   document.getElementById('ag-card-currency')?.value || 'MXN'
     }
   } else {
-    const rawAmt     = document.getElementById('ag-amount')?.value?.trim()
-    const frequency  = document.getElementById('ag-frequency')?.value || 'mensual'
-    const dayOfMonth = parseInt(document.getElementById('ag-day')?.value) || null
-    const weekday    = document.getElementById('ag-weekday')?.value || '1'
-    const customDays = parseInt(document.getElementById('ag-custom-days')?.value) || null
+    const rawAmt      = document.getElementById('ag-amount')?.value?.trim()
+    const frequency   = document.getElementById('ag-frequency')?.value || 'mensual'
+    const dayOfMonth  = parseInt(document.getElementById('ag-day')?.value) || null
+    const weekday     = document.getElementById('ag-weekday')?.value || '1'
+    const customDays  = parseInt(document.getElementById('ag-custom-days')?.value) || null
+    const specificDate = ['anual','bianual','trianual'].includes(frequency)
+      ? (document.getElementById('ag-specific-date')?.value || null)
+      : null
     meta = { ...meta,
-      amount:     rawAmt !== '' ? (parseFloat(rawAmt) || 0) : null,
-      currency:   document.getElementById('ag-currency')?.value || 'MXN',
+      amount:       rawAmt !== '' ? (parseFloat(rawAmt) || 0) : null,
+      currency:     document.getElementById('ag-currency')?.value || 'MXN',
       dayOfMonth,
-      weekday:    frequency === 'semanal' ? weekday : null,
-      customDays: frequency === 'personalizado' ? customDays : null,
+      weekday:      frequency === 'semanal' ? weekday : null,
+      customDays:   frequency === 'personalizado' ? customDays : null,
+      specificDate: specificDate || null,
       frequency,
-      category:   document.getElementById('ag-category')?.value || '',
+      category:     document.getElementById('ag-category')?.value || '',
       paid: false
     }
     if (agendaItemType === 'bill') {
@@ -5293,9 +5345,10 @@ window.editAgendaItem = (nodeId) => {
   if (node.type !== 'card') {
     document.getElementById('ag-amount').value = m.amount != null ? m.amount : ''
     document.getElementById('ag-day').value    = m.dayOfMonth || ''
+    if (document.getElementById('ag-specific-date')) document.getElementById('ag-specific-date').value = m.specificDate || ''
     if (document.getElementById('ag-currency')) document.getElementById('ag-currency').value = m.currency || 'MXN'
     if (document.getElementById('ag-category') && node.type === 'subscription') document.getElementById('ag-category').value = m.category || ''
-    // Restaurar chips de frecuencia
+    // Restaurar chips de frecuencia (también muestra/oculta ag-freq-specific-date)
     _agInitFreqChips(m.frequency || 'mensual')
     // Restaurar día de semana
     if (m.frequency === 'semanal' && m.weekday) {
