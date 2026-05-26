@@ -32,7 +32,8 @@ import {
   ToggleLeft, ToggleRight, Sliders, Radio, Wifi, Battery,
   UserPlus, UserCheck, UserX, UsersRound, Contact,
   ArrowRight, ArrowLeft, MoveRight, MoveLeft,
-  Minus, Asterisk, Divide, Equal
+  Minus, Asterisk, Divide, Equal,
+  ArrowLeftRight, Printer, Save
 } from 'lucide'
 
 // Registro central — todos los iconos disponibles en Nexus OS
@@ -58,7 +59,8 @@ const _lucideIcons = {
   Sliders, Radio, Wifi, Battery, StickyNote, Receipt,
   UserPlus, UserCheck, UserX, UsersRound, Contact,
   ArrowRight, ArrowLeft, MoveRight, MoveLeft,
-  Minus, Asterisk, Divide, Equal
+  Minus, Asterisk, Divide, Equal,
+  ArrowLeftRight, Printer, Save
 }
 
 /**
@@ -185,6 +187,18 @@ let editingFinanceId = null
 let currentContactId = null
 let activeContactFilter = 'all'
 let currentCSheetTab = 'perfil'
+
+// ── Módulo Movimientos — state
+let _mvOrqs        = []
+let _mvMovs        = []
+let _mvActiveOrqId = null
+let _mvFilters     = { tipo:'', moneda:'', estado:'', search:'', dateFrom:'', dateTo:'' }
+let _mvPage        = 1
+const _MV_PER_PAGE = 30
+let _mvTc          = null   // TC USDT/MXN desde Bitso
+let _mvTcTs        = 0
+let _mvEditingId   = null
+let _mvPendingFile = null
 
 // Kanban board state — must be before the boot IIFE
 let boardLists = [
@@ -389,6 +403,7 @@ loadSystemSettings()
   document.getElementById('cronica-date')?.setAttribute('value', new Date().toISOString().split('T')[0])
   drainOfflineQueue()
   updateOfflineBar()
+  window.mvInit()  // pre-warm TC cache for Movimientos
 })()
 
 // ── Global error handler — toast en pantalla en vez de crash silencioso ─────────
@@ -2143,8 +2158,9 @@ const VIEW_RENDER_MAP = {
   calendar:  (nodes) => renderCalendar(nodes),
   cronica:   (nodes) => renderCronica(nodes),
   contacts:  ()      => renderContacts(),
-  agenda:    ()      => renderAgenda(allNodes),
-  proyectos: ()      => renderProyectos(),
+  agenda:       ()      => renderAgenda(allNodes),
+  proyectos:    ()      => renderProyectos(),
+  movimientos:  ()      => renderMovimientos(),
 }
 
 function renderAll() {
@@ -2169,7 +2185,7 @@ function renderAll() {
     safe(renderKanban, nodes); safe(renderNotes, nodes)
     safe(renderFinance, nodes); safe(renderCalendar, nodes)
     safe(renderCronica, nodes); safe(renderContacts)
-    safe(renderAgenda, allNodes)
+    safe(renderAgenda, allNodes); safe(renderMovimientos)
   }
   // Herramientas sub-renderers — siempre actualizar aunque no sea la vista activa
   if (typeof renderOtcHistory === 'function') safe(renderOtcHistory)
@@ -17763,3 +17779,640 @@ window.deleteMilestone = async function(projectId, idx) {
   showToast('🗑 Hito eliminado')
   renderAll(); openProjectDashboard(projectId)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── MÓDULO MOVIMIENTOS — Orquestador Financiero ────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Helpers de formato ─────────────────────────────────────────────────────────
+const _mvFmt$  = (n) => n == null ? '—' : Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 })
+const _mvFmtD  = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'2-digit' }) : '—'
+const _mvEsc   = (s) => (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+
+// ── Supabase API ───────────────────────────────────────────────────────────────
+async function _mvLoadOrqs() {
+  const { data, error } = await supabase.from('orquestadores').select('*').order('created_at')
+  if (error) { console.warn('[mv] loadOrqs', error); return }
+  _mvOrqs = data || []
+  if (_mvOrqs.length && !_mvActiveOrqId) _mvActiveOrqId = _mvOrqs[0].id
+}
+
+async function _mvLoadMovs() {
+  if (!_mvActiveOrqId) { _mvMovs = []; return }
+  const { data, error } = await supabase
+    .from('movimientos').select('*')
+    .eq('orquestador_id', _mvActiveOrqId)
+    .order('fecha', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) { console.warn('[mv] loadMovs', error); return }
+  _mvMovs = data || []
+}
+
+async function _mvFetchTc() {
+  if (_mvTc && (Date.now() - _mvTcTs < 60000)) return _mvTc
+  try {
+    const r = await fetch('https://api.bitso.com/v3/ticker/?book=usdt_mxn')
+    const j = await r.json()
+    _mvTc  = parseFloat(j.payload?.ask) || null
+    _mvTcTs = Date.now()
+  } catch { _mvTc = null }
+  return _mvTc
+}
+
+// ── Cálculos ───────────────────────────────────────────────────────────────────
+function _mvFiltered() {
+  let list = [..._mvMovs]
+  const f  = _mvFilters
+  if (f.tipo)     list = list.filter(m => m.tipo    === f.tipo)
+  if (f.moneda)   list = list.filter(m => m.moneda  === f.moneda)
+  if (f.estado)   list = list.filter(m => m.estado  === f.estado)
+  if (f.dateFrom) list = list.filter(m => m.fecha   >= f.dateFrom)
+  if (f.dateTo)   list = list.filter(m => m.fecha   <= f.dateTo)
+  if (f.search) {
+    const q = f.search.toLowerCase()
+    list = list.filter(m =>
+      (m.ordenante||'').toLowerCase().includes(q) ||
+      (m.beneficiario||'').toLowerCase().includes(q) ||
+      (m.banco||'').toLowerCase().includes(q) ||
+      (m.notas||'').toLowerCase().includes(q) ||
+      (m.clabe||'').toLowerCase().includes(q)
+    )
+  }
+  return list
+}
+
+function _mvKpis(list) {
+  let entradas = 0, salidas = 0, pendiente = 0
+  for (const m of list) {
+    if (m.estado === 'cancelado') continue
+    const amt = m.monto_mxn ?? (m.cantidad * (m.tc || 1))
+    if (m.estado === 'pendiente') { pendiente += (m.tipo === 'entrada' ? amt : -amt); continue }
+    if (m.tipo === 'entrada') entradas += amt
+    else salidas += amt
+  }
+  return { entradas, salidas, net: entradas - salidas, pendiente }
+}
+
+function _mvWithBalance(sorted) {
+  // sorted es newest-first — revertir para calcular balance acumulado oldest→newest
+  const asc     = [...sorted].reverse()
+  let   bal     = 0
+  const withBal = asc.map(m => {
+    if (m.estado !== 'cancelado') {
+      const amt = m.monto_mxn ?? (m.cantidad * (m.tc || 1))
+      bal += m.tipo === 'entrada' ? amt : -amt
+    }
+    return { ...m, _balance: bal }
+  })
+  return withBal.reverse()
+}
+
+// ── Badge helpers ──────────────────────────────────────────────────────────────
+function _mvEstadoBadge(estado) {
+  const map = {
+    hecho:     { color:'#4ade80', bg:'rgba(74,222,128,0.1)',   icon:'CheckCircle2', label:'Hecho' },
+    pendiente: { color:'#fbbf24', bg:'rgba(251,191,36,0.1)',   icon:'Clock',        label:'Pendiente' },
+    cancelado: { color:'#64748b', bg:'rgba(100,116,139,0.1)', icon:'XCircle',      label:'Cancelado' },
+  }
+  const c = map[estado] || { color:'#94a3b8', bg:'rgba(148,163,184,0.1)', icon:'Circle', label: estado }
+  return nxBadge(c.label, { color:c.color, bg:c.bg, icon:c.icon, iconSize:10 })
+}
+
+function _mvMonedaBadge(moneda) {
+  const map = {
+    MXN:  { color:'#4ade80', bg:'rgba(74,222,128,0.08)'  },
+    USD:  { color:'#60a5fa', bg:'rgba(96,165,250,0.08)'  },
+    USDT: { color:'#fbbf24', bg:'rgba(251,191,36,0.08)'  },
+  }
+  const c = map[moneda] || { color:'#94a3b8', bg:'rgba(148,163,184,0.08)' }
+  return nxBadge(moneda, { color:c.color, bg:c.bg })
+}
+
+// ── Vista principal ────────────────────────────────────────────────────────────
+async function renderMovimientos() {
+  const root = document.getElementById('view-movimientos')
+  if (!root || activeView !== 'movimientos') return
+
+  // Carga inicial si no hay datos
+  if (!_mvOrqs.length) await _mvLoadOrqs()
+  if (_mvActiveOrqId && !_mvMovs.length) await _mvLoadMovs()
+
+  const activeOrq   = _mvOrqs.find(o => o.id === _mvActiveOrqId)
+  const filtered    = _mvFiltered()
+  const kpis        = _mvKpis(filtered)
+  const withBal     = _mvWithBalance(filtered)
+  const total       = withBal.length
+  const pageStart   = (_mvPage - 1) * _MV_PER_PAGE
+  const paged       = withBal.slice(pageStart, pageStart + _MV_PER_PAGE)
+  const totalPages  = Math.max(1, Math.ceil(total / _MV_PER_PAGE))
+  const f           = _mvFilters
+  const hasFilters  = f.tipo || f.moneda || f.estado || f.search || f.dateFrom || f.dateTo
+
+  // ── Orquestador tabs ──
+  const orqTabs = _mvOrqs.length
+    ? _mvOrqs.map(o => {
+        const active = o.id === _mvActiveOrqId
+        return `<button onclick="mvSetOrq('${o.id}')" style="padding:8px 16px;border-radius:20px;border:1px solid ${active?'rgba(0,246,255,0.5)':'rgba(255,255,255,0.08)'};background:${active?'rgba(0,246,255,0.1)':'transparent'};color:${active?'#00f0ff':'var(--text-muted)'};font-size:12px;font-weight:${active?700:400};cursor:pointer;transition:all 0.2s;white-space:nowrap;" onmouseover="this.style.borderColor='rgba(0,246,255,0.35)'" onmouseout="this.style.borderColor='${active?'rgba(0,246,255,0.5)':'rgba(255,255,255,0.08)'}'">${_mvEsc(o.nombre)}</button>`
+      }).join('')
+    : `<span style="color:var(--text-dim);font-size:12px;">Sin orquestadores — crea uno primero</span>`
+
+  // ── KPI strip ──
+  const kpiCard = (icon, label, value, color, prefix='$') => `
+    <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px 20px;cursor:default;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 20px rgba(0,0,0,0.3)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="color:${color};opacity:0.7;">${lx(icon,13)}</span>
+        <span style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;">${label}</span>
+      </div>
+      <div style="font-size:19px;font-weight:800;color:${color};font-family:'JetBrains Mono',monospace;">${prefix}${_mvFmt$(value)}</div>
+    </div>`
+
+  const kpiHtml = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;">
+      ${kpiCard('TrendingUp',   'Entradas MXN', kpis.entradas, '#4ade80')}
+      ${kpiCard('TrendingDown', 'Salidas MXN',  kpis.salidas,  '#f87171')}
+      ${kpiCard('BarChart2',    'Saldo Neto',   Math.abs(kpis.net), kpis.net >= 0 ? '#4ade80' : '#f87171')}
+      ${kpiCard('Clock',        'Pendiente',    Math.abs(kpis.pendiente), '#fbbf24')}
+      ${_mvTc ? kpiCard('RefreshCw','TC USDT/MXN', _mvTc, '#00f0ff', '') : ''}
+    </div>`
+
+  // ── Action bar ──
+  const gBtn = (label, icon, onclick) =>
+    `<button onclick="${onclick}" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx(icon,14)} ${label}</button>`
+
+  const actionsHtml = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+      <button onclick="mvOpenModal()" style="display:flex;align-items:center;gap:7px;padding:9px 18px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.background='rgba(0,246,255,0.2)'" onmouseout="this.style.background='rgba(0,246,255,0.1)'">${lx('Plus',15)} Nuevo movimiento</button>
+      ${gBtn('CSV','Download','mvExportCSV()')}
+      ${gBtn('PDF','Printer','mvExportPDF()')}
+      ${gBtn('T/C Bitso','RefreshCw','mvFetchTcAndRender()')}
+      ${gBtn('Orquestadores','Settings','mvOpenOrqModal()')}
+    </div>`
+
+  // ── Filter bar ──
+  const sel = (key, val, opts, ph) =>
+    `<select onchange="mvSetFilter('${key}',this.value)" style="padding:7px 10px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:${val?'var(--text-primary)':'var(--text-muted)'};font-size:12px;cursor:pointer;outline:none;">
+      <option value="">${ph}</option>
+      ${opts.map(([v,l]) => `<option value="${v}"${val===v?' selected':''}>${l}</option>`).join('')}
+    </select>`
+
+  const filterHtml = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px;padding:12px 16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
+      <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:160px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:6px 10px;">
+        ${lx('Search',13,'',{color:'#64748b'})}
+        <input id="mv-search" type="text" value="${_mvEsc(f.search)}" placeholder="Ordenante, banco, notas..." oninput="mvSetFilter('search',this.value)" style="background:none;border:none;outline:none;color:var(--text-primary);font-size:12px;width:100%;" />
+      </div>
+      ${sel('tipo',f.tipo,[['entrada','🟢 Entrada'],['salida','🔴 Salida']],'Tipo')}
+      ${sel('moneda',f.moneda,[['MXN','MXN'],['USD','USD'],['USDT','USDT']],'Moneda')}
+      ${sel('estado',f.estado,[['hecho','✅ Hecho'],['pendiente','⏳ Pendiente'],['cancelado','❌ Cancelado']],'Estado')}
+      <input type="date" value="${f.dateFrom}" onchange="mvSetFilter('dateFrom',this.value)" style="padding:6px 10px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text-muted);font-size:12px;outline:none;" title="Desde" />
+      <input type="date" value="${f.dateTo}" onchange="mvSetFilter('dateTo',this.value)" style="padding:6px 10px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text-muted);font-size:12px;outline:none;" title="Hasta" />
+      ${hasFilters ? `<button onclick="mvClearFilters()" style="padding:6px 12px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;border-radius:8px;font-size:11px;cursor:pointer;">✕ Limpiar</button>` : ''}
+      <span style="margin-left:auto;font-size:11px;color:var(--text-dim);">${total} mov.</span>
+    </div>`
+
+  // ── Tabla ──
+  const emptyTable = nxEmptyState({
+    img: '/empty/no-finance.svg',
+    title: 'Sin movimientos',
+    sub: 'Registra la primera entrada o salida.',
+    cta: `<button onclick="mvOpenModal()" style="margin-top:12px;padding:10px 22px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-weight:700;">+ Nuevo movimiento</button>`
+  })
+
+  const tableHtml = total === 0 ? emptyTable : `
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
+            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Fecha</th>
+            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Tipo</th>
+            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Concepto</th>
+            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Banco · CLABE</th>
+            <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Cantidad</th>
+            <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">MXN</th>
+            <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Balance</th>
+            <th style="padding:10px 12px;text-align:center;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Estado</th>
+            <th style="padding:10px 12px;text-align:center;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;">Comp.</th>
+            <th style="padding:10px 6px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${paged.map(m => {
+            const isEnt    = m.tipo === 'entrada'
+            const isCan    = m.estado === 'cancelado'
+            const amtColor = isCan ? '#64748b' : isEnt ? '#4ade80' : '#f87171'
+            const balColor = m._balance >= 0 ? '#4ade80' : '#f87171'
+            const quien    = _mvEsc(isEnt ? (m.ordenante||'—') : (m.beneficiario||'—'))
+            const cla      = m.clabe ? `···${m.clabe.slice(-4)}` : '—'
+            return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.15s;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''" onclick="mvOpenModal('${m.id}')">
+              <td style="padding:10px 12px;color:var(--text-muted);white-space:nowrap;">${_mvFmtD(m.fecha)}</td>
+              <td style="padding:10px 12px;">${_mvMonedaBadge(m.moneda)}</td>
+              <td style="padding:10px 12px;max-width:200px;">
+                <div style="display:flex;align-items:center;gap:5px;font-weight:600;color:${isCan?'#64748b':'var(--text-primary)'};">
+                  ${isEnt ? lx('ArrowDownLeft',11,'',{color:'#4ade80'}) : lx('ArrowUpRight',11,'',{color:'#f87171'})} ${quien}
+                </div>
+                ${m.notas ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px;">${_mvEsc(m.notas)}</div>` : ''}
+              </td>
+              <td style="padding:10px 12px;">
+                ${m.banco ? `<div style="font-size:11px;color:var(--text-muted);">${_mvEsc(m.banco)}</div>` : ''}
+                ${m.clabe ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);">${_mvEsc(cla)}</div>` : ''}
+              </td>
+              <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:700;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${isEnt?'+':'-'}${_mvFmt$(m.cantidad)} ${_mvEsc(m.moneda)}</td>
+              <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:600;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${isCan?'<span style="color:#64748b">—</span>':(isEnt?'+':'-')+'$'+_mvFmt$(m.monto_mxn)}</td>
+              <td style="padding:10px 12px;text-align:right;color:${balColor};font-weight:800;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${isCan?'<span style="color:#475569">—</span>':(m._balance>=0?'+':'')+' $'+_mvFmt$(m._balance)}</td>
+              <td style="padding:10px 12px;text-align:center;">${_mvEstadoBadge(m.estado)}</td>
+              <td style="padding:10px 12px;text-align:center;">${m.comprobante_url ? `<a href="${_mvEsc(m.comprobante_url)}" target="_blank" onclick="event.stopPropagation()" style="color:#00f0ff;" title="Ver comprobante">${lx('ExternalLink',13)}</a>` : '<span style="color:#334155;">—</span>'}</td>
+              <td style="padding:10px 6px;text-align:center;">
+                <button onclick="event.stopPropagation();mvDeleteMov('${m.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;padding:4px;border-radius:4px;transition:all 0.15s;" onmouseover="this.style.color='#f87171';this.style.background='rgba(248,113,113,0.1)'" onmouseout="this.style.color='var(--text-dim)';this.style.background=''">
+                  ${lx('Trash2',13)}
+                </button>
+              </td>
+            </tr>`
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+    ${totalPages > 1 ? `
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06);">
+        <button onclick="mvSetPage(${_mvPage-1})" ${_mvPage===1?'disabled':''} style="display:flex;align-items:center;gap:5px;padding:6px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text-muted);cursor:pointer;font-size:12px;${_mvPage===1?'opacity:0.4;':''}">${lx('ChevronLeft',13)} Anterior</button>
+        <span style="font-size:12px;color:var(--text-dim);">${_mvPage} / ${totalPages}</span>
+        <button onclick="mvSetPage(${_mvPage+1})" ${_mvPage===totalPages?'disabled':''} style="display:flex;align-items:center;gap:5px;padding:6px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text-muted);cursor:pointer;font-size:12px;${_mvPage===totalPages?'opacity:0.4;':''}">Siguiente ${lx('ChevronRight',13)}</button>
+      </div>` : ''}
+  `
+
+  // ── Ensamblado ──
+  root.innerHTML = `
+    <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+      <div>
+        <h1 class="view-title" style="display:flex;align-items:center;gap:10px;">
+          ${lx('ArrowLeftRight',22,'',{color:'#00f0ff'})} Movimientos
+        </h1>
+        ${activeOrq ? `<p style="font-size:12px;color:var(--text-dim);margin-top:2px;">${_mvEsc(activeOrq.descripcion || activeOrq.nombre)} · ${_mvEsc(activeOrq.moneda_principal)}</p>` : ''}
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px;">
+      ${orqTabs}
+      <button onclick="mvOpenOrqModal(null, true)" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:20px;border:1px dashed rgba(0,246,255,0.25);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='rgba(0,246,255,0.5)';this.style.color='#00f0ff'" onmouseout="this.style.borderColor='rgba(0,246,255,0.25)';this.style.color='var(--text-dim)'">${lx('Plus',12)} Orquestador</button>
+    </div>
+    ${_mvActiveOrqId ? kpiHtml + actionsHtml + filterHtml : nxEmptyState({ img:'/empty/no-finance.svg', title:'Sin orquestadores', sub:'Crea tu primer orquestador para registrar entradas y salidas.', cta:`<button onclick="mvOpenOrqModal(null,true)" style="margin-top:12px;padding:10px 22px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-weight:700;">+ Crear orquestador</button>` })}
+    ${_mvActiveOrqId ? `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:20px;">${tableHtml}</div>` : ''}
+  `
+  requestAnimationFrame(refreshIcons)
+}
+
+// ── Controladores ──────────────────────────────────────────────────────────────
+window.mvSetOrq = async (id) => { _mvActiveOrqId = id; _mvMovs = []; _mvPage = 1; await _mvLoadMovs(); renderMovimientos() }
+window.mvSetFilter = (k, v) => { _mvFilters[k] = v; _mvPage = 1; renderMovimientos() }
+window.mvClearFilters = () => { _mvFilters = { tipo:'',moneda:'',estado:'',search:'',dateFrom:'',dateTo:'' }; _mvPage = 1; renderMovimientos() }
+window.mvSetPage = (p) => { _mvPage = p; renderMovimientos() }
+window.mvFetchTcAndRender = async () => { _mvTc = null; await _mvFetchTc(); renderMovimientos(); showToast('💱 T/C actualizado') }
+
+// ── Modal movimiento ───────────────────────────────────────────────────────────
+window.mvOpenModal = async (id = null) => {
+  _mvEditingId = id; _mvPendingFile = null
+  const mov = id ? _mvMovs.find(m => m.id === id) : null
+  _mvFetchTc()
+  const fld = (label, inner) =>
+    `<div><label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${label}</label>${inner}</div>`
+
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="mv-modal-overlay" onclick="if(event.target===this)mvCloseModal()" style="position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;animation:nexus-modal-in 0.2s both;">
+      <div style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:28px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.55);" onclick="event.stopPropagation()">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+          <h2 style="font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px;">${lx('ArrowLeftRight',17,'',{color:'#00f0ff'})} ${id?'Editar':'Nuevo'} movimiento</h2>
+          <button onclick="mvCloseModal()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;padding:4px;border-radius:6px;" onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='var(--text-dim)'">${lx('X',18)}</button>
+        </div>
+
+        <!-- Tipo + Fecha -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          ${fld('Tipo *', `<div style="display:flex;gap:8px;">
+            <button type="button" id="mv-tipo-ent" onclick="mvSelTipo('entrada')" style="flex:1;padding:9px;border-radius:10px;border:1px solid rgba(74,222,128,0.3);background:${(!mov||mov.tipo==='entrada')?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.04)'};color:${(!mov||mov.tipo==='entrada')?'#4ade80':'var(--text-dim)'};font-weight:700;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.2s;">${lx('ArrowDownLeft',14)} Entrada</button>
+            <button type="button" id="mv-tipo-sal" onclick="mvSelTipo('salida')" style="flex:1;padding:9px;border-radius:10px;border:1px solid rgba(248,113,113,0.3);background:${mov?.tipo==='salida'?'rgba(248,113,113,0.15)':'rgba(255,255,255,0.04)'};color:${mov?.tipo==='salida'?'#f87171':'var(--text-dim)'};font-weight:700;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px;transition:all 0.2s;">${lx('ArrowUpRight',14)} Salida</button>
+          </div><input type="hidden" id="mv-tipo" value="${mov?.tipo||'entrada'}" />`)}
+          ${fld('Fecha *', `<input type="date" id="mv-fecha" value="${mov?.fecha||new Date().toISOString().slice(0,10)}" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />`)}
+        </div>
+
+        <!-- Ordenante / Beneficiario -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          ${fld('Ordenante', `<input type="text" id="mv-ordenante" value="${_mvEsc(mov?.ordenante||'')}" placeholder="Quién envía" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />`)}
+          ${fld('Beneficiario', `<input type="text" id="mv-beneficiario" value="${_mvEsc(mov?.beneficiario||'')}" placeholder="Quién recibe" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />`)}
+        </div>
+
+        <!-- Banco / CLABE -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          ${fld('Banco', `<input type="text" id="mv-banco" value="${_mvEsc(mov?.banco||'')}" placeholder="BBVA, HSBC, STP..." style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />`)}
+          ${fld('CLABE / Cuenta', `<input type="text" id="mv-clabe" value="${_mvEsc(mov?.clabe||'')}" placeholder="18 dígitos" maxlength="18" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
+        </div>
+
+        <!-- Cantidad / Moneda / TC -->
+        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+          ${fld('Cantidad *', `<input type="number" id="mv-cantidad" value="${mov?.cantidad||''}" placeholder="0.00" step="0.0001" min="0" oninput="mvCalcMxn()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
+          ${fld('Moneda', `<select id="mv-moneda" onchange="mvOnMonedaChange()" style="width:100%;padding:9px 12px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;cursor:pointer;outline:none;box-sizing:border-box;"><option value="MXN" ${(mov?.moneda||'MXN')==='MXN'?'selected':''}>MXN</option><option value="USD" ${mov?.moneda==='USD'?'selected':''}>USD</option><option value="USDT" ${mov?.moneda==='USDT'?'selected':''}>USDT</option></select>`)}
+          ${fld('T/C → MXN', `<input type="number" id="mv-tc" value="${mov?.tc||1}" step="0.0001" min="0.0001" oninput="mvCalcMxn()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
+        </div>
+
+        <!-- Preview MXN -->
+        <div id="mv-mxn-preview" style="display:none;padding:8px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:13px;color:#00f0ff;font-family:'JetBrains Mono',monospace;margin-bottom:14px;"></div>
+
+        <!-- Estado -->
+        <div style="margin-bottom:14px;">
+          ${fld('Estado', `<div style="display:flex;gap:8px;">
+            ${[['hecho','✅ Hecho','#4ade80'],['pendiente','⏳ Pendiente','#fbbf24'],['cancelado','❌ Cancelado','#64748b']].map(([v,l,c]) =>
+              `<button type="button" onclick="mvSelEstado('${v}')" id="mv-est-${v}" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:${(mov?.estado||'hecho')===v?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.02)'};color:${(mov?.estado||'hecho')===v?c:'var(--text-dim)'};font-size:12px;font-weight:${(mov?.estado||'hecho')===v?700:400};cursor:pointer;transition:all 0.2s;">${l}</button>`
+            ).join('')}
+          </div><input type="hidden" id="mv-estado" value="${mov?.estado||'hecho'}" />`)}
+        </div>
+
+        <!-- Notas -->
+        <div style="margin-bottom:14px;">
+          ${fld('Notas', `<textarea id="mv-notas" placeholder="Referencia, concepto, observaciones..." rows="2" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit;">${_mvEsc(mov?.notas||'')}</textarea>`)}
+        </div>
+
+        <!-- Comprobante -->
+        <div style="margin-bottom:22px;">
+          ${fld('Comprobante', `
+            ${mov?.comprobante_url ? `<div style="margin-bottom:8px;"><a href="${_mvEsc(mov.comprobante_url)}" target="_blank" style="color:#00f0ff;font-size:12px;display:flex;align-items:center;gap:5px;">${lx('ExternalLink',12)} Ver comprobante actual</a></div>` : ''}
+            <div id="mv-drop-zone" ondrop="mvHandleDrop(event)" ondragover="event.preventDefault();this.style.borderColor='rgba(0,246,255,0.5)'" ondragleave="this.style.borderColor='rgba(255,255,255,0.1)'" onclick="document.getElementById('mv-file-inp').click()" style="border:2px dashed rgba(255,255,255,0.1);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:border-color 0.2s;">
+              ${lx('Upload',17,'',{color:'#64748b'})}
+              <div style="font-size:12px;color:var(--text-dim);margin-top:5px;">Arrastra o haz clic — JPG · PNG · PDF · 5MB máx.</div>
+            </div>
+            <input type="file" id="mv-file-inp" accept="image/*,.pdf" style="display:none;" onchange="mvHandleFile(event)" />
+            <div id="mv-file-st" style="margin-top:6px;font-size:11px;color:#4ade80;"></div>
+          `)}
+        </div>
+
+        <!-- Botones -->
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="mvCloseModal()" style="padding:10px 20px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-muted);cursor:pointer;font-size:13px;">Cancelar</button>
+          <button onclick="mvSaveMov()" style="display:flex;align-items:center;gap:7px;padding:10px 24px;background:linear-gradient(135deg,rgba(0,246,255,0.2),rgba(0,246,255,0.1));border:1px solid rgba(0,246,255,0.4);border-radius:10px;color:#00f0ff;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.background='rgba(0,246,255,0.25)'" onmouseout="this.style.background='linear-gradient(135deg,rgba(0,246,255,0.2),rgba(0,246,255,0.1))'">
+            ${lx('Save',14)} ${id?'Guardar cambios':'Registrar'}
+          </button>
+        </div>
+      </div>
+    </div>`)
+
+  setTimeout(() => {
+    mvCalcMxn()
+    if (!mov && _mvTc) {
+      const ms = document.getElementById('mv-moneda')
+      if (ms?.value === 'USDT') { const tcEl = document.getElementById('mv-tc'); if (tcEl) { tcEl.value = _mvTc; mvCalcMxn() } }
+    }
+  }, 40)
+}
+
+window.mvCloseModal  = () => { document.getElementById('mv-modal-overlay')?.remove(); _mvEditingId = null }
+
+window.mvSelTipo = (t) => {
+  document.getElementById('mv-tipo').value = t
+  const e = document.getElementById('mv-tipo-ent'); const s = document.getElementById('mv-tipo-sal')
+  if (e) { e.style.background = t==='entrada'?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.04)'; e.style.color = t==='entrada'?'#4ade80':'var(--text-dim)' }
+  if (s) { s.style.background = t==='salida' ?'rgba(248,113,113,0.15)':'rgba(255,255,255,0.04)'; s.style.color = t==='salida' ?'#f87171':'var(--text-dim)' }
+}
+
+window.mvSelEstado = (v) => {
+  document.getElementById('mv-estado').value = v
+  const cols = { hecho:'#4ade80', pendiente:'#fbbf24', cancelado:'#64748b' }
+  ;['hecho','pendiente','cancelado'].forEach(s => {
+    const b = document.getElementById(`mv-est-${s}`); if (!b) return
+    b.style.background = s===v?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.02)'
+    b.style.color      = s===v?cols[s]:'var(--text-dim)'
+    b.style.fontWeight = s===v?'700':'400'
+  })
+}
+
+window.mvOnMonedaChange = () => {
+  const m = document.getElementById('mv-moneda')?.value
+  const t = document.getElementById('mv-tc')
+  if (!t) return
+  if (m === 'MXN') t.value = 1
+  else if (_mvTc)  t.value = _mvTc
+  mvCalcMxn()
+}
+
+window.mvCalcMxn = () => {
+  const cant = parseFloat(document.getElementById('mv-cantidad')?.value) || 0
+  const tc   = parseFloat(document.getElementById('mv-tc')?.value) || 1
+  const prev = document.getElementById('mv-mxn-preview')
+  if (!prev) return
+  if (cant > 0) { prev.style.display = 'block'; prev.textContent = `≈ $${(cant * tc).toLocaleString('es-MX',{minimumFractionDigits:2})} MXN` }
+  else prev.style.display = 'none'
+}
+
+window.mvHandleDrop = (e) => {
+  e.preventDefault(); document.getElementById('mv-drop-zone').style.borderColor = 'rgba(255,255,255,0.1)'
+  const f = e.dataTransfer.files?.[0]; if (f) _mvSetFile(f)
+}
+window.mvHandleFile = (e) => { const f = e.target.files?.[0]; if (f) _mvSetFile(f) }
+
+function _mvSetFile(file) {
+  if (file.size > 5 * 1024 * 1024) { showToast('⚠ Archivo mayor a 5MB'); return }
+  _mvPendingFile = file
+  const st = document.getElementById('mv-file-st')
+  if (st) st.textContent = `📎 ${file.name} (${(file.size/1024).toFixed(0)} KB)`
+}
+
+async function _mvUploadFile(userId, movId) {
+  if (!_mvPendingFile) return null
+  const ext  = _mvPendingFile.name.split('.').pop()
+  const path = `${userId}/${movId}.${ext}`
+  const { error } = await supabase.storage.from('comprobantes').upload(path, _mvPendingFile, { upsert: true })
+  if (error) { console.warn('[mv] upload', error); return null }
+  const { data } = supabase.storage.from('comprobantes').getPublicUrl(path)
+  return data?.publicUrl || null
+}
+
+window.mvSaveMov = async () => {
+  const g     = (id2) => document.getElementById(id2)
+  const tipo  = g('mv-tipo')?.value
+  const fecha = g('mv-fecha')?.value
+  const cant  = parseFloat(g('mv-cantidad')?.value)
+  if (!tipo || !fecha || !cant || cant <= 0) { showToast('⚠ Tipo, fecha y cantidad son obligatorios'); return }
+
+  const tc    = parseFloat(g('mv-tc')?.value) || 1
+  const moneda= g('mv-moneda')?.value || 'MXN'
+  const payload = {
+    owner_id: currentUser.id, orquestador_id: _mvActiveOrqId,
+    tipo, fecha,
+    ordenante:    g('mv-ordenante')?.value.trim()    || null,
+    beneficiario: g('mv-beneficiario')?.value.trim() || null,
+    banco:        g('mv-banco')?.value.trim()         || null,
+    clabe:        g('mv-clabe')?.value.trim()         || null,
+    cantidad: cant, moneda, tc,
+    monto_mxn: Math.round(cant * tc * 100) / 100,
+    estado: g('mv-estado')?.value || 'hecho',
+    notas:  g('mv-notas')?.value.trim() || null,
+    updated_at: new Date().toISOString()
+  }
+
+  let movId = _mvEditingId
+  if (_mvEditingId) {
+    const { error } = await supabase.from('movimientos').update(payload).eq('id', _mvEditingId)
+    if (error) { showToast('⚠ ' + error.message); return }
+  } else {
+    const { data, error } = await supabase.from('movimientos').insert(payload).select().single()
+    if (error) { showToast('⚠ ' + error.message); return }
+    movId = data.id
+  }
+
+  if (_mvPendingFile && movId) {
+    const url = await _mvUploadFile(currentUser.id, movId)
+    if (url) await supabase.from('movimientos').update({ comprobante_url: url }).eq('id', movId)
+    _mvPendingFile = null
+  }
+
+  mvCloseModal()
+  await _mvLoadMovs()
+  renderMovimientos()
+  showToast(_mvEditingId ? '✅ Movimiento actualizado' : '✅ Movimiento registrado')
+}
+
+window.mvDeleteMov = async (id) => {
+  if (!confirm('¿Eliminar este movimiento?')) return
+  const { error } = await supabase.from('movimientos').delete().eq('id', id)
+  if (error) { showToast('⚠ Error al eliminar'); return }
+  _mvMovs = _mvMovs.filter(m => m.id !== id)
+  renderMovimientos()
+  showToast('🗑 Movimiento eliminado')
+}
+
+// ── Modal Orquestador ─────────────────────────────────────────────────────────
+window.mvOpenOrqModal = (id = null, isNew = false) => {
+  const orq = id ? _mvOrqs.find(o => o.id === id) : null
+
+  const listHtml = (!isNew && !id) ? `
+    <div style="margin-bottom:20px;">
+      ${_mvOrqs.map(o => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:8px;">
+          <div style="flex:1;"><div style="font-weight:700;font-size:13px;">${_mvEsc(o.nombre)}</div><div style="font-size:11px;color:var(--text-dim);">${_mvEsc(o.descripcion||'')} · ${o.moneda_principal}</div></div>
+          <button onclick="mvOpenOrqModal('${o.id}',false)" style="background:none;border:none;color:var(--text-dim);cursor:pointer;padding:4px;" onmouseover="this.style.color='#00f0ff'" onmouseout="this.style.color='var(--text-dim)'">${lx('Pencil',14)}</button>
+          <button onclick="mvDeleteOrq('${o.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;padding:4px;" onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='var(--text-dim)'">${lx('Trash2',14)}</button>
+        </div>`).join('')}
+      ${!_mvOrqs.length ? `<p style="text-align:center;color:var(--text-dim);font-size:13px;padding:20px;">Sin orquestadores aún.</p>` : ''}
+    </div>
+    <button onclick="mvOpenOrqModal(null,true)" style="width:100%;padding:10px;background:rgba(0,246,255,0.08);border:1px dashed rgba(0,246,255,0.25);color:#00f0ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:7px;">${lx('Plus',14)} Nuevo orquestador</button>` : ''
+
+  const formHtml = (isNew || id) ? `
+    <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:22px;">
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Nombre *</label>
+        <input type="text" id="mv-orq-name" value="${_mvEsc(orq?.nombre||'')}" placeholder="ej. Bacocho, Personal, Lucas" autofocus style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:14px;font-weight:700;outline:none;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Descripción</label>
+        <input type="text" id="mv-orq-desc" value="${_mvEsc(orq?.descripcion||'')}" placeholder="Descripción breve" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Moneda principal</label>
+        <select id="mv-orq-mon" style="width:100%;padding:10px 12px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;">
+          <option value="MXN" ${(orq?.moneda_principal||'MXN')==='MXN'?'selected':''}>🇲🇽 MXN — Peso Mexicano</option>
+          <option value="USD" ${orq?.moneda_principal==='USD'?'selected':''}>🇺🇸 USD — Dólar</option>
+          <option value="USDT" ${orq?.moneda_principal==='USDT'?'selected':''}>🪙 USDT — Tether</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="mvCloseOrqModal()" style="padding:10px 20px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-muted);cursor:pointer;">Cancelar</button>
+      <button onclick="mvSaveOrq('${id||''}')" style="display:flex;align-items:center;gap:7px;padding:10px 24px;background:linear-gradient(135deg,rgba(0,246,255,0.2),rgba(0,246,255,0.1));border:1px solid rgba(0,246,255,0.4);border-radius:10px;color:#00f0ff;cursor:pointer;font-weight:700;">${lx('Save',14)} ${orq?'Actualizar':'Crear'}</button>
+    </div>` : ''
+
+  document.getElementById('mv-orq-modal')?.remove()
+  document.body.insertAdjacentHTML('beforeend', `
+    <div id="mv-orq-modal" onclick="if(event.target===this)mvCloseOrqModal()" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:9100;display:flex;align-items:center;justify-content:center;padding:16px;animation:nexus-modal-in 0.2s both;">
+      <div style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:28px;width:100%;max-width:480px;box-shadow:0 24px 80px rgba(0,0,0,0.5);" onclick="event.stopPropagation()">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+          <h2 style="font-size:15px;font-weight:800;">${isNew||!id?'Nuevo orquestador': id ?'Editar orquestador':'Gestionar orquestadores'}</h2>
+          <button onclick="mvCloseOrqModal()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;" onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='var(--text-dim)'">${lx('X',18)}</button>
+        </div>
+        ${listHtml}${formHtml}
+      </div>
+    </div>`)
+}
+
+window.mvCloseOrqModal = () => document.getElementById('mv-orq-modal')?.remove()
+
+window.mvSaveOrq = async (id) => {
+  const nombre = document.getElementById('mv-orq-name')?.value.trim()
+  if (!nombre) { showToast('⚠ El nombre es obligatorio'); return }
+  const payload = {
+    owner_id: currentUser.id, nombre,
+    descripcion:      document.getElementById('mv-orq-desc')?.value.trim() || null,
+    moneda_principal: document.getElementById('mv-orq-mon')?.value || 'MXN'
+  }
+  if (id) {
+    const { error } = await supabase.from('orquestadores').update(payload).eq('id', id)
+    if (error) { showToast('⚠ ' + error.message); return }
+  } else {
+    const { data, error } = await supabase.from('orquestadores').insert(payload).select().single()
+    if (error) { showToast('⚠ ' + error.message); return }
+    _mvActiveOrqId = data.id
+  }
+  mvCloseOrqModal(); await _mvLoadOrqs(); await _mvLoadMovs(); renderMovimientos()
+  showToast(id ? '✅ Orquestador actualizado' : '✅ Orquestador creado')
+}
+
+window.mvDeleteOrq = async (id) => {
+  if (!confirm('¿Eliminar este orquestador y todos sus movimientos?')) return
+  const { error } = await supabase.from('orquestadores').delete().eq('id', id)
+  if (error) { showToast('⚠ Error al eliminar'); return }
+  _mvOrqs = _mvOrqs.filter(o => o.id !== id)
+  if (_mvActiveOrqId === id) {
+    _mvActiveOrqId = _mvOrqs[0]?.id || null
+    _mvMovs = []
+    if (_mvActiveOrqId) await _mvLoadMovs()
+  }
+  mvCloseOrqModal(); renderMovimientos(); showToast('🗑 Orquestador eliminado')
+}
+
+// ── Export CSV ────────────────────────────────────────────────────────────────
+window.mvExportCSV = () => {
+  const list = _mvWithBalance(_mvFiltered())
+  if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
+  const hdr  = ['Fecha','Tipo','Ordenante','Beneficiario','Banco','CLABE','Cantidad','Moneda','T/C','Monto MXN','Balance MXN','Estado','Notas']
+  const rows = list.map(m => [
+    m.fecha, m.tipo, m.ordenante||'', m.beneficiario||'',
+    m.banco||'', m.clabe||'', m.cantidad, m.moneda, m.tc,
+    m.monto_mxn, m._balance, m.estado, (m.notas||'').replace(/"/g,'""')
+  ].map(v => `"${v}"`).join(','))
+  const blob = new Blob(['﻿' + [hdr.join(','),...rows].join('\n')], { type:'text/csv;charset=utf-8;' })
+  const a    = document.createElement('a')
+  a.href     = URL.createObjectURL(blob)
+  a.download = `nexus-mov-${(_mvOrqs.find(o=>o.id===_mvActiveOrqId)?.nombre||'orq').replace(/\s+/g,'-').toLowerCase()}-${new Date().toISOString().slice(0,10)}.csv`
+  a.click()
+}
+
+// ── Export PDF ────────────────────────────────────────────────────────────────
+window.mvExportPDF = () => {
+  const list = _mvWithBalance(_mvFiltered())
+  if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
+  const orq  = _mvOrqs.find(o => o.id === _mvActiveOrqId)
+  const kpis = _mvKpis(list)
+  const date = new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
+  const rows = list.map(m => `<tr>
+    <td>${m.fecha}</td>
+    <td style="color:${m.tipo==='entrada'?'#16a34a':'#dc2626'};font-weight:700;">${m.tipo==='entrada'?'▲ Entrada':'▼ Salida'}</td>
+    <td>${m.ordenante||m.beneficiario||'—'}</td><td>${m.banco||'—'}</td>
+    <td style="text-align:right;font-family:monospace;">${m.tipo==='entrada'?'+':'-'}${_mvFmt$(m.cantidad)} ${m.moneda}</td>
+    <td style="text-align:right;font-family:monospace;color:${m.tipo==='entrada'?'#16a34a':'#dc2626'};">${m.tipo==='entrada'?'+':'-'}$${_mvFmt$(m.monto_mxn)}</td>
+    <td style="text-align:right;font-family:monospace;color:${m._balance>=0?'#16a34a':'#dc2626'};font-weight:700;">${m._balance>=0?'+ ':''} $${_mvFmt$(m._balance)}</td>
+    <td style="font-size:10px;color:#888;">${m.estado}</td>
+  </tr>`).join('')
+  const win = window.open('','_blank','width=950,height=750')
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Movimientos — ${orq?.nombre||''}</title>
+    <style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:32px;}h1{font-size:22px;margin:0 0 4px;}.meta{color:#666;font-size:11px;margin-bottom:24px;}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}.kpi{background:#f8fafc;border-radius:10px;padding:14px;}.kpi-l{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:4px;}.kpi-v{font-size:18px;font-weight:800;font-family:monospace;}table{width:100%;border-collapse:collapse;}thead tr{background:#f1f5f9;}th{padding:8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#555;}td{padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:11px;}@media print{body{padding:16px;}}</style>
+  </head><body>
+    <h1>📊 ${orq?.nombre||'Movimientos'}</h1>
+    <div class="meta">${orq?.descripcion||''} · Generado el ${date} · ${list.length} movimientos</div>
+    <div class="kpis">
+      <div class="kpi"><div class="kpi-l">Entradas MXN</div><div class="kpi-v" style="color:#16a34a;">+$${_mvFmt$(kpis.entradas)}</div></div>
+      <div class="kpi"><div class="kpi-l">Salidas MXN</div><div class="kpi-v" style="color:#dc2626;">-$${_mvFmt$(kpis.salidas)}</div></div>
+      <div class="kpi"><div class="kpi-l">Saldo Neto</div><div class="kpi-v" style="color:${kpis.net>=0?'#16a34a':'#dc2626'};">${kpis.net>=0?'+ ':''} $${_mvFmt$(kpis.net)}</div></div>
+      <div class="kpi"><div class="kpi-l">Pendiente</div><div class="kpi-v" style="color:#d97706;">$${_mvFmt$(Math.abs(kpis.pendiente))}</div></div>
+    </div>
+    <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Banco</th><th style="text-align:right;">Cantidad</th><th style="text-align:right;">MXN</th><th style="text-align:right;">Balance</th><th>Estado</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <script>window.print();window.close();<\/script>
+  </body></html>`)
+  win.document.close()
+}
+
+// ── Boot hook ─────────────────────────────────────────────────────────────────
+window.mvInit = () => { _mvFetchTc() }
