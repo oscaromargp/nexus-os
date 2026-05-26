@@ -19484,7 +19484,13 @@ function _renderCotCard(d) {
     <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
       <button onclick="exportCotPDF('${d.id}')" title="Exportar PDF" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(34,211,238,0.22);background:rgba(34,211,238,0.07);color:#22d3ee;cursor:pointer;font-size:15px;">📥</button>
       <button onclick="openCotModal('${d.type}','${d.id}')" title="Editar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#94a3b8;cursor:pointer;font-size:14px;">✏️</button>
-      ${isP ? `<button onclick="convertirPresupuestoNota('${d.id}')" title="Convertir a Nota" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(167,139,250,0.22);background:rgba(167,139,250,0.04);color:#a78bfa;cursor:pointer;font-size:13px;">🧾</button>` : ''}
+      ${isP && estado === 'aprobado'
+        ? `<button onclick="convertirPresupuestoNota('${d.id}')" title="Convertir a Nota de Venta"
+            style="height:32px;padding:0 10px;border-radius:8px;border:1px solid rgba(167,139,250,0.5);background:rgba(167,139,250,0.15);color:#a78bfa;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap;">🧾 → Nota</button>`
+        : isP
+          ? `<button onclick="convertirPresupuestoNota('${d.id}')" title="Convertir a Nota de Venta"
+              style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(167,139,250,0.22);background:rgba(167,139,250,0.04);color:#a78bfa;cursor:pointer;font-size:13px;">🧾</button>`
+          : ''}
       ${!isP ? `<button onclick="generarMovimientoCot('${d.id}')" title="Generar Movimiento" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(74,222,128,0.22);background:rgba(74,222,128,0.04);color:#4ade80;cursor:pointer;font-size:13px;">💰</button>` : ''}
       <button onclick="deleteCot('${d.id}')" title="Eliminar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(248,113,113,0.22);background:rgba(248,113,113,0.04);color:#f87171;cursor:pointer;font-size:14px;">🗑</button>
     </div>
@@ -19519,6 +19525,10 @@ window.openCotModal = function(type, id = null) {
   if (!modal) return
 
   const existing = id ? (allNodes.find(n => n.id === id)?.metadata || {}) : {}
+
+  // Cuentas del emisor (para el selector de pago)
+  const emisorNode     = existing.emisorId ? allNodes.find(n => n.id === existing.emisorId) : null
+  const emisorAccounts = emisorNode?.metadata?.contact_accounts || emisorNode?.metadata?.cuentas || []
 
   // Contactos
   const contactOpts = allNodes
@@ -19645,6 +19655,18 @@ window.openCotModal = function(type, id = null) {
         </select>
       </div>
     </div>
+    <!-- Selector de cuenta del emisor — se puebla automáticamente al seleccionar contacto -->
+    <div style="margin-bottom:10px;">
+      ${_lbl('💳 Cuenta del emisor para cobro (auto-llenado)')}
+      <select id="cot-pago-cta" class="modal-input" onchange="cotSelectPagoCta()"
+        style="${emisorAccounts.length ? '' : 'display:none;'}">
+        <option value="">— Seleccionar cuenta —</option>
+        ${emisorAccounts.map((a, i) => {
+          const matched = existing.bancoPago === (a.banco||'') && existing.clabePago === (a.clabe||a.wallet||'')
+          return `<option value="${i}" ${matched?'selected':''}>${esc(a.label || a.banco || 'Cuenta '+(i+1))} · ${esc(a.tipo||'')} ${esc(a.clabe||a.wallet||'').slice(0,10)}${(a.clabe||a.wallet||'').length>10?'…':''}</option>`
+        }).join('')}
+      </select>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
       <div>
         ${_lbl('Banco')}
@@ -19669,9 +19691,9 @@ window.openCotModal = function(type, id = null) {
       <div id="cot-cat-results" style="position:absolute;top:100%;left:0;z-index:100;max-width:360px;background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:10px;max-height:160px;overflow-y:auto;display:none;"></div>
     </div>
 
-    <!-- Tabla de ítems -->
+    <!-- Tabla de ítems — descripción como textarea para detalles completos -->
     <div style="display:grid;grid-template-columns:3fr 70px 100px 70px 90px;gap:5px;padding:0 2px;margin-bottom:5px;">
-      <span style="font-size:10px;color:#6b7280;">Descripción</span>
+      <span style="font-size:10px;color:#6b7280;">Descripción completa</span>
       <span style="font-size:10px;color:#6b7280;text-align:center;">Cant.</span>
       <span style="font-size:10px;color:#6b7280;text-align:right;">Precio unit.</span>
       <span style="font-size:10px;color:#6b7280;text-align:center;">Desc.%</span>
@@ -19680,9 +19702,9 @@ window.openCotModal = function(type, id = null) {
     <div id="cot-items-wrap">
       ${Array.from({length: 10}, (_, i) => {
         const it = items[i] || {}
-        return `<div style="display:grid;grid-template-columns:3fr 70px 100px 70px 90px;gap:5px;margin-bottom:5px;">
-          <input type="text" id="cot-desc-${i+1}" class="modal-input" style="font-size:12px;"
-            placeholder="Concepto ${i+1}" value="${esc(it.descripcion || '')}"/>
+        return `<div style="display:grid;grid-template-columns:3fr 70px 100px 70px 90px;gap:5px;margin-bottom:6px;align-items:start;">
+          <textarea id="cot-desc-${i+1}" class="modal-input" rows="2" style="font-size:12px;resize:none;line-height:1.4;"
+            placeholder="Concepto ${i+1} — incluye detalles, especificaciones y alcance…">${esc(it.descripcion || '')}</textarea>
           <input type="number" id="cot-cant-${i+1}" class="modal-input" style="font-size:12px;text-align:center;"
             placeholder="1" min="0" step="0.01" value="${it.cantidad || ''}" oninput="cotCalcTotales()"/>
           <input type="number" id="cot-precio-${i+1}" class="modal-input" style="font-size:12px;text-align:right;"
@@ -19695,7 +19717,7 @@ window.openCotModal = function(type, id = null) {
       }).join('')}
     </div>
 
-    <!-- IVA + notas -->
+    <!-- IVA + notas con plantillas rápidas -->
     <div style="display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:start;margin-bottom:16px;margin-top:14px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-main);white-space:nowrap;padding-top:2px;">
         <input type="checkbox" id="cot-con-iva" style="width:16px;height:16px;accent-color:#22d3ee;"
@@ -19703,9 +19725,21 @@ window.openCotModal = function(type, id = null) {
         Incluir IVA (16%)
       </label>
       <div>
-        ${_lbl('Notas / observaciones')}
-        <textarea id="cot-notas" class="modal-input" rows="2" style="resize:none;"
-          placeholder="Condiciones de pago, garantías, plazo de entrega…">${esc(existing.notas || '')}</textarea>
+        ${_lbl('Observaciones / Plan de trabajo')}
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
+          ${[
+            ['📋 Condiciones','condiciones'],
+            ['🚀 Entrega','entrega'],
+            ['🛡 Garantía','garantia'],
+            ['💳 Anticipo 50%','anticipo'],
+            ['📞 Seguimiento','seguimiento'],
+          ].map(([label, key]) =>
+            `<button type="button" onclick="cotInsertTemplate('${key}')"
+              style="font-size:10px;padding:3px 8px;border-radius:6px;border:1px solid rgba(34,211,238,0.2);background:rgba(34,211,238,0.05);color:#22d3ee;cursor:pointer;">${label}</button>`
+          ).join('')}
+        </div>
+        <textarea id="cot-notas" class="modal-input" rows="3" style="resize:vertical;"
+          placeholder="Condiciones de pago, plan de trabajo, garantías, plazo de entrega, alcance del proyecto…">${esc(existing.notas || '')}</textarea>
       </div>
     </div>
 
@@ -19738,7 +19772,7 @@ window.closeCotModal = function() {
   _cotEditId = null
 }
 
-// Auto-fill emisor desde contacto
+// Auto-fill emisor desde contacto + puebla selector de cuentas
 window.cotModalFillEmisor = function() {
   const sel = document.getElementById('cot-emisor-sel')
   if (!sel?.value) return
@@ -19750,7 +19784,27 @@ window.cotModalFillEmisor = function() {
   const dirEl    = document.getElementById('cot-emisor-dir')
   if (nombreEl && !nombreEl.value) nombreEl.value = m.name || c.content || ''
   if (rfcEl    && !rfcEl.value)    rfcEl.value    = m.rfc  || ''
-  if (dirEl    && !dirEl.value)    dirEl.value    = m.domicilioLegal || m.address || ''
+  if (dirEl    && !dirEl.value)    dirEl.value    = m.domicilioLegal || m.address_street || m.address || ''
+
+  // Poblar selector de cuentas del emisor (para datos de cobro)
+  const accounts = m.contact_accounts || m.cuentas || []
+  const ctaSel   = document.getElementById('cot-pago-cta')
+  if (ctaSel) {
+    if (accounts.length) {
+      ctaSel.innerHTML = '<option value="">— Seleccionar cuenta de cobro —</option>' +
+        accounts.map((a, i) => {
+          const preview = (a.clabe || a.wallet || '').slice(0, 12) + ((a.clabe || a.wallet || '').length > 12 ? '…' : '')
+          return `<option value="${i}">${esc(a.label || a.banco || 'Cuenta ' + (i+1))} · ${esc(a.tipo || '')} ${preview}</option>`
+        }).join('')
+      // Store for cotSelectPagoCta
+      ctaSel.dataset.accounts = JSON.stringify(accounts)
+      ctaSel.style.display    = 'block'
+      // Auto-seleccionar si solo hay una cuenta
+      if (accounts.length === 1) { ctaSel.value = '0'; cotSelectPagoCta() }
+    } else {
+      ctaSel.style.display = 'none'
+    }
+  }
 }
 
 // Auto-fill cliente desde contacto
@@ -19766,16 +19820,51 @@ window.cotModalFillCliente = function() {
   const telEl  = document.getElementById('cot-cliente-tel')
   if (nameEl) nameEl.value = m.name  || c.content || ''
   if (rfcEl)  rfcEl.value  = m.rfc   || ''
-  if (dirEl)  dirEl.value  = m.domicilioLegal || m.address || ''
+  if (dirEl)  dirEl.value  = m.domicilioLegal || m.address_street || m.address || ''
   if (telEl)  telEl.value  = m.phone || m.tel || ''
-  // Auto-fill datos bancarios del cliente si tiene cuentas
-  if (m.cuentas && m.cuentas.length) {
-    const cuenta = m.cuentas[0]
-    const bancoEl = document.getElementById('cot-banco')
-    const clabeEl = document.getElementById('cot-clabe')
-    if (bancoEl && !bancoEl.value) bancoEl.value = cuenta.banco || ''
-    if (clabeEl && !clabeEl.value) clabeEl.value = cuenta.clabe || cuenta.wallet || ''
+}
+
+// Seleccionar cuenta del emisor → auto-llenar banco + CLABE + método
+window.cotSelectPagoCta = function() {
+  const ctaSel  = document.getElementById('cot-pago-cta')
+  if (!ctaSel || ctaSel.value === '') return
+  const accounts = JSON.parse(ctaSel.dataset.accounts || '[]')
+  const acct     = accounts[parseInt(ctaSel.value)]
+  if (!acct) return
+  const bancoEl = document.getElementById('cot-banco')
+  const clabeEl = document.getElementById('cot-clabe')
+  const metodEl = document.getElementById('cot-metodo-pago')
+  if (bancoEl) bancoEl.value = acct.banco || ''
+  if (clabeEl) clabeEl.value = acct.clabe || acct.wallet || ''
+  // Detectar método de pago por tipo de cuenta
+  if (metodEl) {
+    const tipo = (acct.tipo || '').toLowerCase()
+    if (tipo.includes('cripto') || tipo.includes('wallet') || tipo.includes('usdt') || tipo.includes('btc')) {
+      metodEl.value = 'Cripto'
+    } else if ((acct.clabe || '').length === 18) {
+      metodEl.value = 'SPEI'
+    } else if (tipo.includes('transfer')) {
+      metodEl.value = 'Transferencia'
+    }
   }
+}
+
+// Insertar plantilla rápida en campo de notas/observaciones
+window.cotInsertTemplate = function(key) {
+  const el = document.getElementById('cot-notas')
+  if (!el) return
+  const templates = {
+    condiciones: 'Condiciones de pago: 50% de anticipo para iniciar el proyecto y 50% contra entrega. Precios sujetos a cambio sin previo aviso. El presente documento tiene vigencia de 30 días a partir de su fecha de emisión.',
+    entrega: 'Tiempo estimado de entrega: 15 días hábiles a partir de la confirmación del proyecto y pago del anticipo. Cualquier cambio en el alcance podrá afectar los tiempos de entrega.',
+    garantia: 'Garantía: 30 días por defectos de fabricación o errores en el trabajo entregado. No incluye modificaciones al alcance original ni daños por mal uso.',
+    anticipo: 'Se requiere anticipo del 50% para iniciar trabajos. El saldo restante (50%) se cubrirá contra entrega. No se inicia el proyecto sin anticipo confirmado.',
+    seguimiento: 'Se realizará una reunión de seguimiento semanal para revisar avances. El cliente deberá proporcionar retroalimentación en un plazo máximo de 3 días hábiles por cada entregable.',
+  }
+  const text = templates[key] || ''
+  if (!text) return
+  const sep  = el.value.trim() ? '\n\n' : ''
+  el.value   = el.value + sep + text
+  el.focus()
 }
 
 // Auto-fill info de proyecto
@@ -19827,14 +19916,16 @@ window.cotAddCatalogItem = function(id) {
   const n = allNodes.find(x => x.id === id)
   if (!n) return
   const m = n.metadata || {}
+  // Texto: primero notasInternas (plantilla), luego descripcion larga, luego nombre
+  const descText = m.notasInternas || m.descripcion || m.nombre || ''
   // Buscar primera fila vacía
   for (let i = 1; i <= 10; i++) {
     const descEl = document.getElementById(`cot-desc-${i}`)
     if (descEl && !descEl.value.trim()) {
-      descEl.value = m.nombre || ''
-      const cantEl  = document.getElementById(`cot-cant-${i}`)
+      descEl.value = descText
+      const cantEl   = document.getElementById(`cot-cant-${i}`)
       const precioEl = document.getElementById(`cot-precio-${i}`)
-      if (cantEl)   cantEl.value  = 1
+      if (cantEl)   cantEl.value   = 1
       if (precioEl) precioEl.value = m.precio || 0
       cotCalcTotales()
       break
@@ -20058,31 +20149,60 @@ window.deleteCot = async function(id) {
   showToast('🗑 Documento eliminado')
 }
 
-// ── Convertir Presupuesto → Nota de Venta ─────────────────────────────────────
+// ── Convertir Presupuesto → Nota de Venta (+ Movimiento de ingreso automático) ──
 window.convertirPresupuestoNota = async function(id) {
   const src = allNodes.find(n => n.id === id)
   if (!src) return
-  if (!confirm('¿Convertir este presupuesto en Nota de Venta? Se creará un nuevo documento.')) return
-  const m       = src.metadata || {}
+  const m      = src.metadata || {}
+  const label  = m.titulo || m.folio || 'Sin título'
+  const cliente = m.clienteName || 'Sin cliente'
+  if (!confirm(`¿Convertir "${label}" en Nota de Venta?\n\nEsto creará:\n• Una Nota de Venta nueva con todos los datos del presupuesto\n• Un Movimiento de ingreso por ${_cotFmt(m.total || 0, m.moneda)}`)) return
+
+  // Crear Nota de Venta
   const folio   = _cotFolio('NV')
-  const meta    = {
+  const notaMeta = {
     ...m,
-    folio, estado: 'borrador',
+    folio, estado: 'pagado',
     validezDias: 0,
-    tipo: 'cot_nota',
     createdFromPresupuesto: id,
   }
-  const content = `Nota de Venta ${folio} — ${m.clienteName || 'Sin cliente'} — ${_cotFmt(m.total || 0, m.moneda)}`
-  const node    = {
+  const notaContent = `Nota de Venta ${folio} — ${cliente} — ${_cotFmt(m.total || 0, m.moneda)}`
+  const notaNode    = {
     id: 'cot_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-    content, type: 'cot_nota', metadata: meta,
+    content: notaContent, type: 'cot_nota', metadata: notaMeta,
     created_at: new Date().toISOString(),
   }
-  allNodes.push(node)
+  allNodes.push(notaNode)
   if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
-    await supabase.from('nodes').insert([{ id: node.id, owner_id: currentUser?.id, content, type: 'cot_nota', metadata: meta }])
+    await supabase.from('nodes').insert([{ id: notaNode.id, owner_id: currentUser?.id, content: notaContent, type: 'cot_nota', metadata: notaMeta }])
   }
-  showToast('🧾 Nota de venta creada desde presupuesto')
+
+  // Marcar presupuesto como cerrado
+  src.metadata = { ...src.metadata, estado: 'cerrado' }
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ metadata: src.metadata }).eq('id', id)
+  }
+
+  // Generar Movimiento de ingreso automáticamente
+  const fecha      = m.fecha || new Date().toISOString().slice(0, 10)
+  const movContent = `Ingreso — ${label} — ${cliente}`
+  const movMeta    = {
+    amount: m.total || 0, moneda: m.moneda || 'MXN', type: 'income',
+    description: movContent, date: fecha,
+    cotizacion_ref: notaNode.id, folio_ref: folio,
+    cliente, autoGenerado: true,
+  }
+  const movNode = {
+    id: 'mv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    content: movContent, type: 'income', metadata: movMeta,
+    created_at: new Date().toISOString(),
+  }
+  allNodes.push(movNode)
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').insert([{ id: movNode.id, owner_id: currentUser?.id, content: movContent, type: 'income', metadata: movMeta }])
+  }
+
+  showToast(`🧾 Nota de Venta ${folio} creada · 💰 Ingreso ${_cotFmt(m.total || 0, m.moneda)} registrado`)
   renderCotizaciones()
 }
 
@@ -20174,6 +20294,11 @@ window.openCatModal = function(id = null) {
       <input type="text" id="cat-tags" class="modal-input"
         placeholder="web, diseño, desarrollo, consultoría…" value="${esc(existing.tags || '')}"/>
     </div>
+    <div style="margin-bottom:4px;">
+      ${_lbl('📋 Plantilla de descripción (se auto-llena al agregar a cotización)')}
+      <textarea id="cat-notas-internas" class="modal-input" rows="3" style="resize:vertical;"
+        placeholder="Texto que se usará como descripción detallada al agregar este ítem a un presupuesto o nota de venta. Ej: Incluye diseño UX, desarrollo frontend/backend, 3 rondas de revisión y entrega en GitHub...">${esc(existing.notasInternas || '')}</textarea>
+    </div>
   `
   modal.classList.remove('hidden')
 }
@@ -20185,13 +20310,14 @@ window.saveCatItem = async function() {
 
   const meta = {
     nombre,
-    descripcion: document.getElementById('cat-descripcion')?.value?.trim() || '',
-    foto_url:    document.getElementById('cat-foto-url')?.value?.trim() || '',
-    precio:      parseFloat(document.getElementById('cat-precio')?.value || '0') || 0,
-    moneda:      document.getElementById('cat-moneda')?.value || 'MXN',
-    categoria:   document.getElementById('cat-categoria')?.value?.trim() || '',
-    tags:        document.getElementById('cat-tags')?.value?.trim() || '',
-    activo:      true,
+    descripcion:   document.getElementById('cat-descripcion')?.value?.trim() || '',
+    notasInternas: document.getElementById('cat-notas-internas')?.value?.trim() || '',
+    foto_url:      document.getElementById('cat-foto-url')?.value?.trim() || '',
+    precio:        parseFloat(document.getElementById('cat-precio')?.value || '0') || 0,
+    moneda:        document.getElementById('cat-moneda')?.value || 'MXN',
+    categoria:     document.getElementById('cat-categoria')?.value?.trim() || '',
+    tags:          document.getElementById('cat-tags')?.value?.trim() || '',
+    activo:        true,
   }
   const content = `[Catálogo] ${nombre} — ${_cotFmt(meta.precio, meta.moneda)}`
 

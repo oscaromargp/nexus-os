@@ -1771,24 +1771,39 @@ export function pdfPresupuestoPro(data, emisor = {}) {
     }
   }
 
-  // ── Observaciones ────────────────────────────────────────────────────────────
+  // ── Observaciones / Plan de trabajo ─────────────────────────────────────────
   if (data.notas) {
-    y += 2
+    y += 3
+    const obsLines = doc.splitTextToSize(data.notas, W - T.mX * 2 - 8)
+    const obsH = obsLines.length * 4.5 + 12
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, obsH, 2, 2, 'FD')
+    doc.setFontSize(6.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
+    doc.text('OBSERVACIONES / PLAN DE TRABAJO', T.mX + 4, y + 6)
     doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    const nLines = doc.splitTextToSize('Observaciones: ' + data.notas, W - T.mX * 2)
-    doc.text(nLines, T.mX, y)
-    y += nLines.length * 4 + 5
+    doc.text(obsLines, T.mX + 4, y + 11)
+    y += obsH + 4
   }
 
-  // ── Datos de pago ─────────────────────────────────────────────────────────────
+  // ── Datos de pago — caja destacada ───────────────────────────────────────────
   if (data.metodoPago || data.bancoPago || data.clabePago) {
-    y += 2
-    doc.setFontSize(7.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
-    doc.text('Datos de pago:', T.mX, y); y += 5
+    y += 3
+    const pagoRows = [data.metodoPago, data.bancoPago, data.clabePago].filter(Boolean).length
+    const pagoH    = pagoRows * 7 + 14
+    doc.setFillColor(0, 240, 255, 0.04); doc.setDrawColor(...T.cyan); doc.setLineWidth(0.4)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, pagoH, 2, 2, 'D')
+    doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
+    doc.text('DATOS DE PAGO', T.mX + 4, y + 7)
     doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    if (data.metodoPago) { doc.text(`Método: ${data.metodoPago}`, T.mX, y); y += 5 }
-    if (data.bancoPago)  { doc.text(`Banco: ${data.bancoPago}`,   T.mX, y); y += 5 }
-    if (data.clabePago)  { doc.text(`CLABE/Wallet: ${data.clabePago}`, T.mX, y); y += 5 }
+    let py = y + 14
+    if (data.metodoPago) { doc.text(`Método:  ${data.metodoPago}`, T.mX + 4, py); py += 7 }
+    if (data.bancoPago)  { doc.text(`Banco:   ${data.bancoPago}`,   T.mX + 4, py); py += 7 }
+    if (data.clabePago)  {
+      doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+      doc.text(`CLABE / Wallet:  ${data.clabePago}`, T.mX + 4, py)
+      doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    }
+    y += pagoH + 4
   }
 
   // ── Líneas de firma ──────────────────────────────────────────────────────────
@@ -1929,23 +1944,39 @@ export function pdfNotaVentaPro(data, emisor = {}) {
     }
   }
 
-  // ── Observaciones ────────────────────────────────────────────────────────────
+  // ── Observaciones / Plan de trabajo ─────────────────────────────────────────
   if (data.notas) {
-    y += 2
+    y += 3
+    const obsLines = doc.splitTextToSize(data.notas, W - T.mX * 2 - 8)
+    const obsH = obsLines.length * 4.5 + 12
+    doc.setFillColor(248, 250, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, obsH, 2, 2, 'FD')
+    doc.setFontSize(6.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
+    doc.text('OBSERVACIONES / PLAN DE TRABAJO', T.mX + 4, y + 6)
     doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    const nLines = doc.splitTextToSize('Observaciones: ' + data.notas, W - T.mX * 2)
-    doc.text(nLines, T.mX, y); y += nLines.length * 4 + 5
+    doc.text(obsLines, T.mX + 4, y + 11)
+    y += obsH + 4
   }
 
-  // ── Datos de pago ─────────────────────────────────────────────────────────────
+  // ── Datos de pago — caja destacada ───────────────────────────────────────────
   if (data.metodoPago || data.bancoPago || data.clabePago) {
-    y += 2
-    doc.setFontSize(7.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
-    doc.text('Datos de pago:', T.mX, y); y += 5
+    y += 3
+    const pagoRows = [data.metodoPago, data.bancoPago, data.clabePago].filter(Boolean).length
+    const pagoH    = pagoRows * 7 + 14
+    doc.setFillColor(0, 240, 255, 0.04); doc.setDrawColor(...T.cyan); doc.setLineWidth(0.4)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, pagoH, 2, 2, 'D')
+    doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
+    doc.text('DATOS DE PAGO', T.mX + 4, y + 7)
     doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    if (data.metodoPago) { doc.text(`Método: ${data.metodoPago}`, T.mX, y); y += 5 }
-    if (data.bancoPago)  { doc.text(`Banco: ${data.bancoPago}`,   T.mX, y); y += 5 }
-    if (data.clabePago)  { doc.text(`CLABE/Wallet: ${data.clabePago}`, T.mX, y); y += 5 }
+    let py = y + 14
+    if (data.metodoPago) { doc.text(`Método:  ${data.metodoPago}`, T.mX + 4, py); py += 7 }
+    if (data.bancoPago)  { doc.text(`Banco:   ${data.bancoPago}`,   T.mX + 4, py); py += 7 }
+    if (data.clabePago)  {
+      doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+      doc.text(`CLABE / Wallet:  ${data.clabePago}`, T.mX + 4, py)
+      doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    }
+    y += pagoH + 4
   }
 
   _footerCotizacion(doc, 1, doc.internal.getNumberOfPages(), emisor)
