@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#00f0ff" />
+  <meta name="theme-color" content="#22d3ee" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -48,32 +48,45 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      /* Deep Ocean Tech Palette (HSL for precision) */
-      --h: 184; /* Cyan Hue */
-      --s: 100%;
-      --l: 50%;
-      
-      --bg-deep: #02040a;
-      --bg-panel: #0b111a;
-      --bg-widget: #0d141d;
-      
-      --accent-cyan: hsl(var(--h), var(--s), var(--l));
-      --accent-cyan-rgb: 0, 246, 255;
-      --accent-cyan-dim: hsla(var(--h), var(--s), var(--l), 0.1);
-      --accent-cyan-glow: hsla(var(--h), var(--s), var(--l), 0.4);
-      
-      --glass-bg: rgba(13, 20, 29, 0.7);
-      --glass-border: hsla(var(--h), var(--s), var(--l), 0.2);
-      --glass-border-bright: hsla(var(--h), var(--s), var(--l), 0.4);
-      
-      --text-main: #f0f6fc;
-      --text-muted: #8b949e;
-      --text-dim: #484f58;
-      
+      /* ── Soft Dark Modern Palette ── */
+      --h: 188; /* Cyan Hue — #22d3ee */
+      --s: 84%;
+      --l: 53%;
+
+      --bg-deep:   #05080f;
+      --bg-panel:  #0c1220;
+      --bg-widget: #101828;
+      --bg-surface: #141e2e;
+
+      --accent-cyan:     hsl(var(--h), var(--s), var(--l));
+      --accent-cyan-rgb: 34, 211, 238;
+      --accent-cyan-dim: hsla(var(--h), var(--s), var(--l), 0.10);
+      --accent-cyan-glow:hsla(var(--h), var(--s), var(--l), 0.35);
+
+      --glass-bg:           rgba(14, 20, 34, 0.72);
+      --glass-border:       hsla(var(--h), 60%, 60%, 0.14);
+      --glass-border-bright:hsla(var(--h), 84%, 53%, 0.36);
+
+      --text-main:  #e8f0f9;
+      --text-muted: #7a8899;
+      --text-dim:   #3d4959;
+
+      /* Elevation shadows */
+      --elevation-1: 0 1px 3px rgba(0,0,0,0.45), 0 1px 2px rgba(0,0,0,0.55);
+      --elevation-2: 0 4px 16px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.45);
+      --elevation-3: 0 12px 40px rgba(0,0,0,0.65), 0 4px 12px rgba(0,0,0,0.45);
+
+      /* Border radii tokens */
+      --radius-sm: 10px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+
       --sidebar-width: 260px;
       --widget-width: 320px;
-      
-      --transition-soft: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+      --transition-soft: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      --spring: cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     /* ── LIGHT THEME ── */
@@ -156,16 +169,17 @@
     /* ── BASE & LAYOUT ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     
-    body { 
-      background: var(--bg-deep); 
-      color: var(--text-main); 
-      font-family: 'Inter', system-ui, sans-serif; 
-      overflow: hidden; 
-      height: 100vh; 
+    body {
+      background: var(--bg-deep);
+      color: var(--text-main);
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow: hidden;
+      height: 100vh;
       width: 100vw;
-      background-image: 
-        radial-gradient(circle at 50% -20%, hsla(var(--h), 100%, 50%, 0.05), transparent 50%),
-        radial-gradient(circle at 0% 100%, hsla(var(--h), 100%, 50%, 0.02), transparent 40%);
+      background-image:
+        radial-gradient(ellipse at 60% -10%, hsla(var(--h), 84%, 53%, 0.07), transparent 55%),
+        radial-gradient(ellipse at 0% 100%, hsla(var(--h), 84%, 53%, 0.03), transparent 45%),
+        radial-gradient(ellipse at 100% 50%, hsla(260, 70%, 50%, 0.03), transparent 40%);
     }
 
     #nexus-layout {
@@ -214,7 +228,7 @@
       z-index: 999;
       transition: all 0.32s cubic-bezier(0.4,0,0.2,1);
     }
-    .panel-toggle:hover { background: rgba(0,246,255,0.12); color: #00f6ff; border-color: rgba(0,246,255,0.4); }
+    .panel-toggle:hover { background: rgba(34,211,238,0.10); color: var(--accent-cyan); border-color: var(--glass-border-bright); }
     #toggle-nav  { left: calc(var(--sidebar-width) - 1px); border-radius: 0 8px 8px 0; border-left: none; transition: left 0.32s cubic-bezier(0.4,0,0.2,1); }
     #toggle-side { border-radius: 8px 0 0 8px; border-right: none; transition: right 0.32s cubic-bezier(0.4,0,0.2,1); }
     body.nav-collapsed  #toggle-nav  { left: 0px; }
@@ -375,22 +389,21 @@
       padding: 4px; 
     }
     
-    .trello-card { 
-      background: #161b22; 
-      border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 10px; 
-      padding: 14px; 
-      cursor: pointer; 
-      transition: var(--transition-soft); 
-      position: relative; 
-      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    .trello-card {
+      background: var(--bg-surface);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      cursor: pointer;
+      transition: var(--transition-soft);
+      position: relative;
+      box-shadow: var(--elevation-1);
     }
-    
-    .trello-card:hover { 
-      background: #1c2128; 
+    .trello-card:hover {
+      background: rgba(255,255,255,0.04);
       border-color: var(--glass-border-bright);
       transform: translateY(-2px);
-      box-shadow: 0 5px 15px rgba(0,0,0,0.4);
+      box-shadow: var(--elevation-2);
     }
     
     .trello-card-title { font-size: 14px; color: #f0f6fc; line-height: 1.5; font-weight: 500; }
@@ -447,13 +460,12 @@
     .note-keep {
       background: var(--bg-panel);
       border: 1px solid var(--glass-border);
-      border-radius: 12px;
+      border-radius: var(--radius-md);
       transition: var(--transition-soft);
       cursor: pointer;
       position: relative;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      box-shadow: var(--elevation-1);
       user-select: none;
-      /* Clip the inner flex content */
       height: 190px;
       overflow: hidden;
     }
@@ -875,9 +887,9 @@
 
     /* ── FEED ITEMS ── */
     @keyframes nexus-pulse-in {
-      0%   { opacity:0.5; transform:translateX(-8px) scale(0.98); box-shadow:0 0 0 0 rgba(0,246,255,0); }
-      40%  { opacity:1;   transform:translateX(0)   scale(1);    box-shadow:0 0 12px 3px rgba(0,246,255,0.25); }
-      100% { box-shadow:0 0 0 0 rgba(0,246,255,0); }
+      0%   { opacity:0.5; transform:translateX(-8px) scale(0.98); box-shadow:0 0 0 0 rgba(34,211,238,0); }
+      40%  { opacity:1;   transform:translateX(0)   scale(1);    box-shadow:0 0 14px 3px rgba(34,211,238,0.22); }
+      100% { box-shadow:0 0 0 0 rgba(34,211,238,0); }
     }
     .nexus-new-pulse {
       animation: nexus-pulse-in 0.6s ease-out both;
@@ -885,61 +897,84 @@
     .feed-item {
       background: var(--glass-bg);
       border: 1px solid var(--glass-border);
-      border-radius: 14px;
-      padding: 18px;
-      margin-bottom: 14px;
+      border-left: 2px solid transparent;
+      border-radius: var(--radius-md);
+      padding: 16px 18px;
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
-      gap: 20px;
+      gap: 18px;
       transition: var(--transition-soft);
       cursor: pointer;
+      box-shadow: var(--elevation-1);
     }
-    
     .feed-item:hover {
-      background: rgba(255,255,255,0.05);
+      background: rgba(255,255,255,0.04);
       border-color: var(--glass-border-bright);
-      transform: translateX(6px);
-      box-shadow: -10px 0 20px rgba(var(--accent-cyan-rgb), 0.05);
+      border-left-color: var(--accent-cyan);
+      transform: translateX(3px);
+      box-shadow: var(--elevation-2), -4px 0 20px rgba(34,211,238,0.07);
     }
-    
+    /* Date group headers in feed */
+    .feed-date-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .feed-date-header:first-child { margin-top: 0; }
+    .feed-date-header::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--glass-border);
+    }
     .feed-time {
       font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       color: var(--text-muted);
-      background: rgba(255,255,255,0.05);
-      padding: 5px 10px;
-      border-radius: 8px;
-      letter-spacing: 0.5px;
+      background: rgba(255,255,255,0.04);
+      padding: 4px 9px;
+      border-radius: 7px;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
     }
 
     /* ── SETTINGS UI ── */
     .settings-card {
       background: var(--bg-panel);
       border: 1px solid var(--glass-border);
-      border-radius: 20px;
-      padding: 32px;
-      margin-bottom: 24px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      border-radius: var(--radius-lg);
+      padding: 28px 32px;
+      margin-bottom: 20px;
+      box-shadow: var(--elevation-2);
     }
-    
-    .settings-group { margin-bottom: 24px; }
-    .settings-label { display: block; font-size: 14px; font-weight: 700; color: #fff; margin-bottom: 12px; }
-    
+    .settings-group { margin-bottom: 22px; }
+    .settings-label { display: block; font-size: 13px; font-weight: 700; color: var(--text-main); margin-bottom: 10px; letter-spacing: 0.02em; }
     .input-field {
       width: 100%;
-      background: rgba(0,0,0,0.3);
+      background: rgba(0,0,0,0.28);
       border: 1px solid var(--glass-border);
-      border-radius: 12px;
-      padding: 12px 16px;
-      color: #fff;
+      border-radius: var(--radius-sm);
+      padding: 11px 14px;
+      color: var(--text-main);
       font-family: inherit;
+      font-size: 14px;
       outline: none;
       transition: var(--transition-soft);
     }
-    
     .input-field:focus {
       border-color: var(--accent-cyan);
-      box-shadow: 0 0 15px var(--accent-cyan-dim);
+      background: rgba(34,211,238,0.03);
+      box-shadow: 0 0 0 3px rgba(34,211,238,0.10), 0 0 16px rgba(34,211,238,0.06);
     }
+    .input-field::placeholder { color: var(--text-dim); }
 
     .type-badge-select {
       background: var(--accent-cyan-dim);
@@ -969,6 +1004,127 @@
     }
 
     .hidden { display: none !important; }
+
+    /* ── CONFIG TABS ── */
+    .cfg-tabs {
+      display: flex;
+      gap: 4px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      margin-bottom: 28px;
+      overflow-x: auto;
+    }
+    .cfg-tab {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition-soft);
+      font-family: inherit;
+      white-space: nowrap;
+      min-width: 70px;
+    }
+    .cfg-tab:hover { color: var(--text-main); background: rgba(255,255,255,0.04); }
+    .cfg-tab.active {
+      background: var(--accent-cyan-dim);
+      color: var(--accent-cyan);
+      box-shadow: 0 0 0 1px var(--glass-border);
+    }
+    .cfg-tab-icon { font-size: 16px; }
+    .cfg-panel { display: none; }
+    .cfg-panel.active { display: block; animation: viewFadeIn 0.2s ease both; }
+
+    /* ── OTC POLISH ── */
+    .otc-tool-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-lg);
+      padding: 24px 22px;
+      min-height: 150px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      cursor: pointer;
+      transition: var(--transition-soft);
+      box-shadow: var(--elevation-1);
+      position: relative;
+      overflow: hidden;
+    }
+    .otc-tool-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+    .otc-tool-card:hover {
+      border-color: var(--glass-border-bright);
+      box-shadow: var(--elevation-2), 0 0 24px rgba(34,211,238,0.06);
+      transform: translateY(-2px);
+    }
+    .otc-tool-card:hover::before { opacity: 0.6; }
+    .otc-tool-icon {
+      font-size: 28px;
+      background: var(--accent-cyan-dim);
+      border-radius: 12px;
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+    .otc-tool-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .otc-tool-desc { font-size: 12px; color: var(--text-muted); line-height: 1.45; flex: 1; }
+
+    /* ── HERRAMIENTAS TABS (card style) ── */
+    .herr-tab {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 18px;
+      min-height: 80px;
+      border-radius: var(--radius-md);
+      background: var(--bg-panel);
+      border: 1px solid var(--glass-border);
+      color: var(--text-muted);
+      font-family: inherit;
+      cursor: pointer;
+      transition: var(--transition-soft);
+      box-shadow: var(--elevation-1);
+      position: relative;
+      overflow: hidden;
+    }
+    .herr-tab::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--accent-cyan);
+      transform: scaleX(0);
+      transition: transform 0.25s var(--spring);
+    }
+    .herr-tab:hover { border-color: var(--glass-border-bright); box-shadow: var(--elevation-2); color: var(--text-main); }
+    .herr-tab.active { border-color: var(--glass-border-bright); color: var(--text-main); background: rgba(34,211,238,0.04); }
+    .herr-tab.active::after { transform: scaleX(1); }
 
     /* Animations */
     @keyframes pulse-cyan {
@@ -1847,310 +2003,280 @@
 
     <div id="view-settings" class="view-section">
       <div class="view-header"><h1 class="view-title">⚙️ Configuración</h1></div>
-      <div class="settings-card">
-         <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:20px;">👤 Perfil &amp; Localización</h2>
-         <div class="settings-group">
-           <label class="settings-label">Identidad Nexus</label>
-           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-             <div>
-               <span style="font-size: 11px; color: var(--text-muted);">Apodo / Nickname</span>
-               <input type="text" id="pref-nickname" class="input-field" placeholder="Ej: Comandante" />
-             </div>
-             <div>
-               <span style="font-size: 11px; color: var(--text-muted);">Correo Electrónico</span>
-               <input type="email" id="pref-email" class="input-field" placeholder="correo@ejemplo.com" />
-             </div>
-           </div>
-         </div>
 
-         <div class="settings-group">
-           <label class="settings-label">Localización & Clima</label>
-           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom:12px;">
-             <div>
-               <span style="font-size: 11px; color: var(--text-muted);">Huso Horario</span>
-               <select id="pref-tz" class="input-field">
-                 <option value="America/Mexico_City">Ciudad de México (GMT-6)</option>
-                 <option value="America/La_Paz">La Paz, BCS (GMT-7)</option>
-                 <option value="UTC">Universal (UTC)</option>
-               </select>
-             </div>
-             <div>
-               <span style="font-size: 11px; color: var(--text-muted);">Unidad de Clima</span>
-               <select id="pref-temp" class="input-field">
-                 <option value="C">Celsius (°C)</option>
-                 <option value="F">Fahrenheit (°F)</option>
-               </select>
-             </div>
-           </div>
-           <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
-             <div>
-               <span style="font-size: 11px; color: var(--text-muted);">Ciudad (widget clima)</span>
-               <input type="text" id="pref-city" class="input-field" placeholder="LA PAZ, BCS" />
-             </div>
-             <div>
-               <span style="font-size: 11px; color: var(--text-muted);">Latitud</span>
-               <input type="number" id="pref-lat" class="input-field" placeholder="24.14" step="0.01" />
-             </div>
-             <div>
-               <span style="font-size: 11px; color: var(--text-muted);">Longitud</span>
-               <input type="number" id="pref-lon" class="input-field" placeholder="-110.31" step="0.01" />
-             </div>
-           </div>
-         </div>
-
-         <h2 style="font-size:15px;font-weight:800;color:#a78bfa;margin-top:24px;margin-bottom:16px;padding-top:20px;border-top:1px solid hsla(0,0%,100%,0.05);">🎨 Apariencia</h2>
-         <div class="settings-group">
-           <label class="settings-label">Apariencia</label>
-           <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; background:rgba(255,255,255,0.03); border-radius:12px; border:1px solid var(--glass-border);">
-             <div>
-               <div style="font-size:13px; font-weight:700; color:#fff;">Tema de color</div>
-               <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">Oscuro (Deep Ocean) o Claro</div>
-             </div>
-             <div style="display:flex; gap:8px;">
-               <button id="theme-dark-btn" onclick="setTheme('dark')" style="background:rgba(0,0,0,0.6);border:2px solid var(--accent-cyan);color:#fff;border-radius:9px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;">🌙 Oscuro</button>
-               <button id="theme-light-btn" onclick="setTheme('light')" style="background:rgba(255,255,255,0.1);border:2px solid transparent;color:var(--text-muted);border-radius:9px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;">☀️ Claro</button>
-             </div>
-           </div>
-         </div>
-         
-         <div class="settings-group" style="padding-top: 20px; border-top: 1px solid hsla(0,0%,100%,0.05);">
-           <label class="settings-label">Importación Masiva de Nodos (CSV)</label>
-           <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 14px;">Importa tareas, notas, ingresos o gastos en lote. Descarga la plantilla, llénala con tus datos y súbela. <b style="color:var(--accent-cyan);">El formato debe respetarse exactamente para evitar errores.</b></p>
-
-           <!-- Formato guiado -->
-           <div style="background:rgba(0,0,0,0.2);border:1px solid var(--glass-border);border-radius:12px;padding:14px 16px;margin-bottom:14px;">
-             <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:10px;">COLUMNAS DEL CSV</div>
-             <div style="display:flex;flex-direction:column;gap:6px;">
-               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
-                 <code style="color:var(--accent-cyan);">contenido</code><span style="color:var(--text-muted);">Texto del nodo. Obligatorio.</span>
-               </div>
-               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
-                 <code style="color:var(--accent-cyan);">tipo</code><span style="color:var(--text-muted);">note · kanban · income · expense · persona · contact</span>
-               </div>
-               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
-                 <code style="color:var(--accent-cyan);">monto</code><span style="color:var(--text-muted);">Número. Solo para income/expense.</span>
-               </div>
-               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
-                 <code style="color:var(--accent-cyan);">etiquetas</code><span style="color:var(--text-muted);">Tags separados por espacio. Ej: #trabajo #pendiente</span>
-               </div>
-               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
-                 <code style="color:var(--accent-cyan);">fecha</code><span style="color:var(--text-muted);">Formato YYYY-MM-DD. Ej: 2026-04-30</span>
-               </div>
-               <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;">
-                 <code style="color:var(--accent-cyan);">notas</code><span style="color:var(--text-muted);">Texto adicional opcional.</span>
-               </div>
-             </div>
-           </div>
-
-           <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-             <button onclick="downloadNodeTemplate()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:9px;padding:8px 16px;color:var(--text-muted);cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;">📄 Descargar Plantilla</button>
-             <label style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);border-radius:9px;padding:8px 16px;color:#60a5fa;cursor:pointer;font-size:12px;font-weight:700;">
-               ⬆ Importar CSV<input id="nodes-csv-input" type="file" accept=".csv" style="display:none;" onchange="importNodesCSV(this)" />
-             </label>
-           </div>
-           <div id="nodes-import-result" style="display:none;font-size:12px;padding:10px 14px;border-radius:8px;margin-top:4px;"></div>
-         </div>
-
-         <div class="settings-group" style="padding-top: 20px; border-top: 1px solid hsla(0,0%,100%,0.05);">
-           <label class="settings-label">Estado de la Base de Datos</label>
-           <div style="display: flex; align-items: center; gap: 12px; background: rgba(34,197,94,0.05); padding: 12px; border-radius: 12px; border: 1px solid rgba(34,197,94,0.1);">
-             <div style="width: 8px; height: 8px; background: #22c55e; border-radius: 50%; box-shadow: 0 0 10px #22c55e;"></div>
-             <span style="font-size: 13px; color: #bbf7d0;">Supabase Connected — Sincronización Optimizada</span>
-           </div>
-         </div>
-
-         <h2 style="font-size:15px;font-weight:800;color:#f87171;margin-top:24px;margin-bottom:16px;padding-top:20px;border-top:1px solid hsla(0,0%,100%,0.05);">🔐 Seguridad</h2>
-         <div class="settings-group" style="padding-top: 0; border-top: none;">
-           <label class="settings-label">Seguridad de Cuenta</label>
-           <div style="display:grid; grid-template-columns:1fr auto; gap:12px; align-items:end;">
-             <div>
-               <span style="font-size: 11px; color: var(--text-muted);">Nueva Contraseña</span>
-               <input type="password" id="pref-new-password" class="input-field" placeholder="Mínimo 6 caracteres" />
-             </div>
-             <button id="btn-change-password" class="nav-item" style="border:1px solid var(--glass-border); white-space:nowrap;">Cambiar</button>
-           </div>
-           <button id="btn-delete-account" class="nav-item" style="width:100%; justify-content:center; margin-top:12px; border:1px solid rgba(239,68,68,0.3); color:#f87171;">
-             ⚠ Eliminar Cuenta Permanentemente
-           </button>
-         </div>
-
-         <h2 style="font-size:15px;font-weight:800;color:#fbbf24;margin-top:24px;margin-bottom:16px;padding-top:20px;border-top:1px solid hsla(0,0%,100%,0.05);">💛 Apoyar el proyecto</h2>
-         <div class="settings-group" style="padding-top: 0; border-top: none;">
-           <label class="settings-label">Apoyar este Proyecto</label>
-           <div style="background:rgba(0,170,228,0.08); border:1px solid rgba(0,170,228,0.2); border-radius:14px; padding:20px;">
-             <div style="font-size:13px; color:#7dd3fc; margin-bottom:12px;">Si Nexus OS te está siendo útil, considera hacer una donación en XRP:</div>
-             <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#fff; background:rgba(0,0,0,0.3); padding:12px; border-radius:8px; word-break:break-all; margin-bottom:12px;">rBthUCndKy3Xbb19Ln4xkZeMwusX9NrYfj</div>
-             <button onclick="navigator.clipboard.writeText('rBthUCndKy3Xbb19Ln4xkZeMwusX9NrYfj').then(()=>alert('Dirección XRP copiada ✓'))" class="nav-item" style="width:100%; justify-content:center; border:1px solid rgba(0,170,228,0.4); color:#7dd3fc;">
-               📋 Copiar Dirección XRP
-             </button>
-           </div>
-         </div>
-
-         <button id="btn-save-settings" class="nav-item active" style="width:100%; justify-content:center; margin-top: 10px; font-weight: 800;">
-           GUARDAR CONFIGURACIÓN
-         </button>
+      <!-- Config Tabs Nav -->
+      <div class="cfg-tabs">
+        <button class="cfg-tab active" onclick="switchCfgTab('perfil',this)">
+          <span class="cfg-tab-icon">👤</span>Perfil
+        </button>
+        <button class="cfg-tab" onclick="switchCfgTab('apariencia',this)">
+          <span class="cfg-tab-icon">🎨</span>Apariencia
+        </button>
+        <button class="cfg-tab" onclick="switchCfgTab('datos',this)">
+          <span class="cfg-tab-icon">💾</span>Datos
+        </button>
+        <button class="cfg-tab" onclick="switchCfgTab('seguridad',this)">
+          <span class="cfg-tab-icon">🔐</span>Seguridad
+        </button>
+        <button class="cfg-tab" onclick="switchCfgTab('feedback',this)">
+          <span class="cfg-tab-icon">💬</span>Feedback
+        </button>
       </div>
 
-      <!-- FEEDBACK -->
-      <div class="settings-card" id="feedback-section" style="margin-top:24px; border-color:rgba(0,246,255,0.2);">
-        <h2 style="font-size:16px; font-weight:800; color:var(--accent-cyan); margin-bottom:6px;">💬 Feedback Directo</h2>
-        <p style="font-size:12px; color:var(--text-muted); margin-bottom:20px;">¿Algo no funciona? ¿Tienes una idea? Cuéntame directamente — leo todos los mensajes.</p>
+      <!-- ── Panel: Perfil ── -->
+      <div id="cfg-panel-perfil" class="cfg-panel active">
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:20px;">👤 Identidad &amp; Localización</h2>
+          <div class="settings-group">
+            <label class="settings-label">Identidad Nexus</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">Apodo / Nickname</span>
+                <input type="text" id="pref-nickname" class="input-field" placeholder="Ej: Comandante" />
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">Correo Electrónico</span>
+                <input type="email" id="pref-email" class="input-field" placeholder="correo@ejemplo.com" />
+              </div>
+            </div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Localización &amp; Clima</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;">
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">Huso Horario</span>
+                <select id="pref-tz" class="input-field">
+                  <option value="America/Mexico_City">Ciudad de México (GMT-6)</option>
+                  <option value="America/La_Paz">La Paz, BCS (GMT-7)</option>
+                  <option value="UTC">Universal (UTC)</option>
+                </select>
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">Unidad de Clima</span>
+                <select id="pref-temp" class="input-field">
+                  <option value="C">Celsius (°C)</option>
+                  <option value="F">Fahrenheit (°F)</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">Ciudad (widget clima)</span>
+                <input type="text" id="pref-city" class="input-field" placeholder="LA PAZ, BCS" />
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">Latitud</span>
+                <input type="number" id="pref-lat" class="input-field" placeholder="24.14" step="0.01" />
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">Longitud</span>
+                <input type="number" id="pref-lon" class="input-field" placeholder="-110.31" step="0.01" />
+              </div>
+            </div>
+          </div>
+          <div class="settings-group" style="padding-top:20px;border-top:1px solid var(--glass-border);">
+            <label class="settings-label">Estado de Conexión</label>
+            <div style="display:flex;align-items:center;gap:12px;background:rgba(34,197,94,0.05);padding:12px;border-radius:12px;border:1px solid rgba(34,197,94,0.12);">
+              <div style="width:8px;height:8px;background:#22c55e;border-radius:50%;box-shadow:0 0 10px #22c55e;flex-shrink:0;"></div>
+              <span style="font-size:13px;color:#bbf7d0;">Supabase Connected — Sincronización en tiempo real</span>
+            </div>
+          </div>
+          <button id="btn-save-settings" class="nav-item active" style="width:100%;justify-content:center;margin-top:20px;font-weight:800;">
+            GUARDAR CONFIGURACIÓN
+          </button>
+        </div>
+      </div>
 
-        <!-- Tipo de feedback -->
-        <div class="settings-group">
-          <label class="settings-label">Tipo de Reporte</label>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;" id="fb-type-btns">
-            <button class="contact-filter-btn active" data-fb="bug"          onclick="selectFbType('bug',this)">🐛 Error / Bug</button>
-            <button class="contact-filter-btn"         data-fb="feature"      onclick="selectFbType('feature',this)">✨ Nueva Función</button>
-            <button class="contact-filter-btn"         data-fb="inconsistency" onclick="selectFbType('inconsistency',this)">⚠️ Inconsistencia</button>
-            <button class="contact-filter-btn"         data-fb="other"        onclick="selectFbType('other',this)">💡 Otro</button>
+      <!-- ── Panel: Apariencia ── -->
+      <div id="cfg-panel-apariencia" class="cfg-panel">
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:#a78bfa;margin-bottom:20px;">🎨 Apariencia</h2>
+          <div class="settings-group">
+            <label class="settings-label">Tema de Color</label>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;background:rgba(255,255,255,0.03);border-radius:14px;border:1px solid var(--glass-border);">
+              <div>
+                <div style="font-size:13px;font-weight:700;color:var(--text-main);">Modo visual</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Soft Dark Modern o Claro</div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button id="theme-dark-btn" onclick="setTheme('dark')" style="background:rgba(0,0,0,0.5);border:2px solid var(--accent-cyan);color:#fff;border-radius:9px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;">🌙 Oscuro</button>
+                <button id="theme-light-btn" onclick="setTheme('light')" style="background:rgba(255,255,255,0.07);border:2px solid transparent;color:var(--text-muted);border-radius:9px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer;">☀️ Claro</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Panel: Datos ── -->
+      <div id="cfg-panel-datos" class="cfg-panel">
+        <!-- Importación masiva de nodos -->
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">📋 Importación Masiva de Nodos</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Importa tareas, notas, ingresos o gastos en lote. Descarga la plantilla, llénala y súbela. <b style="color:var(--accent-cyan);">El formato debe respetarse exactamente.</b></p>
+          <div style="background:rgba(0,0,0,0.2);border:1px solid var(--glass-border);border-radius:12px;padding:14px 16px;margin-bottom:14px;">
+            <div style="font-size:10px;font-weight:800;color:var(--text-muted);letter-spacing:1px;margin-bottom:10px;">COLUMNAS DEL CSV</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;"><code style="color:var(--accent-cyan);">contenido</code><span style="color:var(--text-muted);">Texto del nodo. Obligatorio.</span></div>
+              <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;"><code style="color:var(--accent-cyan);">tipo</code><span style="color:var(--text-muted);">note · kanban · income · expense · persona · contact</span></div>
+              <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;"><code style="color:var(--accent-cyan);">monto</code><span style="color:var(--text-muted);">Número. Solo para income/expense.</span></div>
+              <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;"><code style="color:var(--accent-cyan);">etiquetas</code><span style="color:var(--text-muted);">Tags separados por espacio. Ej: #trabajo #pendiente</span></div>
+              <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;"><code style="color:var(--accent-cyan);">fecha</code><span style="color:var(--text-muted);">Formato YYYY-MM-DD. Ej: 2026-04-30</span></div>
+              <div style="display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:11px;"><code style="color:var(--accent-cyan);">notas</code><span style="color:var(--text-muted);">Texto adicional opcional.</span></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button onclick="downloadNodeTemplate()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:9px;padding:8px 16px;color:var(--text-muted);cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;">📄 Descargar Plantilla</button>
+            <label style="background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);border-radius:9px;padding:8px 16px;color:#60a5fa;cursor:pointer;font-size:12px;font-weight:700;">
+              ⬆ Importar CSV<input id="nodes-csv-input" type="file" accept=".csv" style="display:none;" onchange="importNodesCSV(this)" />
+            </label>
+          </div>
+          <div id="nodes-import-result" style="display:none;font-size:12px;padding:10px 14px;border-radius:8px;margin-top:8px;"></div>
+        </div>
+
+        <!-- Plantillas CSV por módulo -->
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:#60a5fa;margin-bottom:8px;">📥 Importar por Módulo</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Descarga la plantilla del módulo, llénala y súbela. El sistema valida antes de importar.</p>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="font-size:18px;">💸</span><div><div style="font-size:13px;font-weight:700;color:var(--text-main);">Transacciones Bancarias</div><div style="font-size:11px;color:var(--text-muted);">Ingresos y gastos</div></div></div>
+              <div style="display:flex;gap:8px;">
+                <button onclick="downloadTemplate('transactions')" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;font-size:12px;cursor:pointer;">⬇️ Plantilla</button>
+                <label style="flex:1;padding:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;">⬆️ Subir CSV<input type="file" accept=".csv" style="display:none" onchange="importTemplate('transactions',this)" /></label>
+              </div>
+            </div>
+            <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="font-size:18px;">👥</span><div><div style="font-size:13px;font-weight:700;color:var(--text-main);">Contactos &amp; Proveedores</div><div style="font-size:11px;color:var(--text-muted);">Clientes, proveedores, colaboradores</div></div></div>
+              <div style="display:flex;gap:8px;">
+                <button onclick="downloadTemplate('contacts')" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;font-size:12px;cursor:pointer;">⬇️ Plantilla</button>
+                <label style="flex:1;padding:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;">⬆️ Subir CSV<input type="file" accept=".csv" style="display:none" onchange="importTemplate('contacts',this)" /></label>
+              </div>
+            </div>
+            <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><span style="font-size:18px;">🏗️</span><div><div style="font-size:13px;font-weight:700;color:var(--text-main);">Proyectos</div><div style="font-size:11px;color:var(--text-muted);">Importa proyectos en lote</div></div></div>
+              <div style="display:flex;gap:8px;">
+                <button onclick="downloadTemplate('projects')" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;font-size:12px;cursor:pointer;">⬇️ Plantilla</button>
+                <label style="flex:1;padding:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;">⬆️ Subir CSV<input type="file" accept=".csv" style="display:none" onchange="importTemplate('projects',this)" /></label>
+              </div>
+            </div>
+          </div>
+          <div id="import-preview-area" style="display:none;margin-top:16px;"></div>
+        </div>
+
+        <!-- Datos & Respaldo -->
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:#4ade80;margin-bottom:16px;">💾 Respaldo de Datos</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Descarga o restaura todos tus datos como JSON.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button onclick="exportBackup()" style="flex:1;min-width:140px;padding:12px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">⬇️ Exportar JSON</button>
+            <button onclick="document.getElementById('restore-file-input-cfg').click()" style="flex:1;min-width:140px;padding:12px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:10px;font-size:13px;cursor:pointer;">📂 Restaurar JSON</button>
+            <input type="file" id="restore-file-input-cfg" accept=".json" style="display:none" onchange="importBackup(this)" />
           </div>
         </div>
 
-        <div class="settings-group">
-          <label class="settings-label">Asunto</label>
-          <input type="text" id="fb-subject" class="input-field" placeholder="Describe brevemente el problema o idea..." />
-        </div>
-
-        <div class="settings-group">
-          <label class="settings-label">Descripción Detallada</label>
-          <textarea id="fb-body" class="input-field" rows="5" placeholder="¿Qué pasó? ¿Cómo lo reproduces? ¿Qué esperabas que pasara?&#10;&#10;Cuanta más info, más rápido lo resuelvo." style="resize:vertical;"></textarea>
-        </div>
-
-        <div class="settings-group">
-          <label class="settings-label">Tu Email (opcional, para responderte)</label>
-          <input type="email" id="fb-email" class="input-field" placeholder="correo@ejemplo.com" />
-        </div>
-
-        <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
-          <button onclick="sendFeedback()" style="background:linear-gradient(135deg,#00f0ff,#1af3ff); color:#000; border:none; border-radius:10px; padding:12px 24px; font-weight:800; font-size:14px; cursor:pointer; font-family:inherit; flex:1; transition:all 0.2s;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
-            📨 Enviar Feedback
-          </button>
-        </div>
-        <div id="fb-status" style="display:none; margin-top:14px; font-size:13px; padding:12px; border-radius:8px;"></div>
-      </div>
-
-      <!-- CATÁLOGO DE ESPECIALIDADES -->
-      <div class="settings-card" style="margin-top:24px;">
-        <h2 style="font-size:15px;font-weight:800;color:#fb923c;margin-bottom:8px;">🏷️ Catálogo de Especialidades</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">
-          Gestiona las especialidades disponibles en el módulo de Contactos. Evita errores de escritura.
-        </p>
-        <div id="spec-catalog-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:40px;"></div>
-        <div style="display:flex;gap:8px;">
-          <input type="text" id="spec-new-input" class="input-field" placeholder="Nueva especialidad..." style="flex:1;" onkeydown="if(event.key==='Enter')addCatalogSpecialty()" />
-          <button onclick="addCatalogSpecialty()" style="padding:8px 16px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f6ff;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px;">+ Agregar</button>
-        </div>
-      </div>
-
-      <!-- DATOS & RESPALDO -->
-      <div class="settings-card" style="margin-top:24px;">
-        <h2 style="font-size:15px;font-weight:800;color:#4ade80;margin-bottom:20px;">💾 Datos &amp; Respaldo</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Descarga o restaura todos tus datos. Usa esto como copia de seguridad.</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button onclick="exportBackup()" style="flex:1;min-width:140px;padding:12px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.3);color:#4ade80;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;">⬇️ Exportar JSON</button>
-          <button onclick="document.getElementById('restore-file-input-cfg').click()" style="flex:1;min-width:140px;padding:12px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:10px;font-size:13px;cursor:pointer;">📂 Restaurar JSON</button>
-          <input type="file" id="restore-file-input-cfg" accept=".json" style="display:none" onchange="importBackup(this)" />
-        </div>
-      </div>
-
-      <!-- GESTIÓN AVANZADA DE DATOS -->
-      <div class="settings-card" style="margin-top:24px;border-color:rgba(248,113,113,0.2);">
-        <h2 style="font-size:15px;font-weight:800;color:#f87171;margin-bottom:8px;">🗑 Gestión Avanzada de Datos</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Elimina grupos de datos o reinicia tu cuenta. <b style="color:#fbbf24;">Estas acciones no se pueden deshacer.</b> Descarga un respaldo primero.</p>
-
-        <!-- Borrado por tipo -->
-        <div style="margin-bottom:16px;">
-          <div style="font-size:12px;font-weight:700;color:#94a3b8;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">Borrar por tipo</div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <!-- Gestión avanzada -->
+        <div class="settings-card" style="border-color:rgba(248,113,113,0.18);">
+          <h2 style="font-size:15px;font-weight:800;color:#f87171;margin-bottom:8px;">🗑 Gestión Avanzada</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Elimina grupos de datos. <b style="color:#fbbf24;">Irreversible — descarga un respaldo primero.</b></p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
             <button onclick="deleteNodesByType('income','💰 ingresos')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Ingresos</button>
             <button onclick="deleteNodesByType('expense','💸 gastos')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Gastos</button>
             <button onclick="deleteNodesByType('persona','👥 contactos')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Contactos</button>
-            <button onclick="deleteNodesByType('kanban','📌 tareas')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Tareas Kanban</button>
+            <button onclick="deleteNodesByType('kanban','📌 tareas')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Tareas</button>
             <button onclick="deleteNodesByType('note','📝 notas')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Notas</button>
             <button onclick="deleteNodesByType('cotizacion','📄 cotizaciones')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Cotizaciones</button>
             <button onclick="deleteNodesByType('proyecto','🏗️ proyectos')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Proyectos</button>
             <button onclick="deleteNodesByType('account','🏦 cuentas')" style="padding:8px 14px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:8px;font-size:12px;cursor:pointer;">🗑 Cuentas</button>
           </div>
-        </div>
-
-        <!-- Borrar datos de demostración -->
-        <div style="margin-bottom:16px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.06);">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-            <div>
-              <div style="font-size:13px;font-weight:700;color:#fbbf24;">🧪 Datos de Demostración</div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Elimina sólo los nodos insertados por el modo demo (id con prefijo "demo_")</div>
-            </div>
-            <button onclick="deleteDemoData()" style="padding:9px 18px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🗑 Limpiar Demo</button>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.2);border-radius:10px;margin-bottom:10px;">
+            <div><div style="font-size:13px;font-weight:700;color:#fbbf24;">🧪 Datos de Demo</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Elimina nodos con prefijo "demo_"</div></div>
+            <button onclick="deleteDemoData()" style="padding:8px 16px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">🗑 Limpiar</button>
           </div>
-        </div>
-
-        <!-- Reset total -->
-        <div style="padding-top:12px;border-top:1px solid rgba(248,113,113,0.15);">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-            <div>
-              <div style="font-size:13px;font-weight:700;color:#f87171;">☢️ Reinicio Total</div>
-              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Elimina TODOS tus nodos en Supabase. La sesión continúa pero Nexus queda vacío.</div>
-            </div>
-            <button onclick="resetAllData()" style="padding:9px 18px;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.4);color:#f87171;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">☢️ Reiniciar Todo</button>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:10px;">
+            <div><div style="font-size:13px;font-weight:700;color:#f87171;">☢️ Reinicio Total</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Elimina TODOS tus nodos. La sesión continúa.</div></div>
+            <button onclick="resetAllData()" style="padding:8px 16px;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.4);color:#f87171;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">☢️ Reiniciar</button>
           </div>
         </div>
       </div>
 
-      <!-- IMPORTAR DATOS (PLANTILLAS) -->
-      <div class="settings-card" style="margin-top:24px;">
-        <h2 style="font-size:15px;font-weight:800;color:#60a5fa;margin-bottom:8px;">📥 Importar Datos</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">Descarga la plantilla, llénala con tus datos, y súbela. El sistema valida el formato antes de importar.</p>
-
-        <!-- Transacciones -->
-        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:12px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-            <span style="font-size:20px;">💸</span>
-            <div><div style="font-size:13px;font-weight:700;color:#fff;">Transacciones Bancarias</div>
-            <div style="font-size:11px;color:var(--text-muted);">Ingresos y gastos desde tu banco o tarjeta</div></div>
+      <!-- ── Panel: Seguridad ── -->
+      <div id="cfg-panel-seguridad" class="cfg-panel">
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:#f87171;margin-bottom:20px;">🔐 Seguridad de Cuenta</h2>
+          <div class="settings-group">
+            <label class="settings-label">Cambiar Contraseña</label>
+            <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;">
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">Nueva Contraseña</span>
+                <input type="password" id="pref-new-password" class="input-field" placeholder="Mínimo 6 caracteres" />
+              </div>
+              <button id="btn-change-password" class="nav-item" style="border:1px solid var(--glass-border);white-space:nowrap;">Cambiar</button>
+            </div>
           </div>
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Columnas requeridas: <code style="color:#60a5fa;">fecha, descripcion, monto, tipo (ingreso/gasto), cuenta, categoria</code></div>
+          <div style="padding-top:20px;border-top:1px solid var(--glass-border);">
+            <label class="settings-label" style="color:#f87171;">Zona de Peligro</label>
+            <button id="btn-delete-account" class="nav-item" style="width:100%;justify-content:center;border:1px solid rgba(239,68,68,0.3);color:#f87171;">
+              ⚠ Eliminar Cuenta Permanentemente
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Panel: Feedback ── -->
+      <div id="cfg-panel-feedback" class="cfg-panel">
+        <!-- Feedback form -->
+        <div class="settings-card" id="feedback-section" style="border-color:var(--glass-border-bright);">
+          <h2 style="font-size:16px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">💬 Feedback Directo</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:20px;">¿Algo no funciona? ¿Tienes una idea? Cuéntame — leo todos los mensajes.</p>
+          <div class="settings-group">
+            <label class="settings-label">Tipo de Reporte</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;" id="fb-type-btns">
+              <button class="contact-filter-btn active" data-fb="bug" onclick="selectFbType('bug',this)">🐛 Error / Bug</button>
+              <button class="contact-filter-btn" data-fb="feature" onclick="selectFbType('feature',this)">✨ Nueva Función</button>
+              <button class="contact-filter-btn" data-fb="inconsistency" onclick="selectFbType('inconsistency',this)">⚠️ Inconsistencia</button>
+              <button class="contact-filter-btn" data-fb="other" onclick="selectFbType('other',this)">💡 Otro</button>
+            </div>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Asunto</label>
+            <input type="text" id="fb-subject" class="input-field" placeholder="Describe brevemente..." />
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Descripción Detallada</label>
+            <textarea id="fb-body" class="input-field" rows="5" placeholder="¿Qué pasó? ¿Cómo lo reproduces?&#10;Cuanta más info, más rápido lo resuelvo." style="resize:vertical;"></textarea>
+          </div>
+          <div class="settings-group">
+            <label class="settings-label">Tu Email (opcional)</label>
+            <input type="email" id="fb-email" class="input-field" placeholder="correo@ejemplo.com" />
+          </div>
+          <button onclick="sendFeedback()" style="background:linear-gradient(135deg,var(--accent-cyan),#1af3ff);color:#000;border:none;border-radius:10px;padding:12px 24px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;width:100%;transition:all 0.2s;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter=''">
+            📨 Enviar Feedback
+          </button>
+          <div id="fb-status" style="display:none;margin-top:14px;font-size:13px;padding:12px;border-radius:8px;"></div>
+        </div>
+
+        <!-- Catálogo de Especialidades -->
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:#fb923c;margin-bottom:8px;">🏷️ Catálogo de Especialidades</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Gestiona las especialidades en el módulo de Contactos.</p>
+          <div id="spec-catalog-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;min-height:40px;"></div>
           <div style="display:flex;gap:8px;">
-            <button onclick="downloadTemplate('transactions')" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;font-size:12px;cursor:pointer;">⬇️ Plantilla CSV</button>
-            <label style="flex:1;padding:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;">
-              ⬆️ Subir CSV<input type="file" accept=".csv" style="display:none" onchange="importTemplate('transactions',this)" />
-            </label>
+            <input type="text" id="spec-new-input" class="input-field" placeholder="Nueva especialidad..." style="flex:1;" onkeydown="if(event.key==='Enter')addCatalogSpecialty()" />
+            <button onclick="addCatalogSpecialty()" style="padding:8px 16px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:var(--accent-cyan);border-radius:8px;cursor:pointer;font-weight:700;font-size:13px;">+ Agregar</button>
           </div>
         </div>
 
-        <!-- Contactos -->
-        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:12px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-            <span style="font-size:20px;">👥</span>
-            <div><div style="font-size:13px;font-weight:700;color:#fff;">Contactos &amp; Proveedores</div>
-            <div style="font-size:11px;color:var(--text-muted);">Clientes, proveedores, colaboradores</div></div>
-          </div>
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Columnas requeridas: <code style="color:#60a5fa;">nombre, tipo (cliente/proveedor/colaborador), telefono, email, especialidad, notas</code></div>
-          <div style="display:flex;gap:8px;">
-            <button onclick="downloadTemplate('contacts')" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;font-size:12px;cursor:pointer;">⬇️ Plantilla CSV</button>
-            <label style="flex:1;padding:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;">
-              ⬆️ Subir CSV<input type="file" accept=".csv" style="display:none" onchange="importTemplate('contacts',this)" />
-            </label>
+        <!-- Apoyo XRP -->
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:#fbbf24;margin-bottom:16px;">💛 Apoyar el Proyecto</h2>
+          <div style="background:rgba(0,170,228,0.07);border:1px solid rgba(0,170,228,0.18);border-radius:14px;padding:20px;">
+            <div style="font-size:13px;color:#7dd3fc;margin-bottom:12px;">Si Nexus OS te está siendo útil, considera una donación en XRP:</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#fff;background:rgba(0,0,0,0.3);padding:12px;border-radius:8px;word-break:break-all;margin-bottom:12px;">rBthUCndKy3Xbb19Ln4xkZeMwusX9NrYfj</div>
+            <button onclick="navigator.clipboard.writeText('rBthUCndKy3Xbb19Ln4xkZeMwusX9NrYfj').then(()=>showToast('Dirección XRP copiada ✓','success'))" class="nav-item" style="width:100%;justify-content:center;border:1px solid rgba(0,170,228,0.4);color:#7dd3fc;">
+              📋 Copiar Dirección XRP
+            </button>
           </div>
         </div>
-
-        <!-- Proyectos -->
-        <div style="border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-            <span style="font-size:20px;">🏗️</span>
-            <div><div style="font-size:13px;font-weight:700;color:#fff;">Proyectos</div>
-            <div style="font-size:11px;color:var(--text-muted);">Importa proyectos en lote con su configuración básica</div></div>
-          </div>
-          <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Columnas requeridas: <code style="color:#60a5fa;">nombre, categoria (inmueble/digital/personal), presupuesto, fase, descripcion, etiqueta</code></div>
-          <div style="display:flex;gap:8px;">
-            <button onclick="downloadTemplate('projects')" style="flex:1;padding:8px;background:rgba(255,255,255,0.05);border:1px solid var(--glass-border);color:var(--text-muted);border-radius:8px;font-size:12px;cursor:pointer;">⬇️ Plantilla CSV</button>
-            <label style="flex:1;padding:8px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;font-size:12px;cursor:pointer;text-align:center;">
-              ⬆️ Subir CSV<input type="file" accept=".csv" style="display:none" onchange="importTemplate('projects',this)" />
-            </label>
-          </div>
-        </div>
-
-        <div id="import-preview-area" style="display:none;margin-top:16px;"></div>
       </div>
 
     </div>
@@ -2569,18 +2695,30 @@
       </div>
 
       <!-- TAB BAR — polished cards -->
-      <div id="herr-tabs" style="display:flex;gap:10px;margin-bottom:24px;">
-        <button class="herr-tab active" data-tab="otc" onclick="switchHerrTab('otc')" style="flex:1;display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:14px;">
-          <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,rgba(0,246,255,0.2),rgba(0,246,255,0.05));display:grid;place-items:center;font-size:18px;flex-shrink:0;">💱</div>
-          <div style="text-align:left;"><div style="font-size:13px;font-weight:800;line-height:1.2;">Orquestador OTC</div><div style="font-size:10px;opacity:0.6;font-weight:400;">Dispersión cripto-fiat</div></div>
+      <div id="herr-tabs" style="display:flex;gap:12px;margin-bottom:28px;">
+        <button class="herr-tab active" data-tab="otc" onclick="switchHerrTab('otc')">
+          <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,rgba(34,211,238,0.22),rgba(34,211,238,0.06));display:grid;place-items:center;font-size:22px;flex-shrink:0;">💱</div>
+          <div style="text-align:left;flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="font-size:14px;font-weight:800;line-height:1.2;color:var(--text-main);">Orquestador OTC</div>
+              <span id="otc-hist-count" style="display:none;font-size:10px;font-weight:700;color:var(--accent-cyan);background:rgba(34,211,238,0.12);border-radius:20px;padding:1px 7px;min-width:20px;text-align:center;"></span>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Dispersión cripto-fiat</div>
+          </div>
         </button>
-        <button class="herr-tab" data-tab="tramites" onclick="switchHerrTab('tramites')" style="flex:1;display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:14px;">
-          <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,rgba(96,165,250,0.2),rgba(96,165,250,0.05));display:grid;place-items:center;font-size:18px;flex-shrink:0;">📋</div>
-          <div style="text-align:left;"><div style="font-size:13px;font-weight:800;line-height:1.2;">Trámites</div><div style="font-size:10px;opacity:0.6;font-weight:400;">Pagos y documentos legales</div></div>
+        <button class="herr-tab" data-tab="tramites" onclick="switchHerrTab('tramites')">
+          <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,rgba(96,165,250,0.22),rgba(96,165,250,0.06));display:grid;place-items:center;font-size:22px;flex-shrink:0;">📋</div>
+          <div style="text-align:left;">
+            <div style="font-size:14px;font-weight:800;line-height:1.2;color:var(--text-main);">Trámites</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Documentos legales</div>
+          </div>
         </button>
-        <button class="herr-tab" data-tab="utilidades" onclick="switchHerrTab('utilidades')" style="flex:1;display:flex;align-items:center;gap:10px;padding:14px 18px;border-radius:14px;">
-          <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.05));display:grid;place-items:center;font-size:18px;flex-shrink:0;">⚙️</div>
-          <div style="text-align:left;"><div style="font-size:13px;font-weight:800;line-height:1.2;">Utilidades</div><div style="font-size:10px;opacity:0.6;font-weight:400;">Conversor, cronómetro, calc</div></div>
+        <button class="herr-tab" data-tab="utilidades" onclick="switchHerrTab('utilidades')">
+          <div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,rgba(167,139,250,0.22),rgba(167,139,250,0.06));display:grid;place-items:center;font-size:22px;flex-shrink:0;">⚙️</div>
+          <div style="text-align:left;">
+            <div style="font-size:14px;font-weight:800;line-height:1.2;color:var(--text-main);">Utilidades</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Conversor, cronómetro</div>
+          </div>
         </button>
       </div>
 
@@ -2632,7 +2770,7 @@
               <input type="number" id="otc-fee-real" class="modal-input" placeholder="0.75" value="0.75" step="any" oninput="otcRecalc()"/>
             </div>
           </div>
-          <button class="otc-btn-action" onclick="otcRecalc()">⚡ Calcular Operación</button>
+          <button class="otc-btn-action" onclick="otcRecalc()" style="font-size:15px;padding:15px 20px;border-radius:14px;letter-spacing:0.04em;box-shadow:0 0 28px rgba(34,211,238,0.2);">⚡ Calcular Operación</button>
         </div>
 
         <!-- KPI CARDS — 2x2 grid -->

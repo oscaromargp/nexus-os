@@ -2326,7 +2326,6 @@ function renderFeed(nodes) {
     nodes.forEach(n => { if (!groups[n.type]) groups[n.type] = []; groups[n.type].push(n) })
     content = Object.entries(groups).map(([type, items]) => {
       const f = TYPE_FILTERS.find(f=>f.type===type)
-      const tc = TYPE_CONFIG[type] || {}
       return `
         <div style="margin-bottom:24px;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--glass-border);">
@@ -2337,7 +2336,27 @@ function renderFeed(nodes) {
         </div>`
     }).join('')
   } else {
-    content = nodes.map(feedItemHtml).join('')
+    // Agrupar por FECHA: Hoy / Ayer / Esta semana / Este mes / Antes
+    const now   = new Date()
+    const todayStr     = now.toDateString()
+    const yesterdayStr = new Date(now - 86400000).toDateString()
+    const thisWeekStart  = new Date(now); thisWeekStart.setDate(now.getDate() - now.getDay())
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    function _feedDateGroup(n) {
+      const d = new Date(n.created_at || n.timestamp || 0)
+      const ds = d.toDateString()
+      if (ds === todayStr)     return 'Hoy'
+      if (ds === yesterdayStr) return 'Ayer'
+      if (d >= thisWeekStart)  return 'Esta semana'
+      if (d >= thisMonthStart) return 'Este mes'
+      return 'Antes'
+    }
+    const ORDER = ['Hoy','Ayer','Esta semana','Este mes','Antes']
+    const grps = {}
+    nodes.forEach(n => { const g = _feedDateGroup(n); (grps[g] ??= []).push(n) })
+    content = ORDER.filter(g => grps[g]?.length).map(g =>
+      `<div class="feed-date-header">${g} <span style="color:var(--text-dim);font-size:10px;font-weight:600;">(${grps[g].length})</span></div>${grps[g].map(feedItemHtml).join('')}`
+    ).join('')
   }
 
   root.innerHTML = filterBar + content
@@ -7053,30 +7072,48 @@ function renderOtcHistory() {
   if (empty) empty.style.display = 'none'
 
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  // Update count badge on OTC tab
+  const otcTabBadgeEl = document.getElementById('otc-hist-count')
+  if (otcTabBadgeEl) {
+    otcTabBadgeEl.textContent = ops.length
+    otcTabBadgeEl.style.display = ops.length > 0 ? '' : 'none'
+  }
+
   let h = ''
   ops.forEach(op => {
     const m = op.metadata || {}
     const rows = m.rows || []
     const benefCount = rows.length
     const totalDisp = rows.reduce((s,r) => s + (r.montoMXN||0), 0)
+    const ventaBruta = m.ventaReportada || m.ventaBruta || 0
+    const pct = ventaBruta > 0 ? Math.min((totalDisp / ventaBruta) * 100, 100) : 100
+    // Status badge
+    let statusColor = '#4ade80'; let statusLabel = 'Completada'
+    if (pct < 99)       { statusColor = '#fbbf24'; statusLabel = `${pct.toFixed(0)}% dispersado` }
+    if (benefCount === 0){ statusColor = '#94a3b8'; statusLabel = 'Sin beneficiarios' }
     const d = new Date(m.saved_at || op.created_at)
     const dateStr = d.toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
-    h += '<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid rgba(255,255,255,0.06);border-radius:10px;margin-bottom:6px;transition:border-color 0.15s;" '
-    h += 'onmouseenter="this.style.borderColor=\'rgba(167,139,250,0.4)\'" onmouseleave="this.style.borderColor=\'rgba(255,255,255,0.06)\'">'
-    h += '<div style="font-size:20px;cursor:pointer;" onclick="otcViewHistory(\'' + esc(op.id) + '\')" title="Ver estado de cuenta">📊</div>'
-    h += '<div style="flex:1;min-width:0;cursor:pointer;" onclick="otcViewHistory(\'' + esc(op.id) + '\')">'
-    h += '<div style="font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(m.otc_ref || 'OTC') + ' — ' + esc(m.coin||'') + '</div>'
-    h += '<div style="font-size:10px;color:var(--text-muted);">' + dateStr + ' · ' + benefCount + ' beneficiario' + (benefCount!==1?'s':'') + '</div>'
-    h += '</div>'
-    h += '<div style="text-align:right;flex-shrink:0;">'
-    h += '<div style="font-size:14px;font-weight:800;color:#4ade80;font-family:\'JetBrains Mono\',monospace;">$' + _fmt$(totalDisp) + '</div>'
-    h += '<div style="font-size:10px;color:var(--text-dim);">dispersado</div>'
-    h += '</div>'
-    h += '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">'
-    h += '<button onclick="event.stopPropagation();otcReopenHistory(\'' + esc(op.id) + '\')" class="otc-btn-reopen" title="Reabrir para editar">↩ Reabrir</button>'
-    h += '<button onclick="event.stopPropagation();otcDeleteHistory(\'' + esc(op.id) + '\')" style="background:none;border:1px solid rgba(248,113,113,0.2);color:#f87171;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:600;" title="Eliminar">🗑 Borrar</button>'
-    h += '</div>'
-    h += '</div>'
+    h += `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg-surface);border:1px solid rgba(255,255,255,0.06);border-radius:12px;margin-bottom:8px;transition:all 0.2s;cursor:pointer;"
+      onmouseenter="this.style.borderColor='rgba(167,139,250,0.35)';this.style.background='rgba(255,255,255,0.03)'"
+      onmouseleave="this.style.borderColor='rgba(255,255,255,0.06)';this.style.background='var(--bg-surface)'"
+      onclick="otcViewHistory('${esc(op.id)}')">`
+    h += `<div style="width:40px;height:40px;border-radius:10px;background:rgba(167,139,250,0.12);display:grid;place-items:center;font-size:18px;flex-shrink:0;">📊</div>`
+    h += `<div style="flex:1;min-width:0;">`
+    h += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">`
+    h += `<div style="font-size:13px;font-weight:700;color:var(--text-main);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.otc_ref||'OTC')} — ${esc(m.coin||'')}</div>`
+    h += `<span style="font-size:10px;font-weight:700;color:${statusColor};background:${statusColor}22;border:1px solid ${statusColor}44;border-radius:20px;padding:1px 8px;flex-shrink:0;">${statusLabel}</span>`
+    h += `</div>`
+    h += `<div style="font-size:11px;color:var(--text-muted);">${dateStr} · ${benefCount} beneficiario${benefCount!==1?'s':''}</div>`
+    h += `</div>`
+    h += `<div style="text-align:right;flex-shrink:0;">`
+    h += `<div style="font-size:15px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">$${_fmt$(totalDisp)}</div>`
+    h += `<div style="font-size:10px;color:var(--text-dim);">dispersado</div>`
+    h += `</div>`
+    h += `<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;" onclick="event.stopPropagation()">`
+    h += `<button onclick="otcReopenHistory('${esc(op.id)}')" class="otc-btn-reopen" title="Reabrir para editar">↩ Reabrir</button>`
+    h += `<button onclick="otcDeleteHistory('${esc(op.id)}')" style="background:none;border:1px solid rgba(248,113,113,0.2);color:#f87171;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;font-weight:600;">🗑</button>`
+    h += `</div>`
+    h += `</div>`
   })
   list.innerHTML = h
 }
@@ -10965,6 +11002,14 @@ function _parseCSVRow(line) {
 
 // ── FEEDBACK ─────────────────────────────────────────────────────────────────
 let activeFbType = 'bug'
+
+window.switchCfgTab = function(panelId, btn) {
+  document.querySelectorAll('.cfg-panel').forEach(p => p.classList.remove('active'))
+  document.querySelectorAll('.cfg-tab').forEach(b => b.classList.remove('active'))
+  const panel = document.getElementById(`cfg-panel-${panelId}`)
+  if (panel) panel.classList.add('active')
+  if (btn)   btn.classList.add('active')
+}
 
 window.selectFbType = function(type, btn) {
   activeFbType = type
