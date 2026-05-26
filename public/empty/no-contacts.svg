@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400">
+  <rect width="500" height="400" fill="none"/>
+  <!-- Person circles -->
+  <circle cx="250" cy="120" r="50" fill="rgba(0,240,255,0.08)" stroke="rgba(0,240,255,0.3)" stroke-width="2"/>
+  <circle cx="250" cy="105" r="22" fill="rgba(0,240,255,0.12)" stroke="rgba(0,240,255,0.25)" stroke-width="1.5"/>
+  <path d="M 205 155 Q 205 132 250 132 Q 295 132 295 155" fill="rgba(0,240,255,0.12)" stroke="rgba(0,240,255,0.25)" stroke-width="1.5"/>
+  <!-- Side persons (smaller) -->
+  <circle cx="140" cy="160" r="35" fill="rgba(0,240,255,0.05)" stroke="rgba(0,240,255,0.2)" stroke-width="1.5"/>
+  <circle cx="360" cy="160" r="35" fill="rgba(0,240,255,0.05)" stroke="rgba(0,240,255,0.2)" stroke-width="1.5"/>
+  <!-- Plus button -->
+  <circle cx="350" cy="250" r="28" fill="rgba(0,240,255,0.12)" stroke="rgba(0,240,255,0.35)" stroke-width="2"/>
+  <rect x="338" y="248" width="24" height="4" rx="2" fill="rgba(0,240,255,0.7)"/>
+  <rect x="348" y="238" width="4" height="24" rx="2" fill="rgba(0,240,255,0.7)"/>
+</svg>

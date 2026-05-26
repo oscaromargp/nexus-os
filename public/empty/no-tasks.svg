@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400">
+  <rect width="500" height="400" fill="none"/>
+  <!-- Clipboard -->
+  <rect x="150" y="50" width="200" height="260" rx="12" fill="rgba(0,240,255,0.06)" stroke="rgba(0,240,255,0.25)" stroke-width="2"/>
+  <rect x="190" y="36" width="120" height="32" rx="8" fill="rgba(0,240,255,0.12)" stroke="rgba(0,240,255,0.3)" stroke-width="1.5"/>
+  <!-- Lines -->
+  <rect x="175" y="105" width="150" height="7" rx="3.5" fill="rgba(0,240,255,0.12)"/>
+  <rect x="175" y="122" width="110" height="7" rx="3.5" fill="rgba(0,240,255,0.08)"/>
+  <rect x="175" y="148" width="150" height="7" rx="3.5" fill="rgba(0,240,255,0.12)"/>
+  <rect x="175" y="165" width="90" height="7" rx="3.5" fill="rgba(0,240,255,0.08)"/>
+  <rect x="175" y="191" width="150" height="7" rx="3.5" fill="rgba(0,240,255,0.12)"/>
+  <!-- Check circles (empty) -->
+  <circle cx="165" cy="108" r="7" fill="none" stroke="rgba(0,240,255,0.3)" stroke-width="1.5"/>
+  <circle cx="165" cy="151" r="7" fill="none" stroke="rgba(0,240,255,0.3)" stroke-width="1.5"/>
+  <circle cx="165" cy="194" r="7" fill="none" stroke="rgba(0,240,255,0.3)" stroke-width="1.5"/>
+  <!-- Pencil -->
+  <g transform="translate(320,220) rotate(-30)">
+    <rect x="-8" y="-50" width="16" height="60" rx="3" fill="rgba(0,240,255,0.2)" stroke="rgba(0,240,255,0.4)" stroke-width="1.5"/>
+    <polygon points="-8,10 8,10 0,24" fill="rgba(0,240,255,0.3)" stroke="rgba(0,240,255,0.4)" stroke-width="1"/>
+  </g>
+</svg>

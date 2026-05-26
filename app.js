@@ -8,6 +8,110 @@ import Sortable from 'sortablejs'
 import { Chart, DoughnutController, ArcElement, Tooltip, Legend, BarController, BarElement, CategoryScale, LinearScale } from 'chart.js'
 Chart.register(DoughnutController, ArcElement, Tooltip, Legend, BarController, BarElement, CategoryScale, LinearScale)
 
+// ── Lucide Icons ──────────────────────────────────────────────────────────────
+import {
+  createIcons,
+  LayoutDashboard, Rss, Columns3, Wallet, Brain, CalendarDays, BookOpen,
+  Users, HelpCircle, Settings, Plus, Search, Bell, X, Check, ChevronDown,
+  ChevronRight, ChevronLeft, ArrowUpRight, ArrowDownLeft, Pencil, Trash2,
+  MoreHorizontal, Tag, Folder, FolderOpen, DollarSign, TrendingUp,
+  TrendingDown, AlertCircle, Clock, Star, Zap, Filter, SortAsc,
+  Download, Upload, Eye, EyeOff, RefreshCw, Copy, ExternalLink,
+  Calendar, List, Grid, Kanban, FileText, Image, Paperclip,
+  Link, Hash, AtSign, CreditCard, Banknote, Receipt, Target,
+  BarChart2, PieChart, Activity, ChevronUp, CheckCircle2, Circle,
+  XCircle, AlertTriangle, Info, Lightbulb, Flag, Bookmark,
+  Send, MessageSquare, Phone, Mail, MapPin, Globe, Building2,
+  User, LogOut, Moon, Sun, Maximize2, Minimize2, PanelLeftClose,
+  PanelLeftOpen, Sparkles, Lock, Unlock, Shield, Key, Archive,
+  FilePlus, FileEdit, FileCheck, ClipboardList, CalendarClock,
+  Repeat, RotateCcw, Timer, Hourglass, PackageOpen, Layers,
+  Briefcase, Gauge, StickyNote, ShoppingCart, Truck, ClipboardCheck,
+  ChartBar, TrendingUpIcon, Play, Pause, CircleDot, Dot,
+  ChevronLast, ChevronFirst, Undo2, Redo2, GripVertical,
+  ToggleLeft, ToggleRight, Sliders, Radio, Wifi, Battery,
+  UserPlus, UserCheck, UserX, UsersRound, Contact,
+  ArrowRight, ArrowLeft, MoveRight, MoveLeft,
+  Minus, Asterisk, Divide, Equal
+} from 'lucide'
+
+// Registro central — todos los iconos disponibles en Nexus OS
+const _lucideIcons = {
+  LayoutDashboard, Rss, Columns3, Wallet, Brain, CalendarDays, BookOpen,
+  Users, HelpCircle, Settings, Plus, Search, Bell, X, Check, ChevronDown,
+  ChevronRight, ChevronLeft, ArrowUpRight, ArrowDownLeft, Pencil, Trash2,
+  MoreHorizontal, Tag, Folder, FolderOpen, DollarSign, TrendingUp,
+  TrendingDown, AlertCircle, Clock, Star, Zap, Filter, SortAsc,
+  Download, Upload, Eye, EyeOff, RefreshCw, Copy, ExternalLink,
+  Calendar, List, Grid, Kanban, FileText, Image, Paperclip,
+  Link, Hash, AtSign, CreditCard, Banknote, Receipt, Target,
+  BarChart2, PieChart, Activity, ChevronUp, CheckCircle2, Circle,
+  XCircle, AlertTriangle, Info, Lightbulb, Flag, Bookmark,
+  Send, MessageSquare, Phone, Mail, MapPin, Globe, Building2,
+  User, LogOut, Moon, Sun, Maximize2, Minimize2, PanelLeftClose,
+  PanelLeftOpen, Sparkles, Lock, Unlock, Shield, Key, Archive,
+  FilePlus, FileEdit, FileCheck, ClipboardList, CalendarClock,
+  Repeat, RotateCcw, Timer, Hourglass, PackageOpen, Layers,
+  Briefcase, Gauge, StickyNote, ShoppingCart, Truck, ClipboardCheck,
+  Play, Pause, CircleDot, Dot, ChevronLast, ChevronFirst,
+  Undo2, Redo2, GripVertical, ToggleLeft, ToggleRight,
+  Sliders, Radio, Wifi, Battery,
+  UserPlus, UserCheck, UserX, UsersRound, Contact,
+  ArrowRight, ArrowLeft, MoveRight, MoveLeft,
+  Minus, Asterisk, Divide, Equal
+}
+
+/**
+ * Genera un SVG string de Lucide para usar en innerHTML templates.
+ * Lucide exporta iconos como array de [tagName, attrs] para los child paths.
+ *
+ * @param {string} name  - Nombre PascalCase del icono (ej: "TrendingUp")
+ * @param {number} size  - Tamaño en px (default 16)
+ * @param {string} cls   - Clases CSS adicionales
+ * @param {object} opts  - { strokeWidth, color, style }
+ * @returns {string} SVG string listo para innerHTML
+ */
+function lx(name, size = 16, cls = '', opts = {}) {
+  const paths = _lucideIcons[name]
+  if (!paths) return `<span style="display:inline-block;width:${size}px;height:${size}px;vertical-align:middle;"></span>`
+  const sw    = opts.strokeWidth ?? 1.75
+  const color = opts.color ?? 'currentColor'
+  const style = opts.style ?? ''
+  const inner = paths.map(([tag, attrs]) => {
+    const attrStr = Object.entries(attrs || {}).map(([k, v]) => `${k}="${v}"`).join(' ')
+    return `<${tag} ${attrStr}/>`
+  }).join('')
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round" class="lucide ${cls}" style="vertical-align:middle;flex-shrink:0;${style}">${inner}</svg>`
+}
+
+// Activa iconos en data-lucide="..." tras cada render del DOM
+function refreshIcons() {
+  try {
+    createIcons({ icons: _lucideIcons, nameAttr: 'data-lucide' })
+  } catch (_) { /* silencioso si no hay elementos */ }
+}
+
+window._lx = lx
+window._refreshIcons = refreshIcons
+
+/**
+ * Genera el HTML de un empty state con ilustración SVG y texto.
+ * @param {object} opts
+ * @param {string} opts.img    - Ruta al SVG (relativa a /public, ej: '/empty/no-data.svg')
+ * @param {string} opts.title  - Título del estado vacío
+ * @param {string} opts.sub    - Subtítulo / descripción
+ * @param {string} [opts.cta]  - HTML del botón CTA opcional
+ */
+function nxEmptyState({ img, title, sub, cta = '' }) {
+  return `<div class="nx-empty-state">
+    <img src="${img}" alt="" aria-hidden="true" />
+    <p class="nx-empty-title">${title}</p>
+    <p class="nx-empty-sub">${sub}</p>
+    ${cta}
+  </div>`
+}
+window._nxEmptyState = nxEmptyState
+
 // ─────────────────────────────────────────
 // Clientes y Estado
 // ─────────────────────────────────────────
@@ -561,11 +665,14 @@ function renderKanban(nodes) {
         </div>
         <div class="trello-cards-container kanban-col-body" data-status="${list.id}"
              style="padding:10px; flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px; min-height:80px;">
-          ${cardsHtml}
+          ${cardsHtml || `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:20px 10px;opacity:0.4;">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-dim)"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span style="font-size:10px;color:var(--text-dim);text-align:center;font-weight:500;">Sin tarjetas</span>
+          </div>`}
         </div>
         <div class="btn-add-card" onclick="startQuickAdd('${list.id}')"
-             style="padding:8px 12px; font-size:12px; color:var(--text-dim); cursor:pointer; border-top:1px solid rgba(255,255,255,0.04);">
-           <span>+</span> Añade una tarjeta
+             style="padding:8px 12px; font-size:12px; color:var(--text-dim); cursor:pointer; border-top:1px solid rgba(255,255,255,0.04); display:flex; align-items:center; gap:6px; transition: color 0.15s, background 0.15s;" onmouseover="this.style.color='var(--accent-cyan)'" onmouseout="this.style.color='var(--text-dim)'">
+           ${lx('Plus', 13)} Añade una tarjeta
         </div>
       </div>
     `
@@ -2000,6 +2107,8 @@ function renderAll() {
   // Herramientas sub-renderers — siempre actualizar aunque no sea la vista activa
   if (typeof renderOtcHistory === 'function') safe(renderOtcHistory)
   if (typeof renderDocHistory === 'function') safe(renderDocHistory)
+  // Lucide: reemplaza <i data-lucide="..."> tras cada render
+  requestAnimationFrame(refreshIcons)
 }
 
 function renderFilterBar() {
@@ -2102,11 +2211,12 @@ function renderFeed(nodes) {
     </div>`
 
   if (nodes.length === 0) {
-    root.innerHTML = filterBar + `<div style="text-align:center;color:var(--text-muted);padding:60px 20px;">
-      <div style="font-size:40px;margin-bottom:12px;">🔍</div>
-      <div style="font-size:15px;font-weight:700;margin-bottom:6px;">Sin resultados</div>
-      <div style="font-size:12px;">Prueba otro filtro o borra la búsqueda</div>
-    </div>`
+    root.innerHTML = filterBar + nxEmptyState({
+      img: '/empty/no-search.svg',
+      title: 'Sin resultados',
+      sub: 'Prueba otro filtro o escribe algo en el panel de comandos',
+      cta: `<button onclick="clearSearch?.()" style="margin-top:4px;padding:8px 18px;border-radius:8px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.25);color:var(--accent-cyan);font-size:12px;font-weight:600;cursor:pointer;">${lx('RefreshCw',13)} Limpiar filtros</button>`
+    })
     return
   }
 
@@ -2525,6 +2635,17 @@ function renderNotes(nodes) {
       return true
     })
     .sort((a, b) => (b.metadata?.pinned ? 1 : 0) - (a.metadata?.pinned ? 1 : 0))
+
+  if (notes.length === 0) {
+    root.innerHTML = nxEmptyState({
+      img: '/empty/no-notes.svg',
+      title: 'Bóveda Neural vacía',
+      sub: 'Escribe tu primer pensamiento en el panel de comandos o usa el atajo rápido',
+      cta: `<button onclick="document.getElementById('cmd-input')?.focus()" style="margin-top:4px;padding:8px 18px;border-radius:8px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.25);color:var(--accent-cyan);font-size:12px;font-weight:600;cursor:pointer;">${lx('Plus',13)} Nueva nota</button>`
+    })
+    if (_showArchivedNotes) _renderArchivedNotes()
+    return
+  }
 
   root.innerHTML = notes.map(n => {
     const color = n.metadata?.color || ''
@@ -10362,10 +10483,12 @@ function renderContacts() {
   }
 
   if (!contacts.length) {
-    root.innerHTML = `<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:60px 20px;">
-      <div style="font-size:40px;margin-bottom:12px;">👥</div>
-      <div style="font-size:14px;">Sin contactos. Crea uno con <b>+ Nuevo</b> o usa <code>#persona Nombre</code> en la barra.</div>
-    </div>`
+    root.innerHTML = `<div style="grid-column:1/-1;">${nxEmptyState({
+      img: '/empty/no-contacts.svg',
+      title: search ? 'Sin resultados' : 'Directorio vacío',
+      sub: search ? `No encontramos contactos para "${search}"` : 'Crea tu primer contacto con el botón + Nuevo o escribe #persona Nombre en el panel de comandos',
+      cta: !search ? `<button onclick="openContactModal()" style="margin-top:4px;padding:8px 18px;border-radius:8px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.25);color:var(--accent-cyan);font-size:12px;font-weight:600;cursor:pointer;">${lx('UserPlus',13)} Nuevo contacto</button>` : ''
+    })}</div>`
     return
   }
 

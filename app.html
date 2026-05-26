@@ -303,8 +303,24 @@
       box-shadow: inset 0 0 10px rgba(var(--accent-cyan-rgb), 0.05);
     }
     
-    .nav-icon { font-size: 18px; filter: grayscale(1); transition: var(--transition-soft); }
-    .nav-item:hover .nav-icon, .nav-item.active .nav-icon { filter: grayscale(0); transform: scale(1.1); }
+    .nav-icon {
+      font-size: 18px;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      opacity: 0.45;
+      transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.16,1,0.3,1);
+    }
+    .nav-icon svg { width: 18px; height: 18px; }
+    .nav-item:hover .nav-icon, .nav-item.active .nav-icon {
+      opacity: 1;
+      transform: scale(1.12);
+    }
+    .nav-item.active .nav-icon svg { stroke: var(--accent-cyan); }
+    .nav-item:hover .nav-icon svg  { stroke: #fff; }
 
     /* ── MAIN AREA ── */
     main { grid-area: main; position: relative; overflow-y: auto; background: radial-gradient(circle at top right, rgba(var(--accent-cyan-rgb), 0.03) 0%, transparent 40%); padding: 30px; padding-bottom: 140px; }
@@ -1126,22 +1142,22 @@
       <span class="logo-text">NEXUS OS</span>
     </a>
     <div class="nav-items">
-      <button class="nav-item active" data-view="feed"><span class="nav-icon">📊</span> Panel de Comandos</button>
-      <button class="nav-item" data-view="kanban"><span class="nav-icon">📌</span> Muro Táctico</button>
-      <button class="nav-item" data-view="finance"><span class="nav-icon">💹</span> Bio-Finanzas</button>
-      <button class="nav-item" data-view="notes"><span class="nav-icon">🧠</span> Bóveda Neural</button>
-      <button class="nav-item" data-view="calendar"><span class="nav-icon">📅</span> Tiempo & Crónica</button>
-      <button class="nav-item" data-view="contacts"><span class="nav-icon">👥</span> Contactos</button>
-      <button class="nav-item" data-view="proyectos"><span class="nav-icon">🏗️</span> Proyectos</button>
-      <button class="nav-item" data-view="agenda"><span class="nav-icon">💳</span> Agenda Financiera</button>
-      <button class="nav-item" data-view="herramientas"><span class="nav-icon">🧮</span> Herramientas</button>
-      <button class="nav-item" data-view="tags"><span class="nav-icon">🏷️</span> Inteligencia Tags</button>
-      <button class="nav-item" data-view="settings"><span class="nav-icon">⚙️</span> Configuración</button>
-      <button class="nav-item" data-view="ayuda"><span class="nav-icon">❓</span> Ayuda</button>
+      <button class="nav-item active" data-view="feed"><span class="nav-icon"><i data-lucide="LayoutDashboard"></i></span> Panel de Comandos</button>
+      <button class="nav-item" data-view="kanban"><span class="nav-icon"><i data-lucide="Columns3"></i></span> Muro Táctico</button>
+      <button class="nav-item" data-view="finance"><span class="nav-icon"><i data-lucide="Wallet"></i></span> Bio-Finanzas</button>
+      <button class="nav-item" data-view="notes"><span class="nav-icon"><i data-lucide="Brain"></i></span> Bóveda Neural</button>
+      <button class="nav-item" data-view="calendar"><span class="nav-icon"><i data-lucide="CalendarDays"></i></span> Tiempo & Crónica</button>
+      <button class="nav-item" data-view="contacts"><span class="nav-icon"><i data-lucide="Users"></i></span> Contactos</button>
+      <button class="nav-item" data-view="proyectos"><span class="nav-icon"><i data-lucide="Briefcase"></i></span> Proyectos</button>
+      <button class="nav-item" data-view="agenda"><span class="nav-icon"><i data-lucide="CalendarClock"></i></span> Agenda Financiera</button>
+      <button class="nav-item" data-view="herramientas"><span class="nav-icon"><i data-lucide="Sliders"></i></span> Herramientas</button>
+      <button class="nav-item" data-view="tags"><span class="nav-icon"><i data-lucide="Tag"></i></span> Inteligencia Tags</button>
+      <button class="nav-item" data-view="settings"><span class="nav-icon"><i data-lucide="Settings"></i></span> Configuración</button>
+      <button class="nav-item" data-view="ayuda"><span class="nav-icon"><i data-lucide="HelpCircle"></i></span> Ayuda</button>
     </div>
     <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.05);">
        <div id="user-email" style="font-size:11px; color: var(--text-muted); margin-bottom: 12px; overflow: hidden; text-overflow: ellipsis;"></div>
-       <button id="btn-logout" class="nav-item" style="width: 100%; border: 1px solid rgba(239,68,68,0.2); color: #f87171;"><span class="nav-icon">↩</span> Abortar Sistema</button>
+       <button id="btn-logout" class="nav-item" style="width: 100%; border: 1px solid rgba(239,68,68,0.2); color: #f87171;"><span class="nav-icon"><i data-lucide="LogOut"></i></span> Abortar Sistema</button>
     </div>
   </nav>
 
@@ -4595,6 +4611,177 @@
       h1.view-title { font-size: 20px !important; }
       .modal-box { margin: 8px; max-width: calc(100vw - 16px) !important; }
     }
+
+    /* ─────────────────────────────────────────────────────────────────
+       NEXUS OS — Micro-interacciones & Lucide icon system
+       Fase 2 del Visual Upgrade: motion, hover, feedback táctil
+    ───────────────────────────────────────────────────────────────── */
+
+    /* Lucide SVG — baseline visual */
+    .lucide {
+      display: inline-block;
+      vertical-align: middle;
+      flex-shrink: 0;
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+
+    /* ── Botones — press feedback ── */
+    button, [role="button"], .btn {
+      transition: transform 0.12s cubic-bezier(0.16,1,0.3,1),
+                  opacity 0.12s ease,
+                  box-shadow 0.15s ease,
+                  background-color 0.15s ease,
+                  border-color 0.15s ease !important;
+    }
+    button:active:not(:disabled), [role="button"]:active:not([disabled]) {
+      transform: scale(0.94) !important;
+      opacity: 0.85 !important;
+    }
+
+    /* ── Cards del Feed — lift on hover ── */
+    .node-card {
+      transition: transform 0.2s cubic-bezier(0.16,1,0.3,1),
+                  box-shadow 0.2s ease,
+                  border-color 0.2s ease !important;
+    }
+    .node-card:hover {
+      transform: translateY(-2px) !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,240,255,0.12) !important;
+    }
+
+    /* ── Kanban cards ── */
+    .kanban-card {
+      transition: transform 0.18s cubic-bezier(0.16,1,0.3,1),
+                  box-shadow 0.18s ease !important;
+    }
+    .kanban-card:hover {
+      transform: translateY(-2px) scale(1.01) !important;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3) !important;
+    }
+
+    /* ── Nav sidebar items ── */
+    .nav-item, [data-view], .sidebar-nav a {
+      transition: background-color 0.15s ease,
+                  color 0.15s ease,
+                  transform 0.15s cubic-bezier(0.16,1,0.3,1),
+                  padding-left 0.15s ease !important;
+    }
+    .nav-item:hover:not(.active), [data-view]:hover:not(.active) {
+      transform: translateX(3px) !important;
+    }
+
+    /* ── Modal entry animation ── */
+    .modal-box {
+      animation: nexus-modal-in 0.28s cubic-bezier(0.16,1,0.3,1) both;
+    }
+    @keyframes nexus-modal-in {
+      from { opacity: 0; transform: scale(0.94) translateY(12px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* ── Toast entry ── */
+    #toast-container > div {
+      animation: nexus-toast-in 0.25s cubic-bezier(0.16,1,0.3,1) both;
+    }
+    @keyframes nexus-toast-in {
+      from { opacity: 0; transform: translateY(20px) scale(0.92); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* ── Input focus glow ── */
+    input:focus, textarea:focus, select:focus {
+      transition: box-shadow 0.2s ease, border-color 0.2s ease !important;
+      box-shadow: 0 0 0 2px rgba(0,240,255,0.2) !important;
+    }
+
+    /* ── Badge pulse para alertas urgentes ── */
+    .badge-urgent {
+      animation: badge-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes badge-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+      50%       { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+    }
+
+    /* ── Skeleton loading state ── */
+    .nx-skeleton {
+      background: linear-gradient(90deg,
+        rgba(255,255,255,0.04) 25%,
+        rgba(255,255,255,0.08) 50%,
+        rgba(255,255,255,0.04) 75%);
+      background-size: 200% 100%;
+      animation: nx-skeleton-wave 1.5s ease-in-out infinite;
+      border-radius: 6px;
+    }
+    @keyframes nx-skeleton-wave {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* ── Empty state container ── */
+    .nx-empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 48px 24px;
+      text-align: center;
+      animation: nexus-modal-in 0.3s ease both;
+    }
+    .nx-empty-state img {
+      width: 140px;
+      height: 140px;
+      opacity: 0.7;
+      filter: hue-rotate(160deg) saturate(0.6) brightness(0.9);
+    }
+    .nx-empty-state .nx-empty-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin: 0;
+    }
+    .nx-empty-state .nx-empty-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 0;
+      max-width: 240px;
+      line-height: 1.5;
+    }
+
+    /* ── Ripple en botones CTA ── */
+    .nx-ripple {
+      position: relative;
+      overflow: hidden;
+    }
+    .nx-ripple::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, rgba(255,255,255,0.18) 0%, transparent 70%);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .nx-ripple:active::after {
+      opacity: 1;
+      transition: none;
+    }
+
+    /* ── Chevron animado en acordeones ── */
+    .nx-chevron {
+      transition: transform 0.22s cubic-bezier(0.16,1,0.3,1);
+    }
+    .nx-chevron.open {
+      transform: rotate(180deg);
+    }
+
+    /* ── Scroll suave global ── */
+    * { scroll-behavior: smooth; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(0,240,255,0.15); border-radius: 99px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0,240,255,0.3); }
+
 </style>
 
 <!-- ═══════════════════════ MODAL: CREAR / EDITAR EVENTO ═══════════════════════ -->

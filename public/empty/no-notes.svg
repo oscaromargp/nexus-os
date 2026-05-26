@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400">
+  <rect width="500" height="400" fill="none"/>
+  <!-- Note cards -->
+  <rect x="160" y="80" width="180" height="160" rx="10" fill="rgba(0,240,255,0.06)" stroke="rgba(0,240,255,0.2)" stroke-width="1.5" transform="rotate(-5,250,160)"/>
+  <rect x="140" y="95" width="180" height="160" rx="10" fill="rgba(0,240,255,0.08)" stroke="rgba(0,240,255,0.25)" stroke-width="1.5" transform="rotate(3,230,175)"/>
+  <rect x="155" y="88" width="180" height="160" rx="10" fill="rgba(0,240,255,0.1)" stroke="rgba(0,240,255,0.3)" stroke-width="1.5"/>
+  <!-- Lines inside note -->
+  <rect x="175" y="115" width="120" height="6" rx="3" fill="rgba(0,240,255,0.2)"/>
+  <rect x="175" y="131" width="90" height="6" rx="3" fill="rgba(0,240,255,0.15)"/>
+  <rect x="175" y="147" width="110" height="6" rx="3" fill="rgba(0,240,255,0.15)"/>
+  <!-- Brain icon outline -->
+  <circle cx="310" cy="310" r="35" fill="rgba(0,240,255,0.08)" stroke="rgba(0,240,255,0.25)" stroke-width="1.5"/>
+  <text x="310" y="320" text-anchor="middle" fill="rgba(0,240,255,0.4)" font-size="28" font-family="sans-serif">🧠</text>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 400">
+  <rect width="500" height="400" fill="none"/>
+  <!-- Magnifier -->
+  <circle cx="210" cy="170" r="80" fill="rgba(0,240,255,0.06)" stroke="rgba(0,240,255,0.28)" stroke-width="3"/>
+  <line x1="270" y1="230" x2="360" y2="320" stroke="rgba(0,240,255,0.35)" stroke-width="14" stroke-linecap="round"/>
+  <!-- X inside magnifier -->
+  <line x1="183" y1="143" x2="237" y2="197" stroke="rgba(0,240,255,0.3)" stroke-width="3" stroke-linecap="round"/>
+  <line x1="237" y1="143" x2="183" y2="197" stroke="rgba(0,240,255,0.3)" stroke-width="3" stroke-linecap="round"/>
+</svg>
