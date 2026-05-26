@@ -27,7 +27,7 @@ import {
   FilePlus, FileEdit, FileCheck, ClipboardList, CalendarClock,
   Repeat, RotateCcw, Timer, Hourglass, PackageOpen, Layers,
   Briefcase, Gauge, StickyNote, ShoppingCart, Truck, ClipboardCheck,
-  ChartBar, TrendingUpIcon, Play, Pause, CircleDot, Dot,
+  Play, Pause, CircleDot, Dot,
   ChevronLast, ChevronFirst, Undo2, Redo2, GripVertical,
   ToggleLeft, ToggleRight, Sliders, Radio, Wifi, Battery,
   UserPlus, UserCheck, UserX, UsersRound, Contact,
@@ -55,7 +55,7 @@ const _lucideIcons = {
   Briefcase, Gauge, StickyNote, ShoppingCart, Truck, ClipboardCheck,
   Play, Pause, CircleDot, Dot, ChevronLast, ChevronFirst,
   Undo2, Redo2, GripVertical, ToggleLeft, ToggleRight,
-  Sliders, Radio, Wifi, Battery,
+  Sliders, Radio, Wifi, Battery, StickyNote, Receipt,
   UserPlus, UserCheck, UserX, UsersRound, Contact,
   ArrowRight, ArrowLeft, MoveRight, MoveLeft,
   Minus, Asterisk, Divide, Equal
@@ -111,6 +111,48 @@ function nxEmptyState({ img, title, sub, cta = '' }) {
   </div>`
 }
 window._nxEmptyState = nxEmptyState
+
+/**
+ * Badge unificado — genera un pill de estado/tipo/etiqueta con Lucide icon.
+ * @param {string} label    - Texto del badge
+ * @param {object} opts     - { color, bg, icon, iconSize, pill }
+ */
+function nxBadge(label, opts = {}) {
+  const color   = opts.color ?? 'var(--text-muted)'
+  const bg      = opts.bg    ?? 'rgba(255,255,255,0.06)'
+  const border  = opts.border ?? `${color}30`
+  const iconHtml= opts.icon  ? lx(opts.icon, opts.iconSize ?? 10, '', { color, strokeWidth: 2 }) + ' ' : ''
+  const radius  = opts.pill !== false ? '99px' : '6px'
+  return `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:${radius};background:${bg};color:${color};border:1px solid ${border};letter-spacing:.02em;white-space:nowrap;flex-shrink:0;">${iconHtml}${label}</span>`
+}
+
+// Badges de tipo de nodo — mapa predefinido
+const NX_TYPE_BADGE = {
+  kanban:       () => nxBadge('Tarea',       { color:'#60a5fa', bg:'rgba(96,165,250,0.1)',   icon:'CheckCircle2' }),
+  income:       () => nxBadge('Ingreso',     { color:'#4ade80', bg:'rgba(74,222,128,0.1)',   icon:'TrendingUp' }),
+  expense:      () => nxBadge('Gasto',       { color:'#f87171', bg:'rgba(248,113,113,0.1)',  icon:'TrendingDown' }),
+  note:         () => nxBadge('Nota',        { color:'#c084fc', bg:'rgba(192,132,252,0.1)',  icon:'StickyNote' }),
+  event:        () => nxBadge('Evento',      { color:'#2dd4bf', bg:'rgba(45,212,191,0.1)',   icon:'CalendarDays' }),
+  bill:         () => nxBadge('Pago fijo',   { color:'#fb923c', bg:'rgba(251,146,60,0.1)',   icon:'Repeat' }),
+  subscription: () => nxBadge('Suscripción', { color:'#fb923c', bg:'rgba(251,146,60,0.1)',   icon:'Repeat' }),
+  proyecto:     () => nxBadge('Proyecto',    { color:'#a78bfa', bg:'rgba(167,139,250,0.1)',  icon:'Briefcase' }),
+  cotizacion:   () => nxBadge('Cotización',  { color:'#fbbf24', bg:'rgba(251,191,36,0.1)',   icon:'Receipt' }),
+  account:      () => nxBadge('Cuenta',      { color:'#2dd4bf', bg:'rgba(45,212,191,0.1)',   icon:'Wallet' }),
+  persona:      () => nxBadge('Persona',     { color:'#f472b6', bg:'rgba(244,114,182,0.1)',  icon:'User' }),
+  contact:      () => nxBadge('Contacto',    { color:'#f472b6', bg:'rgba(244,114,182,0.1)',  icon:'Contact' }),
+}
+
+// Badge de estado Kanban
+const NX_STATUS_BADGE = {
+  todo:        () => nxBadge('Pendiente',   { color:'#94a3b8', bg:'rgba(148,163,184,0.1)',  icon:'Circle' }),
+  in_progress: () => nxBadge('En progreso', { color:'#fbbf24', bg:'rgba(251,191,36,0.1)',   icon:'Zap' }),
+  done:        () => nxBadge('Listo',       { color:'#4ade80', bg:'rgba(74,222,128,0.1)',   icon:'CheckCircle2' }),
+  archived:    () => nxBadge('Archivado',   { color:'#64748b', bg:'rgba(100,116,139,0.1)',  icon:'Archive' }),
+}
+
+window._nxBadge = nxBadge
+window._NX_TYPE_BADGE = NX_TYPE_BADGE
+window._NX_STATUS_BADGE = NX_STATUS_BADGE
 
 // ─────────────────────────────────────────
 // Clientes y Estado
@@ -405,6 +447,22 @@ function loadNodesFromCache() {
   } catch { return null }
 }
 
+// Genera HTML de skeleton cards para el estado de carga inicial
+function _renderSkeletonFeed() {
+  const feedRoot = document.getElementById('feed-root')
+  if (!feedRoot) return
+  const skRow = (w1='60%', w2='85%') => `
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);margin-bottom:8px;">
+      <div class="nx-skeleton" style="width:32px;height:16px;border-radius:6px;flex-shrink:0;"></div>
+      <div class="nx-skeleton" style="width:56px;height:16px;border-radius:99px;flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px;">
+        <div class="nx-skeleton" style="width:${w1};height:13px;border-radius:5px;"></div>
+        <div class="nx-skeleton" style="width:${w2};height:10px;border-radius:5px;opacity:.6;"></div>
+      </div>
+    </div>`
+  feedRoot.innerHTML = skRow('55%','80%') + skRow('70%','60%') + skRow('45%','90%') + skRow('65%','75%') + skRow('80%','55%')
+}
+
 async function loadNodes() {
   // Renderiza inmediatamente desde caché mientras llega Supabase
   const cached = loadNodesFromCache()
@@ -412,6 +470,9 @@ async function loadNodes() {
     allNodes = cached
     renderAll()
     showToast(`📦 ${cached.length} nodos desde caché — sincronizando...`, 2500)
+  } else {
+    // Sin caché: muestra skeletons mientras carga
+    _renderSkeletonFeed()
   }
 
   const { data, error } = await supabase
@@ -1670,33 +1731,38 @@ function renderPanelDashboard() {
   const tareasActivas  = allNodes.filter(n=>n.type==='kanban'&&n.metadata?.status!=='done').length
   const proyectosCount = allNodes.filter(n=>n.type==='proyecto').length
 
+  // Lucide icons — reemplaza el objeto ISVG manual
   const ISVG = {
-    net:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>`,
-    inc:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`,
-    exp:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>`,
-    tasks: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>`,
-    proj:  `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`,
-    clock: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-    users: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`,
-    card:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>`,
-    grid:  `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`,
+    net:   lx('DollarSign', 18),
+    inc:   lx('TrendingUp',  18),
+    exp:   lx('TrendingDown',18),
+    tasks: lx('CheckCircle2',18),
+    proj:  lx('Briefcase',   18),
+    clock: lx('Clock',       14),
+    users: lx('Users',       14),
+    card:  lx('CreditCard',  14),
+    grid:  lx('Layers',      14),
   }
 
   const kpiData = [
-    { icon:ISVG.net,   label:'NETO TOTAL',    val:fmtM(netTotal),    color:netClr,    note:netTotal>=0?'flujo positivo':'déficit' },
-    { icon:ISVG.inc,   label:'INGRESOS MES',  val:'+'+fmtM(monthInc),color:'#4ade80', note:monthTxs.filter(n=>n.type==='income').length+' movimientos' },
-    { icon:ISVG.exp,   label:'GASTOS MES',    val:'-'+fmtM(monthExp),color:'#f87171', note:monthTxs.filter(n=>n.type==='expense').length+' movimientos' },
-    { icon:ISVG.tasks, label:'TAREAS ACTIVAS',val:tareasActivas,     color:'#60a5fa', note:'en progreso' },
-    { icon:ISVG.proj,  label:'PROYECTOS',     val:proyectosCount,    color:'#a78bfa', note:'registrados' },
+    { icon:'DollarSign', label:'NETO TOTAL',    val:fmtM(netTotal),    color:netClr,    note:netTotal>=0?'flujo positivo':'déficit',    bg: netTotal>=0?'rgba(45,212,191,0.08)':'rgba(248,113,113,0.08)' },
+    { icon:'TrendingUp', label:'INGRESOS MES',  val:'+'+fmtM(monthInc),color:'#4ade80', note:monthTxs.filter(n=>n.type==='income').length+' movimientos', bg:'rgba(74,222,128,0.06)' },
+    { icon:'TrendingDown',label:'GASTOS MES',   val:'-'+fmtM(monthExp),color:'#f87171', note:monthTxs.filter(n=>n.type==='expense').length+' movimientos', bg:'rgba(248,113,113,0.06)' },
+    { icon:'CheckCircle2',label:'TAREAS ACTIVAS',val:tareasActivas,    color:'#60a5fa', note:'en progreso', bg:'rgba(96,165,250,0.06)' },
+    { icon:'Briefcase',  label:'PROYECTOS',     val:proyectosCount,    color:'#a78bfa', note:'registrados', bg:'rgba(167,139,250,0.06)' },
   ]
 
-  const kpiStrip = `<div style="display:flex;gap:0;margin-bottom:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden;overflow-x:auto;">
-    ${kpiData.map((k,i) => `<div style="flex:1;min-width:100px;padding:14px 12px;${i>0?'border-left:1px solid rgba(255,255,255,0.06);':''}">
-      <div style="color:${k.color};margin-bottom:6px;opacity:0.9;">${k.icon}</div>
-      <div style="font-size:9px;font-weight:800;letter-spacing:.07em;color:var(--text-muted,#64748b);margin-bottom:4px;text-transform:uppercase;">${k.label}</div>
-      <div style="font-size:15px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1.1;">${k.val}</div>
-      <div style="font-size:9px;color:var(--text-dim,#475569);margin-top:3px;">${k.note}</div>
-    </div>`).join('')}
+  const kpiStrip = `<div style="display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:2px;">
+    ${kpiData.map(k => `
+      <div style="flex:1;min-width:110px;padding:14px 14px 12px;background:${k.bg};border:1px solid ${k.color}22;border-radius:14px;position:relative;overflow:hidden;transition:transform 0.2s,box-shadow 0.2s;cursor:default;"
+           onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,0.25)'"
+           onmouseout="this.style.transform='';this.style.boxShadow=''">
+        <div style="position:absolute;top:-8px;right:-8px;opacity:0.06;">${lx(k.icon,52,'' ,{strokeWidth:1.2,color:k.color})}</div>
+        <div style="color:${k.color};margin-bottom:8px;position:relative;">${lx(k.icon,16,'',{color:k.color,strokeWidth:1.75})}</div>
+        <div style="font-size:8.5px;font-weight:800;letter-spacing:.08em;color:var(--text-dim);margin-bottom:5px;text-transform:uppercase;position:relative;">${k.label}</div>
+        <div style="font-size:18px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1;position:relative;">${k.val}</div>
+        <div style="font-size:9px;color:var(--text-muted);margin-top:4px;position:relative;">${k.note}</div>
+      </div>`).join('')}
   </div>`
 
   // ── A2) Task distribution (Kanban summary) ─────────────────
@@ -1707,25 +1773,26 @@ function renderPanelDashboard() {
   const kDoneAll= kNodes.filter(n=>n.metadata?.status==='done').length
   const kOver   = kNodes.filter(n=>{const d=n.metadata?.date_deadline||n.metadata?.due_date;return d&&d<todayStr&&n.metadata?.status!=='done'}).length
   const kPctDone= kTotal ? Math.round(kDoneAll/kTotal*100) : 0
+  const pctColor= kPctDone>=75?'#4ade80':kPctDone>=40?'#fbbf24':'#94a3b8'
 
-  const taskDistHTML = `<div style="display:flex;gap:0;margin-bottom:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden;align-items:center;">
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;flex:1;">
+  const taskDistHTML = `<div style="margin-bottom:16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;overflow:hidden;">
+    <div style="display:flex;align-items:stretch;">
       ${[
-        {label:'Pendientes',val:kTodo,color:'#94a3b8',icon:'⏳'},
-        {label:'En progreso',val:kProg,color:'#fbbf24',icon:'⚡'},
-        {label:'Completadas',val:kDoneAll,color:'#4ade80',icon:'✅'},
-        {label:'Vencidas',val:kOver,color:kOver>0?'#f87171':'#94a3b8',icon:'🔥'},
-      ].map((k,i)=>`<div style="padding:12px;text-align:center;${i>0?'border-left:1px solid rgba(255,255,255,0.06);':''}">
-        <div style="font-size:14px;margin-bottom:2px;">${k.icon}</div>
-        <div style="font-size:18px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1;">${k.val}</div>
-        <div style="font-size:8px;font-weight:800;color:var(--text-dim);text-transform:uppercase;margin-top:3px;">${k.label}</div>
+        {label:'Pendientes', val:kTodo,   color:'#94a3b8', icon:'Circle'},
+        {label:'En progreso',val:kProg,   color:'#fbbf24', icon:'Zap'},
+        {label:'Completadas',val:kDoneAll,color:'#4ade80', icon:'CheckCircle2'},
+        {label:'Vencidas',   val:kOver,   color:kOver>0?'#f87171':'#475569', icon:'AlertCircle'},
+      ].map((k,i)=>`<div style="flex:1;padding:14px 10px;text-align:center;${i>0?'border-left:1px solid rgba(255,255,255,0.05);':''}">
+        <div style="display:flex;justify-content:center;margin-bottom:6px;color:${k.color};opacity:${k.val===0?0.35:0.9};">${lx(k.icon,14,'',{color:k.color})}</div>
+        <div style="font-size:20px;font-weight:900;color:${k.val===0?'var(--text-dim)':k.color};font-family:'JetBrains Mono',monospace;line-height:1;">${k.val}</div>
+        <div style="font-size:8px;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-top:4px;letter-spacing:.05em;">${k.label}</div>
       </div>`).join('')}
-    </div>
-    <div style="padding:12px 18px;border-left:1px solid rgba(255,255,255,0.06);text-align:center;min-width:90px;">
-      <div style="font-size:9px;font-weight:800;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">Progreso</div>
-      <div style="font-size:22px;font-weight:900;color:${kPctDone>=75?'#4ade80':kPctDone>=40?'#fbbf24':'#94a3b8'};font-family:'JetBrains Mono',monospace;">${kPctDone}%</div>
-      <div style="height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-top:6px;">
-        <div style="height:100%;width:${kPctDone}%;background:linear-gradient(90deg,#00f6ff,#4ade80);border-radius:2px;"></div>
+      <div style="padding:14px 18px;border-left:1px solid rgba(255,255,255,0.05);text-align:center;min-width:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">
+        <div style="font-size:8px;font-weight:800;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;">Progreso</div>
+        <div style="font-size:24px;font-weight:900;color:${pctColor};font-family:'JetBrains Mono',monospace;line-height:1;">${kPctDone}<span style="font-size:12px;opacity:.7;">%</span></div>
+        <div style="width:56px;height:5px;background:rgba(255,255,255,0.06);border-radius:99px;overflow:hidden;">
+          <div style="height:100%;width:${kPctDone}%;background:linear-gradient(90deg,#00f6ff,${pctColor});border-radius:99px;transition:width 0.6s cubic-bezier(0.16,1,0.3,1);"></div>
+        </div>
       </div>
     </div>
   </div>`
@@ -2000,34 +2067,34 @@ function renderPanelDashboard() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div style="${NX_CARD}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          ${ISVG.clock.replace('stroke="currentColor"','stroke="#fb923c"')}
+          ${lx('CalendarClock',14,'',{color:'#fb923c'})}
           <span style="${NX_HEAD}color:#fb923c;">Próximos pagos</span>
-          ${bills.length?`<span style="margin-left:auto;font-size:10px;color:#fb923c;font-weight:700;background:rgba(251,146,60,0.1);border-radius:8px;padding:1px 7px;">${bills.length}</span>`:''}
+          ${bills.length?`<span style="margin-left:auto;font-size:9px;color:#fb923c;font-weight:700;background:rgba(251,146,60,0.12);border-radius:99px;padding:1px 8px;border:1px solid rgba(251,146,60,0.25);">${bills.length}</span>`:''}
         </div>
         ${billsHTML}
       </div>
       <div style="${NX_CARD}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          ${ISVG.grid.replace('stroke="currentColor"','stroke="#a78bfa"')}
+          ${lx('Briefcase',14,'',{color:'#a78bfa'})}
           <span style="${NX_HEAD}color:#a78bfa;">Proyectos activos</span>
-          ${proyectos.length?`<span style="margin-left:auto;font-size:10px;color:#a78bfa;font-weight:700;background:rgba(167,139,250,0.1);border-radius:8px;padding:1px 7px;">${proyectos.length}</span>`:''}
-          <button onclick="switchView('proyectos')" style="font-size:10px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;margin-left:auto;">Ver todos</button>
+          ${proyectos.length?`<span style="font-size:9px;color:#a78bfa;font-weight:700;background:rgba(167,139,250,0.12);border-radius:99px;padding:1px 8px;border:1px solid rgba(167,139,250,0.25);">${proyectos.length}</span>`:''}
+          <button onclick="switchView('proyectos')" style="margin-left:auto;font-size:10px;color:#a78bfa;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;display:flex;align-items:center;gap:4px;">${lx('ArrowUpRight',11,'',{color:'#a78bfa'})} Ver todos</button>
         </div>
         ${projHTML}
       </div>
       <div style="${NX_CARD}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          ${ISVG.card.replace('stroke="currentColor"','stroke="#2dd4bf"')}
+          ${lx('Wallet',14,'',{color:'#2dd4bf'})}
           <span style="${NX_HEAD}color:#2dd4bf;">Cuentas</span>
-          <button onclick="switchView('finance')" style="margin-left:auto;font-size:10px;color:#2dd4bf;background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;">Bio-Finanzas</button>
+          <button onclick="switchView('finance')" style="margin-left:auto;font-size:10px;color:#2dd4bf;background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;display:flex;align-items:center;gap:4px;">${lx('ArrowUpRight',11,'',{color:'#2dd4bf'})} Bio-Finanzas</button>
         </div>
         ${accHTML}
       </div>
       <div style="${NX_CARD}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          ${ISVG.users.replace('stroke="currentColor"','stroke="#f87171"')}
+          ${lx('Users',14,'',{color:'#f87171'})}
           <span style="${NX_HEAD}color:#f87171;">A quién se debe</span>
-          ${debts.length?`<span style="margin-left:auto;font-size:10px;color:#f87171;font-weight:700;background:rgba(248,113,113,0.1);border-radius:8px;padding:1px 7px;">${debts.length}</span>`:''}
+          ${debts.length?`<span style="margin-left:auto;font-size:9px;color:#f87171;font-weight:700;background:rgba(248,113,113,0.12);border-radius:99px;padding:1px 8px;border:1px solid rgba(248,113,113,0.25);">${debts.length}</span>`:''}
         </div>
         ${debtHTML}
       </div>
@@ -2035,18 +2102,18 @@ function renderPanelDashboard() {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
           <div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-              ${ISVG.clock.replace('stroke="currentColor"','stroke="#fb923c"')}
+              ${lx('Clock',14,'',{color:'#fb923c'})}
               <span style="${NX_HEAD}color:#fb923c;">Abonos a vencer</span>
-              ${_upcomingAbonosDash.length ? `<span style="margin-left:auto;font-size:10px;color:#fb923c;font-weight:700;background:rgba(251,146,60,0.1);border-radius:8px;padding:1px 7px;">${_upcomingAbonosDash.length}</span>` : ''}
-              <button onclick="switchView('proyectos')" style="${_upcomingAbonosDash.length?'':'margin-left:auto;'}font-size:10px;color:#fb923c;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;">Proyectos</button>
+              ${_upcomingAbonosDash.length ? `<span style="font-size:9px;color:#fb923c;font-weight:700;background:rgba(251,146,60,0.12);border-radius:99px;padding:1px 8px;border:1px solid rgba(251,146,60,0.25);">${_upcomingAbonosDash.length}</span>` : ''}
+              <button onclick="switchView('proyectos')" style="margin-left:auto;font-size:10px;color:#fb923c;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:6px;padding:2px 8px;cursor:pointer;display:flex;align-items:center;gap:4px;">${lx('ArrowUpRight',11,'',{color:'#fb923c'})} Proyectos</button>
             </div>
             ${abonosDashHTML}
           </div>
           <div>
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+              ${lx('TrendingUp',14,'',{color:'#4ade80'})}
               <span style="${NX_HEAD}color:#4ade80;">Próximos a liquidar</span>
-              ${_nearLiq.length ? `<span style="margin-left:auto;font-size:10px;color:#4ade80;font-weight:700;background:rgba(74,222,128,0.1);border-radius:8px;padding:1px 7px;">${_nearLiq.length}</span>` : ''}
+              ${_nearLiq.length ? `<span style="font-size:9px;color:#4ade80;font-weight:700;background:rgba(74,222,128,0.12);border-radius:99px;padding:1px 8px;border:1px solid rgba(74,222,128,0.25);">${_nearLiq.length}</span>` : ''}
             </div>
             ${nearLiqHTML}
           </div>
@@ -2143,39 +2210,45 @@ function feedItemHtml(n) {
     ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:${tc.color};flex-shrink:0;">${n.type==='income'?'+':'-'}$${n.metadata.amount.toLocaleString()}</span>` : ''
   const timeStr = n.created_at ? `${new Date(n.created_at).getHours().toString().padStart(2,'0')}:${new Date(n.created_at).getMinutes().toString().padStart(2,'0')}` : '--:--'
   const newPulse = n._optimistic ? ' nexus-new-pulse' : ''
-  // ── inline SVG micro-icons for feed actions ───────────────────────────────
-  const _svgEdit  = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`
-  const _svgFolder= `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`
-  const _svgCheck = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
-  const _svgX     = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
-  const _badgeBg  = tc.border.replace('0.4','0.10').replace('0.3','0.10')
+  // Lucide icons para acciones del feed
+  const _svgEdit   = lx('Pencil',   11, '', { strokeWidth: 2 })
+  const _svgFolder = lx('FolderOpen',11,'', { strokeWidth: 2 })
+  const _svgCheck  = lx('Check',    11, '', { strokeWidth: 2.5 })
+  const _svgX      = lx('X',        10, '', { strokeWidth: 2.5 })
+
+  // Badge de tipo usando nxBadge
+  const typeBadgeFn = NX_TYPE_BADGE[n.type]
+  const typeBadge = typeBadgeFn ? typeBadgeFn() : nxBadge(tc.label, { color: tc.color, bg: tc.border.replace('0.4','0.08').replace('0.3','0.08') })
+
+  // Tags del nodo
+  const tagsHtml = (n.metadata?.tags||[])
+    .filter(t => t.toLowerCase() !== `#${n.type.toLowerCase()}`)
+    .map(t => `<span onclick="event.stopPropagation();setFilter('${t}')" style="cursor:pointer;">${nxBadge(t, { color: tc.color, bg: tc.border.replace('0.4','0.06').replace('0.3','0.06'), border: tc.border.replace('0.4','0.15').replace('0.3','0.15'), iconSize:9 })}</span>`)
+    .join('')
+
   return `
-    <div class="feed-item${newPulse}" data-node-id="${n.id}" style="border-left:3px solid ${tc.border};background:${tc.bg};" onclick="openCardModal('${n.id}')">
+    <div class="feed-item node-card${newPulse}" data-node-id="${n.id}" style="border-left:3px solid ${tc.border};background:${tc.bg};" onclick="openCardModal('${n.id}')">
       <span class="feed-time">${timeStr}</span>
-      <span style="display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:${tc.color};background:${_badgeBg};padding:2px 8px;border-radius:4px;flex-shrink:0;">
-        <span style="width:5px;height:5px;border-radius:50%;background:${tc.color};flex-shrink:0;"></span>${tc.label}
-      </span>
+      ${typeBadge}
       <div style="flex:1;min-width:0;">
         <div style="font-size:14px;color:#f0f6fc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(n.metadata?.label || n.content)}</div>
-        <div style="margin-top:3px;display:flex;gap:5px;flex-wrap:wrap;">
-          ${(n.metadata?.tags||[]).filter(t=>t.toLowerCase()!==`#${n.type.toLowerCase()}`).map(t=>`<span style="background:${_badgeBg};color:${tc.color};font-size:9px;padding:1px 5px;border-radius:3px;cursor:pointer;" onclick="event.stopPropagation();setFilter('${t}')">${t}</span>`).join('')}
-        </div>
+        ${tagsHtml ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${tagsHtml}</div>` : ''}
       </div>
       ${amount}
       ${n.type==='proyecto' ? `
-        <span onclick="event.stopPropagation();openProyectoModal('${n.id}')" title="Editar proyecto" style="display:inline-flex;align-items:center;justify-content:center;color:#2dd4bf;cursor:pointer;padding:5px;flex-shrink:0;width:24px;height:24px;border-radius:6px;background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.18);">${_svgEdit}</span>
-        <span onclick="event.stopPropagation();openProjectView('${n.id}')" title="Vista de Proyecto" style="display:inline-flex;align-items:center;justify-content:center;color:#60a5fa;cursor:pointer;padding:5px;flex-shrink:0;width:24px;height:24px;border-radius:6px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.18);">${_svgFolder}</span>
+        <span onclick="event.stopPropagation();openProyectoModal('${n.id}')" title="Editar proyecto" style="display:inline-flex;align-items:center;justify-content:center;color:#2dd4bf;cursor:pointer;padding:5px;flex-shrink:0;width:26px;height:26px;border-radius:7px;background:rgba(45,212,191,0.08);border:1px solid rgba(45,212,191,0.18);transition:background 0.15s;" onmouseenter="this.style.background='rgba(45,212,191,0.18)'" onmouseleave="this.style.background='rgba(45,212,191,0.08)'">${_svgEdit}</span>
+        <span onclick="event.stopPropagation();openProjectView('${n.id}')" title="Vista de Proyecto" style="display:inline-flex;align-items:center;justify-content:center;color:#60a5fa;cursor:pointer;padding:5px;flex-shrink:0;width:26px;height:26px;border-radius:7px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.18);transition:background 0.15s;" onmouseenter="this.style.background='rgba(96,165,250,0.18)'" onmouseleave="this.style.background='rgba(96,165,250,0.08)'">${_svgFolder}</span>
       ` : ''}
       ${n.type==='cotizacion' ? (() => {
         const st = n.metadata?.status || 'pendiente'
         const stCfg = COT_STATUS[st] || COT_STATUS.pendiente
         const amt = n.metadata?.amount ? `<span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:#fb923c;flex-shrink:0;font-size:12px;">$${(+n.metadata.amount).toLocaleString('es-MX')}</span>` : ''
-        const statusBadge = `<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:4px;background:${stCfg.color}1a;color:${stCfg.color};flex-shrink:0;"><span style="width:4px;height:4px;border-radius:50%;background:${stCfg.color};"></span>${stCfg.label}</span>`
-        const quickBtns = st !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${n.id}','aceptada')" title="Aceptar" style="display:inline-flex;align-items:center;justify-content:center;color:#4ade80;cursor:pointer;width:24px;height:24px;border-radius:6px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.18);flex-shrink:0;">${_svgCheck}</span>` : ''
-        const editBtn = `<span onclick="event.stopPropagation();openCotizacionModal('${n.id}')" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;color:#fb923c;cursor:pointer;width:24px;height:24px;border-radius:6px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.18);flex-shrink:0;">${_svgEdit}</span>`
+        const statusBadge = nxBadge(stCfg.label, { color: stCfg.color, bg: stCfg.color + '1a', icon: st==='aceptada'?'CheckCircle2':st==='rechazada'?'XCircle':'Clock' })
+        const quickBtns = st !== 'aceptada' ? `<span onclick="event.stopPropagation();changeCotizacionStatus('${n.id}','aceptada')" title="Aceptar" style="display:inline-flex;align-items:center;justify-content:center;color:#4ade80;cursor:pointer;width:26px;height:26px;border-radius:7px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.18);flex-shrink:0;transition:background 0.15s;" onmouseenter="this.style.background='rgba(74,222,128,0.2)'" onmouseleave="this.style.background='rgba(74,222,128,0.08)'">${_svgCheck}</span>` : ''
+        const editBtn = `<span onclick="event.stopPropagation();openCotizacionModal('${n.id}')" title="Editar" style="display:inline-flex;align-items:center;justify-content:center;color:#fb923c;cursor:pointer;width:26px;height:26px;border-radius:7px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.18);flex-shrink:0;transition:background 0.15s;" onmouseenter="this.style.background='rgba(251,146,60,0.2)'" onmouseleave="this.style.background='rgba(251,146,60,0.08)'">${_svgEdit}</span>`
         return amt + statusBadge + quickBtns + editBtn
       })() : ''}
-      <span onclick="event.stopPropagation();if(confirm('¿Eliminar?')){deleteNode('${n.id}')}" title="Eliminar" style="display:inline-flex;align-items:center;justify-content:center;color:var(--text-dim);cursor:pointer;width:22px;height:22px;border-radius:5px;flex-shrink:0;opacity:0.5;transition:opacity 0.15s;" onmouseenter="this.style.opacity=1;this.style.color='#f87171'" onmouseleave="this.style.opacity=0.5;this.style.color='var(--text-dim)'">${_svgX}</span>
+      <span onclick="event.stopPropagation();if(confirm('¿Eliminar?')){deleteNode('${n.id}')}" title="Eliminar" style="display:inline-flex;align-items:center;justify-content:center;color:var(--text-dim);cursor:pointer;width:26px;height:26px;border-radius:7px;flex-shrink:0;opacity:0.4;transition:opacity 0.15s,background 0.15s,color 0.15s;" onmouseenter="this.style.opacity=1;this.style.color='#f87171';this.style.background='rgba(248,113,113,0.1)'" onmouseleave="this.style.opacity=0.4;this.style.color='var(--text-dim)';this.style.background='transparent'">${_svgX}</span>
     </div>`
 }
 
@@ -2200,13 +2273,13 @@ function renderFeed(nodes) {
           <button onclick="setTypeFilter('${f.type}')" style="border:1px solid ${activeTypeFilter===f.type?f.color:'var(--glass-border)'};background:${activeTypeFilter===f.type?f.color+'22':'transparent'};color:${activeTypeFilter===f.type?f.color:'var(--text-muted)'};border-radius:20px;padding:4px 12px;font-size:10px;font-weight:800;cursor:pointer;transition:all 0.15s;">
             ${f.label} <span style="opacity:0.6;">(${counts[f.type]})</span>
           </button>`).join('')}
-        <button onclick="toggleFeedGroup()" style="margin-left:auto;border:1px solid ${feedGrouped?'var(--accent-cyan)':'var(--glass-border)'};background:${feedGrouped?'rgba(0,246,255,0.1)':'transparent'};color:${feedGrouped?'var(--accent-cyan)':'var(--text-muted)'};border-radius:20px;padding:4px 12px;font-size:10px;font-weight:800;cursor:pointer;" title="Agrupar por tipo">
-          ${feedGrouped?'⊞ Agrupado':'⊟ Agrupar'}
+        <button onclick="toggleFeedGroup()" style="margin-left:auto;border:1px solid ${feedGrouped?'var(--accent-cyan)':'var(--glass-border)'};background:${feedGrouped?'rgba(0,246,255,0.1)':'transparent'};color:${feedGrouped?'var(--accent-cyan)':'var(--text-muted)'};border-radius:20px;padding:4px 12px;font-size:10px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all 0.15s;" title="Agrupar por tipo">
+          ${lx(feedGrouped?'Layers':'List', 11)} ${feedGrouped?'Agrupado':'Agrupar'}
         </button>
       </div>
       ${currentFilter?`<div style="display:flex;align-items:center;gap:8px;background:rgba(0,246,255,0.06);border:1px solid rgba(0,246,255,0.2);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--accent-cyan);">
-        <span>🔍 Buscando: <b>${currentFilter}</b></span>
-        <span onclick="clearFilter()" style="cursor:pointer;margin-left:auto;color:var(--text-muted);">✕ Limpiar</span>
+        ${lx('Search',13)} <span>Buscando: <b>${currentFilter}</b></span>
+        <button onclick="clearFilter()" style="margin-left:auto;display:inline-flex;align-items:center;gap:4px;color:var(--text-muted);background:transparent;border:none;cursor:pointer;font-size:11px;padding:2px 6px;border-radius:5px;transition:color 0.15s;" onmouseenter="this.style.color='#f87171'" onmouseleave="this.style.color='var(--text-muted)'">${lx('X',10)} Limpiar</button>
       </div>`:''}
     </div>`
 

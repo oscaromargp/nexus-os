@@ -1142,18 +1142,18 @@
       <span class="logo-text">NEXUS OS</span>
     </a>
     <div class="nav-items">
-      <button class="nav-item active" data-view="feed"><span class="nav-icon"><i data-lucide="LayoutDashboard"></i></span> Panel de Comandos</button>
-      <button class="nav-item" data-view="kanban"><span class="nav-icon"><i data-lucide="Columns3"></i></span> Muro Táctico</button>
-      <button class="nav-item" data-view="finance"><span class="nav-icon"><i data-lucide="Wallet"></i></span> Bio-Finanzas</button>
-      <button class="nav-item" data-view="notes"><span class="nav-icon"><i data-lucide="Brain"></i></span> Bóveda Neural</button>
-      <button class="nav-item" data-view="calendar"><span class="nav-icon"><i data-lucide="CalendarDays"></i></span> Tiempo & Crónica</button>
-      <button class="nav-item" data-view="contacts"><span class="nav-icon"><i data-lucide="Users"></i></span> Contactos</button>
-      <button class="nav-item" data-view="proyectos"><span class="nav-icon"><i data-lucide="Briefcase"></i></span> Proyectos</button>
-      <button class="nav-item" data-view="agenda"><span class="nav-icon"><i data-lucide="CalendarClock"></i></span> Agenda Financiera</button>
-      <button class="nav-item" data-view="herramientas"><span class="nav-icon"><i data-lucide="Sliders"></i></span> Herramientas</button>
-      <button class="nav-item" data-view="tags"><span class="nav-icon"><i data-lucide="Tag"></i></span> Inteligencia Tags</button>
-      <button class="nav-item" data-view="settings"><span class="nav-icon"><i data-lucide="Settings"></i></span> Configuración</button>
-      <button class="nav-item" data-view="ayuda"><span class="nav-icon"><i data-lucide="HelpCircle"></i></span> Ayuda</button>
+      <button class="nav-item active" data-view="feed"        data-tip="Panel de Comandos"><span class="nav-icon"><i data-lucide="LayoutDashboard"></i></span> Panel de Comandos</button>
+      <button class="nav-item" data-view="kanban"             data-tip="Muro Táctico Kanban"><span class="nav-icon"><i data-lucide="Columns3"></i></span> Muro Táctico</button>
+      <button class="nav-item" data-view="finance"            data-tip="Cuentas y transacciones"><span class="nav-icon"><i data-lucide="Wallet"></i></span> Bio-Finanzas</button>
+      <button class="nav-item" data-view="notes"              data-tip="Notas estilo Keep"><span class="nav-icon"><i data-lucide="Brain"></i></span> Bóveda Neural</button>
+      <button class="nav-item" data-view="calendar"           data-tip="Calendario y Crónica diaria"><span class="nav-icon"><i data-lucide="CalendarDays"></i></span> Tiempo & Crónica</button>
+      <button class="nav-item" data-view="contacts"           data-tip="Directorio de contactos"><span class="nav-icon"><i data-lucide="Users"></i></span> Contactos</button>
+      <button class="nav-item" data-view="proyectos"          data-tip="Gestión de proyectos"><span class="nav-icon"><i data-lucide="Briefcase"></i></span> Proyectos</button>
+      <button class="nav-item" data-view="agenda"             data-tip="Pagos y cobros recurrentes"><span class="nav-icon"><i data-lucide="CalendarClock"></i></span> Agenda Financiera</button>
+      <button class="nav-item" data-view="herramientas"       data-tip="OTC, documentos, calculadoras"><span class="nav-icon"><i data-lucide="Sliders"></i></span> Herramientas</button>
+      <button class="nav-item" data-view="tags"               data-tip="Análisis de etiquetas"><span class="nav-icon"><i data-lucide="Tag"></i></span> Inteligencia Tags</button>
+      <button class="nav-item" data-view="settings"           data-tip="Preferencias del sistema"><span class="nav-icon"><i data-lucide="Settings"></i></span> Configuración</button>
+      <button class="nav-item" data-view="ayuda"              data-tip="Guía completa de Nexus OS"><span class="nav-icon"><i data-lucide="HelpCircle"></i></span> Ayuda</button>
     </div>
     <div style="margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.05);">
        <div id="user-email" style="font-size:11px; color: var(--text-muted); margin-bottom: 12px; overflow: hidden; text-overflow: ellipsis;"></div>
@@ -4773,6 +4773,44 @@
     }
     .nx-chevron.open {
       transform: rotate(180deg);
+    }
+
+    /* ── Tooltip ligero — sin DaisyUI theming ── */
+    [data-tip] {
+      position: relative;
+    }
+    [data-tip]::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%) scale(0.85);
+      background: rgba(15,25,35,0.95);
+      color: #f0f6fc;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      padding: 4px 9px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.1);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.16,1,0.3,1);
+      z-index: 9999;
+      backdrop-filter: blur(8px);
+    }
+    [data-tip]:hover::after {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+    }
+    /* Tooltip abajo (para botones en la parte superior) */
+    [data-tip-bottom]::after {
+      top: calc(100% + 6px);
+      bottom: auto;
+      transform: translateX(-50%) scale(0.85);
+    }
+    [data-tip-bottom]:hover::after {
+      transform: translateX(-50%) scale(1);
     }
 
     /* ── Scroll suave global ── */
