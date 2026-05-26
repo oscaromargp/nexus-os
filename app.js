@@ -195,8 +195,7 @@ let _mvActiveOrqId = null
 let _mvFilters     = { tipo:'', moneda:'', estado:'', search:'', dateFrom:'', dateTo:'' }
 let _mvPage        = 1
 const _MV_PER_PAGE = 30
-let _mvTc          = null   // TC USDT/MXN desde Bitso
-let _mvTcTs        = 0
+let _mvTcCache     = {}     // { USDT: {price, ts}, BTC: {...}, ... }
 let _mvEditingId   = null
 let _mvPendingFile = null
 
@@ -17808,16 +17807,38 @@ async function _mvLoadMovs() {
   _mvMovs = data || []
 }
 
-async function _mvFetchTc() {
-  if (_mvTc && (Date.now() - _mvTcTs < 60000)) return _mvTc
-  try {
-    const r = await fetch('https://api.bitso.com/v3/ticker/?book=usdt_mxn')
-    const j = await r.json()
-    _mvTc  = parseFloat(j.payload?.ask) || null
-    _mvTcTs = Date.now()
-  } catch { _mvTc = null }
-  return _mvTc
+// ── Crypto → Bitso book mapping ───────────────────────────────────────────────
+const _MV_BITSO_BOOKS = {
+  USDT: 'usdt_mxn', BTC: 'btc_mxn', ETH: 'eth_mxn',
+  XRP:  'xrp_mxn',  SOL: 'sol_mxn', LTC: 'ltc_mxn',
 }
+// Monedas que aplican comisión por defecto (entradas)
+const _MV_CRYPTO_SET = new Set(['USDT','BTC','ETH','XRP','SOL','LTC','USD'])
+
+async function _mvFetchCryptoTc(moneda) {
+  if (moneda === 'MXN') return 1
+  const cached = _mvTcCache[moneda]
+  if (cached && (Date.now() - cached.ts < 60000)) return cached.price
+  try {
+    let price = null
+    const book = _MV_BITSO_BOOKS[moneda]
+    if (book) {
+      const r = await fetch(`https://api.bitso.com/v3/ticker/?book=${book}`)
+      const j = await r.json()
+      price = parseFloat(j.payload?.ask) || null
+    } else if (moneda === 'USD') {
+      // USD via open exchange rates
+      const r = await fetch('https://open.er-api.com/v6/latest/USD')
+      const j = await r.json()
+      price = j.rates?.MXN || null
+    }
+    if (price) _mvTcCache[moneda] = { price, ts: Date.now() }
+    return price
+  } catch { return null }
+}
+
+// Compat shim para mvInit y mvFetchTcAndRender (usa USDT como default)
+async function _mvFetchTc() { return _mvFetchCryptoTc('USDT') }
 
 // ── Cálculos ───────────────────────────────────────────────────────────────────
 function _mvFiltered() {
@@ -17880,9 +17901,14 @@ function _mvEstadoBadge(estado) {
 
 function _mvMonedaBadge(moneda) {
   const map = {
-    MXN:  { color:'#4ade80', bg:'rgba(74,222,128,0.08)'  },
-    USD:  { color:'#60a5fa', bg:'rgba(96,165,250,0.08)'  },
-    USDT: { color:'#fbbf24', bg:'rgba(251,191,36,0.08)'  },
+    MXN:  { color:'#4ade80', bg:'rgba(74,222,128,0.08)'   },
+    USD:  { color:'#60a5fa', bg:'rgba(96,165,250,0.08)'   },
+    USDT: { color:'#fbbf24', bg:'rgba(251,191,36,0.08)'   },
+    BTC:  { color:'#f7931a', bg:'rgba(247,147,26,0.08)'   },
+    ETH:  { color:'#8c8dfc', bg:'rgba(140,141,252,0.08)'  },
+    XRP:  { color:'#00aae4', bg:'rgba(0,170,228,0.08)'    },
+    SOL:  { color:'#9945ff', bg:'rgba(153,69,255,0.08)'   },
+    LTC:  { color:'#a0a0a0', bg:'rgba(160,160,160,0.08)'  },
   }
   const c = map[moneda] || { color:'#94a3b8', bg:'rgba(148,163,184,0.08)' }
   return nxBadge(moneda, { color:c.color, bg:c.bg })
@@ -17932,7 +17958,7 @@ async function renderMovimientos() {
       ${kpiCard('TrendingDown', 'Salidas MXN',  kpis.salidas,  '#f87171')}
       ${kpiCard('BarChart2',    'Saldo Neto',   Math.abs(kpis.net), kpis.net >= 0 ? '#4ade80' : '#f87171')}
       ${kpiCard('Clock',        'Pendiente',    Math.abs(kpis.pendiente), '#fbbf24')}
-      ${_mvTc ? kpiCard('RefreshCw','TC USDT/MXN', _mvTc, '#00f0ff', '') : ''}
+      ${Object.entries(_mvTcCache).map(([mon, c]) => kpiCard('RefreshCw', `TC ${mon}/MXN`, c.price, '#00f0ff', '')).join('')}
     </div>`
 
   // ── Action bar ──
@@ -17962,7 +17988,7 @@ async function renderMovimientos() {
         <input id="mv-search" type="text" value="${_mvEsc(f.search)}" placeholder="Ordenante, banco, notas..." oninput="mvSetFilter('search',this.value)" style="background:none;border:none;outline:none;color:var(--text-primary);font-size:12px;width:100%;" />
       </div>
       ${sel('tipo',f.tipo,[['entrada','🟢 Entrada'],['salida','🔴 Salida']],'Tipo')}
-      ${sel('moneda',f.moneda,[['MXN','MXN'],['USD','USD'],['USDT','USDT']],'Moneda')}
+      ${sel('moneda',f.moneda,[['MXN','MXN'],['USD','USD'],['USDT','USDT'],['BTC','BTC'],['ETH','ETH'],['XRP','XRP'],['SOL','SOL'],['LTC','LTC']],'Moneda')}
       ${sel('estado',f.estado,[['hecho','✅ Hecho'],['pendiente','⏳ Pendiente'],['cancelado','❌ Cancelado']],'Estado')}
       <input type="date" value="${f.dateFrom}" onchange="mvSetFilter('dateFrom',this.value)" style="padding:6px 10px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text-muted);font-size:12px;outline:none;" title="Desde" />
       <input type="date" value="${f.dateTo}" onchange="mvSetFilter('dateTo',this.value)" style="padding:6px 10px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text-muted);font-size:12px;outline:none;" title="Hasta" />
@@ -18010,7 +18036,8 @@ async function renderMovimientos() {
                 <div style="display:flex;align-items:center;gap:5px;font-weight:600;color:${isCan?'#64748b':'var(--text-primary)'};">
                   ${isEnt ? lx('ArrowDownLeft',11,'',{color:'#4ade80'}) : lx('ArrowUpRight',11,'',{color:'#f87171'})} ${quien}
                 </div>
-                ${m.notas ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px;">${_mvEsc(m.notas)}</div>` : ''}
+                ${m.comision != null ? `<div style="font-size:10px;color:#fbbf24;margin-top:2px;">com. ${(m.comision*100).toFixed(1)}% · gan. $${_mvFmt$(m.monto_mxn*(1-m.comision))}</div>` : ''}
+                ${m.notas ? `<div style="font-size:10px;color:var(--text-dim);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px;">${_mvEsc(m.notas)}</div>` : ''}
               </td>
               <td style="padding:10px 12px;">
                 ${m.banco ? `<div style="font-size:11px;color:var(--text-muted);">${_mvEsc(m.banco)}</div>` : ''}
@@ -18064,7 +18091,11 @@ window.mvSetOrq = async (id) => { _mvActiveOrqId = id; _mvMovs = []; _mvPage = 1
 window.mvSetFilter = (k, v) => { _mvFilters[k] = v; _mvPage = 1; renderMovimientos() }
 window.mvClearFilters = () => { _mvFilters = { tipo:'',moneda:'',estado:'',search:'',dateFrom:'',dateTo:'' }; _mvPage = 1; renderMovimientos() }
 window.mvSetPage = (p) => { _mvPage = p; renderMovimientos() }
-window.mvFetchTcAndRender = async () => { _mvTc = null; await _mvFetchTc(); renderMovimientos(); showToast('💱 T/C actualizado') }
+window.mvFetchTcAndRender = async () => {
+  _mvTcCache = {}  // flush all cached prices
+  await Promise.all(Object.keys(_MV_BITSO_BOOKS).map(m => _mvFetchCryptoTc(m)))
+  renderMovimientos(); showToast('💱 T/C actualizado para todas las monedas')
+}
 
 // ── Modal movimiento ───────────────────────────────────────────────────────────
 window.mvOpenModal = async (id = null) => {
@@ -18106,12 +18137,31 @@ window.mvOpenModal = async (id = null) => {
         <!-- Cantidad / Moneda / TC -->
         <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-bottom:14px;">
           ${fld('Cantidad *', `<input type="number" id="mv-cantidad" value="${mov?.cantidad||''}" placeholder="0.00" step="0.0001" min="0" oninput="mvCalcMxn()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
-          ${fld('Moneda', `<select id="mv-moneda" onchange="mvOnMonedaChange()" style="width:100%;padding:9px 12px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;cursor:pointer;outline:none;box-sizing:border-box;"><option value="MXN" ${(mov?.moneda||'MXN')==='MXN'?'selected':''}>MXN</option><option value="USD" ${mov?.moneda==='USD'?'selected':''}>USD</option><option value="USDT" ${mov?.moneda==='USDT'?'selected':''}>USDT</option></select>`)}
+          ${fld('Moneda', `<select id="mv-moneda" onchange="mvOnMonedaChange()" style="width:100%;padding:9px 12px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;cursor:pointer;outline:none;box-sizing:border-box;">
+            <option value="MXN"  ${(mov?.moneda||'MXN')==='MXN' ?'selected':''}>🇲🇽 MXN</option>
+            <option value="USD"  ${mov?.moneda==='USD' ?'selected':''}>🇺🇸 USD</option>
+            <option value="USDT" ${mov?.moneda==='USDT'?'selected':''}>🪙 USDT</option>
+            <option value="BTC"  ${mov?.moneda==='BTC' ?'selected':''}>₿ BTC</option>
+            <option value="ETH"  ${mov?.moneda==='ETH' ?'selected':''}>Ξ ETH</option>
+            <option value="XRP"  ${mov?.moneda==='XRP' ?'selected':''}>✕ XRP</option>
+            <option value="SOL"  ${mov?.moneda==='SOL' ?'selected':''}>◎ SOL</option>
+            <option value="LTC"  ${mov?.moneda==='LTC' ?'selected':''}>Ł LTC</option>
+          </select>`)}
           ${fld('T/C → MXN', `<input type="number" id="mv-tc" value="${mov?.tc||1}" step="0.0001" min="0.0001" oninput="mvCalcMxn()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
         </div>
 
-        <!-- Preview MXN -->
-        <div id="mv-mxn-preview" style="display:none;padding:8px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:13px;color:#00f0ff;font-family:'JetBrains Mono',monospace;margin-bottom:14px;"></div>
+        <!-- Preview MXN + campo comisión (solo Entrada + cripto/USD) -->
+        <div id="mv-comision-wrap" style="display:${(mov?.comision != null && mov?.tipo==='entrada')?'grid':'none'};grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:#fbbf24;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Factor comisión</label>
+            <input type="number" id="mv-comision" value="${mov?.comision??0.97}" step="0.001" min="0.01" max="1" oninput="mvCalcMxn()" style="width:100%;padding:9px 12px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);border-radius:10px;color:#fbbf24;font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:2px;">
+            <div id="mv-com-pct" style="font-size:12px;color:var(--text-dim);margin-bottom:4px;"></div>
+            <div id="mv-com-gain" style="font-size:13px;font-weight:700;color:#4ade80;font-family:'JetBrains Mono',monospace;"></div>
+          </div>
+        </div>
+        <div id="mv-mxn-preview" style="display:none;padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:#00f0ff;font-family:'JetBrains Mono',monospace;margin-bottom:14px;line-height:1.7;"></div>
 
         <!-- Estado -->
         <div style="margin-bottom:14px;">
@@ -18151,10 +18201,17 @@ window.mvOpenModal = async (id = null) => {
     </div>`)
 
   setTimeout(() => {
+    _mvToggleComision()
     mvCalcMxn()
-    if (!mov && _mvTc) {
+    // Si hay TC cacheado para la moneda del modal, auto-rellenar si TC está vacío
+    if (!mov) {
       const ms = document.getElementById('mv-moneda')
-      if (ms?.value === 'USDT') { const tcEl = document.getElementById('mv-tc'); if (tcEl) { tcEl.value = _mvTc; mvCalcMxn() } }
+      const moneda = ms?.value || 'MXN'
+      if (moneda !== 'MXN') {
+        const cached = _mvTcCache[moneda]?.price
+        const tcEl = document.getElementById('mv-tc')
+        if (tcEl && cached && !tcEl.value) { tcEl.value = cached; mvCalcMxn() }
+      }
     }
   }, 40)
 }
@@ -18166,6 +18223,8 @@ window.mvSelTipo = (t) => {
   const e = document.getElementById('mv-tipo-ent'); const s = document.getElementById('mv-tipo-sal')
   if (e) { e.style.background = t==='entrada'?'rgba(74,222,128,0.15)':'rgba(255,255,255,0.04)'; e.style.color = t==='entrada'?'#4ade80':'var(--text-dim)' }
   if (s) { s.style.background = t==='salida' ?'rgba(248,113,113,0.15)':'rgba(255,255,255,0.04)'; s.style.color = t==='salida' ?'#f87171':'var(--text-dim)' }
+  _mvToggleComision()
+  mvCalcMxn()
 }
 
 window.mvSelEstado = (v) => {
@@ -18179,22 +18238,83 @@ window.mvSelEstado = (v) => {
   })
 }
 
-window.mvOnMonedaChange = () => {
-  const m = document.getElementById('mv-moneda')?.value
-  const t = document.getElementById('mv-tc')
-  if (!t) return
-  if (m === 'MXN') t.value = 1
-  else if (_mvTc)  t.value = _mvTc
+window.mvOnMonedaChange = async () => {
+  const moneda = document.getElementById('mv-moneda')?.value
+  const tcEl   = document.getElementById('mv-tc')
+  if (!tcEl) return
+  if (moneda === 'MXN') {
+    tcEl.value = 1
+  } else {
+    // Fetch TC from cache or Bitso
+    const cached = _mvTcCache[moneda]?.price
+    if (cached) {
+      tcEl.value = cached
+    } else {
+      tcEl.value = ''
+      tcEl.placeholder = 'Consultando...'
+      const price = await _mvFetchCryptoTc(moneda)
+      if (document.getElementById('mv-tc') === tcEl) {  // modal still open
+        tcEl.value = price || ''
+        tcEl.placeholder = '0.0000'
+      }
+    }
+  }
+  _mvToggleComision()
   mvCalcMxn()
 }
 
+// Muestra/oculta el campo de comisión según tipo + moneda
+function _mvToggleComision() {
+  const tipo   = document.getElementById('mv-tipo')?.value
+  const moneda = document.getElementById('mv-moneda')?.value
+  const wrap   = document.getElementById('mv-comision-wrap')
+  if (!wrap) return
+  const show = tipo === 'entrada' && _MV_CRYPTO_SET.has(moneda)
+  wrap.style.display = show ? 'grid' : 'none'
+  if (show) {
+    const comEl = document.getElementById('mv-comision')
+    if (comEl && !comEl.value) comEl.value = '0.97'
+  }
+}
+
 window.mvCalcMxn = () => {
-  const cant = parseFloat(document.getElementById('mv-cantidad')?.value) || 0
-  const tc   = parseFloat(document.getElementById('mv-tc')?.value) || 1
-  const prev = document.getElementById('mv-mxn-preview')
+  const cant   = parseFloat(document.getElementById('mv-cantidad')?.value) || 0
+  const tc     = parseFloat(document.getElementById('mv-tc')?.value) || 1
+  const prev   = document.getElementById('mv-mxn-preview')
   if (!prev) return
-  if (cant > 0) { prev.style.display = 'block'; prev.textContent = `≈ $${(cant * tc).toLocaleString('es-MX',{minimumFractionDigits:2})} MXN` }
-  else prev.style.display = 'none'
+
+  const tipo   = document.getElementById('mv-tipo')?.value
+  const moneda = document.getElementById('mv-moneda')?.value
+  const comEl  = document.getElementById('mv-comision')
+  const showCom = tipo === 'entrada' && _MV_CRYPTO_SET.has(moneda) && comEl
+
+  const fmt = (n) => n.toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 })
+
+  if (cant > 0) {
+    prev.style.display = 'block'
+    const bruto = cant * tc
+    if (showCom) {
+      const factor  = parseFloat(comEl.value) || 0.97
+      const net     = bruto * factor
+      const ganancia = bruto - net
+      const pct     = ((1 - factor) * 100).toFixed(2)
+      // Actualiza hints en el panel de comisión
+      const pctEl = document.getElementById('mv-com-pct')
+      const gainEl = document.getElementById('mv-com-gain')
+      if (pctEl)  pctEl.textContent  = `${pct}% de ganancia`
+      if (gainEl) gainEl.textContent = `+$${fmt(ganancia)} MXN`
+      prev.innerHTML = `
+        Bruto: <strong>$${fmt(bruto)} MXN</strong>
+        &nbsp;·&nbsp; Cliente recibe: <strong>$${fmt(net)} MXN</strong>
+        &nbsp;·&nbsp; Tu ganancia: <strong style="color:#4ade80;">+$${fmt(ganancia)} MXN</strong>`
+    } else {
+      prev.textContent = `≈ $${fmt(bruto)} MXN`
+    }
+  } else {
+    prev.style.display = 'none'
+    const gainEl = document.getElementById('mv-com-gain')
+    if (gainEl) gainEl.textContent = ''
+  }
 }
 
 window.mvHandleDrop = (e) => {
@@ -18227,8 +18347,13 @@ window.mvSaveMov = async () => {
   const cant  = parseFloat(g('mv-cantidad')?.value)
   if (!tipo || !fecha || !cant || cant <= 0) { showToast('⚠ Tipo, fecha y cantidad son obligatorios'); return }
 
-  const tc    = parseFloat(g('mv-tc')?.value) || 1
-  const moneda= g('mv-moneda')?.value || 'MXN'
+  const tc     = parseFloat(g('mv-tc')?.value) || 1
+  const moneda = g('mv-moneda')?.value || 'MXN'
+  // Comisión: solo se guarda si aplica (Entrada + cripto/USD)
+  const showCom   = tipo === 'entrada' && _MV_CRYPTO_SET.has(moneda)
+  const comisionRaw = showCom ? parseFloat(g('mv-comision')?.value) : null
+  const comision  = (comisionRaw != null && !isNaN(comisionRaw)) ? comisionRaw : null
+
   const payload = {
     owner_id: currentUser.id, orquestador_id: _mvActiveOrqId,
     tipo, fecha,
@@ -18238,6 +18363,7 @@ window.mvSaveMov = async () => {
     clabe:        g('mv-clabe')?.value.trim()         || null,
     cantidad: cant, moneda, tc,
     monto_mxn: Math.round(cant * tc * 100) / 100,
+    comision,
     estado: g('mv-estado')?.value || 'hecho',
     notas:  g('mv-notas')?.value.trim() || null,
     updated_at: new Date().toISOString()
@@ -18415,4 +18541,7 @@ window.mvExportPDF = () => {
 }
 
 // ── Boot hook ─────────────────────────────────────────────────────────────────
-window.mvInit = () => { _mvFetchTc() }
+window.mvInit = () => {
+  // Pre-warm T/C cache for all cryptos in background
+  Object.keys(_MV_BITSO_BOOKS).forEach(m => _mvFetchCryptoTc(m))
+}
