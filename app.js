@@ -18180,10 +18180,23 @@ window.mvOpenModal = async (id = null) => {
         <!-- Comprobante -->
         <div style="margin-bottom:22px;">
           ${fld('Comprobante', `
-            ${mov?.comprobante_url ? `<div style="margin-bottom:8px;"><a href="${_mvEsc(mov.comprobante_url)}" target="_blank" style="color:#00f0ff;font-size:12px;display:flex;align-items:center;gap:5px;">${lx('ExternalLink',12)} Ver comprobante actual</a></div>` : ''}
-            <div id="mv-drop-zone" ondrop="mvHandleDrop(event)" ondragover="event.preventDefault();this.style.borderColor='rgba(0,246,255,0.5)'" ondragleave="this.style.borderColor='rgba(255,255,255,0.1)'" onclick="document.getElementById('mv-file-inp').click()" style="border:2px dashed rgba(255,255,255,0.1);border-radius:10px;padding:14px;text-align:center;cursor:pointer;transition:border-color 0.2s;">
-              ${lx('Upload',17,'',{color:'#64748b'})}
-              <div style="font-size:12px;color:var(--text-dim);margin-top:5px;">Arrastra o haz clic — JPG · PNG · PDF · 5MB máx.</div>
+            ${mov?.comprobante_url ? `<div style="margin-bottom:10px;padding:8px 12px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:8px;display:flex;align-items:center;gap:8px;"><a href="${_mvEsc(mov.comprobante_url)}" target="_blank" style="color:#00f0ff;font-size:12px;display:flex;align-items:center;gap:5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lx('ExternalLink',12)} ${_mvEsc(mov.comprobante_url)}</a></div>` : ''}
+            <!-- Opción 1: URL directa -->
+            <div style="margin-bottom:10px;">
+              <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;display:flex;align-items:center;gap:5px;">${lx('Link',11,'',{color:'#00f0ff'})} Pegar enlace</div>
+              <input type="url" id="mv-comp-url" value="${_mvEsc(mov?.comprobante_url&&!mov.comprobante_url.startsWith('http')?'':mov?.comprobante_url||'')}" placeholder="https://tronscan.org/#/... · drive.google.com · photos.app.goo.gl..." oninput="mvOnUrlInput()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:12px;outline:none;box-sizing:border-box;font-family:'JetBrains Mono',monospace;transition:border-color 0.2s;" onfocus="this.style.borderColor='rgba(0,246,255,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'" />
+            </div>
+            <!-- Separador -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+              <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
+              <span style="font-size:11px;color:var(--text-dim);font-weight:600;">O</span>
+              <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
+            </div>
+            <!-- Opción 2: Archivo -->
+            <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;display:flex;align-items:center;gap:5px;">${lx('Upload',11,'',{color:'#64748b'})} Subir archivo</div>
+            <div id="mv-drop-zone" ondrop="mvHandleDrop(event)" ondragover="event.preventDefault();this.style.borderColor='rgba(0,246,255,0.5)'" ondragleave="this.style.borderColor='rgba(255,255,255,0.1)'" onclick="document.getElementById('mv-file-inp').click()" style="border:2px dashed rgba(255,255,255,0.1);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:border-color 0.2s;">
+              ${lx('Upload',16,'',{color:'#64748b'})}
+              <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Arrastra o haz clic — JPG · PNG · PDF · 5MB máx.</div>
             </div>
             <input type="file" id="mv-file-inp" accept="image/*,.pdf" style="display:none;" onchange="mvHandleFile(event)" />
             <div id="mv-file-st" style="margin-top:6px;font-size:11px;color:#4ade80;"></div>
@@ -18317,6 +18330,18 @@ window.mvCalcMxn = () => {
   }
 }
 
+window.mvOnUrlInput = () => {
+  const inp = document.getElementById('mv-comp-url')
+  const st  = document.getElementById('mv-file-st')
+  if (!inp) return
+  const val = inp.value.trim()
+  if (val && st) {
+    // If user types a URL, clear any pending file since URL takes different path
+    // (file still overrides if explicitly chosen after)
+    st.textContent = val ? '' : st.textContent
+  }
+}
+
 window.mvHandleDrop = (e) => {
   e.preventDefault(); document.getElementById('mv-drop-zone').style.borderColor = 'rgba(255,255,255,0.1)'
   const f = e.dataTransfer.files?.[0]; if (f) _mvSetFile(f)
@@ -18354,6 +18379,9 @@ window.mvSaveMov = async () => {
   const comisionRaw = showCom ? parseFloat(g('mv-comision')?.value) : null
   const comision  = (comisionRaw != null && !isNaN(comisionRaw)) ? comisionRaw : null
 
+  // URL manual (solo se usa si no hay archivo pendiente)
+  const manualUrl = !_mvPendingFile ? (g('mv-comp-url')?.value.trim() || null) : null
+
   const payload = {
     owner_id: currentUser.id, orquestador_id: _mvActiveOrqId,
     tipo, fecha,
@@ -18364,6 +18392,7 @@ window.mvSaveMov = async () => {
     cantidad: cant, moneda, tc,
     monto_mxn: Math.round(cant * tc * 100) / 100,
     comision,
+    comprobante_url: manualUrl,   // se sobreescribe con Storage URL si hay archivo
     estado: g('mv-estado')?.value || 'hecho',
     notas:  g('mv-notas')?.value.trim() || null,
     updated_at: new Date().toISOString()
@@ -18379,10 +18408,16 @@ window.mvSaveMov = async () => {
     movId = data.id
   }
 
+  // Comprobante: archivo tiene prioridad sobre URL manual
   if (_mvPendingFile && movId) {
     const url = await _mvUploadFile(currentUser.id, movId)
     if (url) await supabase.from('movimientos').update({ comprobante_url: url }).eq('id', movId)
     _mvPendingFile = null
+  } else {
+    const manualUrl = g('mv-comp-url')?.value.trim()
+    if (manualUrl && movId) {
+      await supabase.from('movimientos').update({ comprobante_url: manualUrl }).eq('id', movId)
+    }
   }
 
   mvCloseModal()
