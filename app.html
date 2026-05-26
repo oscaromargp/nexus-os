@@ -1307,7 +1307,7 @@
       <button class="nav-item" data-view="proyectos"          data-tip="Gestión de proyectos"><span class="nav-icon"><i data-lucide="Briefcase"></i></span> Proyectos</button>
       <button class="nav-item" data-view="agenda"             data-tip="Pagos y cobros recurrentes"><span class="nav-icon"><i data-lucide="CalendarClock"></i></span> Agenda Financiera</button>
       <button class="nav-item" data-view="movimientos"        data-tip="Orquestador financiero multi-cuenta"><span class="nav-icon"><i data-lucide="ArrowLeftRight"></i></span> Movimientos</button>
-      <button class="nav-item" data-view="documentos"         data-tip="Presupuestos y Notas de Venta"><span class="nav-icon"><i data-lucide="FileText"></i></span> Documentos</button>
+      <button class="nav-item" data-view="cotizaciones"       data-tip="Cotizaciones y Ventas"><span class="nav-icon"><i data-lucide="FileSpreadsheet"></i></span> Cotizaciones y Ventas</button>
       <button class="nav-item" data-view="herramientas"       data-tip="OTC, documentos, calculadoras"><span class="nav-icon"><i data-lucide="Sliders"></i></span> Herramientas</button>
       <button class="nav-item" data-view="tags"               data-tip="Análisis de etiquetas"><span class="nav-icon"><i data-lucide="Tag"></i></span> Inteligencia Tags</button>
       <button class="nav-item" data-view="settings"           data-tip="Preferencias del sistema"><span class="nav-icon"><i data-lucide="Settings"></i></span> Configuración</button>
@@ -1497,8 +1497,8 @@
     <!-- ════ MOVIMIENTOS ════ -->
     <div id="view-movimientos" class="view-section"></div>
 
-    <!-- ════ DOCUMENTOS (Presupuestos + Notas de Venta) ════ -->
-    <div id="view-documentos" class="view-section"></div>
+    <!-- ════ COTIZACIONES Y VENTAS ════ -->
+    <div id="view-cotizaciones" class="view-section"></div>
 
     <!-- ════ AGENDA FINANCIERA ════ -->
     <div id="view-agenda" class="view-section">
@@ -5256,24 +5256,39 @@
   </div>
 </div>
 
-<!-- ════ MODAL DOCUMENTOS (Presupuestos / Notas de Venta) ════ -->
-<div id="doc-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;">
-  <div style="background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:18px;width:100%;max-width:760px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">
+<!-- ════ MODAL COTIZACIONES (Presupuestos / Notas de Venta) ════ -->
+<div id="cot-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;">
+  <div style="background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:18px;width:100%;max-width:860px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">
     <!-- Header -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.07);">
       <div style="display:flex;align-items:center;gap:10px;">
-        <span id="doc-modal-icon" style="font-size:22px;">📋</span>
-        <h2 id="doc-modal-title" style="font-size:17px;font-weight:800;color:#fff;margin:0;">Nuevo Presupuesto</h2>
+        <span id="cot-modal-icon" style="font-size:22px;">📋</span>
+        <h2 id="cot-modal-title" style="font-size:17px;font-weight:800;color:#fff;margin:0;">Nuevo Presupuesto</h2>
       </div>
-      <button onclick="closeDocModal()" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;font-size:18px;line-height:1;">✕</button>
+      <button onclick="closeCotModal()" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;font-size:18px;line-height:1;">✕</button>
     </div>
-    <!-- Body -->
-    <div id="doc-modal-body" style="padding:24px;"></div>
+    <!-- Body dinámico -->
+    <div id="cot-modal-body" style="padding:24px;"></div>
     <!-- Footer -->
     <div style="display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid rgba(255,255,255,0.07);flex-wrap:wrap;">
-      <button onclick="closeDocModal()" style="padding:10px 20px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;font-size:13px;font-weight:600;">Cancelar</button>
-      <button onclick="saveDoc()" style="padding:10px 22px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#e2e8f0;cursor:pointer;font-size:13px;font-weight:700;">💾 Guardar borrador</button>
-      <button onclick="saveDocAndExport()" style="padding:10px 22px;border-radius:10px;border:1px solid rgba(34,211,238,0.35);background:rgba(34,211,238,0.12);color:#22d3ee;cursor:pointer;font-size:13px;font-weight:700;">📥 Guardar y exportar PDF</button>
+      <button onclick="closeCotModal()" style="padding:10px 20px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;font-size:13px;font-weight:600;">Cancelar</button>
+      <button onclick="saveCot()" style="padding:10px 22px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#e2e8f0;cursor:pointer;font-size:13px;font-weight:700;">💾 Guardar borrador</button>
+      <button onclick="saveCotAndExport()" style="padding:10px 22px;border-radius:10px;border:1px solid rgba(34,211,238,0.35);background:rgba(34,211,238,0.12);color:#22d3ee;cursor:pointer;font-size:13px;font-weight:700;">📥 Guardar y exportar PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL CATÁLOGO (cot_catalogo items) ════ -->
+<div id="cat-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:9100;display:flex;align-items:center;justify-content:center;padding:24px 16px;">
+  <div style="background:#0e1422;border:1px solid rgba(167,139,250,0.25);border-radius:18px;width:100%;max-width:500px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,0.07);">
+      <h2 id="cat-modal-title" style="font-size:16px;font-weight:800;color:#fff;margin:0;">Nuevo ítem de catálogo</h2>
+      <button onclick="document.getElementById('cat-modal').classList.add('hidden')" style="width:30px;height:30px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;font-size:16px;line-height:1;">✕</button>
+    </div>
+    <div id="cat-modal-body" style="padding:22px;"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;padding:14px 22px;border-top:1px solid rgba(255,255,255,0.07);">
+      <button onclick="document.getElementById('cat-modal').classList.add('hidden')" style="padding:9px 18px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;font-size:13px;font-weight:600;">Cancelar</button>
+      <button onclick="saveCatItem()" style="padding:9px 20px;border-radius:10px;border:1px solid rgba(167,139,250,0.35);background:rgba(167,139,250,0.12);color:#a78bfa;cursor:pointer;font-size:13px;font-weight:700;">💾 Guardar</button>
     </div>
   </div>
 </div>

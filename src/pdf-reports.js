@@ -1404,3 +1404,408 @@ export function pdfPresupuesto(data, emisor = {}) {
   _footer(doc, 1, doc.internal.getNumberOfPages(), emisor)
   doc.save(`presupuesto-${folio}.pdf`)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COTIZACIONES PRO — Header / Footer especializados + PDF completos
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * _headerCotizacion — Header para Presupuestos y Notas de Venta Pro
+ * Barra delgada cyan (2px) en top, tipo doc grande izquierda, folio derecha.
+ * Si hay titulo: debajo del tipo en gris.
+ * @returns {number} Y de inicio del cuerpo
+ */
+function _headerCotizacion(doc, tipo, folio, titulo) {
+  const W = doc.internal.pageSize.getWidth()
+  // Línea cyan top
+  doc.setFillColor(...T.cyan)
+  doc.rect(0, 0, W, 2, 'F')
+  // Tipo de documento — izquierda, bold grande
+  doc.setFontSize(16)
+  doc.setFont(T.font, 'bold')
+  doc.setTextColor(...T.textInk)
+  doc.text(tipo.toUpperCase(), T.mX, 14)
+  // Folio — derecha, monospace elegante
+  doc.setFontSize(10)
+  doc.setFont('courier', 'bold')
+  doc.setTextColor(...T.textMid)
+  doc.text(folio || '', W - T.mX, 14, { align: 'right' })
+  // Titulo debajo del tipo, en gris muted
+  if (titulo) {
+    doc.setFontSize(8)
+    doc.setFont(T.font, 'normal')
+    doc.setTextColor(...T.textMid)
+    const tLines = doc.splitTextToSize(titulo, W - T.mX * 2 - 40)
+    doc.text(tLines[0], T.mX, 21)
+  }
+  // Línea separadora a los 26mm
+  doc.setDrawColor(...T.textDim)
+  doc.setLineWidth(0.25)
+  doc.line(T.mX, 26, W - T.mX, 26)
+  return 32
+}
+
+/**
+ * _footerCotizacion — Footer para Presupuestos y Notas de Venta Pro
+ */
+function _footerCotizacion(doc, pageNum, totalPages, emisor) {
+  const W = doc.internal.pageSize.getWidth()
+  const H = doc.internal.pageSize.getHeight()
+  doc.setDrawColor(...T.textDim)
+  doc.setLineWidth(0.25)
+  doc.line(T.mX, H - 14, W - T.mX, H - 14)
+  doc.setFontSize(7)
+  doc.setFont(T.font, 'normal')
+  doc.setTextColor(...T.textMid)
+  // Izquierda: emisor o marca
+  const left = (emisor?.nombre)
+    ? `${emisor.nombre}${emisor.rfc ? ' · RFC: ' + emisor.rfc : ''}`
+    : `${T.brand} · ${T.url}`
+  doc.text(doc.splitTextToSize(left, (W / 2) - T.mX)[0], T.mX, H - 7)
+  // Derecha: paginación
+  doc.text(`Pág. ${pageNum} de ${totalPages}`, W - T.mX, H - 7, { align: 'right' })
+  // Centro (solo primera página): leyenda original/copia
+  if (pageNum === 1) {
+    doc.setFontSize(6.5)
+    doc.setTextColor(...T.textDim)
+    doc.text('Original para el interesado · Copia para el otorgante', W / 2, H - 7, { align: 'center' })
+  }
+}
+
+/** Formato moneda con símbolo de moneda arbitraria */
+function _fmtMon(n, moneda) {
+  const sym = moneda === 'USD' ? 'US$' : moneda === 'USDT' ? 'USDT ' : moneda === 'BTC' ? '₿' : '$'
+  return sym + Math.abs(n ?? 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: moneda === 'BTC' ? 8 : 2 })
+}
+
+// ─── PRESUPUESTO PRO ─────────────────────────────────────────────────────────
+/**
+ * pdfPresupuesto — Presupuesto / Cotización profesional completo.
+ * data: { folio, titulo, fecha, fechaFmt, validezDias,
+ *         emisorNombre, emisorRfc, emisorDireccion, emisorTel,
+ *         clienteName, clienteRfc, clienteDireccion, clienteTel, clienteEmail,
+ *         proyectoNombre,
+ *         moneda, tipoCambio, metodoPago, bancoPago, clabePago,
+ *         items: [{ descripcion, cantidad, precio, descuento, subtotal }],
+ *         conIva, subtotal, descuentoTotal, iva, total, notas }
+ */
+export function pdfPresupuestoPro(data, emisor = {}) {
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W     = doc.internal.pageSize.getWidth()
+  const folio = data.folio || _folio()
+  const items = (data.items || []).filter(it => it.descripcion)
+  const mon   = data.moneda || 'MXN'
+  const blank = '________________________'
+
+  let y = _headerCotizacion(doc, 'Presupuesto', folio, data.titulo)
+
+  // ── Bloque emisor + cliente ──────────────────────────────────────────────────
+  const boxW = (W - T.mX * 2) / 2 - 3
+  const emisorNombre = data.emisorNombre || emisor.nombre || ''
+  const emisorRfc    = data.emisorRfc    || emisor.rfc    || ''
+  const emisorDir    = data.emisorDireccion || emisor.direccion || ''
+  const emisorTel    = data.emisorTel    || emisor.tel    || ''
+
+  // Caja Emisor
+  doc.setFillColor(245, 248, 252)
+  doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+  doc.roundedRect(T.mX, y, boxW, 36, 2, 2, 'FD')
+  doc.setFontSize(6.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textMid)
+  doc.text('EMISOR', T.mX + 4, y + 6)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text(doc.splitTextToSize(emisorNombre || 'Emisor', boxW - 8)[0], T.mX + 4, y + 13)
+  doc.setFontSize(7); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  if (emisorRfc)    doc.text(`RFC: ${emisorRfc}`,    T.mX + 4, y + 20)
+  if (emisorDir)    doc.text(doc.splitTextToSize(emisorDir, boxW - 10)[0], T.mX + 4, y + 26)
+  if (emisorTel)    doc.text(`Tel: ${emisorTel}`,    T.mX + 4, y + 32)
+
+  // Caja Cliente
+  const cX = W / 2 + 1
+  doc.setFillColor(245, 248, 252)
+  doc.roundedRect(cX, y, boxW, 36, 2, 2, 'FD')
+  doc.setFontSize(6.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textMid)
+  doc.text('CLIENTE', cX + 4, y + 6)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text(doc.splitTextToSize(data.clienteName || blank, boxW - 8)[0], cX + 4, y + 13)
+  doc.setFontSize(7); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  if (data.clienteRfc)       doc.text(`RFC: ${data.clienteRfc}`,     cX + 4, y + 20)
+  if (data.clienteDireccion) doc.text(doc.splitTextToSize(data.clienteDireccion, boxW - 10)[0], cX + 4, y + 26)
+  if (data.clienteTel)       doc.text(`Tel: ${data.clienteTel}`,     cX + 4, y + 32)
+  y += 42
+
+  // ── Meta: fecha, validez, proyecto ──────────────────────────────────────────
+  doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  const fechaStr = data.fechaFmt || data.fecha || new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
+  doc.text(`Fecha: ${fechaStr}`, T.mX, y)
+  if (data.validezDias) {
+    const vd = new Date(data.fecha ? data.fecha + 'T12:00:00' : Date.now())
+    vd.setDate(vd.getDate() + parseInt(data.validezDias))
+    doc.text(`Validez: ${data.validezDias} días (hasta ${vd.toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' })})`, T.mX + 60, y)
+  }
+  if (mon !== 'MXN') {
+    doc.text(`Moneda: ${mon}${data.tipoCambio ? ` (TC: ${data.tipoCambio})` : ''}`, W - T.mX, y, { align: 'right' })
+  }
+  y += 6
+
+  // Proyecto vinculado
+  if (data.proyectoNombre) {
+    doc.setFontSize(7.5); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
+    doc.text(`Proyecto: ${data.proyectoNombre}`, T.mX, y)
+    y += 6
+  }
+
+  y += 2
+  doc.setDrawColor(...T.textDim); doc.setLineWidth(0.15)
+  doc.line(T.mX, y, W - T.mX, y)
+  y += 5
+
+  // ── Tabla de ítems ───────────────────────────────────────────────────────────
+  if (items.length) {
+    const hasDiscount = items.some(it => (it.descuento || 0) > 0)
+    const head = hasDiscount
+      ? [['#', 'DESCRIPCIÓN', 'CANT.', 'PRECIO UNIT.', 'DESC.%', 'SUBTOTAL']]
+      : [['#', 'DESCRIPCIÓN', 'CANT.', 'PRECIO UNIT.', 'SUBTOTAL']]
+
+    const body = items.map((it, i) => {
+      const cant  = parseFloat(it.cantidad || 1)
+      const prec  = parseFloat(it.precio || 0)
+      const desc  = parseFloat(it.descuento || 0)
+      const sub   = it.subtotal ?? (cant * prec * (1 - desc / 100))
+      const row = [
+        i + 1,
+        it.descripcion || '—',
+        cant.toLocaleString('es-MX', { maximumFractionDigits: 2 }),
+        _fmtMon(prec, mon),
+      ]
+      if (hasDiscount) row.push(desc > 0 ? `${desc}%` : '—')
+      row.push(_fmtMon(sub, mon))
+      return row
+    })
+
+    _autoTable(doc, {
+      startY: y,
+      head,
+      body,
+      columnStyles: hasDiscount
+        ? { 0: { cellWidth: 8, halign: 'center' }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 28, halign: 'right' }, 4: { cellWidth: 16, halign: 'center' }, 5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } }
+        : { 0: { cellWidth: 10, halign: 'center' }, 2: { cellWidth: 18, halign: 'center' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } },
+      didDrawPage: (d) => {
+        _headerCotizacion(doc, 'Presupuesto', folio, data.titulo)
+        _footerCotizacion(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
+      },
+    })
+    y = doc.lastAutoTable.finalY + 4
+
+    // Totales
+    const subtotal      = data.subtotal       ?? items.reduce((s, it) => s + (it.subtotal || 0), 0)
+    const descTotal     = data.descuentoTotal  ?? 0
+    const iva           = data.iva            ?? (data.conIva ? subtotal * 0.16 : 0)
+    const total         = data.total          ?? (subtotal - descTotal + iva)
+    const totX          = W - T.mX - 64
+    const hasDescLine   = descTotal > 0
+    const totRows       = 1 + (hasDescLine ? 1 : 0) + (data.conIva ? 1 : 0) + 1
+    const totH          = totRows * 9 + 4
+
+    doc.setFillColor(245, 248, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+    doc.roundedRect(totX, y, 64, totH, 2, 2, 'FD')
+    let ty = y + 8
+    const _totRow = (label, val, bold = false, color = T.textInk) => {
+      doc.setFontSize(bold ? 9 : 8); doc.setFont(T.font, bold ? 'bold' : 'normal')
+      doc.setTextColor(...T.textMid); doc.text(label, totX + 4, ty)
+      doc.setTextColor(...color);    doc.text(_fmtMon(val, mon), totX + 60, ty, { align: 'right' })
+      ty += 9
+    }
+    _totRow('Subtotal:', subtotal)
+    if (hasDescLine) _totRow('Descuento:', -descTotal, false, T.red)
+    if (data.conIva)  _totRow('IVA (16%):', iva)
+    _totRow(`TOTAL ${mon}:`, total, true, T.cyan)
+    y = Math.max(y + totH + 6, ty + 4)
+
+    // Monto en letras (solo MXN)
+    if (mon === 'MXN') {
+      doc.setFontSize(7); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
+      doc.text(numToLetras(total), T.mX, y)
+      y += 7
+    }
+  }
+
+  // ── Observaciones ────────────────────────────────────────────────────────────
+  if (data.notas) {
+    y += 2
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    const nLines = doc.splitTextToSize('Observaciones: ' + data.notas, W - T.mX * 2)
+    doc.text(nLines, T.mX, y)
+    y += nLines.length * 4 + 5
+  }
+
+  // ── Datos de pago ─────────────────────────────────────────────────────────────
+  if (data.metodoPago || data.bancoPago || data.clabePago) {
+    y += 2
+    doc.setFontSize(7.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('Datos de pago:', T.mX, y); y += 5
+    doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    if (data.metodoPago) { doc.text(`Método: ${data.metodoPago}`, T.mX, y); y += 5 }
+    if (data.bancoPago)  { doc.text(`Banco: ${data.bancoPago}`,   T.mX, y); y += 5 }
+    if (data.clabePago)  { doc.text(`CLABE/Wallet: ${data.clabePago}`, T.mX, y); y += 5 }
+  }
+
+  // ── Líneas de firma ──────────────────────────────────────────────────────────
+  const H = doc.internal.pageSize.getHeight()
+  y = Math.max(y + 8, H - 40)
+  if (y < H - 24) {
+    const midX = W / 2
+    doc.setDrawColor(...T.textDim); doc.setLineWidth(0.3)
+    doc.line(T.mX,     y, T.mX + 58,     y)
+    doc.line(midX + 4, y, midX + 62, y)
+    doc.setFontSize(7); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    doc.text(emisorNombre || 'Emisor / Prestador', T.mX, y + 5)
+    doc.text('Cliente / Aceptante', midX + 4, y + 5)
+  }
+
+  _footerCotizacion(doc, 1, doc.internal.getNumberOfPages(), emisor)
+  doc.save(`presupuesto-${folio}.pdf`)
+}
+
+// ─── NOTA DE VENTA PRO ───────────────────────────────────────────────────────
+/**
+ * pdfNotaVentaPro — Nota de Venta profesional completa.
+ * Mismos campos que pdfPresupuestoPro, sin validez ni líneas de firma.
+ */
+export function pdfNotaVentaPro(data, emisor = {}) {
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W     = doc.internal.pageSize.getWidth()
+  const folio = data.folio || _folio()
+  const items = (data.items || []).filter(it => it.descripcion)
+  const mon   = data.moneda || 'MXN'
+  const blank = '________________________'
+
+  let y = _headerCotizacion(doc, 'Nota de Venta', folio, data.titulo)
+
+  // ── Bloque emisor + cliente ──────────────────────────────────────────────────
+  const boxW = (W - T.mX * 2) / 2 - 3
+  const emisorNombre = data.emisorNombre || emisor.nombre || ''
+  const emisorRfc    = data.emisorRfc    || emisor.rfc    || ''
+  const emisorDir    = data.emisorDireccion || emisor.direccion || ''
+  const emisorTel    = data.emisorTel    || emisor.tel    || ''
+
+  doc.setFillColor(245, 248, 252)
+  doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+  doc.roundedRect(T.mX, y, boxW, 36, 2, 2, 'FD')
+  doc.setFontSize(6.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textMid)
+  doc.text('EMISOR', T.mX + 4, y + 6)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text(doc.splitTextToSize(emisorNombre || 'Emisor', boxW - 8)[0], T.mX + 4, y + 13)
+  doc.setFontSize(7); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  if (emisorRfc) doc.text(`RFC: ${emisorRfc}`, T.mX + 4, y + 20)
+  if (emisorDir) doc.text(doc.splitTextToSize(emisorDir, boxW - 10)[0], T.mX + 4, y + 26)
+  if (emisorTel) doc.text(`Tel: ${emisorTel}`, T.mX + 4, y + 32)
+
+  const cX = W / 2 + 1
+  doc.setFillColor(245, 248, 252)
+  doc.roundedRect(cX, y, boxW, 36, 2, 2, 'FD')
+  doc.setFontSize(6.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textMid)
+  doc.text('CLIENTE', cX + 4, y + 6)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text(doc.splitTextToSize(data.clienteName || blank, boxW - 8)[0], cX + 4, y + 13)
+  doc.setFontSize(7); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  if (data.clienteRfc)       doc.text(`RFC: ${data.clienteRfc}`,     cX + 4, y + 20)
+  if (data.clienteDireccion) doc.text(doc.splitTextToSize(data.clienteDireccion, boxW - 10)[0], cX + 4, y + 26)
+  if (data.clienteTel)       doc.text(`Tel: ${data.clienteTel}`,     cX + 4, y + 32)
+  y += 42
+
+  // ── Meta ──────────────────────────────────────────────────────────────────────
+  doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  const fechaStr = data.fechaFmt || data.fecha || new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
+  doc.text(`Fecha: ${fechaStr}`, T.mX, y)
+  if (mon !== 'MXN') doc.text(`Moneda: ${mon}${data.tipoCambio ? ` (TC: ${data.tipoCambio})` : ''}`, W - T.mX, y, { align: 'right' })
+  y += 6
+  if (data.proyectoNombre) {
+    doc.setFontSize(7.5); doc.setFont(T.font, 'italic')
+    doc.text(`Proyecto: ${data.proyectoNombre}`, T.mX, y); y += 6
+  }
+  y += 2
+  doc.setDrawColor(...T.textDim); doc.setLineWidth(0.15)
+  doc.line(T.mX, y, W - T.mX, y); y += 5
+
+  // ── Tabla de ítems ───────────────────────────────────────────────────────────
+  if (items.length) {
+    const hasDiscount = items.some(it => (it.descuento || 0) > 0)
+    const head = hasDiscount
+      ? [['#', 'DESCRIPCIÓN', 'CANT.', 'PRECIO UNIT.', 'DESC.%', 'SUBTOTAL']]
+      : [['#', 'DESCRIPCIÓN', 'CANT.', 'PRECIO UNIT.', 'SUBTOTAL']]
+
+    const body = items.map((it, i) => {
+      const cant  = parseFloat(it.cantidad || 1)
+      const prec  = parseFloat(it.precio || 0)
+      const desc  = parseFloat(it.descuento || 0)
+      const sub   = it.subtotal ?? (cant * prec * (1 - desc / 100))
+      const row = [i + 1, it.descripcion || '—', cant.toLocaleString('es-MX', { maximumFractionDigits: 2 }), _fmtMon(prec, mon)]
+      if (hasDiscount) row.push(desc > 0 ? `${desc}%` : '—')
+      row.push(_fmtMon(sub, mon))
+      return row
+    })
+
+    _autoTable(doc, {
+      startY: y, head, body,
+      columnStyles: hasDiscount
+        ? { 0: { cellWidth: 8, halign: 'center' }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 28, halign: 'right' }, 4: { cellWidth: 16, halign: 'center' }, 5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } }
+        : { 0: { cellWidth: 10, halign: 'center' }, 2: { cellWidth: 18, halign: 'center' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } },
+      didDrawPage: (d) => {
+        _headerCotizacion(doc, 'Nota de Venta', folio, data.titulo)
+        _footerCotizacion(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
+      },
+    })
+    y = doc.lastAutoTable.finalY + 4
+
+    const subtotal  = data.subtotal      ?? items.reduce((s, it) => s + (it.subtotal || 0), 0)
+    const descTotal = data.descuentoTotal ?? 0
+    const iva       = data.iva           ?? (data.conIva ? subtotal * 0.16 : 0)
+    const total     = data.total         ?? (subtotal - descTotal + iva)
+    const totX      = W - T.mX - 64
+    const hasDescLine = descTotal > 0
+    const totRows   = 1 + (hasDescLine ? 1 : 0) + (data.conIva ? 1 : 0) + 1
+    const totH      = totRows * 9 + 4
+
+    doc.setFillColor(245, 248, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+    doc.roundedRect(totX, y, 64, totH, 2, 2, 'FD')
+    let ty = y + 8
+    const _totRow2 = (label, val, bold = false, color = T.textInk) => {
+      doc.setFontSize(bold ? 9 : 8); doc.setFont(T.font, bold ? 'bold' : 'normal')
+      doc.setTextColor(...T.textMid); doc.text(label, totX + 4, ty)
+      doc.setTextColor(...color);    doc.text(_fmtMon(val, mon), totX + 60, ty, { align: 'right' })
+      ty += 9
+    }
+    _totRow2('Subtotal:', subtotal)
+    if (hasDescLine) _totRow2('Descuento:', -descTotal, false, T.red)
+    if (data.conIva)  _totRow2('IVA (16%):', iva)
+    _totRow2(`TOTAL ${mon}:`, total, true, T.cyan)
+    y = Math.max(y + totH + 6, ty + 4)
+
+    if (mon === 'MXN') {
+      doc.setFontSize(7); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
+      doc.text(numToLetras(total), T.mX, y); y += 7
+    }
+  }
+
+  // ── Observaciones ────────────────────────────────────────────────────────────
+  if (data.notas) {
+    y += 2
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    const nLines = doc.splitTextToSize('Observaciones: ' + data.notas, W - T.mX * 2)
+    doc.text(nLines, T.mX, y); y += nLines.length * 4 + 5
+  }
+
+  // ── Datos de pago ─────────────────────────────────────────────────────────────
+  if (data.metodoPago || data.bancoPago || data.clabePago) {
+    y += 2
+    doc.setFontSize(7.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('Datos de pago:', T.mX, y); y += 5
+    doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    if (data.metodoPago) { doc.text(`Método: ${data.metodoPago}`, T.mX, y); y += 5 }
+    if (data.bancoPago)  { doc.text(`Banco: ${data.bancoPago}`,   T.mX, y); y += 5 }
+    if (data.clabePago)  { doc.text(`CLABE/Wallet: ${data.clabePago}`, T.mX, y); y += 5 }
+  }
+
+  _footerCotizacion(doc, 1, doc.internal.getNumberOfPages(), emisor)
+  doc.save(`nota-venta-${folio}.pdf`)
+}

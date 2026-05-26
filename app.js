@@ -19,7 +19,8 @@ Chart.register(
 // ── PDF Reports Engine ────────────────────────────────────────────────────────
 import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensual,
          pdfProrroga, pdfPagare, pdfRecibo, pdfCartaPoder,
-         pdfContratoServicios, pdfNotaVenta, pdfPresupuesto } from './src/pdf-reports.js'
+         pdfContratoServicios, pdfNotaVenta, pdfPresupuesto,
+         pdfPresupuestoPro, pdfNotaVentaPro } from './src/pdf-reports.js'
 
 // ── Lucide Icons ──────────────────────────────────────────────────────────────
 import {
@@ -46,7 +47,7 @@ import {
   UserPlus, UserCheck, UserX, UsersRound, Contact,
   ArrowRight, ArrowLeft, MoveRight, MoveLeft,
   Minus, Asterisk, Divide, Equal,
-  ArrowLeftRight, Printer, Save
+  ArrowLeftRight, Printer, Save, FileSpreadsheet
 } from 'lucide'
 
 // Registro central — todos los iconos disponibles en Nexus OS
@@ -73,7 +74,7 @@ const _lucideIcons = {
   UserPlus, UserCheck, UserX, UsersRound, Contact,
   ArrowRight, ArrowLeft, MoveRight, MoveLeft,
   Minus, Asterisk, Divide, Equal,
-  ArrowLeftRight, Printer, Save
+  ArrowLeftRight, Printer, Save, FileSpreadsheet
 }
 
 /**
@@ -190,10 +191,12 @@ function getEmisor() {
   return { nombre: s.emisor_nombre || '', rfc: s.emisor_rfc || '', direccion: s.emisor_dir || '' }
 }
 // ── Documentos module state ───────────────────────────────────────────────────
-let _docTab          = 'presupuestos'   // 'presupuestos' | 'notas'
-let _docStatusFilter = 'all'            // 'all' | 'borrador' | 'enviado' | 'aprobado' | 'cancelado'
-let _docEditId       = null             // ID del doc en edición (null = nuevo)
-let _docEditType     = 'doc_presupuesto' // tipo del doc en edición
+let _cotTab          = 'presupuestos'    // 'presupuestos' | 'notas' | 'catalogo'
+let _cotStatusFilter = 'all'            // 'all' | 'borrador' | 'enviado' | 'aprobado' | 'cancelado' | 'pagado'
+let _cotEditId       = null             // ID del doc en edición (null = nuevo)
+let _cotEditType     = 'cot_presupuesto' // tipo del doc en edición
+let _catSearch       = ''              // búsqueda en catálogo
+let _catEditId       = null            // ID de ítem catálogo en edición
 
 let currentFilter = null
 let activeTypeFilter = null   // null = todos los tipos
@@ -2185,7 +2188,7 @@ const VIEW_RENDER_MAP = {
   agenda:       ()      => renderAgenda(allNodes),
   proyectos:    ()      => renderProyectos(),
   movimientos:  ()      => renderMovimientos(),
-  documentos:   ()      => renderDocumentos(),
+  cotizaciones: ()      => renderCotizaciones(),
 }
 
 function renderAll() {
@@ -19036,65 +19039,74 @@ window._mvSelectAccount = (idx) => {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MÓDULO DOCUMENTOS — Presupuestos + Notas de Venta
+// MÓDULO COTIZACIONES Y VENTAS — Presupuestos + Notas de Venta + Catálogo
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const _DOC_STATUS = {
+const _COT_STATUS = {
   borrador:  { label: 'Borrador',  color: '#94a3b8', bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.28)' },
   enviado:   { label: 'Enviado',   color: '#60a5fa', bg: 'rgba(96,165,250,0.10)',  border: 'rgba(96,165,250,0.28)'  },
   aprobado:  { label: 'Aprobado',  color: '#4ade80', bg: 'rgba(74,222,128,0.10)',  border: 'rgba(74,222,128,0.28)'  },
   cancelado: { label: 'Cancelado', color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: 'rgba(248,113,113,0.28)' },
+  pagado:    { label: 'Pagado',    color: '#34d399', bg: 'rgba(52,211,153,0.10)',  border: 'rgba(52,211,153,0.28)'  },
 }
 
-function _docFmt(n) {
-  return '$' + Math.abs(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function _cotFmt(n, moneda = 'MXN') {
+  const sym = moneda === 'USD' ? 'US$' : moneda === 'USDT' ? 'USDT ' : moneda === 'BTC' ? '₿' : '$'
+  return sym + Math.abs(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: moneda === 'BTC' ? 8 : 2 })
 }
 
-function _docFolio(prefix) {
+function _cotFolio(prefix) {
   const d  = new Date()
   const ds = d.toISOString().slice(0, 10).replace(/-/g, '')
   return `${prefix}-${ds}-${Math.floor(Math.random() * 9000 + 1000)}`
 }
 
 // ── Render vista principal ─────────────────────────────────────────────────────
-function renderDocumentos() {
-  const root = document.getElementById('view-documentos')
+function renderCotizaciones() {
+  const root = document.getElementById('view-cotizaciones')
   if (!root) return
 
-  const presupuestos = allNodes.filter(n => n.type === 'doc_presupuesto')
+  const presupuestos = allNodes.filter(n => n.type === 'cot_presupuesto')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-  const notas = allNodes.filter(n => n.type === 'doc_nota')
+  const notas = allNodes.filter(n => n.type === 'cot_nota')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const catalogo = allNodes.filter(n => n.type === 'cot_catalogo')
+    .sort((a, b) => (a.metadata?.nombre || '').localeCompare(b.metadata?.nombre || ''))
 
-  const tabDocs = _docTab === 'presupuestos' ? presupuestos : notas
-  const filtered = _docStatusFilter === 'all'
+  if (_cotTab === 'catalogo') {
+    _renderCatalogo(root, catalogo)
+    return
+  }
+
+  const tabDocs = _cotTab === 'presupuestos' ? presupuestos : notas
+  const filtered = _cotStatusFilter === 'all'
     ? tabDocs
-    : tabDocs.filter(d => (d.metadata?.estado || 'borrador') === _docStatusFilter)
+    : tabDocs.filter(d => (d.metadata?.estado || 'borrador') === _cotStatusFilter)
 
   const totalP   = presupuestos.reduce((s, d) => s + (d.metadata?.total || 0), 0)
   const totalN   = notas.reduce((s, d) => s + (d.metadata?.total || 0), 0)
   const aprobP   = presupuestos.filter(d => d.metadata?.estado === 'aprobado').length
   const convRate = presupuestos.length ? Math.round(aprobP / presupuestos.length * 100) : 0
-  const isPresupTab = _docTab === 'presupuestos'
+  const isPresupTab = _cotTab === 'presupuestos'
 
   root.innerHTML = `
     <div style="padding:0 24px 32px;">
 
       <!-- Header -->
       <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-        <h1 class="view-title">📄 Documentos</h1>
-        <button onclick="openDocModal('${isPresupTab ? 'doc_presupuesto' : 'doc_nota'}')"
+        <h1 class="view-title">📊 Cotizaciones y Ventas</h1>
+        <button onclick="openCotModal('${isPresupTab ? 'cot_presupuesto' : 'cot_nota'}')"
           style="display:flex;align-items:center;gap:7px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:10px;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:700;">
           + Nuevo ${isPresupTab ? 'Presupuesto' : 'Nota de Venta'}
         </button>
       </div>
 
       <!-- KPIs -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px;">
         <div style="background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.18);border-radius:12px;padding:14px 16px;">
           <div style="font-size:10px;font-weight:700;color:#60a5fa;letter-spacing:.07em;margin-bottom:5px;">PRESUPUESTOS</div>
           <div style="font-size:24px;font-weight:900;color:#fff;font-family:monospace;">${presupuestos.length}</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${_docFmt(totalP)}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${_cotFmt(totalP)}</div>
         </div>
         <div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.18);border-radius:12px;padding:14px 16px;">
           <div style="font-size:10px;font-weight:700;color:#4ade80;letter-spacing:.07em;margin-bottom:5px;">APROBADOS</div>
@@ -19104,338 +19116,690 @@ function renderDocumentos() {
         <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.18);border-radius:12px;padding:14px 16px;">
           <div style="font-size:10px;font-weight:700;color:#a78bfa;letter-spacing:.07em;margin-bottom:5px;">NOTAS VENTA</div>
           <div style="font-size:24px;font-weight:900;color:#fff;font-family:monospace;">${notas.length}</div>
-          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${_docFmt(totalN)}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${_cotFmt(totalN)}</div>
+        </div>
+        <div style="background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.18);border-radius:12px;padding:14px 16px;">
+          <div style="font-size:10px;font-weight:700;color:#fbbf24;letter-spacing:.07em;margin-bottom:5px;">CATÁLOGO</div>
+          <div style="font-size:24px;font-weight:900;color:#fff;font-family:monospace;">${catalogo.length}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">productos / servicios</div>
         </div>
       </div>
 
       <!-- Tabs -->
       <div style="display:flex;gap:4px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:4px;margin-bottom:16px;width:fit-content;">
-        <button onclick="switchDocTab('presupuestos')"
-          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;${_docTab==='presupuestos'?'background:rgba(34,211,238,0.12);color:#22d3ee;border:1px solid rgba(34,211,238,0.25);':'background:transparent;color:#6b7280;border:1px solid transparent;'}">
+        <button onclick="switchCotTab('presupuestos')"
+          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;${_cotTab==='presupuestos'?'background:rgba(34,211,238,0.12);color:#22d3ee;border:1px solid rgba(34,211,238,0.25);':'background:transparent;color:#6b7280;border:1px solid transparent;'}">
           📋 Presupuestos
         </button>
-        <button onclick="switchDocTab('notas')"
-          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;${_docTab==='notas'?'background:rgba(34,211,238,0.12);color:#22d3ee;border:1px solid rgba(34,211,238,0.25);':'background:transparent;color:#6b7280;border:1px solid transparent;'}">
+        <button onclick="switchCotTab('notas')"
+          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;${_cotTab==='notas'?'background:rgba(34,211,238,0.12);color:#22d3ee;border:1px solid rgba(34,211,238,0.25);':'background:transparent;color:#6b7280;border:1px solid transparent;'}">
           🧾 Notas de Venta
+        </button>
+        <button onclick="switchCotTab('catalogo')"
+          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;${_cotTab==='catalogo'?'background:rgba(251,191,36,0.12);color:#fbbf24;border:1px solid rgba(251,191,36,0.25);':'background:transparent;color:#6b7280;border:1px solid transparent;'}">
+          📦 Catálogo
         </button>
       </div>
 
-      <!-- Status filters -->
+      <!-- Status filters (solo presupuestos) -->
+      ${isPresupTab ? `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
-        ${[['all','Todos','#94a3b8'],...Object.entries(_DOC_STATUS).map(([k,v])=>[k,v.label,v.color])].map(([s, lbl, col]) => {
-          const active = _docStatusFilter === s
-          return `<button onclick="setDocStatusFilter('${s}')" style="padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;border:1px solid ${active ? col : 'rgba(255,255,255,0.1)'};background:${active ? col + '18' : 'transparent'};color:${active ? col : '#6b7280'};">${lbl}</button>`
+        ${[['all','Todos','#94a3b8'],...Object.entries(_COT_STATUS).map(([k,v])=>[k,v.label,v.color])].map(([s, lbl, col]) => {
+          const active = _cotStatusFilter === s
+          return `<button onclick="setCotStatusFilter('${s}')" style="padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;border:1px solid ${active ? col : 'rgba(255,255,255,0.1)'};background:${active ? col + '18' : 'transparent'};color:${active ? col : '#6b7280'};">${lbl}</button>`
         }).join('')}
-      </div>
+      </div>` : ''}
 
       <!-- Lista de documentos -->
       ${filtered.length === 0 ? `
         <div style="text-align:center;padding:56px 24px;color:#6b7280;">
           <div style="font-size:44px;margin-bottom:14px;">${isPresupTab ? '📋' : '🧾'}</div>
-          <div style="font-size:15px;font-weight:700;color:#94a3b8;margin-bottom:6px;">Sin ${isPresupTab ? 'presupuestos' : 'notas de venta'}${_docStatusFilter !== 'all' ? ' en este estado' : ''}</div>
+          <div style="font-size:15px;font-weight:700;color:#94a3b8;margin-bottom:6px;">Sin ${isPresupTab ? 'presupuestos' : 'notas de venta'}${_cotStatusFilter !== 'all' ? ' en este estado' : ''}</div>
           <div style="font-size:12px;">Crea tu primer documento con el botón de arriba.</div>
         </div>
-      ` : `<div style="display:flex;flex-direction:column;gap:10px;">${filtered.map(d => _renderDocCard(d)).join('')}</div>`}
+      ` : `<div style="display:flex;flex-direction:column;gap:10px;">${filtered.map(d => _renderCotCard(d)).join('')}</div>`}
 
     </div>`
 }
 
-function _renderDocCard(d) {
+// ── Render del catálogo ────────────────────────────────────────────────────────
+function _renderCatalogo(root, catalogo) {
+  const searchQ = (_catSearch || '').toLowerCase()
+  const filtered = searchQ
+    ? catalogo.filter(n => {
+        const m = n.metadata || {}
+        return (m.nombre || '').toLowerCase().includes(searchQ)
+          || (m.categoria || '').toLowerCase().includes(searchQ)
+          || (m.tags || '').toLowerCase().includes(searchQ)
+          || (m.descripcion || '').toLowerCase().includes(searchQ)
+      })
+    : catalogo
+
+  root.innerHTML = `
+    <div style="padding:0 24px 32px;">
+      <!-- Header -->
+      <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+        <h1 class="view-title">📊 Cotizaciones y Ventas</h1>
+        <button onclick="openCatModal()"
+          style="display:flex;align-items:center;gap:7px;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);color:#fbbf24;border-radius:10px;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:700;">
+          + Nuevo ítem
+        </button>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:4px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:4px;margin-bottom:16px;width:fit-content;">
+        <button onclick="switchCotTab('presupuestos')"
+          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:#6b7280;border:1px solid transparent;">
+          📋 Presupuestos
+        </button>
+        <button onclick="switchCotTab('notas')"
+          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:#6b7280;border:1px solid transparent;">
+          🧾 Notas de Venta
+        </button>
+        <button onclick="switchCotTab('catalogo')"
+          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;background:rgba(251,191,36,0.12);color:#fbbf24;border:1px solid rgba(251,191,36,0.25);">
+          📦 Catálogo
+        </button>
+      </div>
+
+      <!-- Búsqueda -->
+      <div style="margin-bottom:20px;">
+        <input type="text" id="cat-search-input" class="modal-input" style="max-width:340px;"
+          placeholder="Buscar por nombre, categoría, tags…"
+          value="${esc(_catSearch)}"
+          oninput="_catSearch=this.value;_renderCatalogo(document.getElementById('view-cotizaciones'), allNodes.filter(n=>n.type==='cot_catalogo').sort((a,b)=>(a.metadata?.nombre||'').localeCompare(b.metadata?.nombre||'')))"/>
+      </div>
+
+      <!-- Grid de productos -->
+      ${filtered.length === 0 ? `
+        <div style="text-align:center;padding:56px 24px;color:#6b7280;">
+          <div style="font-size:44px;margin-bottom:14px;">📦</div>
+          <div style="font-size:15px;font-weight:700;color:#94a3b8;margin-bottom:6px;">Sin ítems en el catálogo</div>
+          <div style="font-size:12px;">Agrega productos o servicios con el botón de arriba.</div>
+        </div>
+      ` : `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;">
+          ${filtered.map(n => _renderCatCard(n)).join('')}
+        </div>
+      `}
+    </div>`
+}
+
+function _renderCatCard(n) {
+  const m = n.metadata || {}
+  return `
+  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:14px;overflow:hidden;transition:border-color .2s;" onmouseover="this.style.borderColor='rgba(251,191,36,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
+    ${m.foto_url
+      ? `<img src="${esc(m.foto_url)}" style="width:100%;height:140px;object-fit:cover;display:block;" onerror="this.style.display='none'"/>`
+      : `<div style="width:100%;height:100px;background:rgba(251,191,36,0.06);display:flex;align-items:center;justify-content:center;font-size:36px;">📦</div>`
+    }
+    <div style="padding:12px 14px;">
+      <div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.nombre || 'Sin nombre')}</div>
+      ${m.categoria ? `<div style="font-size:10px;color:#fbbf24;font-weight:600;margin-bottom:4px;">${esc(m.categoria)}</div>` : ''}
+      ${m.descripcion ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(m.descripcion)}</div>` : ''}
+      <div style="font-size:16px;font-weight:900;color:#22d3ee;margin-bottom:8px;">${_cotFmt(m.precio || 0, m.moneda || 'MXN')}</div>
+      <div style="display:flex;gap:6px;">
+        <button onclick="openCatModal('${n.id}')" style="flex:1;padding:6px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#94a3b8;cursor:pointer;font-size:12px;">✏️ Editar</button>
+        <button onclick="deleteCatItem('${n.id}')" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(248,113,113,0.22);background:rgba(248,113,113,0.04);color:#f87171;cursor:pointer;font-size:14px;">🗑</button>
+      </div>
+    </div>
+  </div>`
+}
+
+function _renderCotCard(d) {
   const m       = d.metadata || {}
   const estado  = m.estado || 'borrador'
-  const scfg    = _DOC_STATUS[estado] || _DOC_STATUS.borrador
-  const isP     = d.type === 'doc_presupuesto'
+  const scfg    = _COT_STATUS[estado] || _COT_STATUS.borrador
+  const isP     = d.type === 'cot_presupuesto'
+  const mon     = m.moneda || 'MXN'
   const fechaStr = m.fecha
     ? new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' })
     : '—'
   const itemCount = (m.items || []).length
 
   return `
-  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;transition:border-color .2s;" onmouseover="this.style.borderColor='rgba(34,211,238,0.22)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
-    <div style="font-size:28px;flex-shrink:0;">${isP ? '📋' : '🧾'}</div>
+  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:border-color .2s;" onmouseover="this.style.borderColor='rgba(34,211,238,0.22)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
+    <div style="font-size:26px;flex-shrink:0;">${isP ? '📋' : '🧾'}</div>
     <div style="flex:1;min-width:0;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px;">
         <span style="font-size:12px;font-weight:800;color:#fff;font-family:monospace;">${esc(m.folio || '—')}</span>
         <span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:10px;background:${scfg.bg};border:1px solid ${scfg.border};color:${scfg.color};">${scfg.label}</span>
+        ${mon !== 'MXN' ? `<span style="font-size:10px;color:#fbbf24;font-weight:600;">${mon}</span>` : ''}
       </div>
+      ${m.titulo ? `<div style="font-size:12px;color:#a78bfa;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.titulo)}</div>` : ''}
       <div style="font-size:13px;color:#e2e8f0;font-weight:600;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.clienteName || 'Sin cliente')}</div>
-      ${m.concepto ? `<div style="font-size:11px;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.concepto)}</div>` : ''}
+      ${m.proyectoNombre ? `<div style="font-size:10px;color:#60a5fa;">Proyecto: ${esc(m.proyectoNombre)}</div>` : ''}
       <div style="font-size:10px;color:#6b7280;margin-top:3px;">${fechaStr}${isP && m.validezDias ? ` · Válido ${m.validezDias} días` : ''} · ${itemCount} concepto${itemCount !== 1 ? 's' : ''}</div>
     </div>
-    <div style="text-align:right;flex-shrink:0;margin-right:8px;">
-      <div style="font-size:19px;font-weight:900;color:#22d3ee;font-family:monospace;">${_docFmt(m.total || 0)}</div>
+    <div style="text-align:right;flex-shrink:0;margin-right:6px;">
+      <div style="font-size:18px;font-weight:900;color:#22d3ee;font-family:monospace;">${_cotFmt(m.total || 0, mon)}</div>
       ${m.conIva ? '<div style="font-size:10px;color:#94a3b8;">incl. IVA 16%</div>' : ''}
     </div>
-    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
-      <button onclick="exportDocPDF('${d.id}')" title="Exportar PDF" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(34,211,238,0.22);background:rgba(34,211,238,0.07);color:#22d3ee;cursor:pointer;font-size:15px;">📥</button>
-      <button onclick="openDocModal('${d.type}','${d.id}')" title="Editar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#94a3b8;cursor:pointer;font-size:14px;">✏️</button>
-      <button onclick="deleteDoc('${d.id}')" title="Eliminar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(248,113,113,0.22);background:rgba(248,113,113,0.04);color:#f87171;cursor:pointer;font-size:14px;">🗑</button>
+    <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
+      <button onclick="exportCotPDF('${d.id}')" title="Exportar PDF" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(34,211,238,0.22);background:rgba(34,211,238,0.07);color:#22d3ee;cursor:pointer;font-size:15px;">📥</button>
+      <button onclick="openCotModal('${d.type}','${d.id}')" title="Editar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#94a3b8;cursor:pointer;font-size:14px;">✏️</button>
+      ${isP ? `<button onclick="convertirPresupuestoNota('${d.id}')" title="Convertir a Nota" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(167,139,250,0.22);background:rgba(167,139,250,0.04);color:#a78bfa;cursor:pointer;font-size:13px;">🧾</button>` : ''}
+      ${!isP ? `<button onclick="generarMovimientoCot('${d.id}')" title="Generar Movimiento" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(74,222,128,0.22);background:rgba(74,222,128,0.04);color:#4ade80;cursor:pointer;font-size:13px;">💰</button>` : ''}
+      <button onclick="deleteCot('${d.id}')" title="Eliminar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(248,113,113,0.22);background:rgba(248,113,113,0.04);color:#f87171;cursor:pointer;font-size:14px;">🗑</button>
     </div>
     ${isP ? `
     <div style="flex-shrink:0;">
-      <select onchange="changeDocStatus('${d.id}',this.value)"
+      <select onchange="changeCotStatus('${d.id}',this.value)"
         style="font-size:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:5px 8px;color:#94a3b8;cursor:pointer;outline:none;">
-        ${Object.entries(_DOC_STATUS).map(([k,v]) => `<option value="${k}" ${estado===k?'selected':''}>${v.label}</option>`).join('')}
+        ${Object.entries(_COT_STATUS).map(([k,v]) => `<option value="${k}" ${estado===k?'selected':''}>${v.label}</option>`).join('')}
       </select>
     </div>` : ''}
   </div>`
 }
 
 // ── Controles de vista ─────────────────────────────────────────────────────────
-window.switchDocTab = function(tab) {
-  _docTab = tab
-  _docStatusFilter = 'all'
-  renderDocumentos()
+window.switchCotTab = function(tab) {
+  _cotTab = tab
+  _cotStatusFilter = 'all'
+  renderCotizaciones()
 }
 
-window.setDocStatusFilter = function(s) {
-  _docStatusFilter = s
-  renderDocumentos()
+window.setCotStatusFilter = function(s) {
+  _cotStatusFilter = s
+  renderCotizaciones()
 }
 
-// ── Modal — abrir ──────────────────────────────────────────────────────────────
-window.openDocModal = function(type, id = null) {
-  _docEditId   = id
-  _docEditType = type
-  const isP    = type === 'doc_presupuesto'
-  const modal  = document.getElementById('doc-modal')
+// ── Modal Cotización — abrir ───────────────────────────────────────────────────
+window.openCotModal = function(type, id = null) {
+  _cotEditId   = id
+  _cotEditType = type
+  const isP    = type === 'cot_presupuesto'
+  const modal  = document.getElementById('cot-modal')
   if (!modal) return
 
-  // Cargar datos si es edición
-  let existing = id ? (allNodes.find(n => n.id === id)?.metadata || {}) : {}
+  const existing = id ? (allNodes.find(n => n.id === id)?.metadata || {}) : {}
 
-  // Contactos para el select
+  // Contactos
   const contactOpts = allNodes
     .filter(n => n.type === 'contact')
     .sort((a, b) => (a.metadata?.name || a.content || '').localeCompare(b.metadata?.name || b.content || ''))
     .map(c => {
       const name = esc(c.metadata?.name || c.content || c.id)
-      const sel  = existing.clienteId === c.id ? 'selected' : ''
-      return `<option value="${c.id}" ${sel}>${name}</option>`
+      return `<option value="${c.id}" ${existing.clienteId === c.id ? 'selected' : ''}>${name}</option>`
+    }).join('')
+
+  const emisorContactOpts = allNodes
+    .filter(n => n.type === 'contact')
+    .sort((a, b) => (a.metadata?.name || a.content || '').localeCompare(b.metadata?.name || b.content || ''))
+    .map(c => {
+      const name = esc(c.metadata?.name || c.content || c.id)
+      return `<option value="${c.id}" ${existing.emisorId === c.id ? 'selected' : ''}>${name}</option>`
+    }).join('')
+
+  // Proyectos
+  const proyOpts = allNodes
+    .filter(n => n.type === 'proyecto')
+    .sort((a, b) => (a.metadata?.nombre || a.content || '').localeCompare(b.metadata?.nombre || b.content || ''))
+    .map(p => {
+      const name = esc(p.metadata?.nombre || p.content || p.id)
+      return `<option value="${p.id}" ${existing.proyectoId === p.id ? 'selected' : ''}>${name}</option>`
     }).join('')
 
   // Items
   const items = existing.items || []
 
-  // Build form
-  document.getElementById('doc-modal-icon').textContent  = isP ? '📋' : '🧾'
-  document.getElementById('doc-modal-title').textContent = id
+  document.getElementById('cot-modal-icon').textContent  = isP ? '📋' : '🧾'
+  document.getElementById('cot-modal-title').textContent = id
     ? (isP ? 'Editar Presupuesto' : 'Editar Nota de Venta')
     : (isP ? 'Nuevo Presupuesto'  : 'Nueva Nota de Venta')
 
   const today = new Date().toISOString().slice(0, 10)
-  document.getElementById('doc-modal-body').innerHTML = `
-    <!-- Fila 1: fecha + cliente -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+  const _lbl = (t) => `<label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;letter-spacing:.04em;">${t}</label>`
+
+  document.getElementById('cot-modal-body').innerHTML = `
+    <!-- ── Sección: Cabecera ────────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:10px;letter-spacing:.08em;">📝 CABECERA</div>
+    <div style="display:grid;grid-template-columns:2fr 1fr${isP?' 1fr':''}; gap:14px;margin-bottom:16px;">
       <div>
-        <label class="modal-label">Fecha</label>
-        <input type="date" id="doc-fecha" class="modal-input" value="${existing.fecha || today}"/>
+        ${_lbl('Título del documento')}
+        <input type="text" id="cot-titulo" class="modal-input"
+          placeholder="Ej. Propuesta Desarrollo Web — Casa Chamela"
+          value="${esc(existing.titulo || '')}"/>
       </div>
       <div>
-        <label class="modal-label">Cliente</label>
-        <select id="doc-cliente-sel" class="modal-input" onchange="docModalFillCliente()">
+        ${_lbl('Fecha')}
+        <input type="date" id="cot-fecha" class="modal-input" value="${existing.fecha || today}"/>
+      </div>
+      ${isP ? `
+      <div>
+        ${_lbl('Validez (días)')}
+        <input type="number" id="cot-validez" class="modal-input" min="1" max="365" placeholder="30" value="${existing.validezDias || 30}"/>
+      </div>` : ''}
+    </div>
+
+    <!-- ── Sección: Partes ─────────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:10px;letter-spacing:.08em;">🏢 PARTES</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <div>
+        ${_lbl('Emisor (contacto)')}
+        <select id="cot-emisor-sel" class="modal-input" style="margin-bottom:6px;" onchange="cotModalFillEmisor()">
+          <option value="">— Seleccionar contacto —</option>${emisorContactOpts}
+        </select>
+        <input type="text" id="cot-emisor-nombre" class="modal-input" style="margin-bottom:4px;"
+          placeholder="Nombre del emisor" value="${esc(existing.emisorNombre || '')}"/>
+        <input type="text" id="cot-emisor-rfc" class="modal-input" style="margin-bottom:4px;"
+          placeholder="RFC" value="${esc(existing.emisorRfc || '')}"/>
+        <input type="text" id="cot-emisor-dir" class="modal-input"
+          placeholder="Dirección" value="${esc(existing.emisorDireccion || '')}"/>
+      </div>
+      <div>
+        ${_lbl('Cliente (contacto)')}
+        <select id="cot-cliente-sel" class="modal-input" style="margin-bottom:6px;" onchange="cotModalFillCliente()">
           <option value="">— Seleccionar contacto —</option>${contactOpts}
         </select>
-        <input type="text" id="doc-cliente-name" class="modal-input" style="margin-top:6px;"
-          placeholder="O escribe el nombre del cliente" value="${esc(existing.clienteName || '')}"/>
+        <input type="text" id="cot-cliente-name" class="modal-input" style="margin-bottom:4px;"
+          placeholder="Nombre del cliente" value="${esc(existing.clienteName || '')}"/>
+        <input type="text" id="cot-cliente-rfc" class="modal-input" style="margin-bottom:4px;"
+          placeholder="RFC" value="${esc(existing.clienteRfc || '')}"/>
+        <input type="text" id="cot-cliente-dir" class="modal-input" style="margin-bottom:4px;"
+          placeholder="Dirección" value="${esc(existing.clienteDireccion || '')}"/>
+        <input type="text" id="cot-cliente-tel" class="modal-input"
+          placeholder="Teléfono" value="${esc(existing.clienteTel || '')}"/>
       </div>
     </div>
 
-    ${isP ? `
-    <!-- Fila 2: concepto + validez (solo presupuesto) -->
-    <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:16px;">
-      <div>
-        <label class="modal-label">Concepto / descripción general</label>
-        <input type="text" id="doc-concepto" class="modal-input"
-          placeholder="Ej. Desarrollo de sitio web, consultoría fiscal…"
-          value="${esc(existing.concepto || '')}"/>
-      </div>
-      <div>
-        <label class="modal-label">Validez (días)</label>
-        <input type="number" id="doc-validez" class="modal-input" min="1" max="365"
-          placeholder="30" value="${existing.validezDias || 30}"/>
-      </div>
-    </div>` : ''}
-
-    <!-- Items -->
+    <!-- ── Sección: Proyecto ───────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:10px;letter-spacing:.08em;">🗂 PROYECTO VINCULADO <span style="font-weight:400;color:#6b7280;">(opcional)</span></div>
     <div style="margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:10px;">📦 Conceptos / Productos</div>
-      <div style="display:grid;grid-template-columns:3fr 80px 100px 100px;gap:6px;padding:0 2px;margin-bottom:4px;">
-        <span style="font-size:10px;color:#6b7280;">Descripción</span>
-        <span style="font-size:10px;color:#6b7280;text-align:center;">Cant.</span>
-        <span style="font-size:10px;color:#6b7280;text-align:right;">Precio unit.</span>
-        <span style="font-size:10px;color:#6b7280;text-align:right;">Subtotal</span>
+      <select id="cot-proyecto-sel" class="modal-input" style="max-width:400px;" onchange="cotModalFillProject()">
+        <option value="">— Sin proyecto vinculado —</option>${proyOpts}
+      </select>
+      <div id="cot-proyecto-info" style="font-size:11px;color:#60a5fa;margin-top:5px;">${existing.proyectoNombre ? `Proyecto: ${esc(existing.proyectoNombre)}` : ''}</div>
+    </div>
+
+    <!-- ── Sección: Financiera ─────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:10px;letter-spacing:.08em;">💱 FINANCIERO</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+      <div>
+        ${_lbl('Moneda')}
+        <select id="cot-moneda" class="modal-input" onchange="cotCalcTotales()">
+          <option value="MXN" ${(existing.moneda||'MXN')==='MXN'?'selected':''}>MXN — Peso Mexicano</option>
+          <option value="USD" ${existing.moneda==='USD'?'selected':''}>USD — Dólar</option>
+          <option value="USDT" ${existing.moneda==='USDT'?'selected':''}>USDT — Tether</option>
+          <option value="BTC" ${existing.moneda==='BTC'?'selected':''}>BTC — Bitcoin</option>
+        </select>
       </div>
-      <div id="doc-items-wrap">
-        ${Array.from({length: 10}, (_, i) => {
-          const it = items[i] || {}
-          return `<div style="display:grid;grid-template-columns:3fr 80px 100px 100px;gap:6px;margin-bottom:6px;">
-            <input type="text" id="doc-desc-${i+1}" class="modal-input" style="font-size:12px;"
-              placeholder="Concepto ${i+1}" value="${esc(it.descripcion || '')}"/>
-            <input type="number" id="doc-cant-${i+1}" class="modal-input" style="font-size:12px;text-align:center;"
-              placeholder="1" min="0" step="0.01" value="${it.cantidad || ''}" oninput="docCalcTotales()"/>
-            <input type="number" id="doc-precio-${i+1}" class="modal-input" style="font-size:12px;text-align:right;"
-              placeholder="0.00" min="0" step="0.01" value="${it.precio || ''}" oninput="docCalcTotales()"/>
-            <input type="text" id="doc-sub-${i+1}" class="modal-input" style="font-size:12px;text-align:right;background:rgba(34,211,238,0.04);color:#22d3ee;"
-              placeholder="0.00" readonly value="${it.subtotal ? it.subtotal.toFixed(2) : ''}"/>
-          </div>`
-        }).join('')}
+      <div>
+        ${_lbl('Tipo de cambio')}
+        <input type="number" id="cot-tc" class="modal-input" min="0" step="0.01"
+          placeholder="Solo si moneda ≠ MXN" value="${existing.tipoCambio || ''}"/>
       </div>
+      <div>
+        ${_lbl('Método de pago')}
+        <select id="cot-metodo-pago" class="modal-input">
+          <option value="">— Seleccionar —</option>
+          ${['Transferencia','SPEI','Efectivo','Cripto','Otro'].map(m =>
+            `<option value="${m}" ${existing.metodoPago===m?'selected':''}>${m}</option>`
+          ).join('')}
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <div>
+        ${_lbl('Banco')}
+        <input type="text" id="cot-banco" class="modal-input" placeholder="Nombre del banco"
+          value="${esc(existing.bancoPago || '')}"/>
+      </div>
+      <div>
+        ${_lbl('CLABE / Wallet')}
+        <input type="text" id="cot-clabe" class="modal-input" placeholder="CLABE 18 dígitos o dirección de wallet"
+          value="${esc(existing.clabePago || '')}"/>
+      </div>
+    </div>
+
+    <!-- ── Sección: Ítems ──────────────────────────────────────────────────── -->
+    <div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:10px;letter-spacing:.08em;">📦 CONCEPTOS / PRODUCTOS</div>
+
+    <!-- Búsqueda en catálogo -->
+    <div style="margin-bottom:12px;position:relative;">
+      <input type="text" id="cot-cat-search" class="modal-input" style="max-width:360px;"
+        placeholder="Buscar en catálogo para agregar ítems…"
+        oninput="cotSearchCatalog()"/>
+      <div id="cot-cat-results" style="position:absolute;top:100%;left:0;z-index:100;max-width:360px;background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:10px;max-height:160px;overflow-y:auto;display:none;"></div>
+    </div>
+
+    <!-- Tabla de ítems -->
+    <div style="display:grid;grid-template-columns:3fr 70px 100px 70px 90px;gap:5px;padding:0 2px;margin-bottom:5px;">
+      <span style="font-size:10px;color:#6b7280;">Descripción</span>
+      <span style="font-size:10px;color:#6b7280;text-align:center;">Cant.</span>
+      <span style="font-size:10px;color:#6b7280;text-align:right;">Precio unit.</span>
+      <span style="font-size:10px;color:#6b7280;text-align:center;">Desc.%</span>
+      <span style="font-size:10px;color:#6b7280;text-align:right;">Subtotal</span>
+    </div>
+    <div id="cot-items-wrap">
+      ${Array.from({length: 10}, (_, i) => {
+        const it = items[i] || {}
+        return `<div style="display:grid;grid-template-columns:3fr 70px 100px 70px 90px;gap:5px;margin-bottom:5px;">
+          <input type="text" id="cot-desc-${i+1}" class="modal-input" style="font-size:12px;"
+            placeholder="Concepto ${i+1}" value="${esc(it.descripcion || '')}"/>
+          <input type="number" id="cot-cant-${i+1}" class="modal-input" style="font-size:12px;text-align:center;"
+            placeholder="1" min="0" step="0.01" value="${it.cantidad || ''}" oninput="cotCalcTotales()"/>
+          <input type="number" id="cot-precio-${i+1}" class="modal-input" style="font-size:12px;text-align:right;"
+            placeholder="0.00" min="0" step="0.01" value="${it.precio || ''}" oninput="cotCalcTotales()"/>
+          <input type="number" id="cot-desc-p-${i+1}" class="modal-input" style="font-size:12px;text-align:center;"
+            placeholder="0" min="0" max="100" step="0.1" value="${it.descuento || ''}" oninput="cotCalcTotales()"/>
+          <input type="text" id="cot-sub-${i+1}" class="modal-input" style="font-size:12px;text-align:right;background:rgba(34,211,238,0.04);color:#22d3ee;"
+            placeholder="0.00" readonly value="${it.subtotal ? it.subtotal.toFixed(2) : ''}"/>
+        </div>`
+      }).join('')}
     </div>
 
     <!-- IVA + notas -->
-    <div style="display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:start;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:start;margin-bottom:16px;margin-top:14px;">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-main);white-space:nowrap;padding-top:2px;">
-        <input type="checkbox" id="doc-con-iva" style="width:16px;height:16px;accent-color:#22d3ee;"
-          ${existing.conIva ? 'checked' : ''} onchange="docCalcTotales()"/>
+        <input type="checkbox" id="cot-con-iva" style="width:16px;height:16px;accent-color:#22d3ee;"
+          ${existing.conIva ? 'checked' : ''} onchange="cotCalcTotales()"/>
         Incluir IVA (16%)
       </label>
       <div>
-        <label class="modal-label">Notas / observaciones</label>
-        <textarea id="doc-notas" class="modal-input" rows="2" style="resize:none;"
+        ${_lbl('Notas / observaciones')}
+        <textarea id="cot-notas" class="modal-input" rows="2" style="resize:none;"
           placeholder="Condiciones de pago, garantías, plazo de entrega…">${esc(existing.notas || '')}</textarea>
       </div>
     </div>
 
     <!-- Totales preview -->
-    <div id="doc-totales-preview" style="display:flex;justify-content:flex-end;margin-top:8px;">
-      <div style="background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.15);border-radius:12px;padding:12px 18px;min-width:200px;">
+    <div id="cot-totales-preview" style="display:flex;justify-content:flex-end;margin-top:8px;">
+      <div style="background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.15);border-radius:12px;padding:14px 20px;min-width:220px;">
         <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:5px;">
-          <span>Subtotal</span><span id="doc-prev-sub">$0.00</span>
+          <span>Subtotal</span><span id="cot-prev-sub">$0.00</span>
         </div>
-        <div id="doc-prev-iva-row" style="display:none;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:5px;">
-          <span>IVA 16%</span><span id="doc-prev-iva">$0.00</span>
+        <div id="cot-prev-desc-row" style="display:none;justify-content:space-between;font-size:12px;color:#f87171;margin-bottom:5px;">
+          <span>Descuento</span><span id="cot-prev-desc">$0.00</span>
         </div>
-        <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;color:#22d3ee;">
-          <span>TOTAL</span><span id="doc-prev-total">$0.00</span>
+        <div id="cot-prev-iva-row" style="display:none;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:5px;">
+          <span>IVA 16%</span><span id="cot-prev-iva">$0.00</span>
         </div>
+        <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:900;color:#22d3ee;">
+          <span>TOTAL</span><span id="cot-prev-total">$0.00</span>
+        </div>
+        <div id="cot-prev-moneda" style="font-size:10px;color:#6b7280;text-align:right;margin-top:2px;"></div>
       </div>
     </div>
   `
 
   modal.classList.remove('hidden')
-  docCalcTotales()
+  cotCalcTotales()
 }
 
-window.closeDocModal = function() {
-  document.getElementById('doc-modal')?.classList.add('hidden')
-  _docEditId = null
+window.closeCotModal = function() {
+  document.getElementById('cot-modal')?.classList.add('hidden')
+  _cotEditId = null
 }
 
-// Auto-fill nombre desde selector de contacto
-window.docModalFillCliente = function() {
-  const sel = document.getElementById('doc-cliente-sel')
+// Auto-fill emisor desde contacto
+window.cotModalFillEmisor = function() {
+  const sel = document.getElementById('cot-emisor-sel')
   if (!sel?.value) return
   const c = allNodes.find(n => n.id === sel.value)
   if (!c) return
-  const nameEl = document.getElementById('doc-cliente-name')
-  if (nameEl && !nameEl.value) nameEl.value = c.metadata?.name || c.content || ''
+  const m = c.metadata || {}
+  const nombreEl = document.getElementById('cot-emisor-nombre')
+  const rfcEl    = document.getElementById('cot-emisor-rfc')
+  const dirEl    = document.getElementById('cot-emisor-dir')
+  if (nombreEl && !nombreEl.value) nombreEl.value = m.name || c.content || ''
+  if (rfcEl    && !rfcEl.value)    rfcEl.value    = m.rfc  || ''
+  if (dirEl    && !dirEl.value)    dirEl.value    = m.domicilioLegal || m.address || ''
+}
+
+// Auto-fill cliente desde contacto
+window.cotModalFillCliente = function() {
+  const sel = document.getElementById('cot-cliente-sel')
+  if (!sel?.value) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (!c) return
+  const m = c.metadata || {}
+  const nameEl = document.getElementById('cot-cliente-name')
+  const rfcEl  = document.getElementById('cot-cliente-rfc')
+  const dirEl  = document.getElementById('cot-cliente-dir')
+  const telEl  = document.getElementById('cot-cliente-tel')
+  if (nameEl) nameEl.value = m.name  || c.content || ''
+  if (rfcEl)  rfcEl.value  = m.rfc   || ''
+  if (dirEl)  dirEl.value  = m.domicilioLegal || m.address || ''
+  if (telEl)  telEl.value  = m.phone || m.tel || ''
+  // Auto-fill datos bancarios del cliente si tiene cuentas
+  if (m.cuentas && m.cuentas.length) {
+    const cuenta = m.cuentas[0]
+    const bancoEl = document.getElementById('cot-banco')
+    const clabeEl = document.getElementById('cot-clabe')
+    if (bancoEl && !bancoEl.value) bancoEl.value = cuenta.banco || ''
+    if (clabeEl && !clabeEl.value) clabeEl.value = cuenta.clabe || cuenta.wallet || ''
+  }
+}
+
+// Auto-fill info de proyecto
+window.cotModalFillProject = function() {
+  const sel  = document.getElementById('cot-proyecto-sel')
+  const info = document.getElementById('cot-proyecto-info')
+  if (!sel || !info) return
+  if (!sel.value) { info.textContent = ''; return }
+  const p = allNodes.find(n => n.id === sel.value)
+  if (!p) return
+  const nombre = p.metadata?.nombre || p.content || sel.value
+  info.innerHTML = `<span style="color:#60a5fa;">Proyecto: ${esc(nombre)}</span> <span style="color:#6b7280;font-size:10px;">— la portada del proyecto se incluirá en el PDF</span>`
+}
+
+// Búsqueda en catálogo para agregar ítems
+window.cotSearchCatalog = function() {
+  const q = (document.getElementById('cot-cat-search')?.value || '').toLowerCase()
+  const res = document.getElementById('cot-cat-results')
+  if (!res) return
+  if (!q) { res.style.display = 'none'; return }
+
+  const matches = allNodes
+    .filter(n => n.type === 'cot_catalogo' && (
+      (n.metadata?.nombre || '').toLowerCase().includes(q) ||
+      (n.metadata?.categoria || '').toLowerCase().includes(q) ||
+      (n.metadata?.tags || '').toLowerCase().includes(q)
+    ))
+    .slice(0, 8)
+
+  if (!matches.length) {
+    res.style.display = 'none'
+    return
+  }
+
+  res.style.display = 'block'
+  res.innerHTML = matches.map(n => {
+    const m = n.metadata || {}
+    return `<div onclick="cotAddCatalogItem('${n.id}')"
+      style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);transition:background .1s;"
+      onmouseover="this.style.background='rgba(34,211,238,0.07)'" onmouseout="this.style.background='transparent'">
+      <div style="font-size:12px;color:#fff;font-weight:600;">${esc(m.nombre || '—')}</div>
+      <div style="font-size:10px;color:#94a3b8;">${esc(m.categoria || '')} · ${_cotFmt(m.precio || 0, m.moneda || 'MXN')}</div>
+    </div>`
+  }).join('')
+}
+
+// Agrega ítem del catálogo a la tabla del modal
+window.cotAddCatalogItem = function(id) {
+  const n = allNodes.find(x => x.id === id)
+  if (!n) return
+  const m = n.metadata || {}
+  // Buscar primera fila vacía
+  for (let i = 1; i <= 10; i++) {
+    const descEl = document.getElementById(`cot-desc-${i}`)
+    if (descEl && !descEl.value.trim()) {
+      descEl.value = m.nombre || ''
+      const cantEl  = document.getElementById(`cot-cant-${i}`)
+      const precioEl = document.getElementById(`cot-precio-${i}`)
+      if (cantEl)   cantEl.value  = 1
+      if (precioEl) precioEl.value = m.precio || 0
+      cotCalcTotales()
+      break
+    }
+  }
+  // Ocultar resultados
+  const res = document.getElementById('cot-cat-results')
+  if (res) res.style.display = 'none'
+  const searchEl = document.getElementById('cot-cat-search')
+  if (searchEl) searchEl.value = ''
 }
 
 // Calcular subtotales + totales en tiempo real
-window.docCalcTotales = function() {
+window.cotCalcTotales = function() {
+  const mon    = document.getElementById('cot-moneda')?.value || 'MXN'
   let subtotal = 0
-  for (let i = 1; i <= 10; i++) {
-    const cant   = parseFloat(document.getElementById(`doc-cant-${i}`)?.value   || '0') || 0
-    const precio = parseFloat(document.getElementById(`doc-precio-${i}`)?.value || '0') || 0
-    const sub    = cant * precio
-    const subEl  = document.getElementById(`doc-sub-${i}`)
-    if (subEl) subEl.value = sub > 0 ? sub.toFixed(2) : ''
-    subtotal += sub
-  }
-  const conIva = document.getElementById('doc-con-iva')?.checked
-  const iva    = conIva ? subtotal * 0.16 : 0
-  const total  = subtotal + iva
+  let descTotal = 0
 
-  const fmtP = n => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const subEl = document.getElementById('doc-prev-sub');   if (subEl)   subEl.textContent = fmtP(subtotal)
-  const ivaEl = document.getElementById('doc-prev-iva');   if (ivaEl)   ivaEl.textContent = fmtP(iva)
-  const totEl = document.getElementById('doc-prev-total'); if (totEl)   totEl.textContent = fmtP(total)
-  const ivaRow = document.getElementById('doc-prev-iva-row')
-  if (ivaRow) ivaRow.style.display = conIva ? 'flex' : 'none'
+  for (let i = 1; i <= 10; i++) {
+    const cant   = parseFloat(document.getElementById(`cot-cant-${i}`)?.value    || '0') || 0
+    const precio = parseFloat(document.getElementById(`cot-precio-${i}`)?.value  || '0') || 0
+    const desc   = parseFloat(document.getElementById(`cot-desc-p-${i}`)?.value  || '0') || 0
+    const rawSub = cant * precio
+    const deduccion = rawSub * (desc / 100)
+    const sub    = rawSub - deduccion
+    const subEl  = document.getElementById(`cot-sub-${i}`)
+    if (subEl) subEl.value = rawSub > 0 ? sub.toFixed(2) : ''
+    subtotal  += rawSub
+    descTotal += deduccion
+  }
+
+  const conIva  = document.getElementById('cot-con-iva')?.checked
+  const iva     = conIva ? (subtotal - descTotal) * 0.16 : 0
+  const total   = subtotal - descTotal + iva
+  const fmtM    = (n) => _cotFmt(n, mon)
+
+  const subEl = document.getElementById('cot-prev-sub');   if (subEl) subEl.textContent = fmtM(subtotal)
+  const descEl = document.getElementById('cot-prev-desc'); if (descEl) descEl.textContent = fmtM(descTotal)
+  const ivaEl  = document.getElementById('cot-prev-iva');  if (ivaEl)  ivaEl.textContent = fmtM(iva)
+  const totEl  = document.getElementById('cot-prev-total'); if (totEl) totEl.textContent = fmtM(total)
+  const ivaRow  = document.getElementById('cot-prev-iva-row')
+  const descRow = document.getElementById('cot-prev-desc-row')
+  const monEl   = document.getElementById('cot-prev-moneda')
+  if (ivaRow)  ivaRow.style.display  = conIva ? 'flex' : 'none'
+  if (descRow) descRow.style.display = descTotal > 0 ? 'flex' : 'none'
+  if (monEl)   monEl.textContent     = mon !== 'MXN' ? `en ${mon}` : ''
 }
 
 // ── Recopilar datos del modal ──────────────────────────────────────────────────
-function _collectDocData() {
-  const isP       = _docEditType === 'doc_presupuesto'
-  const fechaRaw  = document.getElementById('doc-fecha')?.value || ''
-  const fechaFmt  = fechaRaw
+function _collectCotData() {
+  const isP         = _cotEditType === 'cot_presupuesto'
+  const fechaRaw    = document.getElementById('cot-fecha')?.value || ''
+  const fechaFmt    = fechaRaw
     ? new Date(fechaRaw + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
     : new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
-  const clienteSel  = document.getElementById('doc-cliente-sel')?.value || ''
-  const clienteNode = clienteSel ? allNodes.find(n => n.id === clienteSel) : null
-  const clienteName = document.getElementById('doc-cliente-name')?.value?.trim()
+
+  // Emisor
+  const emisorSelVal    = document.getElementById('cot-emisor-sel')?.value || ''
+  const emisorNombre    = document.getElementById('cot-emisor-nombre')?.value?.trim() || ''
+  const emisorRfc       = document.getElementById('cot-emisor-rfc')?.value?.trim() || ''
+  const emisorDireccion = document.getElementById('cot-emisor-dir')?.value?.trim() || ''
+
+  // Cliente
+  const clienteSelVal   = document.getElementById('cot-cliente-sel')?.value || ''
+  const clienteNode     = clienteSelVal ? allNodes.find(n => n.id === clienteSelVal) : null
+  const clienteName     = document.getElementById('cot-cliente-name')?.value?.trim()
     || (clienteNode ? (clienteNode.metadata?.name || clienteNode.content) : '') || ''
-  const conIva    = document.getElementById('doc-con-iva')?.checked || false
-  const notas     = document.getElementById('doc-notas')?.value?.trim() || ''
-  const concepto  = isP ? (document.getElementById('doc-concepto')?.value?.trim() || '') : ''
-  const validezDias = isP ? parseInt(document.getElementById('doc-validez')?.value || '30') : 0
+  const clienteRfc      = document.getElementById('cot-cliente-rfc')?.value?.trim() || ''
+  const clienteDireccion = document.getElementById('cot-cliente-dir')?.value?.trim() || ''
+  const clienteTel      = document.getElementById('cot-cliente-tel')?.value?.trim() || ''
 
+  // Proyecto
+  const proyectoSelVal  = document.getElementById('cot-proyecto-sel')?.value || ''
+  const proyectoNode    = proyectoSelVal ? allNodes.find(n => n.id === proyectoSelVal) : null
+  const proyectoNombre  = proyectoNode ? (proyectoNode.metadata?.nombre || proyectoNode.content || '') : ''
+
+  // Financiero
+  const moneda      = document.getElementById('cot-moneda')?.value || 'MXN'
+  const tipoCambio  = parseFloat(document.getElementById('cot-tc')?.value || '0') || null
+  const metodoPago  = document.getElementById('cot-metodo-pago')?.value || ''
+  const bancoPago   = document.getElementById('cot-banco')?.value?.trim() || ''
+  const clabePago   = document.getElementById('cot-clabe')?.value?.trim() || ''
+  const titulo      = document.getElementById('cot-titulo')?.value?.trim() || ''
+  const validezDias = isP ? parseInt(document.getElementById('cot-validez')?.value || '30') : 0
+  const conIva      = document.getElementById('cot-con-iva')?.checked || false
+  const notas       = document.getElementById('cot-notas')?.value?.trim() || ''
+
+  // Items
   const items = []
+  let subtotal = 0; let descuentoTotal = 0
   for (let i = 1; i <= 10; i++) {
-    const desc   = document.getElementById(`doc-desc-${i}`)?.value?.trim() || ''
-    const cant   = parseFloat(document.getElementById(`doc-cant-${i}`)?.value   || '0') || 0
-    const precio = parseFloat(document.getElementById(`doc-precio-${i}`)?.value || '0') || 0
-    if (desc) items.push({ descripcion: desc, cantidad: cant || 1, precio, subtotal: (cant || 1) * precio })
+    const desc    = document.getElementById(`cot-desc-${i}`)?.value?.trim() || ''
+    const cant    = parseFloat(document.getElementById(`cot-cant-${i}`)?.value    || '0') || 0
+    const precio  = parseFloat(document.getElementById(`cot-precio-${i}`)?.value  || '0') || 0
+    const descPct = parseFloat(document.getElementById(`cot-desc-p-${i}`)?.value  || '0') || 0
+    if (desc) {
+      const rawSub = (cant || 1) * precio
+      const deduccion = rawSub * (descPct / 100)
+      const sub = rawSub - deduccion
+      items.push({ descripcion: desc, cantidad: cant || 1, precio, descuento: descPct, subtotal: sub })
+      subtotal     += rawSub
+      descuentoTotal += deduccion
+    }
   }
+  const iva   = conIva ? (subtotal - descuentoTotal) * 0.16 : 0
+  const total = subtotal - descuentoTotal + iva
 
-  const subtotal = items.reduce((s, it) => s + it.subtotal, 0)
-  const iva      = conIva ? subtotal * 0.16 : 0
-  const total    = subtotal + iva
+  // Folio
+  const folio = _cotEditId
+    ? (allNodes.find(n => n.id === _cotEditId)?.metadata?.folio || _cotFolio(isP ? 'PRS' : 'NV'))
+    : _cotFolio(isP ? 'PRS' : 'NV')
 
-  // Folio: reutilizar si edición, generar si nuevo
-  let folio = _docEditId
-    ? (allNodes.find(n => n.id === _docEditId)?.metadata?.folio || _docFolio(isP ? 'PRS' : 'NV'))
-    : _docFolio(isP ? 'PRS' : 'NV')
-
-  return { folio, fecha: fechaRaw, fechaFmt, clienteId: clienteSel, clienteName, conIva, notas,
-           concepto, validezDias, items, subtotal, iva, total }
+  return {
+    folio, titulo, fecha: fechaRaw, fechaFmt, validezDias,
+    emisorId: emisorSelVal, emisorNombre, emisorRfc, emisorDireccion,
+    clienteId: clienteSelVal, clienteName, clienteRfc, clienteDireccion, clienteTel,
+    proyectoId: proyectoSelVal, proyectoNombre,
+    moneda, tipoCambio, metodoPago, bancoPago, clabePago,
+    items, conIva, subtotal, descuentoTotal, iva, total, notas,
+  }
 }
 
 // ── Guardar ────────────────────────────────────────────────────────────────────
-window.saveDoc = function() { _persistDoc(false) }
-window.saveDocAndExport = function() { _persistDoc(true) }
+window.saveCot = function() { _persistCot(false) }
+window.saveCotAndExport = function() { _persistCot(true) }
 
-async function _persistDoc(exportPdf = false) {
-  const data    = _collectDocData()
+async function _persistCot(exportPdf = false) {
+  const data   = _collectCotData()
   if (!data.items.length) { showToast('⚠️ Agrega al menos un concepto'); return }
 
-  const isP     = _docEditType === 'doc_presupuesto'
-  const emisor  = getEmisor()
-  const estado  = _docEditId
-    ? (allNodes.find(n => n.id === _docEditId)?.metadata?.estado || 'borrador')
+  const isP    = _cotEditType === 'cot_presupuesto'
+  const emisor = getEmisor()
+  const estado = _cotEditId
+    ? (allNodes.find(n => n.id === _cotEditId)?.metadata?.estado || 'borrador')
     : 'borrador'
 
   const meta = {
-    folio: data.folio, fecha: data.fecha, fechaFmt: data.fechaFmt,
+    folio: data.folio, titulo: data.titulo,
+    fecha: data.fecha, fechaFmt: data.fechaFmt, validezDias: data.validezDias,
+    emisorId: data.emisorId, emisorNombre: data.emisorNombre, emisorRfc: data.emisorRfc,
+    emisorDireccion: data.emisorDireccion,
     clienteId: data.clienteId, clienteName: data.clienteName,
-    concepto: data.concepto, validezDias: data.validezDias,
-    items: data.items, subtotal: data.subtotal, iva: data.iva, total: data.total,
-    conIva: data.conIva, notas: data.notas, estado,
-    is_doc: true,
+    clienteRfc: data.clienteRfc, clienteDireccion: data.clienteDireccion, clienteTel: data.clienteTel,
+    proyectoId: data.proyectoId, proyectoNombre: data.proyectoNombre,
+    moneda: data.moneda, tipoCambio: data.tipoCambio,
+    metodoPago: data.metodoPago, bancoPago: data.bancoPago, clabePago: data.clabePago,
+    items: data.items, conIva: data.conIva,
+    subtotal: data.subtotal, descuentoTotal: data.descuentoTotal, iva: data.iva, total: data.total,
+    notas: data.notas, estado,
   }
-  const content = `${isP ? 'Presupuesto' : 'Nota de Venta'} ${data.folio} — ${data.clienteName || 'Sin cliente'} — $${data.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+  const label   = data.titulo || data.clienteName || 'Sin cliente'
+  const content = `${isP ? 'Presupuesto' : 'Nota de Venta'} ${data.folio} — ${label} — ${_cotFmt(data.total, data.moneda)}`
 
-  if (_docEditId) {
-    // Actualizar nodo existente
-    const node = allNodes.find(n => n.id === _docEditId)
+  if (_cotEditId) {
+    const node = allNodes.find(n => n.id === _cotEditId)
     if (node) {
       node.content  = content
       node.metadata = { ...node.metadata, ...meta }
       if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
-        await supabase.from('nodes').update({ content, metadata: node.metadata }).eq('id', _docEditId)
+        await supabase.from('nodes').update({ content, metadata: node.metadata }).eq('id', _cotEditId)
       }
     }
     showToast('✅ Documento actualizado')
   } else {
-    // Nuevo nodo
     const node = {
-      id: 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-      content, type: _docEditType, metadata: meta,
+      id: 'cot_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      content, type: _cotEditType, metadata: meta,
       created_at: new Date().toISOString(),
     }
     allNodes.push(node)
-    _docEditId = node.id   // para exportPdf referencia
+    _cotEditId = node.id
     if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
       await supabase.from('nodes').insert([{ id: node.id, owner_id: currentUser?.id, content, type: node.type, metadata: meta }])
     }
@@ -19443,53 +19807,225 @@ async function _persistDoc(exportPdf = false) {
   }
 
   if (exportPdf) {
-    const pdfData = { ...data, folio: meta.folio }
-    if (isP) pdfPresupuesto(pdfData, emisor)
-    else     pdfNotaVenta(pdfData, emisor)
+    const pdfData = { ...data, folio: meta.folio, emisor }
+    if (isP) pdfPresupuestoPro(pdfData, emisor)
+    else     pdfNotaVentaPro(pdfData, emisor)
   }
 
-  closeDocModal()
-  renderDocumentos()
+  closeCotModal()
+  renderCotizaciones()
 }
 
 // ── Exportar PDF desde la lista ────────────────────────────────────────────────
-window.exportDocPDF = function(id) {
+window.exportCotPDF = function(id) {
   const node = allNodes.find(n => n.id === id)
   if (!node) { showToast('Documento no encontrado'); return }
   const m      = node.metadata || {}
   const emisor = getEmisor()
-  const data   = {
-    folio: m.folio, fecha: m.fechaFmt || m.fecha, clienteName: m.clienteName,
-    concepto: m.concepto, validezDias: m.validezDias,
-    items: m.items || [], conIva: m.conIva, notas: m.notas,
-  }
-  if (node.type === 'doc_presupuesto') pdfPresupuesto(data, emisor)
-  else                                  pdfNotaVenta(data, emisor)
+  const data   = { ...m }
+  if (node.type === 'cot_presupuesto') pdfPresupuestoPro(data, emisor)
+  else                                  pdfNotaVentaPro(data, emisor)
   showToast('📥 PDF generado')
 }
 
 // ── Cambiar estado ─────────────────────────────────────────────────────────────
-window.changeDocStatus = async function(id, estado) {
+window.changeCotStatus = async function(id, estado) {
   const node = allNodes.find(n => n.id === id)
   if (!node) return
   node.metadata = { ...node.metadata, estado }
   if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
     await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
   }
-  renderDocumentos()
-  showToast(`Estado → ${_DOC_STATUS[estado]?.label || estado}`)
+  renderCotizaciones()
+  showToast(`Estado → ${_COT_STATUS[estado]?.label || estado}`)
 }
 
-// ── Eliminar ───────────────────────────────────────────────────────────────────
-window.deleteDoc = async function(id) {
+// ── Eliminar cotización ────────────────────────────────────────────────────────
+window.deleteCot = async function(id) {
   if (!confirm('¿Eliminar este documento? Esta acción no se puede deshacer.')) return
   const idx = allNodes.findIndex(n => n.id === id)
   if (idx !== -1) allNodes.splice(idx, 1)
   if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
     await supabase.from('nodes').delete().eq('id', id)
   }
-  renderDocumentos()
+  renderCotizaciones()
   showToast('🗑 Documento eliminado')
+}
+
+// ── Convertir Presupuesto → Nota de Venta ─────────────────────────────────────
+window.convertirPresupuestoNota = async function(id) {
+  const src = allNodes.find(n => n.id === id)
+  if (!src) return
+  if (!confirm('¿Convertir este presupuesto en Nota de Venta? Se creará un nuevo documento.')) return
+  const m       = src.metadata || {}
+  const folio   = _cotFolio('NV')
+  const meta    = {
+    ...m,
+    folio, estado: 'borrador',
+    validezDias: 0,
+    tipo: 'cot_nota',
+    createdFromPresupuesto: id,
+  }
+  const content = `Nota de Venta ${folio} — ${m.clienteName || 'Sin cliente'} — ${_cotFmt(m.total || 0, m.moneda)}`
+  const node    = {
+    id: 'cot_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    content, type: 'cot_nota', metadata: meta,
+    created_at: new Date().toISOString(),
+  }
+  allNodes.push(node)
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').insert([{ id: node.id, owner_id: currentUser?.id, content, type: 'cot_nota', metadata: meta }])
+  }
+  showToast('🧾 Nota de venta creada desde presupuesto')
+  renderCotizaciones()
+}
+
+// ── Generar Movimiento desde Nota de Venta ─────────────────────────────────────
+window.generarMovimientoCot = async function(id) {
+  const src = allNodes.find(n => n.id === id)
+  if (!src) { showToast('Nota no encontrada'); return }
+  const m   = src.metadata || {}
+  if (!m.total) { showToast('⚠️ La nota no tiene total'); return }
+
+  const fecha   = m.fecha || new Date().toISOString().slice(0, 10)
+  const content = `Ingreso — ${m.titulo || m.folio || id} — ${m.clienteName || 'Sin cliente'}`
+  const meta    = {
+    amount: m.total, moneda: m.moneda || 'MXN', type: 'income',
+    description: content, date: fecha,
+    cotizacion_ref: id, folio_ref: m.folio,
+    cliente: m.clienteName || '',
+    autoGenerado: true,
+  }
+  const node = {
+    id: 'mv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    content, type: 'income', metadata: meta,
+    created_at: new Date().toISOString(),
+  }
+  allNodes.push(node)
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').insert([{ id: node.id, owner_id: currentUser?.id, content, type: 'income', metadata: meta }])
+  }
+  // Marcar nota como pagada
+  src.metadata = { ...src.metadata, estado: 'pagado' }
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ metadata: src.metadata }).eq('id', id)
+  }
+  showToast(`💰 Movimiento de ingreso generado — ${_cotFmt(m.total, m.moneda || 'MXN')}`)
+  renderCotizaciones()
+}
+
+// ── Modal Catálogo — abrir ─────────────────────────────────────────────────────
+window.openCatModal = function(id = null) {
+  _catEditId = id
+  const modal = document.getElementById('cat-modal')
+  if (!modal) return
+  const existing = id ? (allNodes.find(n => n.id === id)?.metadata || {}) : {}
+
+  document.getElementById('cat-modal-title').textContent = id ? 'Editar ítem del catálogo' : 'Nuevo ítem del catálogo'
+  const _lbl = (t) => `<label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">${t}</label>`
+
+  document.getElementById('cat-modal-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        ${_lbl('Nombre *')}
+        <input type="text" id="cat-nombre" class="modal-input" required
+          placeholder="Nombre del producto o servicio" value="${esc(existing.nombre || '')}"/>
+      </div>
+      <div>
+        ${_lbl('Categoría')}
+        <input type="text" id="cat-categoria" class="modal-input"
+          placeholder="Ej. Consultoría, Software…" value="${esc(existing.categoria || '')}"/>
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      ${_lbl('Descripción')}
+      <textarea id="cat-descripcion" class="modal-input" rows="2" style="resize:none;"
+        placeholder="Descripción del producto o servicio…">${esc(existing.descripcion || '')}</textarea>
+    </div>
+    <div style="margin-bottom:12px;">
+      ${_lbl('URL de imagen')}
+      <input type="text" id="cat-foto-url" class="modal-input"
+        placeholder="https://ejemplo.com/imagen.png" value="${esc(existing.foto_url || '')}"/>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+      <div>
+        ${_lbl('Precio')}
+        <input type="number" id="cat-precio" class="modal-input" min="0" step="0.01"
+          placeholder="0.00" value="${existing.precio || ''}"/>
+      </div>
+      <div>
+        ${_lbl('Moneda')}
+        <select id="cat-moneda" class="modal-input">
+          <option value="MXN" ${(existing.moneda||'MXN')==='MXN'?'selected':''}>MXN</option>
+          <option value="USD" ${existing.moneda==='USD'?'selected':''}>USD</option>
+          <option value="USDT" ${existing.moneda==='USDT'?'selected':''}>USDT</option>
+          <option value="BTC" ${existing.moneda==='BTC'?'selected':''}>BTC</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-bottom:12px;">
+      ${_lbl('Tags (separados por comas)')}
+      <input type="text" id="cat-tags" class="modal-input"
+        placeholder="web, diseño, desarrollo, consultoría…" value="${esc(existing.tags || '')}"/>
+    </div>
+  `
+  modal.classList.remove('hidden')
+}
+
+// ── Guardar ítem del catálogo ──────────────────────────────────────────────────
+window.saveCatItem = async function() {
+  const nombre = document.getElementById('cat-nombre')?.value?.trim()
+  if (!nombre) { showToast('⚠️ El nombre es obligatorio'); return }
+
+  const meta = {
+    nombre,
+    descripcion: document.getElementById('cat-descripcion')?.value?.trim() || '',
+    foto_url:    document.getElementById('cat-foto-url')?.value?.trim() || '',
+    precio:      parseFloat(document.getElementById('cat-precio')?.value || '0') || 0,
+    moneda:      document.getElementById('cat-moneda')?.value || 'MXN',
+    categoria:   document.getElementById('cat-categoria')?.value?.trim() || '',
+    tags:        document.getElementById('cat-tags')?.value?.trim() || '',
+    activo:      true,
+  }
+  const content = `[Catálogo] ${nombre} — ${_cotFmt(meta.precio, meta.moneda)}`
+
+  if (_catEditId) {
+    const node = allNodes.find(n => n.id === _catEditId)
+    if (node) {
+      node.content  = content
+      node.metadata = { ...node.metadata, ...meta }
+      if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+        await supabase.from('nodes').update({ content, metadata: node.metadata }).eq('id', _catEditId)
+      }
+    }
+    showToast('✅ Ítem actualizado')
+  } else {
+    const node = {
+      id: 'cot_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      content, type: 'cot_catalogo', metadata: meta,
+      created_at: new Date().toISOString(),
+    }
+    allNodes.push(node)
+    if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+      await supabase.from('nodes').insert([{ id: node.id, owner_id: currentUser?.id, content, type: 'cot_catalogo', metadata: meta }])
+    }
+    showToast('✅ Ítem agregado al catálogo')
+  }
+  document.getElementById('cat-modal')?.classList.add('hidden')
+  _catEditId = null
+  renderCotizaciones()
+}
+
+// ── Eliminar ítem del catálogo ─────────────────────────────────────────────────
+window.deleteCatItem = async function(id) {
+  if (!confirm('¿Eliminar este ítem del catálogo?')) return
+  const idx = allNodes.findIndex(n => n.id === id)
+  if (idx !== -1) allNodes.splice(idx, 1)
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').delete().eq('id', id)
+  }
+  renderCotizaciones()
+  showToast('🗑 Ítem eliminado del catálogo')
 }
 
 // ── Boot hook ─────────────────────────────────────────────────────────────────
