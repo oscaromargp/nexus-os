@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.2.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.3.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -51,6 +51,8 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
   <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase"/>
   <img src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel"/>
   <img src="https://img.shields.io/badge/Chart.js-FF6384?style=for-the-badge&logo=chart.js&logoColor=white" alt="Chart.js"/>
+  <img src="https://img.shields.io/badge/Lucide-F56040?style=for-the-badge&logo=lucide&logoColor=white" alt="Lucide Icons"/>
+  <img src="https://img.shields.io/badge/DaisyUI-5A0EF8?style=for-the-badge&logo=daisyui&logoColor=white" alt="DaisyUI"/>
   <img src="https://img.shields.io/badge/Fuse.js-1B1F23?style=for-the-badge&logo=github&logoColor=white" alt="Fuse.js"/>
   <img src="https://img.shields.io/badge/SortableJS-FF4500?style=for-the-badge" alt="SortableJS"/>
 </p>
@@ -67,11 +69,15 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 🔒 **Auth completa** | Login/registro con Supabase Auth — cada usuario solo ve sus propios datos (RLS) |
 | 🖼️ **Adjuntos con Ctrl+V** | Pega imágenes directamente desde el portapapeles con compresión automática |
 | 🔍 **Búsqueda global** | Fuzzy search con Fuse.js sobre todo el contenido, filtros por tipo y tag |
-| 📊 **Dashboard ejecutivo** | KPIs, próximos pagos, proyectos activos, distribución Kanban, eventos de contactos próximos (30 días) |
-| 🔢 **KPI de cotizaciones** | Monto pendiente por saldar con barra de progreso + próximo vencimiento crítico con semáforo de días |
-| 📆 **Calendario financiero** | Mini-calendario en Bio-Finanzas con días que tienen abonos de cotizaciones marcados en naranja |
-| ⚡ **Filtros rápidos** | Filtra movimientos por Todos / Ingresos / Gastos / Pendientes (cotizaciones por saldar) con un clic |
-| 🟢 **Semáforo financiero** | Cada fila del log muestra 🟢 ingreso · 🔴 gasto · 🟡 préstamo — identificación instantánea |
+| 📊 **Dashboard ejecutivo** | KPIs tintados por tipo, próximos pagos con estado, distribución Kanban, abonos a vencer, próximos a liquidar |
+| 🔢 **KPI de cotizaciones** | Abonos a vencer (30 días) y proyectos próximos a liquidar (≥70%) en Panel de Comandos |
+| 📅 **Pagos recurrentes avanzados** | Frecuencias: mensual · bimestral · trimestral · semestral · anual · bianual · trianual. Fecha específica para anclar mes+día exacto |
+| ⚡ **Filtros rápidos** | Filtra movimientos del Feed y Bio-Finanzas por Todos / Ingresos / Gastos con un clic |
+| 🟢 **Semáforo financiero** | Cada fila del log muestra badge visual por tipo: ingreso · gasto · evento · nota |
+| 🎨 **Visual Upgrade v2.3** | Lucide Icons (~80 iconos), DaisyUI v5, tailwindcss-animate, micro-interacciones spring, tooltips glassmorphism |
+| 💫 **Micro-interacciones** | Cards con lift on hover, botones con press scale, modales con slide-in, toasts animados, skeleton de carga |
+| 🏷️ **Badge system** | `nxBadge()` unificado: 10 tipos de nodo + 4 estados Kanban con iconos Lucide contextuales |
+| 🖼️ **Empty states** | Ilustraciones SVG propias (paleta cyan Nexus) en 6 vistas: Feed, Notas, Kanban, Contactos, Búsqueda, Finanzas |
 | 📤 **Print / Export CSV** | Exporta transacciones y movimientos financieros en un clic |
 | 📱 **PWA-ready** | Diseño responsivo, usable en móvil y tablet |
 | 🎨 **Editor rico** | Bóveda Neural con colores de texto, resaltado, tamaños XS–3X y formato completo |
@@ -378,8 +384,8 @@ Abre [http://localhost:5173](http://localhost:5173) — crea tu cuenta y empieza
 
 ```
 nexus-os/
-├── app.js                  # Lógica principal — parser, render engine, todas las vistas
-├── app.html                # Shell HTML — estructura de vistas y modales
+├── app.js                  # Lógica principal — parser, render engine, todas las vistas (~12 000 líneas)
+├── app.html                # Shell HTML — estructura de vistas, modales y estilos (~5 000 líneas)
 ├── main.js                 # Entry point Vite — Supabase init, auth, router
 ├── style.css               # Design tokens y clases base (complementa Tailwind)
 ├── index.html              # Landing / login page
@@ -390,7 +396,7 @@ nexus-os/
 │   ├── logic.js            # Lógica auxiliar compartida
 │   └── __tests__/          # Tests unitarios (Vitest)
 ├── vite.config.js          # Config Vite (multi-page)
-├── tailwind.config.js      # Config Tailwind CSS
+├── tailwind.config.js      # Config Tailwind + DaisyUI + tailwindcss-animate
 ├── vercel.json             # Config deploy Vercel (SPA routing)
 ├── docs/
 │   └── database_schema.md  # Esquema SQL completo documentado
@@ -399,7 +405,10 @@ nexus-os/
 ├── assets/
 │   ├── banner.png          # Banner del proyecto
 │   └── screenshots/        # Capturas por vista (01 a 10)
-├── public/                 # manifest.json, service worker
+├── public/
+│   ├── manifest.json       # PWA manifest
+│   ├── sw.js               # Service Worker
+│   └── empty/              # SVGs de empty states (no-data, no-tasks, no-finance, no-notes, no-contacts, no-search)
 └── .env.example            # Plantilla de variables de entorno
 ```
 
@@ -407,31 +416,34 @@ nexus-os/
 
 | Función | Vista / Módulo |
 |---|---|
-| `renderPanelDashboard()` | Panel de Comandos — dashboard ejecutivo con stats Kanban |
+| `renderPanelDashboard()` | Panel de Comandos — KPIs, pagos, distribución Kanban, abonos |
 | `renderKanban()` | Muro Táctico — board Kanban drag & drop |
-| `renderFinance()` | Bio-Finanzas — cuentas y transacciones |
-| `renderCryptoPortfolio()` | Portafolio Crypto (dentro de Bio-Finanzas) |
+| `renderFinance()` | Bio-Finanzas — cuentas, transacciones, semáforo |
 | `renderNotes()` | Bóveda Neural — grilla o editor full-page |
 | `renderCalendar()` | Calendario / Línea de Tiempo |
 | `renderCronica()` | Crónica — histórico diario |
 | `renderProyectos()` | Proyectos — dashboard + finanzas + Kanban |
 | `renderContacts()` | Contactos — tarjetas del directorio |
+| `calcNextDueDate(freq, dayOfMonth, weekday, customDays, specificDate)` | Calcula próxima fecha de vencimiento (soporta bianual/trianual) |
+| `feedItemHtml(n)` | HTML de una fila del Feed con `nxBadge()` y Lucide icons |
+| `nxBadge(label, opts)` | Genera pill de badge unificado con icono Lucide opcional |
+| `NX_TYPE_BADGE[type]()` | Badge preconfigurado por tipo de nodo (10 tipos) |
+| `NX_STATUS_BADGE[status]()` | Badge de estado Kanban (todo/in_progress/done/archived) |
+| `nxEmptyState({ img, title, sub, cta })` | HTML de empty state con SVG + texto + botón CTA |
+| `lx(name, size, cls, opts)` | Genera SVG string de Lucide para uso en innerHTML templates |
+| `refreshIcons()` | Activa `data-lucide="..."` en DOM tras cada render |
+| `_renderSkeletonFeed()` | Muestra skeleton de 5 filas shimmer mientras carga datos |
 | `openContactProfile(id)` | Ficha completa de contacto con tabs |
 | `buildNoteBlockEditor()` | Editor rico con colores/tamaños/paste limpio |
 | `printFinanceCEP()` | Comprobante Electrónico de Pago |
 | `printProjectReport(id)` | Reporte financiero con Chart.js |
 | `openCotizacionDetail(id)` | Detalle de cotización con historial de pagos |
 | `importContactsCSV()` | Importación masiva CSV con detección de duplicados |
-| `switchHerrTab(tab)` | Navegación entre tabs de Herramientas |
 | `otcRecalc()` | Motor de cálculo OTC con truncamiento a 2 decimales |
 | `otcFetchBitso()` | Consulta precio Bitso real-time |
-| `otcAddRow()` / `otcRenderTable()` | Tabla de dispersión con autocomplete de contactos |
 | `otcCopyWhatsApp()` | Genera mensaje de pre-aprobación WhatsApp |
 | `otcExportPDF()` | Exporta estado de cuenta ejecutivo en PDF |
-| `otcSaveToNodes()` | Inyecta abonos en cotizaciones vinculadas |
-| `renderTramitesCuentas()` | Cuentas propias con botón copiar CLABE |
 | `openDocGen(type)` | Generador de documentos legales con auto-fill |
-| `docGenExport()` | Exporta documento legal como PDF imprimible |
 
 ---
 
@@ -570,6 +582,9 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para m�
 
 - [Supabase](https://supabase.com) — por el backend serverless y la autenticación
 - [Vite](https://vitejs.dev) — por el tooling de desarrollo ultrarrápido
+- [Lucide](https://lucide.dev) — por el sistema de iconos SVG consistente (~80 iconos usados)
+- [DaisyUI](https://daisyui.com) — por los componentes CSS (badges, tooltips, skeletons)
+- [tailwindcss-animate](https://github.com/jamiebuilds/tailwindcss-animate) — por las clases de animación spring
 - [Fuse.js](https://fusejs.io) — por el fuzzy search
 - [Chrono-node](https://github.com/wanasit/chrono) — por el reconocimiento de fechas naturales
 - [SortableJS](https://sortablejs.github.io/Sortable/) — por el drag & drop del Kanban
