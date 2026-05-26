@@ -7365,10 +7365,14 @@ window.openDocGen = function(type) {
     h += '<select id="dg-arrendatario" class="modal-input" onchange="docGenFillProrroga(\'arrendatario\')"><option value="">— Seleccionar o escribir —</option>' + contactOpts + '</select>'
     h += '<div id="dg-arrendatario-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
     h += '<input type="text" id="dg-arrendatario-name" class="modal-input" placeholder="Nombre completo..." style="margin-top:4px;"/>'
-    h += '<input type="text" id="dg-arrendatario-dom" class="modal-input" placeholder="Domicilio completo" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-arrendatario-curp" class="modal-input" placeholder="CURP (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-arrendatario-dom" class="modal-input" placeholder="Domicilio del arrendatario" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
 
     h += '</div>'
+
+    h += '<div class="modal-field"><label class="modal-label">Domicilio del inmueble (si es diferente)</label>'
+    h += '<input type="text" id="dg-domicilio-inmueble" class="modal-input" placeholder="Dirección del inmueble en renta (opcional)"/></div>'
 
     h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
     h += '<div class="modal-field"><label class="modal-label">Día</label><input type="number" id="dg-dia" class="modal-input" min="1" max="31" placeholder="__"/></div>'
@@ -7376,8 +7380,12 @@ window.openDocGen = function(type) {
     h += '<div class="modal-field"><label class="modal-label">Año</label><input type="number" id="dg-anio" class="modal-input" value="' + new Date().getFullYear() + '"/></div>'
     h += '</div>'
 
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
     h += '<div class="modal-field"><label class="modal-label">Mes de renta a prorrogar</label>'
     h += '<select id="dg-mes-renta" class="modal-input"><option value="">— Mes —</option>' + mesOpts + '</select></div>'
+    h += '<div class="modal-field"><label class="modal-label">Monto de renta ($)</label>'
+    h += '<input type="number" id="dg-monto-renta" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '</div>'
 
     h += '<div class="modal-field"><label class="modal-label">Motivo de la prórroga</label>'
     h += '<textarea id="dg-motivo" class="modal-input" rows="3" placeholder="Ej: atraso en flujo de efectivo, situación médica, demora en cobro, etc."></textarea></div>'
@@ -7396,10 +7404,13 @@ window.openDocGen = function(type) {
     h += '<div style="font-size:11px;font-weight:700;color:#4ade80;margin-bottom:8px;">💰 BENEFICIARIO (quien cobra)</div>'
     h += '<select id="dg-beneficiario" class="modal-input" onchange="docGenFillPagare(\'beneficiario\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select>'
     h += '<div id="dg-beneficiario-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
-    h += '<input type="text" id="dg-benef-curp" class="modal-input" placeholder="CURP" style="margin-top:6px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-benef-name" class="modal-input" placeholder="Nombre completo" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-benef-curp" class="modal-input" placeholder="CURP" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-benef-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
     h += '<input type="text" id="dg-benef-electoral" class="modal-input" placeholder="Clave Electoral" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-benef-pasaporte" class="modal-input" placeholder="N. Pasaporte" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-benef-tel" class="modal-input" placeholder="Teléfono" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-benef-email" class="modal-input" placeholder="Email" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-benef-dir" class="modal-input" placeholder="Dirección" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
 
@@ -7408,56 +7419,99 @@ window.openDocGen = function(type) {
     h += '<div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:8px;">📝 EMISOR / DEUDOR (quien paga)</div>'
     h += '<select id="dg-deudor" class="modal-input" onchange="docGenFillPagare(\'deudor\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select>'
     h += '<div id="dg-deudor-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
-    h += '<input type="text" id="dg-deudor-curp" class="modal-input" placeholder="CURP" style="margin-top:6px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-deudor-name" class="modal-input" placeholder="Nombre completo" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-deudor-curp" class="modal-input" placeholder="CURP" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-deudor-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
     h += '<input type="text" id="dg-deudor-electoral" class="modal-input" placeholder="Clave Electoral" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-deudor-pasaporte" class="modal-input" placeholder="N. Pasaporte" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-deudor-tel" class="modal-input" placeholder="Teléfono" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-deudor-email" class="modal-input" placeholder="Email" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-deudor-dir" class="modal-input" placeholder="Dirección" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
     h += '</div>'
 
-    h += '<div class="modal-field" style="margin-top:14px;"><label class="modal-label">Lugar</label>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">'
+    h += '<div class="modal-field"><label class="modal-label">Lugar</label>'
     h += '<input type="text" id="dg-lugar" class="modal-input" placeholder="Ej: La Paz, B.C.S."/></div>'
-
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-    h += '<div class="modal-field"><label class="modal-label">Monto ($)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
-    h += '<div class="modal-field"><label class="modal-label">Fecha de Pago</label><input type="date" id="dg-fecha-pago" class="modal-input"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Interés moratorio (%)</label>'
+    h += '<input type="number" id="dg-interes-moratorio" class="modal-input" value="2.5" min="0" step="0.1"/></div>'
     h += '</div>'
 
-    h += '<div class="modal-field"><label class="modal-label">Concepto</label>'
-    h += '<input type="text" id="dg-concepto" class="modal-input" placeholder="Ej: Préstamo personal, servicios profesionales, etc."/></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Monto</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Moneda</label>'
+    h += '<select id="dg-moneda" class="modal-input" onchange="docGenToggleTC()"><option value="MXN">MXN</option><option value="USD">USD</option><option value="USDT">USDT</option><option value="BTC">BTC</option></select></div>'
+    h += '<div class="modal-field" id="dg-tc-field" style="display:none;"><label class="modal-label">Tipo de cambio</label><input type="number" id="dg-tc" class="modal-input" placeholder="T.C." step="0.01"/></div>'
+    h += '</div>'
 
     h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
-    h += '<div class="modal-field"><label class="modal-label">Método de Pago</label><input type="text" id="dg-metodo" class="modal-input" placeholder="Transferencia bancaria, efectivo, etc."/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Fecha de Pago</label><input type="date" id="dg-fecha-pago" class="modal-input"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Concepto</label>'
+    h += '<input type="text" id="dg-concepto" class="modal-input" placeholder="Ej: Préstamo personal, servicios, etc."/></div>'
+    h += '</div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    h += '<div class="modal-field"><label class="modal-label">Método de Pago</label><input type="text" id="dg-metodo" class="modal-input" placeholder="Transferencia, efectivo, etc."/></div>'
     h += '<div class="modal-field"><label class="modal-label">Referencia de Pago</label><input type="text" id="dg-referencia" class="modal-input" placeholder="Número de referencia o N/A"/></div>'
     h += '</div>'
 
+    h += '<div style="margin-top:10px;">'
+    h += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text-main);margin-bottom:8px;">'
+    h += '<input type="checkbox" id="dg-pagos-serie" onchange="docGenTogglePagosSerie()" style="width:15px;height:15px;accent-color:var(--accent-cyan);"/> Pagos en serie (múltiples abonos)'
+    h += '</label>'
+    h += '<div id="dg-pagos-serie-table" style="display:none;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;">'
+    h += '<div style="font-size:10px;color:var(--text-dim);margin-bottom:6px;">Tabla de abonos</div>'
+    for (let i = 1; i <= 5; i++) {
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px;">'
+      h += '<input type="date" id="dg-pago-fecha-' + i + '" class="modal-input" style="font-size:11px;" placeholder="Fecha abono ' + i + '"/>'
+      h += '<input type="number" id="dg-pago-monto-' + i + '" class="modal-input" style="font-size:11px;" placeholder="Monto abono ' + i + '" step="0.01" min="0"/>'
+      h += '</div>'
+    }
+    h += '</div>'
+    h += '</div>'
+
   } else if (type === 'recibo') {
-    h += '<div class="modal-field"><label class="modal-label">Quien recibe el dinero (Parte A)</label>'
-    h += '<select id="dg-receptor" class="modal-input" onchange="docGenFillRecibo(\'receptor\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
-    h += '<input type="text" id="dg-receptor-name" class="modal-input" placeholder="O escribir nombre manualmente" style="margin-bottom:6px;"/>'
-    h += '<div class="modal-field"><label class="modal-label">¿A qué cuenta / método se recibe?</label>'
-    h += '<select id="dg-receptor-cuenta" class="modal-input" style="margin-bottom:4px;">'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+
+    // Receptor
+    h += '<div style="background:rgba(74,222,128,0.04);border:1px solid rgba(74,222,128,0.15);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#4ade80;margin-bottom:8px;">📥 RECEPTOR (quien recibe)</div>'
+    h += '<select id="dg-receptor" class="modal-input" onchange="docGenFillRecibo(\'receptor\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-receptor-name" class="modal-input" placeholder="Nombre completo" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-receptor-rfc" class="modal-input" placeholder="RFC (opcional)" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
+    h += '<div class="modal-field" style="margin-top:4px;"><label class="modal-label" style="font-size:10px;">Cuenta / Método de pago</label>'
+    h += '<select id="dg-receptor-cuenta" class="modal-input" style="font-size:11px;">'
     h += '<option value="">— Sin especificar —</option>'
     h += '<option value="__efectivo__">💵 Efectivo / Cash</option>'
-    h += '<option value="__otro__">📝 Otro (especificar manualmente abajo)</option>'
-    h += '</select></div>'
-    h += '<input type="text" id="dg-receptor-cuenta-manual" class="modal-input" placeholder="Cuenta, CLABE, plataforma... (opcional)" style="margin-bottom:10px;font-size:11px;"/>'
+    h += '<option value="__otro__">📝 Otro (especificar abajo)</option>'
+    h += '</select>'
+    h += '<input type="text" id="dg-receptor-cuenta-manual" class="modal-input" placeholder="Cuenta, CLABE, plataforma..." style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '</div>'
 
-    h += '<div class="modal-field"><label class="modal-label">Quien entrega el dinero (Parte B)</label>'
-    h += '<select id="dg-entregante" class="modal-input" onchange="docGenFillRecibo(\'entregante\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select></div>'
-    h += '<input type="text" id="dg-entregante-name" class="modal-input" placeholder="O escribir nombre manualmente" style="margin-bottom:10px;"/>'
+    // Entregante
+    h += '<div style="background:rgba(248,113,113,0.04);border:1px solid rgba(248,113,113,0.15);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:8px;">📤 ENTREGANTE (quien paga)</div>'
+    h += '<select id="dg-entregante" class="modal-input" onchange="docGenFillRecibo(\'entregante\')"><option value="">— Seleccionar —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-entregante-name" class="modal-input" placeholder="Nombre completo" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-entregante-rfc" class="modal-input" placeholder="RFC (opcional)" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
+    h += '</div>'
+    h += '</div>'
 
     h += '<div class="modal-field"><label class="modal-label">Lugar</label>'
     h += '<input type="text" id="dg-lugar" class="modal-input" placeholder="Ej: Saltillo, Coahuila"/></div>'
 
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
     h += '<div class="modal-field"><label class="modal-label">Fecha</label><input type="date" id="dg-fecha" class="modal-input"/></div>'
-    h += '<div class="modal-field"><label class="modal-label">Monto ($)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Monto</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Moneda</label>'
+    h += '<select id="dg-moneda" class="modal-input" onchange="docGenToggleTC()"><option value="MXN">MXN</option><option value="USD">USD</option><option value="USDT">USDT</option><option value="BTC">BTC</option></select></div>'
     h += '</div>'
+    h += '<div class="modal-field" id="dg-tc-field" style="display:none;"><label class="modal-label">Tipo de cambio (a MXN)</label>'
+    h += '<input type="number" id="dg-tc" class="modal-input" placeholder="T.C." step="0.01"/></div>'
 
     h += '<div class="modal-field"><label class="modal-label">Concepto</label>'
-    h += '<input type="text" id="dg-concepto" class="modal-input" placeholder="Ej: Bancalización de activos, pago de servicios, etc."/></div>'
+    h += '<input type="text" id="dg-concepto" class="modal-input" placeholder="Ej: Pago de servicios, préstamo, etc."/></div>'
 
   } else if (type === 'cartapoder') {
     h += '<div class="modal-field"><label class="modal-label">Destinatario (a quien se dirige)</label>'
@@ -7472,6 +7526,8 @@ window.openDocGen = function(type) {
     h += '<div id="dg-otorgante-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
     h += '<select id="dg-otorgante-idtype" class="modal-input" style="margin-top:6px;font-size:11px;"><option value="INE">INE</option><option value="Pasaporte">Pasaporte</option><option value="Cédula Profesional">Cédula Profesional</option><option value="Licencia de Conducir">Licencia de Conducir</option></select>'
     h += '<input type="text" id="dg-otorgante-idnum" class="modal-input" placeholder="N° de identificación" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-otorgante-curp" class="modal-input" placeholder="CURP" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-otorgante-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
     h += '<input type="text" id="dg-otorgante-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
 
@@ -7482,6 +7538,8 @@ window.openDocGen = function(type) {
     h += '<div id="dg-apoderado-info" style="font-size:10px;color:var(--text-muted);padding:4px 0;"></div>'
     h += '<select id="dg-apoderado-idtype" class="modal-input" style="margin-top:6px;font-size:11px;"><option value="INE">INE</option><option value="Pasaporte">Pasaporte</option><option value="Cédula Profesional">Cédula Profesional</option><option value="Licencia de Conducir">Licencia de Conducir</option></select>'
     h += '<input type="text" id="dg-apoderado-idnum" class="modal-input" placeholder="N° de identificación" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-apoderado-curp" class="modal-input" placeholder="CURP" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-apoderado-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
     h += '<input type="text" id="dg-apoderado-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
     h += '</div>'
@@ -7491,22 +7549,60 @@ window.openDocGen = function(type) {
     h += '<div class="modal-field"><label class="modal-label">Fecha</label><input type="date" id="dg-fecha" class="modal-input"/></div>'
     h += '</div>'
 
-    h += '<div class="modal-field"><label class="modal-label">Razón / Facultades otorgadas</label>'
-    h += '<textarea id="dg-razon" class="modal-input" rows="3" placeholder="Describa la razón específica del poder (cobrar, firmar, representar, etc.). El texto legal completo se incluirá automáticamente."></textarea></div>'
+    // Facultades checkboxes predefinidas
+    h += '<div class="modal-field"><label class="modal-label">Facultades otorgadas</label>'
+    h += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
+    const facultadesOpts = [
+      ['cobrar', 'Cobrar'],
+      ['firmar', 'Firmar documentos'],
+      ['gestionar', 'Gestionar trámites'],
+      ['representar', 'Representar legalmente'],
+      ['convenios', 'Suscribir convenios'],
+    ]
+    facultadesOpts.forEach(([val, lbl]) => {
+      h += '<label style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-main);cursor:pointer;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 8px;">'
+      h += '<input type="checkbox" class="dg-facultad-check" value="' + val + '" data-label="' + lbl + '" style="accent-color:var(--accent-cyan);width:13px;height:13px;"/> ' + lbl
+      h += '</label>'
+    })
+    h += '</div>'
+    h += '<textarea id="dg-razon" class="modal-input" rows="2" placeholder="Facultades adicionales o descripción específica del poder..."></textarea></div>'
+
+    // Testigos
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px;">'
+    h += '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:6px;">TESTIGO 1</div>'
+    h += '<select id="dg-testigo1" class="modal-input" onchange="docGenFillTestigo(1)" style="font-size:11px;"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-testigo1-name" class="modal-input" placeholder="Nombre del testigo 1" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:var(--text-dim);margin-bottom:6px;">TESTIGO 2</div>'
+    h += '<select id="dg-testigo2" class="modal-input" onchange="docGenFillTestigo(2)" style="font-size:11px;"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-testigo2-name" class="modal-input" placeholder="Nombre del testigo 2" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '</div>'
 
   } else if (type === 'contrato') {
+    const projectNodes = (typeof allNodes !== 'undefined') ? allNodes.filter(n => n.type === 'project') : []
+    const projectOpts = projectNodes.map(p => '<option value="' + esc(p.id) + '">' + esc(p.content || p.metadata?.name || 'Proyecto') + '</option>').join('')
+
     h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
 
     h += '<div style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);border-radius:10px;padding:12px;">'
     h += '<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:8px;">🏢 PRESTADOR DE SERVICIOS</div>'
     h += '<select id="dg-prestador" class="modal-input" onchange="docGenFillContrato(\'prestador\')"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
-    h += '<input type="text" id="dg-prestador-name" class="modal-input" placeholder="Nombre / razón social" style="margin-top:6px;"/>'
+    h += '<input type="text" id="dg-prestador-name" class="modal-input" placeholder="Nombre / razón social" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-prestador-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
+    h += '<input type="date" id="dg-prestador-nac" class="modal-input" title="Fecha de nacimiento" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-prestador-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
 
     h += '<div style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:12px;">'
     h += '<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;">👤 CLIENTE</div>'
     h += '<select id="dg-cliente" class="modal-input" onchange="docGenFillContrato(\'cliente\')"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
-    h += '<input type="text" id="dg-cliente-name" class="modal-input" placeholder="Nombre / razón social" style="margin-top:6px;"/>'
+    h += '<input type="text" id="dg-cliente-name" class="modal-input" placeholder="Nombre / razón social" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-cliente-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
+    h += '<input type="date" id="dg-cliente-nac" class="modal-input" title="Fecha de nacimiento" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-cliente-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
 
     h += '</div>'
@@ -7515,6 +7611,11 @@ window.openDocGen = function(type) {
     h += '<div><label class="modal-label">Lugar de firma</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, BCS"/></div>'
     h += '<div><label class="modal-label">Fecha del contrato</label><input type="date" id="dg-fecha" class="modal-input" value="' + new Date().toISOString().slice(0, 10) + '"/></div>'
     h += '</div>'
+
+    if (projectOpts) {
+      h += '<div class="modal-field"><label class="modal-label">Proyecto vinculado (opcional)</label>'
+      h += '<select id="dg-proyecto" class="modal-input"><option value="">— Sin vincular —</option>' + projectOpts + '</select></div>'
+    }
 
     h += '<div class="modal-field"><label class="modal-label">Descripción de servicios</label>'
     h += '<textarea id="dg-servicios" class="modal-input" rows="3" placeholder="Describir detalladamente los servicios a prestar..."></textarea></div>'
@@ -7532,6 +7633,9 @@ window.openDocGen = function(type) {
 
     h += '<div class="modal-field"><label class="modal-label">Ciudad para jurisdicción de tribunal</label>'
     h += '<input type="text" id="dg-jurisdiccion" class="modal-input" placeholder="Ej: La Paz, BCS"/></div>'
+
+    h += '<div class="modal-field"><label class="modal-label">Cláusulas adicionales (opcional)</label>'
+    h += '<textarea id="dg-clausulas-extra" class="modal-input" rows="3" placeholder="Disposiciones adicionales, acuerdos especiales, penalizaciones, etc."></textarea></div>'
 
   } else if (type === 'nota_venta') {
     h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
@@ -7573,29 +7677,6 @@ window.closeDocGen = function() {
 }
 
 // ── Auto-fill helpers for each template ──────────────────────────
-window.docGenFillProrroga = function(role) {
-  const selId = role === 'arrendador' ? 'dg-arrendador' : 'dg-arrendatario'
-  const sel = document.getElementById(selId)
-  if (!sel?.value) return
-  const c = allNodes.find(n => n.id === sel.value)
-  if (!c) return
-  const m = c.metadata || {}
-  const addr = m.domicilio_legal || [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
-  if (role === 'arrendador') {
-    const infoEl = document.getElementById('dg-arrendador-info')
-    if (infoEl) infoEl.textContent = m.name || c.content
-    const nameEl = document.getElementById('dg-arrendador-name')
-    if (nameEl) nameEl.value = m.name || c.content || ''
-  } else {
-    const infoEl = document.getElementById('dg-arrendatario-info')
-    if (infoEl) infoEl.textContent = m.name || c.content
-    const nameEl = document.getElementById('dg-arrendatario-name')
-    if (nameEl) nameEl.value = m.name || c.content || ''
-    const domEl = document.getElementById('dg-arrendatario-dom')
-    if (domEl) domEl.value = addr
-  }
-}
-
 window.docGenFillPagare = function(role) {
   const prefix = role === 'beneficiario' ? 'dg-benef' : 'dg-deudor'
   const selId = role === 'beneficiario' ? 'dg-beneficiario' : 'dg-deudor'
@@ -7607,10 +7688,13 @@ window.docGenFillPagare = function(role) {
   const info = document.getElementById(selId + '-info')
   if (info) info.textContent = m.name || c.content
   const addr = m.domicilio_legal || [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
+  // name
+  const nameEl = document.getElementById(prefix + '-name')
+  if (nameEl) nameEl.value = m.name || c.content || ''
   const rfcEl = document.getElementById(prefix + '-rfc')
-  if (rfcEl) rfcEl.value = m.rfc || ''   // siempre actualiza al cambiar contacto
+  if (rfcEl) rfcEl.value = m.rfc || ''
   const dirEl = document.getElementById(prefix + '-dir')
-  if (dirEl) dirEl.value = addr          // siempre actualiza
+  if (dirEl) dirEl.value = addr
   // CURP — del campo directo, fallback a documentos array
   const curpEl = document.getElementById(prefix + '-curp')
   if (curpEl) {
@@ -7620,26 +7704,34 @@ window.docGenFillPagare = function(role) {
       curpEl.value = curpDoc?.name || ''
     }
   }
-  // Electoral & Passport — siempre actualiza
+  // Electoral & Passport
   const electEl = document.getElementById(prefix + '-electoral')
-  if (electEl) electEl.value = m.electoral || ''
+  if (electEl) electEl.value = m.clave_electoral || m.electoral || ''
   const pasapEl = document.getElementById(prefix + '-pasaporte')
   if (pasapEl) pasapEl.value = m.pasaporte || ''
+  // Tel & Email
+  const telEl = document.getElementById(prefix + '-tel')
+  if (telEl) telEl.value = m.tel || m.phone || ''
+  const emailEl = document.getElementById(prefix + '-email')
+  if (emailEl) emailEl.value = m.email || ''
 }
 
 window.docGenFillRecibo = function(role) {
   const sel = document.getElementById('dg-' + role)
   const nameEl = document.getElementById('dg-' + role + '-name')
-  if (!sel?.value || !nameEl) return
+  if (!sel?.value) return
   const c = allNodes.find(n => n.id === sel.value)
   if (!c) return
-  nameEl.value = (c.metadata?.name || c.content || '')
+  const m = c.metadata || {}
+  if (nameEl) nameEl.value = m.name || c.content || ''
+  // RFC auto-fill
+  const rfcEl = document.getElementById('dg-' + role + '-rfc')
+  if (rfcEl) rfcEl.value = m.rfc || ''
   // If receptor, populate account select with all their accounts
   if (role === 'receptor') {
     const cuentaSelect = document.getElementById('dg-receptor-cuenta')
     if (cuentaSelect) {
-      const accounts = c.metadata?.contact_accounts || []
-      // Rebuild options
+      const accounts = m.contact_accounts || []
       let opts = '<option value="">— Sin especificar —</option>'
       opts += '<option value="__efectivo__">💵 Efectivo / Cash</option>'
       accounts.forEach(a => {
@@ -7662,27 +7754,46 @@ window.docGenFillCartaPoder = function(role) {
   const m = c.metadata || {}
   const info = document.getElementById('dg-' + role + '-info')
   if (info) info.textContent = (m.name || c.content) + (m.rfc ? ' · RFC: ' + m.rfc : '')
-  // domicilio_legal toma precedencia; si no, construye desde campos separados
   const addr = m.domicilio_legal || [m.address_street, m.city, m.address_state, m.address_country].filter(Boolean).join(', ')
   const domEl = document.getElementById('dg-' + role + '-dom')
-  if (domEl) domEl.value = addr   // siempre actualiza al cambiar el contacto
-  // ID number — siempre actualiza al cambiar de contacto
+  if (domEl) domEl.value = addr
   const idNumEl = document.getElementById('dg-' + role + '-idnum')
   if (idNumEl) {
-    const idNum = m.electoral || m.pasaporte || m.curp || ''
+    const idNum = m.clave_electoral || m.electoral || m.pasaporte || m.curp || ''
     idNumEl.value = idNum
   }
+  // CURP
+  const curpEl = document.getElementById('dg-' + role + '-curp')
+  if (curpEl) curpEl.value = m.curp || ''
+  // RFC
+  const rfcEl = document.getElementById('dg-' + role + '-rfc')
+  if (rfcEl) rfcEl.value = m.rfc || ''
+}
+
+window.docGenFillTestigo = function(num) {
+  const sel = document.getElementById('dg-testigo' + num)
+  if (!sel?.value) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (!c) return
+  const nameEl = document.getElementById('dg-testigo' + num + '-name')
+  if (nameEl) nameEl.value = c.metadata?.name || c.content || ''
 }
 
 window.docGenFillContrato = function(role) {
-  const selId = role === 'prestador' ? 'dg-prestador' : 'dg-cliente'
-  const nameId = role === 'prestador' ? 'dg-prestador-name' : 'dg-cliente-name'
-  const selEl  = document.getElementById(selId)
+  const selEl = document.getElementById('dg-' + role)
   if (!selEl?.value) return
   const c = allNodes.find(n => n.id === selEl.value)
   if (!c) return
-  const nameEl = document.getElementById(nameId)
-  if (nameEl && !nameEl.value) nameEl.value = c.metadata?.name || c.content || ''
+  const m = c.metadata || {}
+  const nameEl = document.getElementById('dg-' + role + '-name')
+  if (nameEl) nameEl.value = m.name || c.content || ''
+  const rfcEl = document.getElementById('dg-' + role + '-rfc')
+  if (rfcEl) rfcEl.value = m.rfc || ''
+  const domEl = document.getElementById('dg-' + role + '-dom')
+  if (domEl) domEl.value = m.domicilio_legal || [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
+  // fecha_nac si está en metadata
+  const nacEl = document.getElementById('dg-' + role + '-nac')
+  if (nacEl && m.fecha_nac) nacEl.value = m.fecha_nac
 }
 
 window.docGenFillNotaVenta = function() {
@@ -7692,6 +7803,43 @@ window.docGenFillNotaVenta = function() {
   if (!c) return
   const nameEl = document.getElementById('dg-cliente-name')
   if (nameEl && !nameEl.value) nameEl.value = c.metadata?.name || c.content || ''
+}
+
+window.docGenToggleTC = function() {
+  const monedaEl = document.getElementById('dg-moneda')
+  const tcField = document.getElementById('dg-tc-field')
+  if (tcField) tcField.style.display = (monedaEl?.value && monedaEl.value !== 'MXN') ? 'block' : 'none'
+}
+
+window.docGenTogglePagosSerie = function() {
+  const cb = document.getElementById('dg-pagos-serie')
+  const tbl = document.getElementById('dg-pagos-serie-table')
+  if (tbl) tbl.style.display = cb?.checked ? 'block' : 'none'
+}
+
+window.docGenFillProrroga = function(role) {
+  const selId = role === 'arrendador' ? 'dg-arrendador' : 'dg-arrendatario'
+  const sel = document.getElementById(selId)
+  if (!sel?.value) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (!c) return
+  const m = c.metadata || {}
+  const addr = m.domicilio_legal || [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
+  if (role === 'arrendador') {
+    const infoEl = document.getElementById('dg-arrendador-info')
+    if (infoEl) infoEl.textContent = m.name || c.content
+    const nameEl = document.getElementById('dg-arrendador-name')
+    if (nameEl) nameEl.value = m.name || c.content || ''
+  } else {
+    const infoEl = document.getElementById('dg-arrendatario-info')
+    if (infoEl) infoEl.textContent = m.name || c.content
+    const nameEl = document.getElementById('dg-arrendatario-name')
+    if (nameEl) nameEl.value = m.name || c.content || ''
+    const curpEl = document.getElementById('dg-arrendatario-curp')
+    if (curpEl) curpEl.value = m.curp || ''
+    const domEl = document.getElementById('dg-arrendatario-dom')
+    if (domEl) domEl.value = addr
+  }
 }
 
 // ── PDF CSS shared by export & reprint ───────────────────────────
@@ -7719,6 +7867,7 @@ window.docGenExport = function() {
     const arrendadorCargo = document.getElementById('dg-arrendador-cargo')?.value || 'Arrendador del inmueble'
     const arrName = document.getElementById('dg-arrendatario-name')?.value || blank
     const arrDom  = document.getElementById('dg-arrendatario-dom')?.value  || blank
+    const arrCurp = document.getElementById('dg-arrendatario-curp')?.value || ''
     const dia     = document.getElementById('dg-dia')?.value     || '___'
     const mes     = document.getElementById('dg-mes')?.value     || '____________'
     const anio    = document.getElementById('dg-anio')?.value    || '20__'
@@ -7727,12 +7876,14 @@ window.docGenExport = function() {
     const diaPago = document.getElementById('dg-dia-pago')?.value  || '__'
     const mesPago = document.getElementById('dg-mes-pago')?.value  || '[mes]'
     const anioPago = document.getElementById('dg-anio-pago')?.value || '20__'
+    const montoRenta = document.getElementById('dg-monto-renta')?.value || ''
     parteAName = arrendadorName
     parteBName = arrName
     parteAId   = document.getElementById('dg-arrendador')?.value    || ''
     parteBId   = document.getElementById('dg-arrendatario')?.value  || ''
     docTitle   = 'Prórroga de Pago de Renta'
     data = { arrendadorName, arrendadorCargo, arrendatarioName: arrName, arrendatarioDom: arrDom,
+             arrendatarioCurp: arrCurp, montoRenta,
              dia, mes, anio, mesRenta, motivo, diaPago, mesPago, anioPago }
     pdfProrroga(data, emisor)
 
@@ -7741,47 +7892,77 @@ window.docGenExport = function() {
     const deudorSel = document.getElementById('dg-deudor')?.value || ''
     const cBenef  = benefSel  ? allNodes.find(n => n.id === benefSel)  : null
     const cDeudor = deudorSel ? allNodes.find(n => n.id === deudorSel) : null
-    const benefName  = cBenef  ? (cBenef.metadata?.name  || cBenef.content)  : blank
-    const deudorName = cDeudor ? (cDeudor.metadata?.name || cDeudor.content) : blank
+    const benefName  = document.getElementById('dg-benef-name')?.value
+      || (cBenef  ? (cBenef.metadata?.name  || cBenef.content)  : blank)
+    const deudorName = document.getElementById('dg-deudor-name')?.value
+      || (cDeudor ? (cDeudor.metadata?.name || cDeudor.content) : blank)
     const lugar      = document.getElementById('dg-lugar')?.value || blank
     const monto      = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const moneda     = document.getElementById('dg-moneda')?.value || 'MXN'
+    const tc         = document.getElementById('dg-tc')?.value || ''
+    const interesMoratorio = document.getElementById('dg-interes-moratorio')?.value || '2.5'
     const fechaPagoR = document.getElementById('dg-fecha-pago')?.value || ''
     const fechaPago  = fechaPagoR
       ? new Date(fechaPagoR + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : blank
     const concepto   = document.getElementById('dg-concepto')?.value   || blank
     const metodo     = document.getElementById('dg-metodo')?.value     || blank
     const referencia = document.getElementById('dg-referencia')?.value || blank
-    const bCurp  = document.getElementById('dg-benef-curp')?.value        || cBenef?.metadata?.curp      || ''
-    const bRfc   = document.getElementById('dg-benef-rfc')?.value         || cBenef?.metadata?.rfc       || ''
-    const bElect = document.getElementById('dg-benef-electoral')?.value   || cBenef?.metadata?.electoral || ''
-    const bPasap = document.getElementById('dg-benef-pasaporte')?.value   || cBenef?.metadata?.pasaporte || ''
+    const bCurp  = document.getElementById('dg-benef-curp')?.value        || cBenef?.metadata?.curp             || ''
+    const bRfc   = document.getElementById('dg-benef-rfc')?.value         || cBenef?.metadata?.rfc              || ''
+    const bElect = document.getElementById('dg-benef-electoral')?.value   || cBenef?.metadata?.clave_electoral  || ''
+    const bPasap = document.getElementById('dg-benef-pasaporte')?.value   || cBenef?.metadata?.pasaporte        || ''
+    const bTel   = document.getElementById('dg-benef-tel')?.value         || cBenef?.metadata?.tel              || ''
+    const bEmail = document.getElementById('dg-benef-email')?.value       || cBenef?.metadata?.email            || ''
     const bDir   = document.getElementById('dg-benef-dir')?.value
+      || cBenef?.metadata?.domicilio_legal
       || [cBenef?.metadata?.address_street, cBenef?.metadata?.city, cBenef?.metadata?.address_state].filter(Boolean).join(', ')
-    const dCurp  = document.getElementById('dg-deudor-curp')?.value       || cDeudor?.metadata?.curp      || ''
-    const dRfc   = document.getElementById('dg-deudor-rfc')?.value        || cDeudor?.metadata?.rfc       || ''
-    const dElect = document.getElementById('dg-deudor-electoral')?.value  || cDeudor?.metadata?.electoral || ''
-    const dPasap = document.getElementById('dg-deudor-pasaporte')?.value  || cDeudor?.metadata?.pasaporte || ''
+    const dCurp  = document.getElementById('dg-deudor-curp')?.value       || cDeudor?.metadata?.curp            || ''
+    const dRfc   = document.getElementById('dg-deudor-rfc')?.value        || cDeudor?.metadata?.rfc             || ''
+    const dElect = document.getElementById('dg-deudor-electoral')?.value  || cDeudor?.metadata?.clave_electoral || ''
+    const dPasap = document.getElementById('dg-deudor-pasaporte')?.value  || cDeudor?.metadata?.pasaporte       || ''
+    const dTel   = document.getElementById('dg-deudor-tel')?.value        || cDeudor?.metadata?.tel             || ''
+    const dEmail = document.getElementById('dg-deudor-email')?.value      || cDeudor?.metadata?.email           || ''
     const dDir   = document.getElementById('dg-deudor-dir')?.value
+      || cDeudor?.metadata?.domicilio_legal
       || [cDeudor?.metadata?.address_street, cDeudor?.metadata?.city, cDeudor?.metadata?.address_state].filter(Boolean).join(', ')
+    // Pagos en serie
+    let pagos = []
+    if (document.getElementById('dg-pagos-serie')?.checked) {
+      for (let i = 1; i <= 5; i++) {
+        const fRaw = document.getElementById('dg-pago-fecha-' + i)?.value || ''
+        const mRaw = parseFloat(document.getElementById('dg-pago-monto-' + i)?.value || '0')
+        if (fRaw || mRaw > 0) {
+          const fFmt = fRaw ? new Date(fRaw + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : ''
+          pagos.push({ fecha: fFmt, monto: mRaw })
+        }
+      }
+    }
     parteAName = benefName; parteBName = deudorName; parteAId = benefSel; parteBId = deudorSel
     docTitle   = 'Pagaré'
     data = { benefName, deudorName, lugar,
              fechaLarga: new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }),
-             monto, fechaPago, concepto, metodo, referencia,
-             bCurp, bRfc, bElect, bPasap, bDir,
-             dCurp, dRfc, dElect, dPasap, dDir }
+             monto, moneda, tc, interesMoratorio, fechaPago, concepto, metodo, referencia,
+             bCurp, bRfc, bElect, bPasap, bTel, bEmail, bDir,
+             dCurp, dRfc, dElect, dPasap, dTel, dEmail, dDir,
+             pagos: pagos.length ? pagos : null }
     pdfPagare(data, emisor)
 
   } else if (type === 'recibo') {
     const receptorSel   = document.getElementById('dg-receptor')?.value   || ''
     const entreganteSel = document.getElementById('dg-entregante')?.value || ''
+    const cReceptor    = receptorSel   ? allNodes.find(n => n.id === receptorSel)   : null
+    const cEntregante  = entreganteSel ? allNodes.find(n => n.id === entreganteSel) : null
     const receptorName  = document.getElementById('dg-receptor-name')?.value
-      || (receptorSel ? (allNodes.find(n => n.id === receptorSel)?.metadata?.name || allNodes.find(n => n.id === receptorSel)?.content) : '') || blank
+      || (cReceptor  ? (cReceptor.metadata?.name  || cReceptor.content)  : '') || blank
     const entreganteName = document.getElementById('dg-entregante-name')?.value
-      || (entreganteSel ? (allNodes.find(n => n.id === entreganteSel)?.metadata?.name || allNodes.find(n => n.id === entreganteSel)?.content) : '') || blank
+      || (cEntregante ? (cEntregante.metadata?.name || cEntregante.content) : '') || blank
+    const receptorRfc   = document.getElementById('dg-receptor-rfc')?.value   || cReceptor?.metadata?.rfc   || ''
+    const entreganteRfc = document.getElementById('dg-entregante-rfc')?.value || cEntregante?.metadata?.rfc || ''
     const lugar    = document.getElementById('dg-lugar')?.value || blank
     const fechaRaw = document.getElementById('dg-fecha')?.value || ''
     const monto    = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const moneda   = document.getElementById('dg-moneda')?.value || 'MXN'
+    const tc       = document.getElementById('dg-tc')?.value || ''
     const concepto = document.getElementById('dg-concepto')?.value || blank
     let fechaFmt = blank
     if (fechaRaw) {
@@ -7803,7 +7984,8 @@ window.docGenExport = function() {
     }
     parteAName = receptorName; parteBName = entreganteName; parteAId = receptorSel; parteBId = entreganteSel
     docTitle   = 'Recibo de Dinero'
-    data = { receptorName, entreganteName, lugar, fecha: fechaFmt, monto, concepto, via }
+    data = { receptorName, receptorRfc, entreganteName, entreganteRfc,
+             lugar, fecha: fechaFmt, monto, moneda, tc, concepto, via }
     pdfRecibo(data, emisor)
 
   } else if (type === 'cartapoder') {
@@ -7818,11 +8000,20 @@ window.docGenExport = function() {
     const fechaRaw     = document.getElementById('dg-fecha')?.value           || ''
     const otorgIdType  = document.getElementById('dg-otorgante-idtype')?.value || 'INE'
     const otorgIdNum   = document.getElementById('dg-otorgante-idnum')?.value  || blank
+    const otorgCurp    = document.getElementById('dg-otorgante-curp')?.value   || cOtorg?.metadata?.curp || ''
+    const otorgRfc     = document.getElementById('dg-otorgante-rfc')?.value    || cOtorg?.metadata?.rfc  || ''
     const otorgDom     = document.getElementById('dg-otorgante-dom')?.value    || blank
     const apodIdType   = document.getElementById('dg-apoderado-idtype')?.value || 'INE'
     const apodIdNum    = document.getElementById('dg-apoderado-idnum')?.value  || blank
+    const apodCurp     = document.getElementById('dg-apoderado-curp')?.value   || cApod?.metadata?.curp  || ''
+    const apodRfc      = document.getElementById('dg-apoderado-rfc')?.value    || cApod?.metadata?.rfc   || ''
     const apodDom      = document.getElementById('dg-apoderado-dom')?.value    || blank
-    const actos        = document.getElementById('dg-razon')?.value            || blank
+    const actos        = document.getElementById('dg-razon')?.value            || ''
+    const testigo1Name = document.getElementById('dg-testigo1-name')?.value   || ''
+    const testigo2Name = document.getElementById('dg-testigo2-name')?.value   || ''
+    // Facultades checkeadas
+    const facultadesChecks = Array.from(document.querySelectorAll('.dg-facultad-check:checked'))
+    const facultadesList = facultadesChecks.map(el => el.getAttribute('data-label'))
     let fechaFmt = blank
     if (fechaRaw) {
       const d = new Date(fechaRaw + 'T12:00:00')
@@ -7831,7 +8022,9 @@ window.docGenExport = function() {
     parteAName = otorgName; parteBName = apodName; parteAId = otorganteSel; parteBId = apoderadoSel
     docTitle   = 'Carta Poder'
     data = { otorgName, apodName, destinatario, lugar, fecha: fechaFmt,
-             otorgIdType, otorgIdNum, otorgDom, apodIdType, apodIdNum, apodDom, actos }
+             otorgIdType, otorgIdNum, otorgCurp, otorgRfc, otorgDom,
+             apodIdType, apodIdNum, apodCurp, apodRfc, apodDom,
+             actos, facultadesList, testigo1Name, testigo2Name }
     pdfCartaPoder(data, emisor)
 
   } else if (type === 'contrato') {
@@ -7843,6 +8036,12 @@ window.docGenExport = function() {
       || (cPrest  ? (cPrest.metadata?.name  || cPrest.content)  : '') || blank
     const clienteName   = document.getElementById('dg-cliente-name')?.value
       || (cClient ? (cClient.metadata?.name || cClient.content) : '') || blank
+    const prestadorRfc  = document.getElementById('dg-prestador-rfc')?.value  || cPrest?.metadata?.rfc  || ''
+    const clienteRfc    = document.getElementById('dg-cliente-rfc')?.value    || cClient?.metadata?.rfc || ''
+    const prestadorNacR = document.getElementById('dg-prestador-nac')?.value  || ''
+    const clienteNacR   = document.getElementById('dg-cliente-nac')?.value    || ''
+    const prestadorDom  = document.getElementById('dg-prestador-dom')?.value  || ''
+    const clienteDom    = document.getElementById('dg-cliente-dom')?.value    || ''
     const lugar        = document.getElementById('dg-lugar')?.value        || blank
     const fechaRaw     = document.getElementById('dg-fecha')?.value        || ''
     const servicios    = document.getElementById('dg-servicios')?.value    || blank
@@ -7852,13 +8051,20 @@ window.docGenExport = function() {
     const monto        = parseFloat(document.getElementById('dg-monto')?.value || '0')
     const formaPago    = document.getElementById('dg-forma-pago')?.value   || blank
     const jurisdiccion = document.getElementById('dg-jurisdiccion')?.value || lugar
+    const clausulasExtra = document.getElementById('dg-clausulas-extra')?.value || ''
+    // Proyecto vinculado
+    const proyectoSel  = document.getElementById('dg-proyecto')?.value || ''
+    const cProyecto    = proyectoSel ? allNodes.find(n => n.id === proyectoSel) : null
+    const proyectoNombre = cProyecto ? (cProyecto.content || cProyecto.metadata?.name || '') : ''
     const toFmt = raw => raw
       ? new Date(raw + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : blank
     parteAName = prestadorName; parteBName = clienteName; parteAId = prestadorSel; parteBId = clienteSel
     docTitle   = 'Contrato de Servicios'
-    data = { prestadorName, clienteName, lugar, fecha: toFmt(fechaRaw), servicios,
+    data = { prestadorName, prestadorRfc, prestadorNac: toFmt(prestadorNacR), prestadorDom,
+             clienteName, clienteRfc, clienteNac: toFmt(clienteNacR), clienteDom,
+             lugar, fecha: toFmt(fechaRaw), servicios, proyectoNombre,
              fechaInicio: toFmt(fIniRaw), fechaFin: toFmt(fFinRaw),
-             diasAviso, monto, formaPago, jurisdiccion }
+             diasAviso, monto, formaPago, jurisdiccion, clausulasExtra }
     pdfContratoServicios(data, emisor)
 
   } else if (type === 'nota_venta') {

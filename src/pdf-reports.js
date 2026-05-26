@@ -734,6 +734,60 @@ export function pdfResumenMensual(period, allNodes = [], accounts = [], emisor =
 // Todos los trámites reciben un objeto `data` con los campos del formulario
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/**
+ * HEADER TRAMITE — Documentos legales mejorado
+ * Línea cyan delgada + folio derecha + título centrado bold
+ * @returns {number} Y = 26 (inicio del cuerpo)
+ */
+function _headerTramite(doc, titulo, folio) {
+  const W = doc.internal.pageSize.getWidth()
+  // Línea cyan superior
+  doc.setFillColor(...T.cyan)
+  doc.rect(0, 0, W, 1.5, 'F')
+  // Folio alineado a la derecha
+  if (folio) {
+    doc.setFontSize(7.5)
+    doc.setFont(T.font, 'normal')
+    doc.setTextColor(...T.textMid)
+    doc.text('Folio: ' + folio, W - T.mX, 10, { align: 'right' })
+  }
+  // Título del documento centrado
+  doc.setFontSize(18)
+  doc.setFont(T.font, 'bold')
+  doc.setTextColor(...T.textInk)
+  doc.text(titulo, W / 2, 18, { align: 'center' })
+  // Separador delgado
+  doc.setDrawColor(...T.textDim)
+  doc.setLineWidth(0.25)
+  doc.line(T.mX, 22, W - T.mX, 22)
+  return 26  // inicio del cuerpo
+}
+
+/**
+ * FOOTER TRAMITE — con leyenda opcional centrada
+ */
+function _footerTramite(doc, emisor, leyenda) {
+  const W = doc.internal.pageSize.getWidth()
+  const H = doc.internal.pageSize.getHeight()
+  doc.setDrawColor(...T.textDim)
+  doc.setLineWidth(0.25)
+  doc.line(T.mX, H - 15, W - T.mX, H - 15)
+  doc.setFontSize(6.5)
+  doc.setFont(T.font, 'normal')
+  doc.setTextColor(...T.textMid)
+  const left = emisor?.nombre
+    ? `${emisor.nombre}${emisor.rfc ? ' · RFC: ' + emisor.rfc : ''}`
+    : `${T.brand} · ${T.url}`
+  doc.text(doc.splitTextToSize(left, (W / 2) - T.mX)[0], T.mX, H - 9)
+  const ts = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+  doc.text(ts, W - T.mX, H - 9, { align: 'right' })
+  if (leyenda) {
+    doc.setFontSize(6)
+    doc.setFont(T.font, 'italic')
+    doc.text(leyenda, W / 2, H - 9, { align: 'center' })
+  }
+}
+
 /** Helper: párrafo fluido */
 function _para(doc, text, y, indent = T.mX, maxW = null) {
   const W = doc.internal.pageSize.getWidth()
@@ -762,26 +816,8 @@ export function pdfProrroga(data, emisor = {}) {
   const folio = _folio()
   const blank = '________________________'
 
-  let y = _headerDoc(doc, 'Prórroga', folio)
-
-  // Título del documento
-  y += 8
-  doc.setFontSize(14)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.textInk)
-  doc.text('SOLICITUD DE PRÓRROGA DE PAGO DE RENTA', W / 2, y, { align: 'center' })
+  let y = _headerTramite(doc, 'SOLICITUD DE PRÓRROGA DE PAGO DE RENTA', folio)
   y += 4
-  doc.setFontSize(8)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textMid)
-  doc.text('Documento oficial generado por Nexus OS', W / 2, y + 4, { align: 'center' })
-  y += 12
-
-  // Línea separadora
-  doc.setDrawColor(...T.textDim)
-  doc.setLineWidth(0.3)
-  doc.line(T.mX, y, W - T.mX, y)
-  y += 8
 
   // Lugar y fecha
   const { dia='__', mes='____________', anio='20__' } = data
@@ -789,10 +825,11 @@ export function pdfProrroga(data, emisor = {}) {
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textInk)
   doc.text(`${data.lugar || blank}, a ${dia} de ${mes} de ${anio}.`, W - T.mX, y, { align: 'right' })
-  y += 8
+  y += 10
 
   // Destinatario
   doc.setFont(T.font, 'bold')
+  doc.setFontSize(9)
   doc.text('Para:', T.mX, y)
   doc.setFont(T.font, 'normal')
   y = _para(doc, `${data.arrendadorName || blank}\n${data.arrendadorCargo || 'Arrendador del inmueble'}`, y + 5, T.mX + 12)
@@ -808,7 +845,9 @@ export function pdfProrroga(data, emisor = {}) {
   doc.setFontSize(9.5)
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textInk)
-  const cuerpo = `Yo, ${data.arrendatarioName || blank}, con domicilio en ${data.arrendatarioDom || blank}, en calidad de arrendatario del espacio en renta mencionado, comparezco para solicitar de manera respetuosa una prórroga en el pago correspondiente al mes de ${data.mesRenta || '[mes]'} del año ${anio}.`
+  const curpStr = data.arrendatarioCurp ? `, CURP: ${data.arrendatarioCurp},` : ''
+  const montoStr = data.montoRenta ? ` por la cantidad de $${parseFloat(data.montoRenta).toLocaleString('es-MX', { minimumFractionDigits: 2 })} M.N.` : ''
+  const cuerpo = `Por medio del presente, yo ${data.arrendatarioName || blank}${curpStr}, con domicilio en ${data.arrendatarioDom || blank}, en calidad de arrendatario del espacio en renta${montoStr}, comparezco para solicitar respetuosamente una prórroga en el pago correspondiente al mes de ${data.mesRenta || '[mes]'} del año ${anio}.`
   y = _para(doc, cuerpo, y)
   y += 5
 
@@ -837,12 +876,7 @@ export function pdfProrroga(data, emisor = {}) {
 
   _firma(doc, T.mX + 30, y, 80, `${data.arrendatarioName || blank}\nArrendatario`)
 
-  y += 20
-  doc.setFontSize(8)
-  doc.setTextColor(...T.textMid)
-  doc.text(`Copia para: ${data.arrendadorName || blank}`, T.mX, y)
-
-  _footer(doc, 1, 1, emisor)
+  _footerTramite(doc, emisor, 'Original para el interesado - Copia para el otorgante')
   doc.save(`prorroga-renta-${folio}.pdf`)
 }
 
@@ -853,38 +887,51 @@ export function pdfPagare(data, emisor = {}) {
   const folio = _folio()
   const blank = '________________________'
   const monto = parseFloat(data.monto || 0)
+  const moneda = data.moneda || 'MXN'
   const montoFmt   = monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })
   const montoLetra = numToLetras(monto)
+  const interesMoratorio = data.interesMoratorio || '2.5'
 
-  let y = _headerDoc(doc, 'Pagaré', folio)
-  y += 8
+  let y = _headerTramite(doc, 'P A G A R É', folio)
+  y += 2
 
-  // Título espaciado
-  doc.setFontSize(20)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.textInk)
-  doc.text('P  A  G  A  R  É', W / 2, y, { align: 'center' })
-  y += 4
+  // Subtítulo
   doc.setFontSize(8)
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textMid)
-  doc.text('Título de crédito', W / 2, y + 3, { align: 'center' })
-  y += 10
+  doc.text('Título de crédito', W / 2, y, { align: 'center' })
+  y += 6
 
-  // Caja de monto
-  y = _amountBox(doc, y, monto, montoLetra)
-  y += 2
+  // Caja de monto con moneda
+  doc.setFillColor(245, 248, 252)
+  doc.setDrawColor(...T.cyan)
+  doc.setLineWidth(0.5)
+  doc.roundedRect(T.mX, y, W - T.mX * 2, 22, 2, 2, 'FD')
+  doc.setFontSize(14)
+  doc.setFont(T.font, 'bold')
+  doc.setTextColor(...T.textInk)
+  doc.text(`$${montoFmt} ${moneda}`, T.mX + 6, y + 10)
+  doc.setFontSize(7.5)
+  doc.setFont(T.font, 'italic')
+  doc.setTextColor(...T.textMid)
+  const letLines = doc.splitTextToSize(montoLetra, W - T.mX * 2 - 12)
+  doc.text(letLines, T.mX + 6, y + 17)
+  if (data.tc && moneda !== 'MXN') {
+    doc.setFontSize(7)
+    doc.text(`TC: ${data.tc}`, W - T.mX - 4, y + 10, { align: 'right' })
+  }
+  y += 26
 
   // Datos de lugar/fecha
   doc.setFontSize(9.5)
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textInk)
-  doc.text(`Lugar: ${data.lugar || blank}`, T.mX, y)
-  doc.text(`Fecha: ${data.fechaLarga || new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}`, W / 2, y)
+  const fechaLarga = data.fechaLarga || new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })
+  doc.text(`En ${data.lugar || blank}, a ${fechaLarga}.`, T.mX, y)
   y += 8
 
   // Texto legal
-  const legal = `A través del presente pagaré, yo ${data.deudorName || blank} me comprometo a pagar incondicionalmente la cantidad de $${montoFmt} (${montoLetra}) a la orden de ${data.benefName || blank} por concepto de "${data.concepto || blank}". Dicha cantidad será liquidada el día ${data.fechaPago || blank}.`
+  const legal = `A través del presente pagaré, yo ${data.deudorName || blank} me comprometo a pagar INCONDICIONALMENTE la cantidad de $${montoFmt} (${montoLetra}) a la orden de ${data.benefName || blank}, por concepto de "${data.concepto || blank}". Dicha cantidad será liquidada el día ${data.fechaPago || blank}.`
   doc.setFontSize(9.5)
   y = _para(doc, legal, y)
   y += 4
@@ -898,49 +945,73 @@ export function pdfPagare(data, emisor = {}) {
     y += 7
   }
 
-  // Bloques de ID
-  const idBlock = (title, name, curp, rfc, elect, pasap, dir) => {
+  // Bloques de ID completos
+  const idBlock = (title, name, curp, rfc, elect, pasap, tel, email, dir) => {
+    const boxH = 44
     doc.setFillColor(245, 248, 252)
     doc.setDrawColor(...T.textDim)
     doc.setLineWidth(0.2)
-    doc.roundedRect(T.mX, y, W - T.mX * 2, 34, 2, 2, 'FD')
+    doc.roundedRect(T.mX, y, W - T.mX * 2, boxH, 2, 2, 'FD')
     doc.setFontSize(8)
     doc.setFont(T.font, 'bold')
     doc.setTextColor(...T.textInk)
-    doc.text(`Datos del ${title}`, T.mX + 4, y + 6)
+    doc.text(`Datos del ${title}:`, T.mX + 4, y + 6)
     doc.setFont(T.font, 'normal')
-    doc.setFontSize(8)
-    const col1 = T.mX + 4, col2 = W / 2
+    doc.setFontSize(7.8)
+    const col1 = T.mX + 4, col2 = W / 2 + 2
     doc.text(`Nombre: ${name || blank}`, col1, y + 12)
     doc.text(`CURP: ${curp || blank}`, col1, y + 18)
     doc.text(`RFC: ${rfc || blank}`, col2, y + 18)
     doc.text(`Clave Electoral: ${elect || blank}`, col1, y + 24)
     doc.text(`Pasaporte: ${pasap || blank}`, col2, y + 24)
+    if (tel || email) {
+      doc.text(`Tel: ${tel || blank}`, col1, y + 30)
+      doc.text(`Email: ${email || blank}`, col2, y + 30)
+    }
     if (dir) {
       doc.setFontSize(7.5)
       const dLines = doc.splitTextToSize(`Dir: ${dir}`, W - T.mX * 2 - 8)
-      doc.text(dLines[0], col1, y + 30)
+      doc.text(dLines[0], col1, y + 37)
     }
-    return y + 38
+    return y + boxH + 3
   }
 
-  y = idBlock('Beneficiario', data.benefName, data.bCurp, data.bRfc, data.bElect, data.bPasap, data.bDir)
+  y = idBlock('Beneficiario', data.benefName, data.bCurp, data.bRfc, data.bElect, data.bPasap, data.bTel, data.bEmail, data.bDir)
+  y = idBlock('Emisor (Deudor)', data.deudorName, data.dCurp, data.dRfc, data.dElect, data.dPasap, data.dTel, data.dEmail, data.dDir)
   y += 2
-  y = idBlock('Emisor (Deudor)', data.deudorName, data.dCurp, data.dRfc, data.dElect, data.dPasap, data.dDir)
-  y += 6
+
+  // Tabla de pagos en serie (si aplica)
+  if (data.pagos && data.pagos.length > 0) {
+    doc.setFontSize(8.5)
+    doc.setFont(T.font, 'bold')
+    doc.setTextColor(...T.textInk)
+    doc.text('Tabla de pagos en serie:', T.mX, y)
+    y += 3
+    _autoTable(doc, {
+      startY: y,
+      head: [['#', 'FECHA DE PAGO', 'MONTO']],
+      body: data.pagos.map((p, i) => [i + 1, p.fecha || '—', `$${parseFloat(p.monto || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${moneda}`]),
+      columnStyles: {
+        0: { cellWidth: 12, halign: 'center' },
+        1: { cellWidth: 60, halign: 'center' },
+        2: { halign: 'right', fontStyle: 'bold' },
+      },
+    })
+    y = doc.lastAutoTable.finalY + 4
+  }
 
   // Interés moratorio
   doc.setFontSize(8.5)
   doc.setFont(T.font, 'italic')
   doc.setTextColor(...T.textMid)
-  y = _para(doc, 'En caso de incumplimiento, este pagaré causará un interés moratorio del 2.5% mensual sobre el saldo insoluto, contado a partir de la fecha de vencimiento.', y)
+  y = _para(doc, `En caso de incumplimiento en el pago, este pagaré causará un interés moratorio del ${interesMoratorio}% mensual sobre el saldo insoluto, contado a partir de la fecha de vencimiento o requerimiento de pago.`, y)
   y += 8
 
   // Firmas
   _firma(doc, T.mX + 10,      y + 18, 70, `${data.benefName || blank}\nBeneficiario`)
   _firma(doc, W - T.mX - 80,  y + 18, 70, `${data.deudorName || blank}\nQuien suscribe`)
 
-  _footer(doc, 1, 1, emisor)
+  _footerTramite(doc, emisor, 'Original para el beneficiario - Copia para el suscriptor')
   doc.save(`pagare-${folio}.pdf`)
 }
 
@@ -951,21 +1022,11 @@ export function pdfRecibo(data, emisor = {}) {
   const folio = _folio()
   const blank = '________________________'
   const monto = parseFloat(data.monto || 0)
+  const moneda = data.moneda || 'MXN'
   const montoLetra = numToLetras(monto)
 
-  let y = _headerDoc(doc, 'Recibo', folio)
-  y += 8
-
-  doc.setFontSize(16)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.textInk)
-  doc.text('RECIBO DE DINERO', W / 2, y, { align: 'center' })
-  y += 10
-
-  doc.setDrawColor(...T.textDim)
-  doc.setLineWidth(0.3)
-  doc.line(T.mX, y, W - T.mX, y)
-  y += 8
+  let y = _headerTramite(doc, 'RECIBO DE DINERO', folio)
+  y += 4
 
   // Lugar y fecha
   doc.setFontSize(9.5)
@@ -975,13 +1036,30 @@ export function pdfRecibo(data, emisor = {}) {
   y += 10
 
   // Cuerpo
-  const cuerpo = `Por medio del presente, hago constar que he recibido de: ${data.entreganteName || blank}, la cantidad de:`
+  const entRfc = data.entreganteRfc ? ` (RFC: ${data.entreganteRfc})` : ''
+  const cuerpo = `Por medio del presente, hago constar que he recibido de: ${data.entreganteName || blank}${entRfc}, la cantidad de:`
   y = _para(doc, cuerpo, y)
   y += 2
 
-  // Caja de monto
-  y = _amountBox(doc, y, monto, montoLetra)
-  y += 2
+  // Caja de monto con moneda
+  doc.setFillColor(245, 248, 252)
+  doc.setDrawColor(...T.cyan)
+  doc.setLineWidth(0.5)
+  doc.roundedRect(T.mX, y, W - T.mX * 2, 22, 2, 2, 'FD')
+  doc.setFontSize(14)
+  doc.setFont(T.font, 'bold')
+  doc.setTextColor(...T.textInk)
+  doc.text(`$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${moneda}`, T.mX + 6, y + 10)
+  doc.setFontSize(7.5)
+  doc.setFont(T.font, 'italic')
+  doc.setTextColor(...T.textMid)
+  doc.text(doc.splitTextToSize(montoLetra, W - T.mX * 2 - 12), T.mX + 6, y + 17)
+  if (data.tc && moneda !== 'MXN') {
+    doc.setFontSize(7)
+    doc.setFont(T.font, 'normal')
+    doc.text(`TC: ${data.tc}`, W - T.mX - 4, y + 10, { align: 'right' })
+  }
+  y += 26
 
   const concepto = `Por concepto de: ${data.concepto || blank}.`
   y = _para(doc, concepto, y)
@@ -996,6 +1074,14 @@ export function pdfRecibo(data, emisor = {}) {
     y += 2
   }
 
+  // Datos del receptor (con RFC si hay)
+  const recRfc = data.receptorRfc ? ` · RFC: ${data.receptorRfc}` : ''
+  doc.setFontSize(8.5)
+  doc.setFont(T.font, 'normal')
+  doc.setTextColor(...T.textMid)
+  doc.text(`Receptor: ${data.receptorName || blank}${recRfc}`, T.mX, y + 3)
+  y += 8
+
   y = _para(doc, 'Este recibo se extiende para los fines legales a que haya lugar, en la fecha antes mencionada.', y + 2)
   y += 20
 
@@ -1003,7 +1089,7 @@ export function pdfRecibo(data, emisor = {}) {
   _firma(doc, T.mX + 10,     y, 70, `${data.receptorName || blank}\n(Quien recibe)`)
   _firma(doc, W - T.mX - 80, y, 70, `${data.entreganteName || blank}\n(Quien entrega)`)
 
-  _footer(doc, 1, 1, emisor)
+  _footerTramite(doc, emisor, null)
   doc.save(`recibo-dinero-${folio}.pdf`)
 }
 
@@ -1014,24 +1100,15 @@ export function pdfCartaPoder(data, emisor = {}) {
   const folio = _folio()
   const blank = '________________________'
 
-  let y = _headerDoc(doc, 'Carta Poder', folio)
-  y += 8
+  let y = _headerTramite(doc, 'C A R T A   P O D E R', folio)
+  y += 2
 
-  doc.setFontSize(16)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.textInk)
-  doc.text('C A R T A   P O D E R', W / 2, y, { align: 'center' })
-  y += 4
+  // Destinatario
   doc.setFontSize(8.5)
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textMid)
   const dest = `Para: ${data.destinatario || '[Institución o destinatario]'}`
-  doc.text(dest, W / 2, y + 4, { align: 'center' })
-  y += 12
-
-  doc.setDrawColor(...T.textDim)
-  doc.setLineWidth(0.3)
-  doc.line(T.mX, y, W - T.mX, y)
+  doc.text(dest, W / 2, y, { align: 'center' })
   y += 8
 
   // Lugar y fecha
@@ -1039,41 +1116,62 @@ export function pdfCartaPoder(data, emisor = {}) {
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textInk)
   doc.text(`${data.lugar || blank}, a ${data.fecha || blank}.`, W - T.mX, y, { align: 'right' })
-  y += 10
+  y += 8
 
   // Cuerpo legal
-  const cuerpo1 = `Yo, ${data.otorgName || blank}, identificado con ${data.otorgIdType || 'INE/IFE'}: ${data.otorgIdNum || blank}, con domicilio en ${data.otorgDom || blank};`
+  const otorgCurp = data.otorgCurp ? `, CURP: ${data.otorgCurp}` : ''
+  const otorgRfc  = data.otorgRfc  ? `, RFC: ${data.otorgRfc}`   : ''
+  const cuerpo1 = `Yo, ${data.otorgName || blank}${otorgCurp}${otorgRfc}, identificado con ${data.otorgIdType || 'INE/IFE'}: ${data.otorgIdNum || blank}, con domicilio en ${data.otorgDom || blank}, declaro ser mayor de edad y estar en plenas facultades físicas y mentales.`
   y = _para(doc, cuerpo1, y)
   y += 5
 
-  const cuerpo2 = `Por medio de la presente, otorgo PODER GENERAL AMPLIO Y SUFICIENTE en términos de lo dispuesto por el Código Civil Federal, a favor de: ${data.apodName || blank}, identificado con ${data.apodIdType || 'INE/IFE'}: ${data.apodIdNum || blank}, con domicilio en ${data.apodDom || blank};`
+  const apodCurp = data.apodCurp ? `, CURP: ${data.apodCurp}` : ''
+  const apodRfc  = data.apodRfc  ? `, RFC: ${data.apodRfc}`   : ''
+  const cuerpo2 = `Por medio de la presente, otorgo PODER ESPECIAL, AMPLIO Y SUFICIENTE a favor de: ${data.apodName || blank}${apodCurp}${apodRfc}, identificado con ${data.apodIdType || 'INE/IFE'}: ${data.apodIdNum || blank}, con domicilio en ${data.apodDom || blank};`
   y = _para(doc, cuerpo2, y)
   y += 5
 
-  const facultades = data.facultades
-    || `Para que en mi nombre y representación pueda realizar los siguientes actos: ${data.actos || '[Describir los actos autorizados]'}. Asimismo, con facultades para firmar documentos, gestionar trámites y realizar todas las acciones necesarias para el cumplimiento del objeto de este poder.`
-  y = _para(doc, facultades, y)
-  y += 5
+  // Facultades
+  let facultadesText = ''
+  if (data.facultadesList && data.facultadesList.length > 0) {
+    facultadesText = `Para que en mi nombre y representación pueda: ${data.facultadesList.join(', ')}.`
+  } else {
+    facultadesText = `Para que en mi nombre y representación pueda realizar los siguientes actos: ${data.actos || '[Describir los actos autorizados]'}.`
+  }
+  if (data.facultadesExtra) facultadesText += ` ${data.facultadesExtra}`
+  y = _para(doc, facultadesText, y)
+  y += 4
 
+  y = _para(doc, 'Para presentar o contestar demandas, ofrecer pruebas, interponer recursos, promover amparo, suscribir convenios y ejecutar todos los actos necesarios para el cumplimiento de este poder.', y)
+  y += 4
   y = _para(doc, 'El presente poder tendrá vigencia mientras no sea revocado expresamente por el otorgante mediante escrito dirigido al apoderado.', y)
-  y += 5
+  y += 4
   y = _para(doc, 'Se otorga la presente carta poder para todos los efectos legales a que haya lugar.', y)
-  y += 18
+  y += 14
 
-  // Firmas
-  _firma(doc, T.mX + 8,      y, 75, `${data.otorgName || blank}\nOtorgante`)
-  _firma(doc, W - T.mX - 83, y, 75, `${data.apodName || blank}\nApoderado`)
+  // Firmas principales
+  _firma(doc, T.mX + 8,      y, 75, `${data.otorgName || blank}\nOtorgó el poder`)
+  _firma(doc, W - T.mX - 83, y, 75, `${data.apodName || blank}\nAceptó el poder`)
 
   // Testigos
-  y += 20
-  doc.setFontSize(8)
-  doc.setTextColor(...T.textMid)
+  y += 24
+  doc.setFontSize(8.5)
+  doc.setFont(T.font, 'bold')
+  doc.setTextColor(...T.textInk)
   doc.text('TESTIGOS:', T.mX, y)
   y += 12
-  _firma(doc, T.mX + 8,          y, 65, 'Testigo 1\n_________________________')
-  _firma(doc, (W / 2) + 4,        y, 65, 'Testigo 2\n_________________________')
+  const t1Label = data.testigo1Name ? `${data.testigo1Name}\nTestigo 1` : 'Testigo 1\n_________________________'
+  const t2Label = data.testigo2Name ? `${data.testigo2Name}\nTestigo 2` : 'Testigo 2\n_________________________'
+  _firma(doc, T.mX + 8,    y, 65, t1Label)
+  _firma(doc, W / 2 + 4,   y, 65, t2Label)
 
-  _footer(doc, 1, 1, emisor)
+  y += 20
+  doc.setFontSize(7.5)
+  doc.setFont(T.font, 'italic')
+  doc.setTextColor(...T.textMid)
+  doc.text('El presente documento debe entregarse con copias de las identificaciones.', T.mX, y)
+
+  _footerTramite(doc, emisor, 'Original para el apoderado - Copia para el otorgante')
   doc.save(`carta-poder-${folio}.pdf`)
 }
 
@@ -1085,45 +1183,60 @@ export function pdfContratoServicios(data, emisor = {}) {
   const blank = '________________________'
   const monto = parseFloat(data.monto || 0)
 
-  let y = _headerDoc(doc, 'Contrato de Servicios', folio)
-  y += 8
+  let y = _headerTramite(doc, 'CONTRATO DE PRESTACIÓN DE SERVICIOS', folio)
+  y += 2
 
-  doc.setFontSize(14)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.textInk)
-  doc.text('CONTRATO DE PRESTACIÓN DE SERVICIOS', W / 2, y, { align: 'center' })
-  y += 4
   doc.setFontSize(8)
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textMid)
-  doc.text('Contrato de naturaleza civil', W / 2, y + 3, { align: 'center' })
-  y += 10
+  doc.text('Contrato de naturaleza civil', W / 2, y, { align: 'center' })
+  y += 8
 
-  doc.setDrawColor(...T.textDim)
-  doc.setLineWidth(0.3)
-  doc.line(T.mX, y, W - T.mX, y)
-  y += 6
+  // Bloque de partes
+  doc.setFontSize(9)
+  doc.setFont(T.font, 'bold')
+  doc.setTextColor(...T.textInk)
+  doc.text('PARTES:', T.mX, y)
+  y += 5
+  doc.setFont(T.font, 'normal')
+  doc.setFontSize(9)
+  const prestRfc   = data.prestadorRfc  ? `, RFC: ${data.prestadorRfc}`  : ''
+  const prestNac   = data.prestadorNac  ? `, nacido el ${data.prestadorNac}` : ''
+  const prestDom   = data.prestadorDom  ? `, con domicilio en ${data.prestadorDom}` : ''
+  const clienteRfc = data.clienteRfc    ? `, RFC: ${data.clienteRfc}`    : ''
+  const clienteNac = data.clienteNac    ? `, nacido el ${data.clienteNac}` : ''
+  const clienteDom = data.clienteDom    ? `, con domicilio en ${data.clienteDom}` : ''
+  y = _para(doc, `- EL PRESTADOR: ${data.prestadorName || blank}${prestRfc}${prestNac}${prestDom}.`, y, T.mX + 2)
+  y += 2
+  y = _para(doc, `- EL CLIENTE: ${data.clienteName || blank}${clienteRfc}${clienteNac}${clienteDom}.`, y, T.mX + 2)
+  y += 5
 
   doc.setFontSize(9.5)
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textInk)
-  const intro = `En ${data.lugar || blank}, a ${data.fecha || blank}, comparecen por una parte ${data.clienteName || blank} (en adelante "EL CLIENTE"), y por otra parte ${data.prestadorName || blank} (en adelante "EL PRESTADOR DE SERVICIOS"), quienes convienen en celebrar el presente Contrato de Prestación de Servicios, al tenor de las siguientes cláusulas:`
+  const proyectoPart = data.proyectoNombre ? ` (Proyecto: "${data.proyectoNombre}")` : ''
+  const intro = `En ${data.lugar || blank}, a ${data.fecha || blank}, ambas partes convienen en celebrar el presente Contrato de Prestación de Servicios${proyectoPart}, al tenor de las siguientes cláusulas:`
   y = _para(doc, intro, y)
   y += 5
 
   const clausulas = [
-    { titulo: 'PRIMERA. OBJETO DEL CONTRATO', texto: `EL PRESTADOR DE SERVICIOS se obliga a prestar al CLIENTE los siguientes servicios: ${data.servicios || blank}.` },
-    { titulo: 'SEGUNDA. VIGENCIA', texto: `El presente contrato tendrá vigencia a partir del ${data.fechaInicio || blank} y hasta el ${data.fechaFin || blank}, salvo acuerdo previo de las partes.` },
-    { titulo: 'TERCERA. HONORARIOS', texto: `EL CLIENTE se obliga a pagar al PRESTADOR la cantidad de ${fmt$(monto)} MXN (${numToLetras(monto)}) por la prestación de los servicios convenidos. Forma de pago: ${data.formaPago || blank}.` },
-    { titulo: 'CUARTA. CONFIDENCIALIDAD', texto: `Ambas partes se obligan a mantener en estricta confidencialidad toda la información que sea intercambiada con motivo del presente contrato.` },
-    { titulo: 'QUINTA. RESCISIÓN', texto: `Cualquiera de las partes podrá rescindir el presente contrato mediante aviso previo de ${data.diasAviso || '15'} días naturales.` },
-    { titulo: 'SEXTA. JURISDICCIÓN', texto: `Para la interpretación y cumplimiento del presente contrato, las partes se someten a la jurisdicción de los tribunales de ${data.jurisdiccion || data.lugar || blank}.` },
+    { titulo: 'PRIMERA — OBJETO', texto: `EL PRESTADOR DE SERVICIOS se compromete a proporcionar al CLIENTE los siguientes servicios: ${data.servicios || blank}.${data.proyectoNombre ? ` Proyecto de referencia: "${data.proyectoNombre}".` : ''}` },
+    { titulo: 'SEGUNDA — HONORARIOS', texto: `EL CLIENTE se obliga a pagar al PRESTADOR la cantidad de $${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN (${numToLetras(monto)}) por los servicios convenidos. Forma de pago: ${data.formaPago || blank}.` },
+    { titulo: 'TERCERA — VIGENCIA', texto: `El presente contrato tendrá vigencia a partir del ${data.fechaInicio || blank} y hasta el ${data.fechaFin || blank}, renovable con previo aviso de ${data.diasAviso || '15'} días naturales.` },
+    { titulo: 'CUARTA — CONFIDENCIALIDAD', texto: `Las partes acuerdan mantener estricta confidencialidad sobre toda la información intercambiada con motivo del presente contrato, aun después de su terminación.` },
+    { titulo: 'QUINTA — RESCISIÓN', texto: `Cualquiera de las partes podrá rescindir el presente contrato mediante aviso previo de ${data.diasAviso || '15'} días naturales por escrito. El incumplimiento de alguna de las partes dará derecho a la otra a rescindir de manera inmediata.` },
+    { titulo: 'SEXTA — JURISDICCIÓN', texto: `Para la interpretación y cumplimiento del presente contrato, las partes se someten expresamente a la jurisdicción y competencia de los tribunales de ${data.jurisdiccion || data.lugar || blank}, renunciando a cualquier fuero que por razón de su domicilio presente o futuro pudiere corresponderles.` },
   ]
+
+  // Cláusulas adicionales
+  if (data.clausulasExtra) {
+    clausulas.push({ titulo: 'SÉPTIMA — DISPOSICIONES ADICIONALES', texto: data.clausulasExtra })
+  }
 
   for (const c of clausulas) {
     if (y > 240) {
       doc.addPage()
-      y = _headerDoc(doc, 'Contrato de Servicios', folio)
+      y = _headerTramite(doc, 'CONTRATO DE PRESTACIÓN DE SERVICIOS', folio)
       y += 4
     }
     doc.setFontSize(9)
@@ -1137,18 +1250,18 @@ export function pdfContratoServicios(data, emisor = {}) {
     y += 4
   }
 
-  y += 10
+  y += 8
   if (y > 250) { doc.addPage(); y = 20 }
   doc.setFontSize(9)
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textInk)
-  doc.text('Leído el presente instrumento por ambas partes, lo firman en señal de conformidad:', T.mX, y)
+  doc.text('Leído el presente instrumento por ambas partes, lo firman de conformidad.', T.mX, y)
   y += 14
 
   _firma(doc, T.mX + 8,      y, 75, `${data.clienteName || blank}\nEL CLIENTE`)
   _firma(doc, W - T.mX - 83, y, 75, `${data.prestadorName || blank}\nEL PRESTADOR DE SERVICIOS`)
 
-  _footer(doc, 1, doc.internal.getNumberOfPages(), emisor)
+  _footerTramite(doc, emisor, null)
   doc.save(`contrato-servicios-${folio}.pdf`)
 }
 
@@ -1160,14 +1273,21 @@ export function pdfNotaVenta(data, emisor = {}) {
   const blank = '________________________'
   const items = data.items || []
 
-  let y = _headerDoc(doc, 'Nota de Venta', folio)
-  y += 6
+  let y = _headerTramite(doc, 'NOTA DE VENTA', folio)
+  y += 4
 
   // ── Encabezado del emisor ──
+  const boxW = (W - T.mX * 2) / 2 - 3
   doc.setFillColor(245, 248, 252)
   doc.setDrawColor(...T.textDim)
   doc.setLineWidth(0.2)
-  doc.roundedRect(T.mX, y, (W - T.mX * 2) / 2 - 3, 28, 2, 2, 'FD')
+  doc.roundedRect(T.mX, y, boxW, 28, 2, 2, 'FD')
+  // Borde top cyan corto
+  doc.setDrawColor(...T.cyan)
+  doc.setLineWidth(0.8)
+  doc.line(T.mX, y, T.mX + 20, y)
+  doc.setDrawColor(...T.textDim)
+  doc.setLineWidth(0.2)
   doc.setFontSize(11)
   doc.setFont(T.font, 'bold')
   doc.setTextColor(...T.textInk)
@@ -1175,25 +1295,30 @@ export function pdfNotaVenta(data, emisor = {}) {
   doc.setFontSize(7.5)
   doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textMid)
-  if (emisor.rfc || data.emisorRfc)  doc.text(`RFC: ${emisor.rfc || data.emisorRfc}`, T.mX + 4, y + 15)
+  if (emisor.rfc || data.emisorRfc)  doc.text(`RFC: ${emisor.rfc || data.emisorRfc}`, T.mX + 4, y + 14)
   if (emisor.direccion || data.emisorDir) {
-    const dLines = doc.splitTextToSize(emisor.direccion || data.emisorDir, (W - T.mX * 2) / 2 - 12)
-    doc.text(dLines[0], T.mX + 4, y + 21)
+    const dLines = doc.splitTextToSize(emisor.direccion || data.emisorDir, boxW - 10)
+    doc.text(dLines[0], T.mX + 4, y + 20)
   }
 
   // ── Datos del cliente ──
   const cX = W / 2 + 1
-  doc.roundedRect(cX, y, (W - T.mX * 2) / 2 - 3, 28, 2, 2, 'FD')
-  doc.setFontSize(8)
+  doc.setFillColor(245, 248, 252)
+  doc.setDrawColor(...T.textDim)
+  doc.setLineWidth(0.2)
+  doc.roundedRect(cX, y, boxW, 28, 2, 2, 'FD')
+  doc.setFontSize(7)
+  doc.setFont(T.font, 'bold')
+  doc.setTextColor(...T.textMid)
+  doc.text('CLIENTE:', cX + 4, y + 7)
+  doc.setFontSize(9.5)
   doc.setFont(T.font, 'bold')
   doc.setTextColor(...T.textInk)
-  doc.text('Cliente:', cX + 4, y + 8)
-  doc.setFont(T.font, 'normal')
-  doc.setFontSize(8.5)
-  doc.text(data.clienteName || blank, cX + 4, y + 15)
+  doc.text(doc.splitTextToSize(data.clienteName || blank, boxW - 10)[0], cX + 4, y + 14)
   doc.setFontSize(7.5)
+  doc.setFont(T.font, 'normal')
   doc.setTextColor(...T.textMid)
-  doc.text(`Fecha: ${data.fecha || new Date().toLocaleDateString('es-MX')}`, cX + 4, y + 22)
+  doc.text(`Fecha: ${data.fecha || new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}`, cX + 4, y + 21)
   doc.text(`Folio: ${folio}`, cX + 4, y + 27)
   y += 34
 
@@ -1223,38 +1348,55 @@ export function pdfNotaVenta(data, emisor = {}) {
         4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
       },
       didDrawPage: (d) => {
-        _headerDoc(doc, 'Nota de Venta', folio)
-        _footer(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
+        _headerTramite(doc, 'NOTA DE VENTA', folio)
+        _footerTramite(doc, emisor, null)
       },
     })
     y = doc.lastAutoTable.finalY + 4
 
-    // Totales
-    const totX = W - T.mX - 58
-    doc.setFillColor(245, 248, 252)
+    // Totales — diseño mejorado
+    const totX = W - T.mX - 64
+    const totH = data.conIva ? 36 : 22
+    doc.setFillColor(248, 250, 253)
     doc.setDrawColor(...T.textDim)
     doc.setLineWidth(0.2)
-    doc.roundedRect(totX, y, 58, data.conIva ? 28 : 16, 2, 2, 'FD')
-    doc.setFontSize(8.5)
+    doc.roundedRect(totX, y, 64, totH, 2, 2, 'FD')
+    // Borde top cyan
+    doc.setDrawColor(...T.cyan)
+    doc.setLineWidth(0.8)
+    doc.line(totX, y, totX + 20, y)
+    doc.setDrawColor(...T.textDim)
+    doc.setLineWidth(0.2)
+
+    doc.setFontSize(8)
     doc.setFont(T.font, 'normal')
     doc.setTextColor(...T.textMid)
-    doc.text('Subtotal:', totX + 4, y + 7)
+    doc.text('Subtotal:', totX + 4, y + 8)
     doc.setTextColor(...T.textInk)
-    doc.text(fmt$(subtotal), totX + 54, y + 7, { align: 'right' })
+    doc.setFont(T.font, 'bold')
+    doc.text(fmt$(subtotal), totX + 60, y + 8, { align: 'right' })
+
     if (data.conIva) {
+      doc.setFont(T.font, 'normal')
       doc.setTextColor(...T.textMid)
-      doc.text('IVA (16%):', totX + 4, y + 14)
+      doc.text('IVA (16%):', totX + 4, y + 16)
+      doc.setFont(T.font, 'bold')
       doc.setTextColor(...T.textInk)
-      doc.text(fmt$(iva), totX + 54, y + 14, { align: 'right' })
+      doc.text(fmt$(iva), totX + 60, y + 16, { align: 'right' })
+      // Separador interno
+      doc.setDrawColor(...T.textDim)
+      doc.setLineWidth(0.15)
+      doc.line(totX + 4, y + 20, totX + 60, y + 20)
     }
-    const totalY = data.conIva ? y + 23 : y + 13
-    doc.setFontSize(10)
+
+    const totalRowY = data.conIva ? y + 29 : y + 17
+    doc.setFontSize(10.5)
     doc.setFont(T.font, 'bold')
     doc.setTextColor(...T.cyan)
-    doc.text('TOTAL:', totX + 4, totalY)
+    doc.text('TOTAL:', totX + 4, totalRowY)
     doc.setTextColor(...T.textInk)
-    doc.text(fmt$(total), totX + 54, totalY, { align: 'right' })
-    y += (data.conIva ? 34 : 22)
+    doc.text(fmt$(total), totX + 60, totalRowY, { align: 'right' })
+    y += totH + 6
 
     // Monto en letras
     doc.setFontSize(7.5)
@@ -1273,7 +1415,7 @@ export function pdfNotaVenta(data, emisor = {}) {
     y += 10
   }
 
-  _footer(doc, 1, doc.internal.getNumberOfPages(), emisor)
+  _footerTramite(doc, emisor, null)
   doc.save(`nota-venta-${folio}.pdf`)
 }
 
