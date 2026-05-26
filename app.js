@@ -19,7 +19,7 @@ Chart.register(
 // ── PDF Reports Engine ────────────────────────────────────────────────────────
 import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensual,
          pdfProrroga, pdfPagare, pdfRecibo, pdfCartaPoder,
-         pdfContratoServicios, pdfNotaVenta } from './src/pdf-reports.js'
+         pdfContratoServicios, pdfNotaVenta, pdfPresupuesto } from './src/pdf-reports.js'
 
 // ── Lucide Icons ──────────────────────────────────────────────────────────────
 import {
@@ -189,6 +189,12 @@ function getEmisor() {
   const s = JSON.parse(localStorage.getItem('nexus_settings') || '{}')
   return { nombre: s.emisor_nombre || '', rfc: s.emisor_rfc || '', direccion: s.emisor_dir || '' }
 }
+// ── Documentos module state ───────────────────────────────────────────────────
+let _docTab          = 'presupuestos'   // 'presupuestos' | 'notas'
+let _docStatusFilter = 'all'            // 'all' | 'borrador' | 'enviado' | 'aprobado' | 'cancelado'
+let _docEditId       = null             // ID del doc en edición (null = nuevo)
+let _docEditType     = 'doc_presupuesto' // tipo del doc en edición
+
 let currentFilter = null
 let activeTypeFilter = null   // null = todos los tipos
 let feedGrouped = false       // agrupar por tipo en el feed
@@ -2179,6 +2185,7 @@ const VIEW_RENDER_MAP = {
   agenda:       ()      => renderAgenda(allNodes),
   proyectos:    ()      => renderProyectos(),
   movimientos:  ()      => renderMovimientos(),
+  documentos:   ()      => renderDocumentos(),
 }
 
 function renderAll() {
@@ -19026,6 +19033,463 @@ window._mvSelectAccount = (idx) => {
   const b = document.getElementById('mv-banco'); if (b) b.value = acc.banco || ''
   const cl = document.getElementById('mv-clabe'); if (cl) cl.value = acc.clabe || ''
   document.getElementById('mv-acct-picker')?.remove()
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MÓDULO DOCUMENTOS — Presupuestos + Notas de Venta
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const _DOC_STATUS = {
+  borrador:  { label: 'Borrador',  color: '#94a3b8', bg: 'rgba(148,163,184,0.10)', border: 'rgba(148,163,184,0.28)' },
+  enviado:   { label: 'Enviado',   color: '#60a5fa', bg: 'rgba(96,165,250,0.10)',  border: 'rgba(96,165,250,0.28)'  },
+  aprobado:  { label: 'Aprobado',  color: '#4ade80', bg: 'rgba(74,222,128,0.10)',  border: 'rgba(74,222,128,0.28)'  },
+  cancelado: { label: 'Cancelado', color: '#f87171', bg: 'rgba(248,113,113,0.10)', border: 'rgba(248,113,113,0.28)' },
+}
+
+function _docFmt(n) {
+  return '$' + Math.abs(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function _docFolio(prefix) {
+  const d  = new Date()
+  const ds = d.toISOString().slice(0, 10).replace(/-/g, '')
+  return `${prefix}-${ds}-${Math.floor(Math.random() * 9000 + 1000)}`
+}
+
+// ── Render vista principal ─────────────────────────────────────────────────────
+function renderDocumentos() {
+  const root = document.getElementById('view-documentos')
+  if (!root) return
+
+  const presupuestos = allNodes.filter(n => n.type === 'doc_presupuesto')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const notas = allNodes.filter(n => n.type === 'doc_nota')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+
+  const tabDocs = _docTab === 'presupuestos' ? presupuestos : notas
+  const filtered = _docStatusFilter === 'all'
+    ? tabDocs
+    : tabDocs.filter(d => (d.metadata?.estado || 'borrador') === _docStatusFilter)
+
+  const totalP   = presupuestos.reduce((s, d) => s + (d.metadata?.total || 0), 0)
+  const totalN   = notas.reduce((s, d) => s + (d.metadata?.total || 0), 0)
+  const aprobP   = presupuestos.filter(d => d.metadata?.estado === 'aprobado').length
+  const convRate = presupuestos.length ? Math.round(aprobP / presupuestos.length * 100) : 0
+  const isPresupTab = _docTab === 'presupuestos'
+
+  root.innerHTML = `
+    <div style="padding:0 24px 32px;">
+
+      <!-- Header -->
+      <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+        <h1 class="view-title">📄 Documentos</h1>
+        <button onclick="openDocModal('${isPresupTab ? 'doc_presupuesto' : 'doc_nota'}')"
+          style="display:flex;align-items:center;gap:7px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:10px;padding:9px 16px;cursor:pointer;font-size:13px;font-weight:700;">
+          + Nuevo ${isPresupTab ? 'Presupuesto' : 'Nota de Venta'}
+        </button>
+      </div>
+
+      <!-- KPIs -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;">
+        <div style="background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.18);border-radius:12px;padding:14px 16px;">
+          <div style="font-size:10px;font-weight:700;color:#60a5fa;letter-spacing:.07em;margin-bottom:5px;">PRESUPUESTOS</div>
+          <div style="font-size:24px;font-weight:900;color:#fff;font-family:monospace;">${presupuestos.length}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${_docFmt(totalP)}</div>
+        </div>
+        <div style="background:rgba(74,222,128,0.06);border:1px solid rgba(74,222,128,0.18);border-radius:12px;padding:14px 16px;">
+          <div style="font-size:10px;font-weight:700;color:#4ade80;letter-spacing:.07em;margin-bottom:5px;">APROBADOS</div>
+          <div style="font-size:24px;font-weight:900;color:#fff;font-family:monospace;">${aprobP}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${convRate}% conversión</div>
+        </div>
+        <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.18);border-radius:12px;padding:14px 16px;">
+          <div style="font-size:10px;font-weight:700;color:#a78bfa;letter-spacing:.07em;margin-bottom:5px;">NOTAS VENTA</div>
+          <div style="font-size:24px;font-weight:900;color:#fff;font-family:monospace;">${notas.length}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${_docFmt(totalN)}</div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:4px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:4px;margin-bottom:16px;width:fit-content;">
+        <button onclick="switchDocTab('presupuestos')"
+          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;${_docTab==='presupuestos'?'background:rgba(34,211,238,0.12);color:#22d3ee;border:1px solid rgba(34,211,238,0.25);':'background:transparent;color:#6b7280;border:1px solid transparent;'}">
+          📋 Presupuestos
+        </button>
+        <button onclick="switchDocTab('notas')"
+          style="padding:7px 18px;border-radius:9px;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;${_docTab==='notas'?'background:rgba(34,211,238,0.12);color:#22d3ee;border:1px solid rgba(34,211,238,0.25);':'background:transparent;color:#6b7280;border:1px solid transparent;'}">
+          🧾 Notas de Venta
+        </button>
+      </div>
+
+      <!-- Status filters -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
+        ${[['all','Todos','#94a3b8'],...Object.entries(_DOC_STATUS).map(([k,v])=>[k,v.label,v.color])].map(([s, lbl, col]) => {
+          const active = _docStatusFilter === s
+          return `<button onclick="setDocStatusFilter('${s}')" style="padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;border:1px solid ${active ? col : 'rgba(255,255,255,0.1)'};background:${active ? col + '18' : 'transparent'};color:${active ? col : '#6b7280'};">${lbl}</button>`
+        }).join('')}
+      </div>
+
+      <!-- Lista de documentos -->
+      ${filtered.length === 0 ? `
+        <div style="text-align:center;padding:56px 24px;color:#6b7280;">
+          <div style="font-size:44px;margin-bottom:14px;">${isPresupTab ? '📋' : '🧾'}</div>
+          <div style="font-size:15px;font-weight:700;color:#94a3b8;margin-bottom:6px;">Sin ${isPresupTab ? 'presupuestos' : 'notas de venta'}${_docStatusFilter !== 'all' ? ' en este estado' : ''}</div>
+          <div style="font-size:12px;">Crea tu primer documento con el botón de arriba.</div>
+        </div>
+      ` : `<div style="display:flex;flex-direction:column;gap:10px;">${filtered.map(d => _renderDocCard(d)).join('')}</div>`}
+
+    </div>`
+}
+
+function _renderDocCard(d) {
+  const m       = d.metadata || {}
+  const estado  = m.estado || 'borrador'
+  const scfg    = _DOC_STATUS[estado] || _DOC_STATUS.borrador
+  const isP     = d.type === 'doc_presupuesto'
+  const fechaStr = m.fecha
+    ? new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' })
+    : '—'
+  const itemCount = (m.items || []).length
+
+  return `
+  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:16px;transition:border-color .2s;" onmouseover="this.style.borderColor='rgba(34,211,238,0.22)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
+    <div style="font-size:28px;flex-shrink:0;">${isP ? '📋' : '🧾'}</div>
+    <div style="flex:1;min-width:0;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+        <span style="font-size:12px;font-weight:800;color:#fff;font-family:monospace;">${esc(m.folio || '—')}</span>
+        <span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:10px;background:${scfg.bg};border:1px solid ${scfg.border};color:${scfg.color};">${scfg.label}</span>
+      </div>
+      <div style="font-size:13px;color:#e2e8f0;font-weight:600;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.clienteName || 'Sin cliente')}</div>
+      ${m.concepto ? `<div style="font-size:11px;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.concepto)}</div>` : ''}
+      <div style="font-size:10px;color:#6b7280;margin-top:3px;">${fechaStr}${isP && m.validezDias ? ` · Válido ${m.validezDias} días` : ''} · ${itemCount} concepto${itemCount !== 1 ? 's' : ''}</div>
+    </div>
+    <div style="text-align:right;flex-shrink:0;margin-right:8px;">
+      <div style="font-size:19px;font-weight:900;color:#22d3ee;font-family:monospace;">${_docFmt(m.total || 0)}</div>
+      ${m.conIva ? '<div style="font-size:10px;color:#94a3b8;">incl. IVA 16%</div>' : ''}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+      <button onclick="exportDocPDF('${d.id}')" title="Exportar PDF" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(34,211,238,0.22);background:rgba(34,211,238,0.07);color:#22d3ee;cursor:pointer;font-size:15px;">📥</button>
+      <button onclick="openDocModal('${d.type}','${d.id}')" title="Editar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#94a3b8;cursor:pointer;font-size:14px;">✏️</button>
+      <button onclick="deleteDoc('${d.id}')" title="Eliminar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(248,113,113,0.22);background:rgba(248,113,113,0.04);color:#f87171;cursor:pointer;font-size:14px;">🗑</button>
+    </div>
+    ${isP ? `
+    <div style="flex-shrink:0;">
+      <select onchange="changeDocStatus('${d.id}',this.value)"
+        style="font-size:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:5px 8px;color:#94a3b8;cursor:pointer;outline:none;">
+        ${Object.entries(_DOC_STATUS).map(([k,v]) => `<option value="${k}" ${estado===k?'selected':''}>${v.label}</option>`).join('')}
+      </select>
+    </div>` : ''}
+  </div>`
+}
+
+// ── Controles de vista ─────────────────────────────────────────────────────────
+window.switchDocTab = function(tab) {
+  _docTab = tab
+  _docStatusFilter = 'all'
+  renderDocumentos()
+}
+
+window.setDocStatusFilter = function(s) {
+  _docStatusFilter = s
+  renderDocumentos()
+}
+
+// ── Modal — abrir ──────────────────────────────────────────────────────────────
+window.openDocModal = function(type, id = null) {
+  _docEditId   = id
+  _docEditType = type
+  const isP    = type === 'doc_presupuesto'
+  const modal  = document.getElementById('doc-modal')
+  if (!modal) return
+
+  // Cargar datos si es edición
+  let existing = id ? (allNodes.find(n => n.id === id)?.metadata || {}) : {}
+
+  // Contactos para el select
+  const contactOpts = allNodes
+    .filter(n => n.type === 'contact')
+    .sort((a, b) => (a.metadata?.name || a.content || '').localeCompare(b.metadata?.name || b.content || ''))
+    .map(c => {
+      const name = esc(c.metadata?.name || c.content || c.id)
+      const sel  = existing.clienteId === c.id ? 'selected' : ''
+      return `<option value="${c.id}" ${sel}>${name}</option>`
+    }).join('')
+
+  // Items
+  const items = existing.items || []
+
+  // Build form
+  document.getElementById('doc-modal-icon').textContent  = isP ? '📋' : '🧾'
+  document.getElementById('doc-modal-title').textContent = id
+    ? (isP ? 'Editar Presupuesto' : 'Editar Nota de Venta')
+    : (isP ? 'Nuevo Presupuesto'  : 'Nueva Nota de Venta')
+
+  const today = new Date().toISOString().slice(0, 10)
+  document.getElementById('doc-modal-body').innerHTML = `
+    <!-- Fila 1: fecha + cliente -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
+      <div>
+        <label class="modal-label">Fecha</label>
+        <input type="date" id="doc-fecha" class="modal-input" value="${existing.fecha || today}"/>
+      </div>
+      <div>
+        <label class="modal-label">Cliente</label>
+        <select id="doc-cliente-sel" class="modal-input" onchange="docModalFillCliente()">
+          <option value="">— Seleccionar contacto —</option>${contactOpts}
+        </select>
+        <input type="text" id="doc-cliente-name" class="modal-input" style="margin-top:6px;"
+          placeholder="O escribe el nombre del cliente" value="${esc(existing.clienteName || '')}"/>
+      </div>
+    </div>
+
+    ${isP ? `
+    <!-- Fila 2: concepto + validez (solo presupuesto) -->
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:16px;">
+      <div>
+        <label class="modal-label">Concepto / descripción general</label>
+        <input type="text" id="doc-concepto" class="modal-input"
+          placeholder="Ej. Desarrollo de sitio web, consultoría fiscal…"
+          value="${esc(existing.concepto || '')}"/>
+      </div>
+      <div>
+        <label class="modal-label">Validez (días)</label>
+        <input type="number" id="doc-validez" class="modal-input" min="1" max="365"
+          placeholder="30" value="${existing.validezDias || 30}"/>
+      </div>
+    </div>` : ''}
+
+    <!-- Items -->
+    <div style="margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:10px;">📦 Conceptos / Productos</div>
+      <div style="display:grid;grid-template-columns:3fr 80px 100px 100px;gap:6px;padding:0 2px;margin-bottom:4px;">
+        <span style="font-size:10px;color:#6b7280;">Descripción</span>
+        <span style="font-size:10px;color:#6b7280;text-align:center;">Cant.</span>
+        <span style="font-size:10px;color:#6b7280;text-align:right;">Precio unit.</span>
+        <span style="font-size:10px;color:#6b7280;text-align:right;">Subtotal</span>
+      </div>
+      <div id="doc-items-wrap">
+        ${Array.from({length: 10}, (_, i) => {
+          const it = items[i] || {}
+          return `<div style="display:grid;grid-template-columns:3fr 80px 100px 100px;gap:6px;margin-bottom:6px;">
+            <input type="text" id="doc-desc-${i+1}" class="modal-input" style="font-size:12px;"
+              placeholder="Concepto ${i+1}" value="${esc(it.descripcion || '')}"/>
+            <input type="number" id="doc-cant-${i+1}" class="modal-input" style="font-size:12px;text-align:center;"
+              placeholder="1" min="0" step="0.01" value="${it.cantidad || ''}" oninput="docCalcTotales()"/>
+            <input type="number" id="doc-precio-${i+1}" class="modal-input" style="font-size:12px;text-align:right;"
+              placeholder="0.00" min="0" step="0.01" value="${it.precio || ''}" oninput="docCalcTotales()"/>
+            <input type="text" id="doc-sub-${i+1}" class="modal-input" style="font-size:12px;text-align:right;background:rgba(34,211,238,0.04);color:#22d3ee;"
+              placeholder="0.00" readonly value="${it.subtotal ? it.subtotal.toFixed(2) : ''}"/>
+          </div>`
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- IVA + notas -->
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:start;margin-bottom:16px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-main);white-space:nowrap;padding-top:2px;">
+        <input type="checkbox" id="doc-con-iva" style="width:16px;height:16px;accent-color:#22d3ee;"
+          ${existing.conIva ? 'checked' : ''} onchange="docCalcTotales()"/>
+        Incluir IVA (16%)
+      </label>
+      <div>
+        <label class="modal-label">Notas / observaciones</label>
+        <textarea id="doc-notas" class="modal-input" rows="2" style="resize:none;"
+          placeholder="Condiciones de pago, garantías, plazo de entrega…">${esc(existing.notas || '')}</textarea>
+      </div>
+    </div>
+
+    <!-- Totales preview -->
+    <div id="doc-totales-preview" style="display:flex;justify-content:flex-end;margin-top:8px;">
+      <div style="background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.15);border-radius:12px;padding:12px 18px;min-width:200px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:5px;">
+          <span>Subtotal</span><span id="doc-prev-sub">$0.00</span>
+        </div>
+        <div id="doc-prev-iva-row" style="display:none;justify-content:space-between;font-size:12px;color:#94a3b8;margin-bottom:5px;">
+          <span>IVA 16%</span><span id="doc-prev-iva">$0.00</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:15px;font-weight:900;color:#22d3ee;">
+          <span>TOTAL</span><span id="doc-prev-total">$0.00</span>
+        </div>
+      </div>
+    </div>
+  `
+
+  modal.classList.remove('hidden')
+  docCalcTotales()
+}
+
+window.closeDocModal = function() {
+  document.getElementById('doc-modal')?.classList.add('hidden')
+  _docEditId = null
+}
+
+// Auto-fill nombre desde selector de contacto
+window.docModalFillCliente = function() {
+  const sel = document.getElementById('doc-cliente-sel')
+  if (!sel?.value) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (!c) return
+  const nameEl = document.getElementById('doc-cliente-name')
+  if (nameEl && !nameEl.value) nameEl.value = c.metadata?.name || c.content || ''
+}
+
+// Calcular subtotales + totales en tiempo real
+window.docCalcTotales = function() {
+  let subtotal = 0
+  for (let i = 1; i <= 10; i++) {
+    const cant   = parseFloat(document.getElementById(`doc-cant-${i}`)?.value   || '0') || 0
+    const precio = parseFloat(document.getElementById(`doc-precio-${i}`)?.value || '0') || 0
+    const sub    = cant * precio
+    const subEl  = document.getElementById(`doc-sub-${i}`)
+    if (subEl) subEl.value = sub > 0 ? sub.toFixed(2) : ''
+    subtotal += sub
+  }
+  const conIva = document.getElementById('doc-con-iva')?.checked
+  const iva    = conIva ? subtotal * 0.16 : 0
+  const total  = subtotal + iva
+
+  const fmtP = n => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const subEl = document.getElementById('doc-prev-sub');   if (subEl)   subEl.textContent = fmtP(subtotal)
+  const ivaEl = document.getElementById('doc-prev-iva');   if (ivaEl)   ivaEl.textContent = fmtP(iva)
+  const totEl = document.getElementById('doc-prev-total'); if (totEl)   totEl.textContent = fmtP(total)
+  const ivaRow = document.getElementById('doc-prev-iva-row')
+  if (ivaRow) ivaRow.style.display = conIva ? 'flex' : 'none'
+}
+
+// ── Recopilar datos del modal ──────────────────────────────────────────────────
+function _collectDocData() {
+  const isP       = _docEditType === 'doc_presupuesto'
+  const fechaRaw  = document.getElementById('doc-fecha')?.value || ''
+  const fechaFmt  = fechaRaw
+    ? new Date(fechaRaw + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
+    : new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
+  const clienteSel  = document.getElementById('doc-cliente-sel')?.value || ''
+  const clienteNode = clienteSel ? allNodes.find(n => n.id === clienteSel) : null
+  const clienteName = document.getElementById('doc-cliente-name')?.value?.trim()
+    || (clienteNode ? (clienteNode.metadata?.name || clienteNode.content) : '') || ''
+  const conIva    = document.getElementById('doc-con-iva')?.checked || false
+  const notas     = document.getElementById('doc-notas')?.value?.trim() || ''
+  const concepto  = isP ? (document.getElementById('doc-concepto')?.value?.trim() || '') : ''
+  const validezDias = isP ? parseInt(document.getElementById('doc-validez')?.value || '30') : 0
+
+  const items = []
+  for (let i = 1; i <= 10; i++) {
+    const desc   = document.getElementById(`doc-desc-${i}`)?.value?.trim() || ''
+    const cant   = parseFloat(document.getElementById(`doc-cant-${i}`)?.value   || '0') || 0
+    const precio = parseFloat(document.getElementById(`doc-precio-${i}`)?.value || '0') || 0
+    if (desc) items.push({ descripcion: desc, cantidad: cant || 1, precio, subtotal: (cant || 1) * precio })
+  }
+
+  const subtotal = items.reduce((s, it) => s + it.subtotal, 0)
+  const iva      = conIva ? subtotal * 0.16 : 0
+  const total    = subtotal + iva
+
+  // Folio: reutilizar si edición, generar si nuevo
+  let folio = _docEditId
+    ? (allNodes.find(n => n.id === _docEditId)?.metadata?.folio || _docFolio(isP ? 'PRS' : 'NV'))
+    : _docFolio(isP ? 'PRS' : 'NV')
+
+  return { folio, fecha: fechaRaw, fechaFmt, clienteId: clienteSel, clienteName, conIva, notas,
+           concepto, validezDias, items, subtotal, iva, total }
+}
+
+// ── Guardar ────────────────────────────────────────────────────────────────────
+window.saveDoc = function() { _persistDoc(false) }
+window.saveDocAndExport = function() { _persistDoc(true) }
+
+async function _persistDoc(exportPdf = false) {
+  const data    = _collectDocData()
+  if (!data.items.length) { showToast('⚠️ Agrega al menos un concepto'); return }
+
+  const isP     = _docEditType === 'doc_presupuesto'
+  const emisor  = getEmisor()
+  const estado  = _docEditId
+    ? (allNodes.find(n => n.id === _docEditId)?.metadata?.estado || 'borrador')
+    : 'borrador'
+
+  const meta = {
+    folio: data.folio, fecha: data.fecha, fechaFmt: data.fechaFmt,
+    clienteId: data.clienteId, clienteName: data.clienteName,
+    concepto: data.concepto, validezDias: data.validezDias,
+    items: data.items, subtotal: data.subtotal, iva: data.iva, total: data.total,
+    conIva: data.conIva, notas: data.notas, estado,
+    is_doc: true,
+  }
+  const content = `${isP ? 'Presupuesto' : 'Nota de Venta'} ${data.folio} — ${data.clienteName || 'Sin cliente'} — $${data.total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
+
+  if (_docEditId) {
+    // Actualizar nodo existente
+    const node = allNodes.find(n => n.id === _docEditId)
+    if (node) {
+      node.content  = content
+      node.metadata = { ...node.metadata, ...meta }
+      if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+        await supabase.from('nodes').update({ content, metadata: node.metadata }).eq('id', _docEditId)
+      }
+    }
+    showToast('✅ Documento actualizado')
+  } else {
+    // Nuevo nodo
+    const node = {
+      id: 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      content, type: _docEditType, metadata: meta,
+      created_at: new Date().toISOString(),
+    }
+    allNodes.push(node)
+    _docEditId = node.id   // para exportPdf referencia
+    if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+      await supabase.from('nodes').insert([{ id: node.id, owner_id: currentUser?.id, content, type: node.type, metadata: meta }])
+    }
+    showToast('✅ Documento guardado')
+  }
+
+  if (exportPdf) {
+    const pdfData = { ...data, folio: meta.folio }
+    if (isP) pdfPresupuesto(pdfData, emisor)
+    else     pdfNotaVenta(pdfData, emisor)
+  }
+
+  closeDocModal()
+  renderDocumentos()
+}
+
+// ── Exportar PDF desde la lista ────────────────────────────────────────────────
+window.exportDocPDF = function(id) {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) { showToast('Documento no encontrado'); return }
+  const m      = node.metadata || {}
+  const emisor = getEmisor()
+  const data   = {
+    folio: m.folio, fecha: m.fechaFmt || m.fecha, clienteName: m.clienteName,
+    concepto: m.concepto, validezDias: m.validezDias,
+    items: m.items || [], conIva: m.conIva, notas: m.notas,
+  }
+  if (node.type === 'doc_presupuesto') pdfPresupuesto(data, emisor)
+  else                                  pdfNotaVenta(data, emisor)
+  showToast('📥 PDF generado')
+}
+
+// ── Cambiar estado ─────────────────────────────────────────────────────────────
+window.changeDocStatus = async function(id, estado) {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) return
+  node.metadata = { ...node.metadata, estado }
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', id)
+  }
+  renderDocumentos()
+  showToast(`Estado → ${_DOC_STATUS[estado]?.label || estado}`)
+}
+
+// ── Eliminar ───────────────────────────────────────────────────────────────────
+window.deleteDoc = async function(id) {
+  if (!confirm('¿Eliminar este documento? Esta acción no se puede deshacer.')) return
+  const idx = allNodes.findIndex(n => n.id === id)
+  if (idx !== -1) allNodes.splice(idx, 1)
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').delete().eq('id', id)
+  }
+  renderDocumentos()
+  showToast('🗑 Documento eliminado')
 }
 
 // ── Boot hook ─────────────────────────────────────────────────────────────────
