@@ -2041,6 +2041,23 @@
             </div>
           </div>
           <div class="settings-group">
+            <label class="settings-label">🏢 Datos del Emisor <span style="font-size:10px;font-weight:500;color:var(--text-dim);">(pie de página en PDFs)</span></label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;">
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">Nombre / Razón Social</span>
+                <input type="text" id="pref-emisor-nombre" class="input-field" placeholder="Tu nombre o empresa" />
+              </div>
+              <div>
+                <span style="font-size:11px;color:var(--text-muted);">RFC</span>
+                <input type="text" id="pref-emisor-rfc" class="input-field" placeholder="XXXXX000000XXX" style="text-transform:uppercase;" />
+              </div>
+            </div>
+            <div>
+              <span style="font-size:11px;color:var(--text-muted);">Domicilio Fiscal</span>
+              <input type="text" id="pref-emisor-dir" class="input-field" placeholder="Calle, Colonia, Ciudad, Estado" />
+            </div>
+          </div>
+          <div class="settings-group">
             <label class="settings-label">Localización &amp; Clima</label>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;">
               <div>
@@ -2919,6 +2936,20 @@
               <div style="font-size:28px;text-align:center;margin-bottom:10px;">✍️</div>
               <h3 style="font-size:14px;font-weight:800;color:#fff;text-align:center;margin-bottom:6px;">Carta Poder</h3>
               <p style="font-size:11px;color:var(--text-muted);text-align:center;">Carta poder con texto legal completo, identificaciones y firmas.</p>
+            </div>
+
+            <!-- Contrato de Servicios -->
+            <div class="settings-card" style="cursor:pointer;" onclick="openDocGen('contrato')">
+              <div style="font-size:28px;text-align:center;margin-bottom:10px;">🤝</div>
+              <h3 style="font-size:14px;font-weight:800;color:#fff;text-align:center;margin-bottom:6px;">Contrato de Servicios</h3>
+              <p style="font-size:11px;color:var(--text-muted);text-align:center;">Contrato de prestación de servicios con 6 cláusulas legales completas.</p>
+            </div>
+
+            <!-- Nota de Venta -->
+            <div class="settings-card" style="cursor:pointer;" onclick="openDocGen('nota_venta')">
+              <div style="font-size:28px;text-align:center;margin-bottom:10px;">🧾</div>
+              <h3 style="font-size:14px;font-weight:800;color:#fff;text-align:center;margin-bottom:6px;">Nota de Venta</h3>
+              <p style="font-size:11px;color:var(--text-muted);text-align:center;">Nota de venta con tabla de conceptos, cantidades, precios y totales con IVA.</p>
             </div>
 
           </div>

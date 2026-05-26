@@ -17,7 +17,9 @@ Chart.register(
 )
 
 // ── PDF Reports Engine ────────────────────────────────────────────────────────
-import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensual } from './src/pdf-reports.js'
+import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensual,
+         pdfProrroga, pdfPagare, pdfRecibo, pdfCartaPoder,
+         pdfContratoServicios, pdfNotaVenta } from './src/pdf-reports.js'
 
 // ── Lucide Icons ──────────────────────────────────────────────────────────────
 import {
@@ -181,6 +183,12 @@ let activeView    = 'feed'
 let calDate       = new Date()
 let editingCardId = null
 let userPrefs     = { tempUnit: 'C' }
+
+/** Reads emisor (fiscal) data from localStorage settings for PDF footers */
+function getEmisor() {
+  const s = JSON.parse(localStorage.getItem('nexus_settings') || '{}')
+  return { nombre: s.emisor_nombre || '', rfc: s.emisor_rfc || '', direccion: s.emisor_dir || '' }
+}
 let currentFilter = null
 let activeTypeFilter = null   // null = todos los tipos
 let feedGrouped = false       // agrupar por tipo en el feed
@@ -7410,10 +7418,12 @@ window.openDocGen = function(type) {
   const contactOpts = contacts.map(c => '<option value="' + esc(c.id) + '">' + esc(c.metadata?.name || c.content) + '</option>').join('')
 
   const titles = {
-    prorroga: '📋 Prórroga de Pago de Renta',
-    pagare: '📜 Pagaré',
-    recibo: '💰 Recibo de Dinero',
-    cartapoder: '✍️ Carta Poder'
+    prorroga:   '📋 Prórroga de Pago de Renta',
+    pagare:     '📜 Pagaré',
+    recibo:     '💰 Recibo de Dinero',
+    cartapoder: '✍️ Carta Poder',
+    contrato:   '🤝 Contrato de Servicios',
+    nota_venta: '🧾 Nota de Venta',
   }
   if (title) title.textContent = titles[type] || 'Documento'
 
@@ -7568,6 +7578,75 @@ window.openDocGen = function(type) {
 
     h += '<div class="modal-field"><label class="modal-label">Razón / Facultades otorgadas</label>'
     h += '<textarea id="dg-razon" class="modal-input" rows="3" placeholder="Describa la razón específica del poder (cobrar, firmar, representar, etc.). El texto legal completo se incluirá automáticamente."></textarea></div>'
+
+  } else if (type === 'contrato') {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+
+    h += '<div style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:8px;">🏢 PRESTADOR DE SERVICIOS</div>'
+    h += '<select id="dg-prestador" class="modal-input" onchange="docGenFillContrato(\'prestador\')"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-prestador-name" class="modal-input" placeholder="Nombre / razón social" style="margin-top:6px;"/>'
+    h += '</div>'
+
+    h += '<div style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;">👤 CLIENTE</div>'
+    h += '<select id="dg-cliente" class="modal-input" onchange="docGenFillContrato(\'cliente\')"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-cliente-name" class="modal-input" placeholder="Nombre / razón social" style="margin-top:6px;"/>'
+    h += '</div>'
+
+    h += '</div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Lugar de firma</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, BCS"/></div>'
+    h += '<div><label class="modal-label">Fecha del contrato</label><input type="date" id="dg-fecha" class="modal-input" value="' + new Date().toISOString().slice(0, 10) + '"/></div>'
+    h += '</div>'
+
+    h += '<div class="modal-field"><label class="modal-label">Descripción de servicios</label>'
+    h += '<textarea id="dg-servicios" class="modal-input" rows="3" placeholder="Describir detalladamente los servicios a prestar..."></textarea></div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Inicio de vigencia</label><input type="date" id="dg-fecha-inicio" class="modal-input"/></div>'
+    h += '<div><label class="modal-label">Fin de vigencia</label><input type="date" id="dg-fecha-fin" class="modal-input"/></div>'
+    h += '<div><label class="modal-label">Días aviso rescisión</label><input type="number" id="dg-dias-aviso" class="modal-input" value="15" min="1"/></div>'
+    h += '</div>'
+
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Honorarios (MXN)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div><label class="modal-label">Forma de pago</label><input type="text" id="dg-forma-pago" class="modal-input" placeholder="Ej: Transferencia mensual"/></div>'
+    h += '</div>'
+
+    h += '<div class="modal-field"><label class="modal-label">Ciudad para jurisdicción de tribunal</label>'
+    h += '<input type="text" id="dg-jurisdiccion" class="modal-input" placeholder="Ej: La Paz, BCS"/></div>'
+
+  } else if (type === 'nota_venta') {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Fecha</label><input type="date" id="dg-fecha" class="modal-input" value="' + new Date().toISOString().slice(0, 10) + '"/></div>'
+    h += '<div>'
+    h += '<label class="modal-label">Cliente</label>'
+    h += '<select id="dg-cliente" class="modal-input" onchange="docGenFillNotaVenta()"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-cliente-name" class="modal-input" placeholder="Nombre del cliente" style="margin-top:6px;"/>'
+    h += '</div>'
+    h += '</div>'
+
+    h += '<div style="margin-bottom:14px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:var(--accent-cyan);margin-bottom:8px;">📦 Conceptos / Productos</div>'
+    h += '<div style="display:grid;grid-template-columns:3fr 1fr 1fr;gap:6px;margin-bottom:4px;padding:0 2px;">'
+    h += '<span style="font-size:10px;color:var(--text-dim);">Descripción</span>'
+    h += '<span style="font-size:10px;color:var(--text-dim);">Cant.</span>'
+    h += '<span style="font-size:10px;color:var(--text-dim);">Precio Unit.</span>'
+    h += '</div>'
+    for (let i = 1; i <= 5; i++) {
+      h += '<div style="display:grid;grid-template-columns:3fr 1fr 1fr;gap:6px;margin-bottom:6px;">'
+      h += '<input type="text" id="dg-item-desc-' + i + '" class="modal-input" style="font-size:12px;" placeholder="Concepto ' + i + '"/>'
+      h += '<input type="number" id="dg-item-cant-' + i + '" class="modal-input" style="font-size:12px;" placeholder="1" min="0" step="0.01"/>'
+      h += '<input type="number" id="dg-item-precio-' + i + '" class="modal-input" style="font-size:12px;" placeholder="0.00" min="0" step="0.01"/>'
+      h += '</div>'
+    }
+    h += '</div>'
+
+    h += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-main);">'
+    h += '<input type="checkbox" id="dg-con-iva" style="width:16px;height:16px;accent-color:var(--accent-cyan);"/> Incluir IVA (16%)'
+    h += '</label>'
   }
 
   body.innerHTML = h
@@ -7680,6 +7759,26 @@ window.docGenFillCartaPoder = function(role) {
   }
 }
 
+window.docGenFillContrato = function(role) {
+  const selId = role === 'prestador' ? 'dg-prestador' : 'dg-cliente'
+  const nameId = role === 'prestador' ? 'dg-prestador-name' : 'dg-cliente-name'
+  const selEl  = document.getElementById(selId)
+  if (!selEl?.value) return
+  const c = allNodes.find(n => n.id === selEl.value)
+  if (!c) return
+  const nameEl = document.getElementById(nameId)
+  if (nameEl && !nameEl.value) nameEl.value = c.metadata?.name || c.content || ''
+}
+
+window.docGenFillNotaVenta = function() {
+  const selEl = document.getElementById('dg-cliente')
+  if (!selEl?.value) return
+  const c = allNodes.find(n => n.id === selEl.value)
+  if (!c) return
+  const nameEl = document.getElementById('dg-cliente-name')
+  if (nameEl && !nameEl.value) nameEl.value = c.metadata?.name || c.content || ''
+}
+
 // ── PDF CSS shared by export & reprint ───────────────────────────
 const _docGenCSS = `
   body { font-family: Georgia, 'Times New Roman', serif; max-width: 700px; margin: 0 auto; padding: 40px 50px; color: #1a1a1a; font-size: 13px; line-height: 1.9; }
@@ -7694,44 +7793,33 @@ const _docGenCSS = `
 
 // ── Export / generate PDF ────────────────────────────────────────
 window.docGenExport = function() {
-  const type = _docGenType
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+  const type  = _docGenType
   const blank = '________________________'
+  const emisor = getEmisor()
 
-  let docHtml = '', docTitle = '', parteAName = '', parteBName = '', parteAId = '', parteBId = ''
+  let data = {}, docTitle = '', parteAName = '', parteBName = '', parteAId = '', parteBId = ''
 
   if (type === 'prorroga') {
-    const arrName = document.getElementById('dg-arrendatario-name')?.value || blank
-    const arrDom  = document.getElementById('dg-arrendatario-dom')?.value || blank
-    const dia     = document.getElementById('dg-dia')?.value || '___'
-    const mes     = document.getElementById('dg-mes')?.value || '____________'
-    const anio    = document.getElementById('dg-anio')?.value || '20__'
-    const mesRenta = document.getElementById('dg-mes-renta')?.value || '[mes]'
-    const motivo  = document.getElementById('dg-motivo')?.value || '[Describir brevemente el motivo]'
-    const diaPago = document.getElementById('dg-dia-pago')?.value || '[_]'
-    const mesPago = document.getElementById('dg-mes-pago')?.value || '[mes]'
-    const anioPago = document.getElementById('dg-anio-pago')?.value || '20__'
-    const arrendadorName  = document.getElementById('dg-arrendador-name')?.value || blank
+    const arrendadorName  = document.getElementById('dg-arrendador-name')?.value  || blank
     const arrendadorCargo = document.getElementById('dg-arrendador-cargo')?.value || 'Arrendador del inmueble'
-
+    const arrName = document.getElementById('dg-arrendatario-name')?.value || blank
+    const arrDom  = document.getElementById('dg-arrendatario-dom')?.value  || blank
+    const dia     = document.getElementById('dg-dia')?.value     || '___'
+    const mes     = document.getElementById('dg-mes')?.value     || '____________'
+    const anio    = document.getElementById('dg-anio')?.value    || '20__'
+    const mesRenta = document.getElementById('dg-mes-renta')?.value || '[mes]'
+    const motivo  = document.getElementById('dg-motivo')?.value  || '[Describir brevemente el motivo]'
+    const diaPago = document.getElementById('dg-dia-pago')?.value  || '__'
+    const mesPago = document.getElementById('dg-mes-pago')?.value  || '[mes]'
+    const anioPago = document.getElementById('dg-anio-pago')?.value || '20__'
     parteAName = arrendadorName
     parteBName = arrName
-    parteAId = document.getElementById('dg-arrendador')?.value || ''
-    parteBId = document.getElementById('dg-arrendatario')?.value || ''
-    docTitle = 'Prórroga de Pago de Renta'
-
-    docHtml = '<h1>FORMATO DE SOLICITUD DE PRÓRROGA DE PAGO DE RENTA</h1>'
-    docHtml += '<p style="text-align:right;">' + esc(dia) + ' de ' + esc(mes) + ' de ' + esc(anio) + '.</p>'
-    docHtml += '<p><strong>Para:</strong><br/>' + esc(arrendadorName) + '<br/>' + esc(arrendadorCargo) + '</p>'
-    docHtml += '<p><strong>Asunto:</strong><br/>Solicitud formal de prórroga de pago de renta</p>'
-    docHtml += '<p>Yo, <strong>' + esc(arrName) + '</strong>, con domicilio en <strong>' + esc(arrDom) + '</strong>, en calidad de arrendatario del espacio en renta mencionado, comparezco para solicitar de manera respetuosa una prórroga en el pago correspondiente al mes de <strong>' + esc(mesRenta) + '</strong> del año ' + esc(anio) + '.</p>'
-    docHtml += '<p><strong>Motivo de la prórroga:</strong><br/>' + esc(motivo) + '</p>'
-    docHtml += '<p><strong>Fecha estimada de pago:</strong><br/>Me comprometo a realizar el pago completo, incluyendo el importe de la renta y, en su caso, la penalización correspondiente, a más tardar el día <strong>' + esc(diaPago) + '</strong> de <strong>' + esc(mesPago) + '</strong> de ' + esc(anioPago) + '.</p>'
-    docHtml += '<p>Manifiesto que esta solicitud no exime mi responsabilidad contractual ni elimina el cobro de la multa por morosidad si aplica conforme a las condiciones establecidas.</p>'
-    docHtml += '<p>Agradezco de antemano su comprensión.</p>'
-    docHtml += '<p>Atentamente,</p>'
-    docHtml += '<br/><div class="sig"><strong>' + esc(arrName) + '</strong><br/>Arrendatario</div>'
-    docHtml += '<p style="font-size:10px;margin-top:20px;color:#555;border-top:1px solid #ddd;padding-top:8px;"><strong>Copia para el interesado original a:</strong> ' + esc(arrendadorName) + '</p>'
+    parteAId   = document.getElementById('dg-arrendador')?.value    || ''
+    parteBId   = document.getElementById('dg-arrendatario')?.value  || ''
+    docTitle   = 'Prórroga de Pago de Renta'
+    data = { arrendadorName, arrendadorCargo, arrendatarioName: arrName, arrendatarioDom: arrDom,
+             dia, mes, anio, mesRenta, motivo, diaPago, mesPago, anioPago }
+    pdfProrroga(data, emisor)
 
   } else if (type === 'pagare') {
     const benefSel  = document.getElementById('dg-beneficiario')?.value || ''
@@ -7740,143 +7828,68 @@ window.docGenExport = function() {
     const cDeudor = deudorSel ? allNodes.find(n => n.id === deudorSel) : null
     const benefName  = cBenef  ? (cBenef.metadata?.name  || cBenef.content)  : blank
     const deudorName = cDeudor ? (cDeudor.metadata?.name || cDeudor.content) : blank
-
     const lugar      = document.getElementById('dg-lugar')?.value || blank
     const monto      = parseFloat(document.getElementById('dg-monto')?.value || '0')
     const fechaPagoR = document.getElementById('dg-fecha-pago')?.value || ''
-    const fechaPago  = fechaPagoR ? new Date(fechaPagoR + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : blank
-    const fechaLarga = new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
-    const concepto   = document.getElementById('dg-concepto')?.value || blank
-    const metodo     = document.getElementById('dg-metodo')?.value || blank
+    const fechaPago  = fechaPagoR
+      ? new Date(fechaPagoR + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : blank
+    const concepto   = document.getElementById('dg-concepto')?.value   || blank
+    const metodo     = document.getElementById('dg-metodo')?.value     || blank
     const referencia = document.getElementById('dg-referencia')?.value || blank
-
-    const bCurp  = document.getElementById('dg-benef-curp')?.value  || cBenef?.metadata?.curp      || ''
-    const bRfc   = document.getElementById('dg-benef-rfc')?.value   || cBenef?.metadata?.rfc       || ''
-    const bElect = document.getElementById('dg-benef-electoral')?.value || cBenef?.metadata?.electoral || ''
-    const bPasap = document.getElementById('dg-benef-pasaporte')?.value || cBenef?.metadata?.pasaporte || ''
-    const bDir   = document.getElementById('dg-benef-dir')?.value   || [cBenef?.metadata?.address_street, cBenef?.metadata?.city, cBenef?.metadata?.address_state].filter(Boolean).join(', ')
-    const dCurp  = document.getElementById('dg-deudor-curp')?.value || cDeudor?.metadata?.curp      || ''
-    const dRfc   = document.getElementById('dg-deudor-rfc')?.value  || cDeudor?.metadata?.rfc       || ''
-    const dElect = document.getElementById('dg-deudor-electoral')?.value || cDeudor?.metadata?.electoral || ''
-    const dPasap = document.getElementById('dg-deudor-pasaporte')?.value || cDeudor?.metadata?.pasaporte || ''
-    const dDir   = document.getElementById('dg-deudor-dir')?.value  || [cDeudor?.metadata?.address_street, cDeudor?.metadata?.city, cDeudor?.metadata?.address_state].filter(Boolean).join(', ')
-
-    const montoFmt   = monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })
-    const montoLetra = _numberToWords(monto) + ' pesos 00/100 M.N.'
-
-    parteAName = benefName
-    parteBName = deudorName
-    parteAId   = benefSel
-    parteBId   = deudorSel
+    const bCurp  = document.getElementById('dg-benef-curp')?.value        || cBenef?.metadata?.curp      || ''
+    const bRfc   = document.getElementById('dg-benef-rfc')?.value         || cBenef?.metadata?.rfc       || ''
+    const bElect = document.getElementById('dg-benef-electoral')?.value   || cBenef?.metadata?.electoral || ''
+    const bPasap = document.getElementById('dg-benef-pasaporte')?.value   || cBenef?.metadata?.pasaporte || ''
+    const bDir   = document.getElementById('dg-benef-dir')?.value
+      || [cBenef?.metadata?.address_street, cBenef?.metadata?.city, cBenef?.metadata?.address_state].filter(Boolean).join(', ')
+    const dCurp  = document.getElementById('dg-deudor-curp')?.value       || cDeudor?.metadata?.curp      || ''
+    const dRfc   = document.getElementById('dg-deudor-rfc')?.value        || cDeudor?.metadata?.rfc       || ''
+    const dElect = document.getElementById('dg-deudor-electoral')?.value  || cDeudor?.metadata?.electoral || ''
+    const dPasap = document.getElementById('dg-deudor-pasaporte')?.value  || cDeudor?.metadata?.pasaporte || ''
+    const dDir   = document.getElementById('dg-deudor-dir')?.value
+      || [cDeudor?.metadata?.address_street, cDeudor?.metadata?.city, cDeudor?.metadata?.address_state].filter(Boolean).join(', ')
+    parteAName = benefName; parteBName = deudorName; parteAId = benefSel; parteBId = deudorSel
     docTitle   = 'Pagaré'
-
-    function _pgIdBlock(title, name, curp, rfc, elect, pasap, dir, ineFrente, ineReverso) {
-      let b = '<div class="id-block">'
-      b += '<h3>Datos del ' + title + '</h3>'
-      b += '<table style="width:100%;border-collapse:collapse;"><tr>'
-      b += '<td style="width:50%;vertical-align:top;padding-right:20px;">'
-      b += '<strong>Nombre:</strong><br/>' + esc(name) + '<br/><br/>'
-      b += '<strong>Identificación:</strong><br/>'
-      b += 'CURP: ' + esc(curp || blank) + '<br/>'
-      b += 'RFC: ' + esc(rfc || blank) + '<br/>'
-      b += 'CLAVE ELECTORAL: ' + esc(elect || blank) + '<br/>'
-      b += 'N. PASAPORTE: ' + esc(pasap || blank) + '<br/>'
-      b += 'DIRECCIÓN: ' + esc(dir || blank) + '<br/>'
-      b += '</td><td style="width:50%;vertical-align:top;">'
-      b += '<div style="display:flex;gap:16px;margin-bottom:12px;">'
-      if (ineFrente) {
-        b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID FRENTE:</div><img src="' + esc(ineFrente) + '" style="width:140px;height:100px;object-fit:cover;border:1px solid #ccc;border-radius:4px;"/></div>'
-      } else {
-        b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID FRENTE:</div><div class="id-box">ID Frente</div></div>'
-      }
-      if (ineReverso) {
-        b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID REVERSO:</div><img src="' + esc(ineReverso) + '" style="width:140px;height:100px;object-fit:cover;border:1px solid #ccc;border-radius:4px;"/></div>'
-      } else {
-        b += '<div><div style="font-size:10px;font-weight:700;margin-bottom:4px;">ID REVERSO:</div><div class="id-box">ID Reverso</div></div>'
-      }
-      b += '</div>'
-      b += '<div style="margin-top:20px;"><strong>FIRMA:</strong><br/><div style="width:200px;height:60px;border-bottom:1px solid #333;margin-top:30px;"></div></div>'
-      b += '</td></tr></table></div>'
-      return b
-    }
-
-    // Helper to extract ID photo URLs from contact documents
-    const getIdPhotos = (c) => {
-      const docs = c?.metadata?.documents || []
-      return {
-        frente:  docs.find(d => d.docType==='ine_front'||d.docType==='id_front')?.url  || '',
-        reverso: docs.find(d => d.docType==='ine_back' ||d.docType==='id_back')?.url   || ''
-      }
-    }
-    const bPhotos = getIdPhotos(cBenef)
-    const dPhotos = getIdPhotos(cDeudor)
-
-    docHtml = '<h1 style="letter-spacing:12px;">P  A  G  A  R  É</h1>'
-    docHtml += '<p style="text-align:right;font-size:12px;">Bueno por: <strong>$' + esc(montoFmt) + ' MXN</strong></p>'
-    docHtml += '<p><strong>Lugar:</strong> ' + esc(lugar) + '<br/><strong>Fecha:</strong> ' + esc(fechaLarga) + '</p>'
-    docHtml += '<p>A través de este pagaré yo <strong>' + esc(deudorName) + '</strong>, me comprometo a pagar incondicionalmente la cantidad de <strong>$' + esc(montoFmt) + '</strong> (' + esc(montoLetra) + ') a la orden de <strong>' + esc(benefName) + '</strong> por concepto de <strong>' + esc(concepto) + '</strong>. Dicha cantidad será liquidada el día <strong>' + esc(fechaPago) + '</strong>.</p>'
-    docHtml += '<p><strong>El pago será realizado a través de los siguientes medios:</strong><br/>Método de Pago: <strong>' + esc(metodo) + '</strong><br/>Referencia de Pago: <strong>' + esc(referencia) + '</strong></p>'
-    docHtml += _pgIdBlock('BENEFICIARIO', benefName, bCurp, bRfc, bElect, bPasap, bDir, bPhotos.frente, bPhotos.reverso)
-    docHtml += _pgIdBlock('EMISOR', deudorName, dCurp, dRfc, dElect, dPasap, dDir, dPhotos.frente, dPhotos.reverso)
-    docHtml += '<p style="margin-top:20px;font-size:12px;font-style:italic;">En caso de incumplimiento en el pago, este pagaré causará un interés moratorio del <strong>2.5% mensual</strong> sobre el saldo insoluto, contado a partir de la fecha de vencimiento o requerimiento de pago.</p>'
-    docHtml += '<p style="text-align:center;font-size:10px;margin-top:20px;color:#666;">Original — Beneficiario (' + esc(benefName) + ') &nbsp;|&nbsp; Copia — Quien suscribe (' + esc(deudorName) + ')</p>'
-    docHtml += '<p style="font-size:10px;margin-top:8px;color:#555;border-top:1px solid #ddd;padding-top:8px;"><strong>Copia para el interesado original a:</strong> ' + esc(deudorName) + '</p>'
+    data = { benefName, deudorName, lugar,
+             fechaLarga: new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }),
+             monto, fechaPago, concepto, metodo, referencia,
+             bCurp, bRfc, bElect, bPasap, bDir,
+             dCurp, dRfc, dElect, dPasap, dDir }
+    pdfPagare(data, emisor)
 
   } else if (type === 'recibo') {
-    const receptorSel   = document.getElementById('dg-receptor')?.value || ''
+    const receptorSel   = document.getElementById('dg-receptor')?.value   || ''
     const entreganteSel = document.getElementById('dg-entregante')?.value || ''
     const receptorName  = document.getElementById('dg-receptor-name')?.value
       || (receptorSel ? (allNodes.find(n => n.id === receptorSel)?.metadata?.name || allNodes.find(n => n.id === receptorSel)?.content) : '') || blank
     const entreganteName = document.getElementById('dg-entregante-name')?.value
       || (entreganteSel ? (allNodes.find(n => n.id === entreganteSel)?.metadata?.name || allNodes.find(n => n.id === entreganteSel)?.content) : '') || blank
-
     const lugar    = document.getElementById('dg-lugar')?.value || blank
     const fechaRaw = document.getElementById('dg-fecha')?.value || ''
     const monto    = parseFloat(document.getElementById('dg-monto')?.value || '0')
     const concepto = document.getElementById('dg-concepto')?.value || blank
-
     let fechaFmt = blank
     if (fechaRaw) {
       const d = new Date(fechaRaw + 'T12:00:00')
-      fechaFmt = d.getDate() + ' de ' + d.toLocaleDateString('es-MX', { month: 'long' }) + ' de ' + d.getFullYear()
+      fechaFmt = `${d.getDate()} de ${d.toLocaleDateString('es-MX', { month:'long' })} de ${d.getFullYear()}`
     }
-
-    const montoFmt   = monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })
-    const mlRaw      = _numberToWords(monto)
-    const montoLetra = mlRaw.charAt(0).toUpperCase() + mlRaw.slice(1) + ' pesos 00/100 M.N.'
-
-    parteAName = receptorName
-    parteBName = entreganteName
-    parteAId   = receptorSel
-    parteBId   = entreganteSel
-    docTitle   = 'Recibo de Dinero'
-
-    // Read selected account/method from the form
-    let receptorBankInfo = ''
-    const cuentaVal = document.getElementById('dg-receptor-cuenta')?.value || ''
+    let via = ''
+    const cuentaVal    = document.getElementById('dg-receptor-cuenta')?.value || ''
     const cuentaManual = document.getElementById('dg-receptor-cuenta-manual')?.value.trim() || ''
     if (cuentaVal === '__efectivo__') {
-      receptorBankInfo = 'Efectivo / Cash'
+      via = 'Efectivo / Cash'
     } else if (cuentaVal === '__otro__' || cuentaVal === '') {
-      receptorBankInfo = cuentaManual
+      via = cuentaManual
     } else {
       try {
         const acct = JSON.parse(cuentaVal)
-        receptorBankInfo = [acct.label||acct.bank, acct.clabe||acct.wallet].filter(Boolean).join(' · ')
-      } catch(e) { receptorBankInfo = cuentaManual }
+        via = [acct.label || acct.bank, acct.clabe || acct.wallet].filter(Boolean).join(' · ')
+      } catch { via = cuentaManual }
     }
-
-    docHtml = '<h1>RECIBO DE DINERO</h1>'
-    docHtml += '<p style="text-align:right;">En ' + esc(lugar) + ', a ' + esc(fechaFmt) + '</p>'
-    docHtml += '<p>Por medio del presente, hago constar que he recibido de: <strong>' + esc(entreganteName) + '</strong>. La cantidad de: <strong>$' + esc(montoFmt) + ' M.N.</strong> (' + esc(montoLetra) + ')</p>'
-    docHtml += '<p>Por concepto de: <strong>' + esc(concepto) + '</strong></p>'
-    if (receptorBankInfo) docHtml += '<p>Vía: <strong>' + esc(receptorBankInfo) + '</strong>' + (receptorBankInfo !== 'Efectivo / Cash' ? ' a nombre de <strong>' + esc(receptorName) + '</strong>' : '') + '</p>'
-    docHtml += '<p>Este recibo se extiende para los fines legales a que haya lugar, en la fecha antes mencionada.</p>'
-    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:60px;">'
-    docHtml += '<div class="sig"><strong>' + esc(receptorName) + '</strong><br/>(Quien recibe)</div>'
-    docHtml += '<div class="sig"><strong>' + esc(entreganteName) + '</strong><br/>(Quien entrega)</div>'
-    docHtml += '</div>'
-    docHtml += '<p style="font-size:10px;margin-top:30px;color:#555;border-top:1px solid #ddd;padding-top:8px;"><strong>Copia para el interesado original a:</strong> ' + esc(entreganteName) + '</p>'
+    parteAName = receptorName; parteBName = entreganteName; parteAId = receptorSel; parteBId = entreganteSel
+    docTitle   = 'Recibo de Dinero'
+    data = { receptorName, entreganteName, lugar, fecha: fechaFmt, monto, concepto, via }
+    pdfRecibo(data, emisor)
 
   } else if (type === 'cartapoder') {
     const otorganteSel = document.getElementById('dg-otorgante')?.value || ''
@@ -7885,69 +7898,89 @@ window.docGenExport = function() {
     const cApod  = apoderadoSel ? allNodes.find(n => n.id === apoderadoSel) : null
     const otorgName = cOtorg ? (cOtorg.metadata?.name || cOtorg.content) : blank
     const apodName  = cApod  ? (cApod.metadata?.name  || cApod.content)  : blank
-
-    const destinatario = document.getElementById('dg-destinatario')?.value || blank
-    const lugar      = document.getElementById('dg-lugar')?.value || blank
-    const fechaRaw   = document.getElementById('dg-fecha')?.value || ''
-    const otorgIdType = document.getElementById('dg-otorgante-idtype')?.value || 'INE'
-    const otorgIdNum  = document.getElementById('dg-otorgante-idnum')?.value || blank
-    const otorgDom    = document.getElementById('dg-otorgante-dom')?.value || blank
-    const apodIdType  = document.getElementById('dg-apoderado-idtype')?.value || 'INE'
-    const apodIdNum   = document.getElementById('dg-apoderado-idnum')?.value || blank
-    const apodDom     = document.getElementById('dg-apoderado-dom')?.value || blank
-    const razon       = document.getElementById('dg-razon')?.value || blank
-
+    const destinatario = document.getElementById('dg-destinatario')?.value    || blank
+    const lugar        = document.getElementById('dg-lugar')?.value           || blank
+    const fechaRaw     = document.getElementById('dg-fecha')?.value           || ''
+    const otorgIdType  = document.getElementById('dg-otorgante-idtype')?.value || 'INE'
+    const otorgIdNum   = document.getElementById('dg-otorgante-idnum')?.value  || blank
+    const otorgDom     = document.getElementById('dg-otorgante-dom')?.value    || blank
+    const apodIdType   = document.getElementById('dg-apoderado-idtype')?.value || 'INE'
+    const apodIdNum    = document.getElementById('dg-apoderado-idnum')?.value  || blank
+    const apodDom      = document.getElementById('dg-apoderado-dom')?.value    || blank
+    const actos        = document.getElementById('dg-razon')?.value            || blank
     let fechaFmt = blank
     if (fechaRaw) {
       const d = new Date(fechaRaw + 'T12:00:00')
-      fechaFmt = d.getDate() + ' de ' + d.toLocaleDateString('es-MX', { month: 'long' }) + ' de ' + d.getFullYear()
+      fechaFmt = `${d.getDate()} de ${d.toLocaleDateString('es-MX', { month:'long' })} de ${d.getFullYear()}`
     }
-
-    parteAName = otorgName
-    parteBName = apodName
-    parteAId   = otorganteSel
-    parteBId   = apoderadoSel
+    parteAName = otorgName; parteBName = apodName; parteAId = otorganteSel; parteBId = apoderadoSel
     docTitle   = 'Carta Poder'
+    data = { otorgName, apodName, destinatario, lugar, fecha: fechaFmt,
+             otorgIdType, otorgIdNum, otorgDom, apodIdType, apodIdNum, apodDom, actos }
+    pdfCartaPoder(data, emisor)
 
-    const legalSuffix = ' y asimismo para que conteste las demandas y reconvenciones que se entablen en mi contra, oponga excepciones dilatorias y perentorias, rinda toda clase de pruebas, reconozca firmas y documentos, redarguya de falsos a los que se presenten por la contraria, presente testigos, vea protestar a los de la contraria y los repregunte y tache, articule y absuelva posiciones, recuse Jueces superiores o inferiores, oiga autor interlocutorios y definitivos, consienta de los favorables y pida revocación por contrario imperio, apele, interponga el recurso de amparo y se desista de los que interponga, pida aclaración de las sentencias, ejecute, embargue y me (nos) represente en los embargos que contra mí se decreten, pida el remate de los bienes embargados; nombre peritos y recuse a los de la contraria, asista a almonedas, trance este juicio, perciba valores y otorgue recibos y cartas de pago, someta el presente juicio a la decisión de Jueces árbitros y arbitradores, gestione el otorgamiento de garantías, y en fin, para que promueva todos los recursos que favorezcan mis derechos así como para que sustituya este poder, ratificando desde hoy todo lo que haga sobre este particular.'
+  } else if (type === 'contrato') {
+    const prestadorSel  = document.getElementById('dg-prestador')?.value || ''
+    const clienteSel    = document.getElementById('dg-cliente')?.value   || ''
+    const cPrest  = prestadorSel ? allNodes.find(n => n.id === prestadorSel) : null
+    const cClient = clienteSel   ? allNodes.find(n => n.id === clienteSel)   : null
+    const prestadorName = document.getElementById('dg-prestador-name')?.value
+      || (cPrest  ? (cPrest.metadata?.name  || cPrest.content)  : '') || blank
+    const clienteName   = document.getElementById('dg-cliente-name')?.value
+      || (cClient ? (cClient.metadata?.name || cClient.content) : '') || blank
+    const lugar        = document.getElementById('dg-lugar')?.value        || blank
+    const fechaRaw     = document.getElementById('dg-fecha')?.value        || ''
+    const servicios    = document.getElementById('dg-servicios')?.value    || blank
+    const fIniRaw      = document.getElementById('dg-fecha-inicio')?.value || ''
+    const fFinRaw      = document.getElementById('dg-fecha-fin')?.value    || ''
+    const diasAviso    = document.getElementById('dg-dias-aviso')?.value   || '15'
+    const monto        = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const formaPago    = document.getElementById('dg-forma-pago')?.value   || blank
+    const jurisdiccion = document.getElementById('dg-jurisdiccion')?.value || lugar
+    const toFmt = raw => raw
+      ? new Date(raw + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : blank
+    parteAName = prestadorName; parteBName = clienteName; parteAId = prestadorSel; parteBId = clienteSel
+    docTitle   = 'Contrato de Servicios'
+    data = { prestadorName, clienteName, lugar, fecha: toFmt(fechaRaw), servicios,
+             fechaInicio: toFmt(fIniRaw), fechaFin: toFmt(fFinRaw),
+             diasAviso, monto, formaPago, jurisdiccion }
+    pdfContratoServicios(data, emisor)
 
-    docHtml = '<h1 style="letter-spacing:10px;">C A R T A &nbsp; P O D E R</h1>'
-    docHtml += '<p>' + esc(lugar) + ' a ' + esc(fechaFmt) + '</p>'
-    docHtml += '<p><strong>' + esc(destinatario) + '</strong></p>'
-    docHtml += '<p>Presente:</p>'
-    docHtml += '<p>Yo <strong>' + esc(otorgName) + '</strong> identificado con <strong>' + esc(otorgIdType) + '</strong> N° <strong>' + esc(otorgIdNum) + '</strong> con domicilio en <strong>' + esc(otorgDom) + '</strong>, declaro ser mayor de edad y estar en plenas facultades físicas y mentales, exponiendo ante la presente carta otorgar el poder en favor de: <strong>' + esc(apodName) + '</strong> identificado(a) con <strong>' + esc(apodIdType) + '</strong> N° <strong>' + esc(apodIdNum) + '</strong> con domicilio en <strong>' + esc(apodDom) + '</strong> poder especial, amplio y suficiente para que, conjunta o indistintamente, en mi nombre y representación: <strong>' + esc(razon) + '</strong>' + esc(legalSuffix) + '</p>'
-    docHtml += '<p style="text-align:center;letter-spacing:4px;margin-top:30px;">A t e n t a m e n t e</p>'
-    docHtml += '<div style="display:flex;justify-content:space-between;margin-top:60px;">'
-    docHtml += '<div class="sig"><strong>' + esc(otorgName) + '</strong><br/>Otorgó el poder</div>'
-    docHtml += '<div class="sig"><strong>' + esc(apodName) + '</strong><br/>Acepto el poder</div>'
-    docHtml += '</div>'
-    docHtml += '<p style="font-size:10px;margin-top:20px;color:#555;border-top:1px solid #ddd;padding-top:8px;"><strong>Copia para el interesado original a:</strong> ' + esc(apodName) + '</p>'
-    docHtml += '<p style="font-size:11px;font-style:italic;margin-top:16px;text-align:center;color:#666;">Nota: El presente documento debe entregarse con copias de las identificaciones</p>'
+  } else if (type === 'nota_venta') {
+    const clienteSel  = document.getElementById('dg-cliente')?.value || ''
+    const cClient     = clienteSel ? allNodes.find(n => n.id === clienteSel) : null
+    const clienteName = document.getElementById('dg-cliente-name')?.value
+      || (cClient ? (cClient.metadata?.name || cClient.content) : '') || blank
+    const fechaRaw = document.getElementById('dg-fecha')?.value || ''
+    const fechaFmt = fechaRaw
+      ? new Date(fechaRaw + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : blank
+    const conIva = document.getElementById('dg-con-iva')?.checked || false
+    const items = []
+    for (let i = 1; i <= 5; i++) {
+      const desc   = document.getElementById('dg-item-desc-'  + i)?.value || ''
+      const cant   = parseFloat(document.getElementById('dg-item-cant-'  + i)?.value || '0')
+      const precio = parseFloat(document.getElementById('dg-item-precio-' + i)?.value || '0')
+      if (desc) items.push({ descripcion: desc, cantidad: cant || 1, precio, subtotal: (cant || 1) * precio })
+    }
+    parteAName = emisor.nombre || 'Emisor'; parteBName = clienteName; parteAId = ''; parteBId = clienteSel
+    docTitle   = 'Nota de Venta'
+    data = { clienteName, fecha: fechaFmt, items, conIva }
+    pdfNotaVenta(data, emisor)
   }
 
-  // Open print window
-  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/>'
-  h += '<title>' + esc(docTitle) + '</title>'
-  h += '<style>' + _docGenCSS + '</style></head><body>'
-  h += docHtml
-  h += '<div class="footer-note">Documento generado por Nexus OS — ' + new Date().toLocaleString('es-MX') + '</div>'
-  h += '</body></html>'
+  if (!docTitle) return
 
-  const win = window.open('', '_blank')
-  if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
-
-  // Save to history as a node
+  // Save to history as a node (doc_data for jsPDF reprint)
   const docNode = {
     id: 'doc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-    content: docTitle + ' — ' + parteAName + ' / ' + parteBName,
+    content: docTitle + ' — ' + parteAName + (parteBName ? ' / ' + parteBName : ''),
     type: 'note',
     metadata: {
-      doc_type: type,
-      doc_title: docTitle,
+      doc_type: type, doc_title: docTitle,
       parteA: parteAName, parteA_id: parteAId,
       parteB: parteBName, parteB_id: parteBId,
       doc_date: new Date().toISOString().slice(0, 10),
-      doc_html: docHtml,
+      doc_data: data,
       tags: ['#documento', '#' + type],
       is_legal_doc: true
     },
@@ -7955,9 +7988,12 @@ window.docGenExport = function() {
   }
   allNodes.push(docNode)
   if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
-    supabase.from('nodes').insert([{ id: docNode.id, owner_id: currentUser?.id, content: docNode.content, type: docNode.type, metadata: docNode.metadata }])
+    supabase.from('nodes').insert([{
+      id: docNode.id, owner_id: currentUser?.id,
+      content: docNode.content, type: docNode.type, metadata: docNode.metadata
+    }])
   }
-  showToast('Documento guardado en histórico')
+  showToast('✅ PDF generado y guardado en histórico')
   renderDocHistory()
   closeDocGen()
 }
@@ -7969,7 +8005,7 @@ function renderDocHistory() {
   const docs = allNodes.filter(n => n.metadata?.is_legal_doc).sort((a, b) => (b.metadata?.doc_date || '').localeCompare(a.metadata?.doc_date || ''))
   if (docs.length === 0) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Sin documentos generados aún.</div>'; return }
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
-  const icons = { prorroga: '📋', pagare: '📜', recibo: '💰', cartapoder: '✍️', arrendamiento: '🏠', compraventa: '🤝', recomendacion: '⭐' }
+  const icons = { prorroga: '📋', pagare: '📜', recibo: '💰', cartapoder: '✍️', contrato: '🤝', nota_venta: '🧾', arrendamiento: '🏠', compraventa: '🤝', recomendacion: '⭐' }
   let h = ''
   docs.forEach(d => {
     const m = d.metadata || {}
@@ -7988,9 +8024,26 @@ function renderDocHistory() {
 
 window.reprintDoc = function(id) {
   const node = allNodes.find(n => n.id === id)
-  if (!node?.metadata?.doc_html) { showToast('Documento no encontrado'); return }
-  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>' + (node.metadata.doc_title || 'Documento') + '</title><style>' + _docGenCSS + '</style></head><body>'
-  h += node.metadata.doc_html
+  if (!node) { showToast('Documento no encontrado'); return }
+  const m = node.metadata || {}
+  const emisor = getEmisor()
+
+  // New jsPDF reprint (nodes saved after PDF standardization)
+  if (m.doc_data) {
+    switch (m.doc_type) {
+      case 'prorroga':   pdfProrroga(m.doc_data, emisor);          return
+      case 'pagare':     pdfPagare(m.doc_data, emisor);            return
+      case 'recibo':     pdfRecibo(m.doc_data, emisor);            return
+      case 'cartapoder': pdfCartaPoder(m.doc_data, emisor);        return
+      case 'contrato':   pdfContratoServicios(m.doc_data, emisor); return
+      case 'nota_venta': pdfNotaVenta(m.doc_data, emisor);         return
+    }
+  }
+
+  // Fallback: legacy HTML reprint
+  if (!m.doc_html) { showToast('Documento no disponible para reimprimir'); return }
+  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/><title>' + (m.doc_title || 'Documento') + '</title><style>' + _docGenCSS + '</style></head><body>'
+  h += m.doc_html
   h += '<div class="footer-note">Documento generado por Nexus OS</div>'
   h += '</body></html>'
   const win = window.open('', '_blank')
@@ -8127,13 +8180,16 @@ function applyStoredTheme() {
 // Settings Logic
 document.getElementById('btn-save-settings')?.addEventListener('click', () => {
   const settings = {
-    nickname: document.getElementById('pref-nickname')?.value || '',
-    email:    document.getElementById('pref-email')?.value || '',
-    timezone: document.getElementById('pref-tz')?.value || 'America/Mexico_City',
-    tempUnit: document.getElementById('pref-temp')?.value || 'C',
-    city:     (document.getElementById('pref-city')?.value || 'LA PAZ, BCS').toUpperCase(),
-    lat:      document.getElementById('pref-lat')?.value || '24.14',
-    lon:      document.getElementById('pref-lon')?.value || '-110.31',
+    nickname:      document.getElementById('pref-nickname')?.value || '',
+    email:         document.getElementById('pref-email')?.value    || '',
+    timezone:      document.getElementById('pref-tz')?.value       || 'America/Mexico_City',
+    tempUnit:      document.getElementById('pref-temp')?.value     || 'C',
+    city:         (document.getElementById('pref-city')?.value     || 'LA PAZ, BCS').toUpperCase(),
+    lat:           document.getElementById('pref-lat')?.value      || '24.14',
+    lon:           document.getElementById('pref-lon')?.value      || '-110.31',
+    emisor_nombre: document.getElementById('pref-emisor-nombre')?.value || '',
+    emisor_rfc:   (document.getElementById('pref-emisor-rfc')?.value    || '').toUpperCase(),
+    emisor_dir:    document.getElementById('pref-emisor-dir')?.value    || '',
   }
   localStorage.setItem('nexus_settings', JSON.stringify(settings))
   showToast('✅ Preferencias guardadas')
@@ -8144,13 +8200,16 @@ document.getElementById('btn-save-settings')?.addEventListener('click', () => {
 function loadSystemSettings() {
   const settings = JSON.parse(localStorage.getItem('nexus_settings') || '{}')
   const setVal = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val }
-  setVal('pref-nickname', settings.nickname)
-  setVal('pref-email',    settings.email)
-  setVal('pref-tz',       settings.timezone)
-  setVal('pref-temp',     settings.tempUnit)
-  setVal('pref-city',     settings.city)
-  setVal('pref-lat',      settings.lat)
-  setVal('pref-lon',      settings.lon)
+  setVal('pref-nickname',      settings.nickname)
+  setVal('pref-email',         settings.email)
+  setVal('pref-tz',            settings.timezone)
+  setVal('pref-temp',          settings.tempUnit)
+  setVal('pref-city',          settings.city)
+  setVal('pref-lat',           settings.lat)
+  setVal('pref-lon',           settings.lon)
+  setVal('pref-emisor-nombre', settings.emisor_nombre)
+  setVal('pref-emisor-rfc',    settings.emisor_rfc)
+  setVal('pref-emisor-dir',    settings.emisor_dir)
   applyStoredTheme()
 }
 document.getElementById('btn-change-password')?.addEventListener('click', async () => {
