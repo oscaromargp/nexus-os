@@ -16064,7 +16064,7 @@ window.openCotizacionModal = (id = null, prefillProjectTag = '') => {
   const c = id ? allNodes.find(n => n.id === id) : null
   const m = c?.metadata || {}
   currentCotizacionId = id
-  document.getElementById('cot-modal-title').textContent = c ? 'Editar Cotización' : 'Nueva Cotización'
+  document.getElementById('proj-cot-modal-title').textContent = c ? 'Editar Cotización' : 'Nueva Cotización'
   document.getElementById('cot-label').value         = m.label || c?.content || ''
   document.getElementById('cot-amount').value        = m.amount || ''
   document.getElementById('cot-status').value        = m.status || 'pendiente'
