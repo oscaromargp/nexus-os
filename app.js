@@ -8872,6 +8872,29 @@ window.setContactFilter = (type, btn) => {
   renderContacts()
 }
 
+window.setContactViewMode = (mode) => {
+  _contactsViewMode = mode
+  // Actualizar botones toggle
+  const gBtn = document.getElementById('contact-view-grid-btn')
+  const lBtn = document.getElementById('contact-view-list-btn')
+  if (gBtn) { gBtn.style.background = mode==='grid'?'rgba(0,246,255,0.1)':'transparent'; gBtn.style.color = mode==='grid'?'#00f0ff':'var(--text-dim)' }
+  if (lBtn) { lBtn.style.background = mode==='list'?'rgba(0,246,255,0.1)':'transparent'; lBtn.style.color = mode==='list'?'#00f0ff':'var(--text-dim)' }
+  renderContacts()
+}
+
+window.contactsListSelect = (id) => {
+  _contactsListSelectedId = id
+  // Actualizar panel de detalle sin re-renderizar la lista completa
+  const detail = document.getElementById('contacts-list-detail')
+  if (!detail) { renderContacts(); return }
+  detail.innerHTML = _buildContactProfileHTML(id)
+  // Resaltar fila activa
+  document.querySelectorAll('.contact-list-row').forEach(r => {
+    r.style.background = r.dataset.id === id ? 'rgba(0,246,255,0.07)' : ''
+    r.style.borderLeft = r.dataset.id === id ? '3px solid #00f0ff' : '3px solid transparent'
+  })
+}
+
 // ── Contact Sheet compatibility stubs (kept for backward compat with openPaymentModal etc) ──
 window.openContactSheet = (id) => window.openContactModal(id)
 window.closeContactSheet = (e) => {
@@ -9041,6 +9064,8 @@ let _cmDocs   = []    // [{id, docType, name, url, notes}]
 let _currentContactId = null
 let _profileContactId = null  // contact currently open in profile view
 let _contactsMode = 'grid'         // 'grid' | 'profile'
+let _contactsViewMode = 'grid'     // 'grid' | 'list'
+let _contactsListSelectedId = null // selected contact in list mode
 let _contactProfileTab = 'info'    // 'info' | 'docs' | 'pagos' | 'proyectos'
 
 function uid() {
@@ -10539,11 +10564,6 @@ function renderContacts() {
     return
   }
 
-  // ── Grid mode ──────────────────────────────────────────────────────
-  root.style.display = 'grid'
-  root.style.gridTemplateColumns = 'repeat(auto-fill,minmax(280px,1fr))'
-  root.style.gap = '16px'
-
   const search = (document.getElementById('contact-search')?.value || '').toLowerCase()
   let contacts = allNodes.filter(n => n.type === 'persona' || n.type === 'contact')
   if (activeContactFilter !== 'all') {
@@ -10569,6 +10589,59 @@ function renderContacts() {
         || (m.notes || '').toLowerCase().includes(search)
     })
   }
+
+  // ── Lista master-detail ────────────────────────────────────────────
+  if (_contactsViewMode === 'list') {
+    root.style.display = 'block'
+    root.style.gridTemplateColumns = ''
+    root.style.gap = ''
+
+    if (!_contactsListSelectedId && contacts.length) _contactsListSelectedId = contacts[0].id
+
+    const listRows = contacts.map(c => {
+      const m        = c.metadata || {}
+      const name     = m.name || c.content
+      const color    = m.color || '#00f0ff'
+      const roles    = m.roles || (m.cType ? [m.cType] : ['persona'])
+      const phones   = m.phones || (m.phone ? [{ number:m.phone }] : [])
+      const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase()||'?'
+      const isActive = c.id === _contactsListSelectedId
+      const roleColor = { persona:'#00f0ff', proveedor:'#f97316', cliente:'#4ade80', colaborador:'#a78bfa' }[roles[0]] || '#94a3b8'
+      const avatarHTML = m.photo_url
+        ? `<img src="${m.photo_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid ${color}44;flex-shrink:0;">`
+        : `<div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;background:${color}18;color:${color};border:2px solid ${color}44;">${initials}</div>`
+      return `<div class="contact-list-row" data-id="${c.id}" onclick="contactsListSelect('${c.id}')"
+        style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-left:3px solid ${isActive?'#00f0ff':'transparent'};background:${isActive?'rgba(0,246,255,0.06)':'transparent'};border-bottom:1px solid rgba(255,255,255,0.04);transition:all 0.15s;"
+        onmouseover="if(this.dataset.id!=='${_contactsListSelectedId}')this.style.background='rgba(255,255,255,0.03)'"
+        onmouseout="if(this.dataset.id!=='${_contactsListSelectedId}')this.style.background=''">
+        ${avatarHTML}
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:${isActive?700:500};color:${isActive?'#fff':'var(--text-primary)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
+          <div style="font-size:10px;color:${roleColor};font-weight:600;">${roles[0]||''} ${phones[0]?'· '+esc(phones[0].number):''}</div>
+        </div>
+        ${m.contact_accounts?.length ? `<span style="font-size:9px;color:#00f0ff;background:rgba(0,246,255,0.08);padding:1px 5px;border-radius:4px;">🏦${m.contact_accounts.length}</span>` : ''}
+      </div>`
+    }).join('')
+
+    const detailHtml = _contactsListSelectedId
+      ? _buildContactProfileHTML(_contactsListSelectedId)
+      : `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim);font-size:13px;">Selecciona un contacto</div>`
+
+    root.innerHTML = `<div style="display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - 200px);border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;">
+      <div style="overflow-y:auto;border-right:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.01);">
+        ${contacts.length ? listRows : `<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px;">Sin contactos</div>`}
+      </div>
+      <div id="contacts-list-detail" style="overflow-y:auto;padding:0;">
+        ${detailHtml}
+      </div>
+    </div>`
+    return
+  }
+
+  // ── Grid mode (default) ────────────────────────────────────────────
+  root.style.display = 'grid'
+  root.style.gridTemplateColumns = 'repeat(auto-fill,minmax(280px,1fr))'
+  root.style.gap = '16px'
 
   if (!contacts.length) {
     root.innerHTML = `<div style="grid-column:1/-1;">${nxEmptyState({
@@ -17862,11 +17935,19 @@ function _mvFiltered() {
   return list
 }
 
+/** Importe que realmente impacta el balance: neto de comisión para entradas cripto */
+function _mvNetAmount(m) {
+  const bruto = m.monto_mxn ?? (m.cantidad * (m.tc || 1))
+  return (m.tipo === 'entrada' && m.comision != null)
+    ? Math.round(bruto * m.comision * 100) / 100
+    : bruto
+}
+
 function _mvKpis(list) {
   let entradas = 0, salidas = 0, pendiente = 0
   for (const m of list) {
     if (m.estado === 'cancelado') continue
-    const amt = m.monto_mxn ?? (m.cantidad * (m.tc || 1))
+    const amt = _mvNetAmount(m)
     if (m.estado === 'pendiente') { pendiente += (m.tipo === 'entrada' ? amt : -amt); continue }
     if (m.tipo === 'entrada') entradas += amt
     else salidas += amt
@@ -17880,8 +17961,7 @@ function _mvWithBalance(sorted) {
   let   bal     = 0
   const withBal = asc.map(m => {
     if (m.estado !== 'cancelado') {
-      const amt = m.monto_mxn ?? (m.cantidad * (m.tc || 1))
-      bal += m.tipo === 'entrada' ? amt : -amt
+      bal += m.tipo === 'entrada' ? _mvNetAmount(m) : -_mvNetAmount(m)
     }
     return { ...m, _balance: bal }
   })
@@ -17966,10 +18046,12 @@ async function renderMovimientos() {
     `<button onclick="${onclick}" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx(icon,14)} ${label}</button>`
 
   const actionsHtml = `
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
-      <button onclick="mvOpenModal()" style="display:flex;align-items:center;gap:7px;padding:9px 18px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.background='rgba(0,246,255,0.2)'" onmouseout="this.style.background='rgba(0,246,255,0.1)'">${lx('Plus',15)} Nuevo movimiento</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
+      <button onclick="mvOpenModal()" style="display:flex;align-items:center;gap:7px;padding:9px 18px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.background='rgba(0,246,255,0.2)'" onmouseout="this.style.background='rgba(0,246,255,0.1)'">${lx('Plus',15)} Nuevo</button>
+      <button onclick="mvExportEstadoCuenta()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;transition:background 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.16)'" onmouseout="this.style.background='rgba(74,222,128,0.08)'">${lx('FileText',14)} Estado de Cuenta</button>
       ${gBtn('CSV','Download','mvExportCSV()')}
-      ${gBtn('PDF','Printer','mvExportPDF()')}
+      <label style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx('Upload',14)} Importar<input type="file" accept=".csv" style="display:none;" onchange="mvImportCSV(this)" /></label>
+      <button onclick="mvDownloadTemplate()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'" title="Descargar plantilla CSV para importación masiva">${lx('FileDown',14)} Plantilla</button>
       ${gBtn('T/C Bitso','RefreshCw','mvFetchTcAndRender()')}
       ${gBtn('Orquestadores','Settings','mvOpenOrqModal()')}
     </div>`
@@ -18036,7 +18118,7 @@ async function renderMovimientos() {
                 <div style="display:flex;align-items:center;gap:5px;font-weight:600;color:${isCan?'#64748b':'var(--text-primary)'};">
                   ${isEnt ? lx('ArrowDownLeft',11,'',{color:'#4ade80'}) : lx('ArrowUpRight',11,'',{color:'#f87171'})} ${quien}
                 </div>
-                ${m.comision != null ? `<div style="font-size:10px;color:#fbbf24;margin-top:2px;">com. ${(m.comision*100).toFixed(1)}% · gan. $${_mvFmt$(m.monto_mxn*(1-m.comision))}</div>` : ''}
+                ${m.comision != null ? `<div style="font-size:10px;color:#fbbf24;margin-top:2px;">com. ${(m.comision*100).toFixed(1)}% · bruto $${_mvFmt$(m.monto_mxn)}</div>` : ''}
                 ${m.notas ? `<div style="font-size:10px;color:var(--text-dim);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px;">${_mvEsc(m.notas)}</div>` : ''}
               </td>
               <td style="padding:10px 12px;">
@@ -18044,7 +18126,9 @@ async function renderMovimientos() {
                 ${m.clabe ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);">${_mvEsc(cla)}</div>` : ''}
               </td>
               <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:700;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${isEnt?'+':'-'}${_mvFmt$(m.cantidad)} ${_mvEsc(m.moneda)}</td>
-              <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:600;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${isCan?'<span style="color:#64748b">—</span>':(isEnt?'+':'-')+'$'+_mvFmt$(m.monto_mxn)}</td>
+              <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:600;font-family:'JetBrains Mono',monospace;white-space:nowrap;" title="${m.comision!=null?'Bruto: $'+_mvFmt$(m.monto_mxn):''}">
+                ${isCan?'<span style="color:#64748b">—</span>':(isEnt?'+':'-')+'$'+_mvFmt$(_mvNetAmount(m))}
+              </td>
               <td style="padding:10px 12px;text-align:right;color:${balColor};font-weight:800;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${isCan?'<span style="color:#475569">—</span>':(m._balance>=0?'+':'')+' $'+_mvFmt$(m._balance)}</td>
               <td style="padding:10px 12px;text-align:center;">${_mvEstadoBadge(m.estado)}</td>
               <td style="padding:10px 12px;text-align:center;">${m.comprobante_url ? `<a href="${_mvEsc(m.comprobante_url)}" target="_blank" onclick="event.stopPropagation()" style="color:#00f0ff;" title="Ver comprobante">${lx('ExternalLink',13)}</a>` : '<span style="color:#334155;">—</span>'}</td>
@@ -18122,10 +18206,24 @@ window.mvOpenModal = async (id = null) => {
           ${fld('Fecha *', `<input type="date" id="mv-fecha" value="${mov?.fecha||new Date().toISOString().slice(0,10)}" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />`)}
         </div>
 
-        <!-- Ordenante / Beneficiario -->
+        <!-- Ordenante / Beneficiario con autocomplete de contactos -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
-          ${fld('Ordenante', `<input type="text" id="mv-ordenante" value="${_mvEsc(mov?.ordenante||'')}" placeholder="Quién envía" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />`)}
-          ${fld('Beneficiario', `<input type="text" id="mv-beneficiario" value="${_mvEsc(mov?.beneficiario||'')}" placeholder="Quién recibe" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />`)}
+          ${fld('Ordenante', `<div style="position:relative;">
+            <input type="text" id="mv-ordenante" value="${_mvEsc(mov?.ordenante||'')}" placeholder="Quién envía · busca contacto" autocomplete="off"
+              oninput="mvSearchContact('ordenante',this.value)"
+              onfocus="mvSearchContact('ordenante',this.value)"
+              onblur="setTimeout(()=>{const d=document.getElementById('mv-ordenante-drop');if(d)d.style.display='none'},180)"
+              style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />
+            <div id="mv-ordenante-drop" style="display:none;"></div>
+          </div>`)}
+          ${fld('Beneficiario', `<div style="position:relative;">
+            <input type="text" id="mv-beneficiario" value="${_mvEsc(mov?.beneficiario||'')}" placeholder="Quién recibe · busca contacto" autocomplete="off"
+              oninput="mvSearchContact('beneficiario',this.value)"
+              onfocus="mvSearchContact('beneficiario',this.value)"
+              onblur="setTimeout(()=>{const d=document.getElementById('mv-beneficiario-drop');if(d)d.style.display='none'},180)"
+              style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />
+            <div id="mv-beneficiario-drop" style="display:none;"></div>
+          </div>`)}
         </div>
 
         <!-- Banco / CLABE -->
@@ -18527,11 +18625,11 @@ window.mvDeleteOrq = async (id) => {
 window.mvExportCSV = () => {
   const list = _mvWithBalance(_mvFiltered())
   if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
-  const hdr  = ['Fecha','Tipo','Ordenante','Beneficiario','Banco','CLABE','Cantidad','Moneda','T/C','Monto MXN','Balance MXN','Estado','Notas']
+  const hdr  = ['Fecha','Tipo','Ordenante','Beneficiario','Banco','CLABE','Cantidad','Moneda','T/C','Bruto MXN','Neto MXN','Balance MXN','Comision','Estado','Notas']
   const rows = list.map(m => [
     m.fecha, m.tipo, m.ordenante||'', m.beneficiario||'',
     m.banco||'', m.clabe||'', m.cantidad, m.moneda, m.tc,
-    m.monto_mxn, m._balance, m.estado, (m.notas||'').replace(/"/g,'""')
+    m.monto_mxn, _mvNetAmount(m), m._balance, m.comision??'', m.estado, (m.notas||'').replace(/"/g,'""')
   ].map(v => `"${v}"`).join(','))
   const blob = new Blob(['﻿' + [hdr.join(','),...rows].join('\n')], { type:'text/csv;charset=utf-8;' })
   const a    = document.createElement('a')
@@ -18540,39 +18638,296 @@ window.mvExportCSV = () => {
   a.click()
 }
 
-// ── Export PDF ────────────────────────────────────────────────────────────────
-window.mvExportPDF = () => {
-  const list = _mvWithBalance(_mvFiltered())
+// ── Estado de Cuenta — PDF al estilo hoja de cálculo ──────────────────────────
+window.mvExportEstadoCuenta = () => {
+  const list  = _mvWithBalance(_mvFiltered())
   if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
-  const orq  = _mvOrqs.find(o => o.id === _mvActiveOrqId)
-  const kpis = _mvKpis(list)
-  const date = new Date().toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
-  const rows = list.map(m => `<tr>
-    <td>${m.fecha}</td>
-    <td style="color:${m.tipo==='entrada'?'#16a34a':'#dc2626'};font-weight:700;">${m.tipo==='entrada'?'▲ Entrada':'▼ Salida'}</td>
-    <td>${m.ordenante||m.beneficiario||'—'}</td><td>${m.banco||'—'}</td>
-    <td style="text-align:right;font-family:monospace;">${m.tipo==='entrada'?'+':'-'}${_mvFmt$(m.cantidad)} ${m.moneda}</td>
-    <td style="text-align:right;font-family:monospace;color:${m.tipo==='entrada'?'#16a34a':'#dc2626'};">${m.tipo==='entrada'?'+':'-'}$${_mvFmt$(m.monto_mxn)}</td>
-    <td style="text-align:right;font-family:monospace;color:${m._balance>=0?'#16a34a':'#dc2626'};font-weight:700;">${m._balance>=0?'+ ':''} $${_mvFmt$(m._balance)}</td>
-    <td style="font-size:10px;color:#888;">${m.estado}</td>
-  </tr>`).join('')
-  const win = window.open('','_blank','width=950,height=750')
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Movimientos — ${orq?.nombre||''}</title>
-    <style>body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:32px;}h1{font-size:22px;margin:0 0 4px;}.meta{color:#666;font-size:11px;margin-bottom:24px;}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px;}.kpi{background:#f8fafc;border-radius:10px;padding:14px;}.kpi-l{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:4px;}.kpi-v{font-size:18px;font-weight:800;font-family:monospace;}table{width:100%;border-collapse:collapse;}thead tr{background:#f1f5f9;}th{padding:8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:#555;}td{padding:7px 8px;border-bottom:1px solid #f0f0f0;font-size:11px;}@media print{body{padding:16px;}}</style>
+  const orq   = _mvOrqs.find(o => o.id === _mvActiveOrqId)
+  const kpis  = _mvKpis(list)
+
+  // Saldo final = último balance del listado (newest-first ⟹ índice 0)
+  const saldoFinal = list[0]?._balance ?? 0
+  const estadoStr  = saldoFinal >= 0 ? 'Saldo Positivo' : 'Saldo Negativo'
+  const estadoColor = saldoFinal >= 0 ? '#16a34a' : '#dc2626'
+
+  // T/C USDT para equivalente
+  const tcUsdt   = _mvTcCache['USDT']?.price || 1
+  const equivUSDT = tcUsdt > 1 ? (Math.abs(saldoFinal) / tcUsdt) : 0
+
+  const now       = new Date()
+  const dateStr   = now.toLocaleDateString('es-MX', { year:'numeric', month:'numeric', day:'numeric' })
+  const periodoStr = (_mvFilters.dateFrom || _mvFilters.dateTo)
+    ? `${_mvFilters.dateFrom||'inicio'} → ${_mvFilters.dateTo||'hoy'}`
+    : 'Todos los movimientos'
+
+  const _fmtM = (n) => '$' + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 })
+
+  // Convertir número a letras (simplificado para importes comunes)
+  function numToLetras(n) {
+    const entero = Math.floor(Math.abs(n))
+    const cents  = Math.round((Math.abs(n) - entero) * 100)
+    const units  = ['','UN','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE']
+    const teens  = ['DIEZ','ONCE','DOCE','TRECE','CATORCE','QUINCE','DIECISÉIS','DIECISIETE','DIECIOCHO','DIECINUEVE']
+    const tens   = ['','DIEZ','VEINTE','TREINTA','CUARENTA','CINCUENTA','SESENTA','SETENTA','OCHENTA','NOVENTA']
+    const hundreds=['','CIENTO','DOSCIENTOS','TRESCIENTOS','CUATROCIENTOS','QUINIENTOS','SEISCIENTOS','SETECIENTOS','OCHOCIENTOS','NOVECIENTOS']
+    const fn = (num) => {
+      if (num === 0) return ''
+      if (num === 100) return 'CIEN'
+      if (num < 10) return units[num]
+      if (num < 20) return teens[num-10]
+      if (num < 100) return tens[Math.floor(num/10)] + (num%10?' Y '+units[num%10]:'')
+      return hundreds[Math.floor(num/100)] + (num%100?' '+fn(num%100):'')
+    }
+    const miles = Math.floor(entero / 1000)
+    const resto = entero % 1000
+    let str = ''
+    if (miles > 0) str += (miles === 1 ? 'MIL' : fn(miles) + ' MIL') + (resto > 0 ? ' ' : '')
+    str += fn(resto)
+    return (str || 'CERO') + ` PESOS ${String(cents).padStart(2,'0')}/100 M.N.`
+  }
+
+  const rows = list.map(m => {
+    const netMxn   = _mvNetAmount(m)
+    const isCan    = m.estado === 'cancelado'
+    const isCrypto = m.moneda !== 'MXN' && m.moneda !== 'USD'
+    const cargo    = (!isCan && m.tipo === 'salida') ? _fmtM(netMxn) : ''
+    const abono    = (!isCan && m.tipo === 'entrada') ? _fmtM(netMxn) : ''
+    const saldo    = isCan ? '—' : _fmtM(m._balance)
+    const saldoClr = m._balance >= 0 ? '#16a34a' : '#dc2626'
+    const concepto = m.tipo === 'entrada' ? (m.ordenante || m.notas || 'Depósito') : (m.beneficiario || m.notas || 'Retiro')
+    const isHoy    = m.fecha === now.toISOString().slice(0,10)
+    const rowStyle = isHoy ? 'background:#f0fdf4;font-weight:700;' : ''
+    const cryptoCol = isCrypto ? `<td style="text-align:right;font-family:monospace;color:#b45309;">${m.tipo==='entrada'?'':''} ${m.cantidad.toLocaleString('es-MX',{maximumFractionDigits:6})} ${m.moneda}</td>` : '<td></td>'
+    return `<tr style="${rowStyle}">
+      <td>${m.fecha}</td>
+      <td>${esc(concepto)}${m.banco?`<br><small style="color:#888;">${esc(m.banco)}</small>`:''}</td>
+      ${cryptoCol}
+      <td style="text-align:right;font-family:monospace;color:#dc2626;">${cargo}</td>
+      <td style="text-align:right;font-family:monospace;color:#16a34a;">${abono}</td>
+      <td style="text-align:right;font-family:monospace;color:${saldoClr};font-weight:${isHoy?800:600};">${saldo}</td>
+    </tr>`
+  }).join('')
+
+  const win = window.open('', '_blank', 'width=950,height=750')
+  if (!win) { showToast('⚠ Permite ventanas emergentes'); return }
+  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+    <title>Estado de Cuenta — ${orq?.nombre||''}</title>
+    <style>
+      *{box-sizing:border-box;}
+      body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#111;margin:0;padding:28px;}
+      .header-title{text-align:center;font-size:22px;font-weight:900;letter-spacing:0.12em;padding:10px 0;border-bottom:3px solid #111;border-top:3px solid #111;margin-bottom:16px;}
+      .meta-grid{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:6px 14px;margin-bottom:8px;font-size:11px;}
+      .meta-label{font-weight:700;background:#e2e8f0;padding:3px 10px;border-radius:4px;}
+      .saldo-box{text-align:right;}
+      .saldo-big{font-size:22px;font-weight:900;font-family:monospace;}
+      .saldo-words{text-align:center;font-size:10px;letter-spacing:0.04em;color:#555;margin-bottom:8px;padding:4px 0;border-top:1px solid #ddd;border-bottom:1px solid #ddd;}
+      .equiv-row{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:4px 14px;font-size:11px;margin-bottom:16px;}
+      table{width:100%;border-collapse:collapse;margin-top:4px;}
+      thead tr{background:#1e293b;color:#fff;}
+      th{padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.07em;}
+      th.r{text-align:right;}
+      td{padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:11px;}
+      td.r{text-align:right;}
+      tbody tr:hover{background:#f8fafc;}
+      .footer{margin-top:16px;font-size:10px;color:#888;text-align:right;}
+      @media print{@page{margin:14mm;} .no-print{display:none!important;}}
+    </style>
   </head><body>
-    <h1>📊 ${orq?.nombre||'Movimientos'}</h1>
-    <div class="meta">${orq?.descripcion||''} · Generado el ${date} · ${list.length} movimientos</div>
-    <div class="kpis">
-      <div class="kpi"><div class="kpi-l">Entradas MXN</div><div class="kpi-v" style="color:#16a34a;">+$${_mvFmt$(kpis.entradas)}</div></div>
-      <div class="kpi"><div class="kpi-l">Salidas MXN</div><div class="kpi-v" style="color:#dc2626;">-$${_mvFmt$(kpis.salidas)}</div></div>
-      <div class="kpi"><div class="kpi-l">Saldo Neto</div><div class="kpi-v" style="color:${kpis.net>=0?'#16a34a':'#dc2626'};">${kpis.net>=0?'+ ':''} $${_mvFmt$(kpis.net)}</div></div>
-      <div class="kpi"><div class="kpi-l">Pendiente</div><div class="kpi-v" style="color:#d97706;">$${_mvFmt$(Math.abs(kpis.pendiente))}</div></div>
+    <div class="header-title">ESTADO DE CUENTA</div>
+    <div class="meta-grid">
+      <span class="meta-label">Orquestador:</span>
+      <span style="color:${estadoColor};font-weight:700;">${esc(orq?.nombre||'Sin nombre')} — ${estadoStr}</span>
+      <span class="meta-label">Fecha:</span>
+      <span class="saldo-box"><strong>${dateStr}</strong></span>
     </div>
-    <table><thead><tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Banco</th><th style="text-align:right;">Cantidad</th><th style="text-align:right;">MXN</th><th style="text-align:right;">Balance</th><th>Estado</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    <script>window.print();window.close();<\/script>
+    <div style="text-align:center;font-size:12px;color:#555;margin-bottom:6px;">${periodoStr}</div>
+    <div class="saldo-box" style="text-align:right;margin-bottom:4px;">
+      <span style="font-size:11px;color:#555;">$ </span><span class="saldo-big" style="color:${estadoColor};">${_fmtM(saldoFinal).replace('$','')}</span>
+    </div>
+    <div class="saldo-words">${numToLetras(saldoFinal)}</div>
+    ${equivUSDT > 0 ? `<div class="equiv-row">
+      <span class="meta-label">Equivalen a:</span>
+      <span style="font-weight:700;">${equivUSDT.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})} USDT</span>
+      <span class="meta-label">T.C.</span>
+      <span>$ ${tcUsdt.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+    </div>` : ''}
+    <div class="no-print" style="margin-bottom:10px;display:flex;gap:8px;">
+      <button onclick="window.print()" style="padding:8px 18px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:12px;">🖨 Imprimir / Guardar PDF</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>FECHA</th><th>CONCEPTO / BENEFICIARIO</th><th class="r">CRIPTO</th>
+        <th class="r">CARGO (−)</th><th class="r">ABONO (+)</th><th class="r">SALDO</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="footer">Nexus OS · ${orq?.nombre||''} · Generado ${now.toLocaleString('es-MX')} · ${list.length} movimientos</div>
   </body></html>`)
   win.document.close()
+}
+
+// ── Export PDF básico (legacy — usa Estado de Cuenta) ────────────────────────
+window.mvExportPDF = () => window.mvExportEstadoCuenta()
+
+// ── Plantilla CSV para importación masiva ─────────────────────────────────────
+window.mvDownloadTemplate = () => {
+  const hdr  = 'fecha,tipo,ordenante,beneficiario,banco,clabe,cantidad,moneda,tc,comision,notas,estado'
+  const demo = [
+    '2026-05-25,entrada,JUAN GARCIA,,BBVA,012345678901234567,5000,USDT,17.29,0.97,Bancalización mayo,hecho',
+    '2026-05-25,salida,,MARIA LOPEZ,HSBC,021000400000000001,12000,MXN,1,,Retiro operaciones,hecho',
+    '2026-05-20,entrada,PEDRO SÁNCHEZ,,STP,072180001107853210,1500,USD,17.10,,Ingreso USD,pendiente',
+  ].join('\n')
+  const blob = new Blob(['﻿' + hdr + '\n' + demo], { type:'text/csv;charset=utf-8;' })
+  const a    = document.createElement('a'); a.href = URL.createObjectURL(blob)
+  a.download = 'nexus-movimientos-plantilla.csv'; a.click()
+}
+
+// ── Importar CSV masivo de movimientos ───────────────────────────────────────
+window.mvImportCSV = async (input) => {
+  if (!_mvActiveOrqId) { showToast('⚠ Selecciona un orquestador primero'); return }
+  const file = input.files?.[0]; if (!file) return
+  input.value = ''
+  const text = await file.text()
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  if (lines.length < 2) { showToast('⚠ Archivo vacío o sin filas de datos'); return }
+
+  // Detectar BOM y encabezado
+  const header = lines[0].replace(/^﻿/,'').toLowerCase()
+  const cols   = header.split(',').map(c => c.trim().replace(/^"|"$/g,''))
+  const idx    = (k) => cols.indexOf(k)
+
+  const iF = idx('fecha'), iT = idx('tipo'), iOr = idx('ordenante'), iBe = idx('beneficiario')
+  const iBa = idx('banco'), iCl = idx('clabe'), iCa = idx('cantidad'), iMo = idx('moneda')
+  const iTc = idx('tc'), iCom = idx('comision'), iNo = idx('notas'), iEs = idx('estado')
+
+  if (iF < 0 || iT < 0 || iCa < 0) {
+    showToast('⚠ El CSV debe tener columnas: fecha, tipo, cantidad'); return
+  }
+
+  const parseRow = (line) => {
+    // Soporta CSV con comillas
+    const vals = []; let cur = '', inQ = false
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ }
+      else if (ch === ',' && !inQ) { vals.push(cur); cur = '' }
+      else cur += ch
+    }
+    vals.push(cur)
+    return vals.map(v => v.trim())
+  }
+
+  const toInsert = []
+  const errors   = []
+  for (let i = 1; i < lines.length; i++) {
+    const v   = parseRow(lines[i])
+    const tipo = (v[iT]||'').toLowerCase()
+    if (!['entrada','salida'].includes(tipo)) { errors.push(`Fila ${i+1}: tipo inválido "${v[iT]}"`); continue }
+    const cant = parseFloat(v[iCa])
+    if (isNaN(cant) || cant < 0) { errors.push(`Fila ${i+1}: cantidad inválida`); continue }
+    const tc   = parseFloat(v[iTc]) || 1
+    const com  = iCom >= 0 && v[iCom] ? parseFloat(v[iCom]) : null
+    const moneda = (v[iMo]||'MXN').toUpperCase()
+    const estado = ['hecho','pendiente','cancelado'].includes((v[iEs]||'').toLowerCase()) ? (v[iEs]||'hecho').toLowerCase() : 'hecho'
+    toInsert.push({
+      owner_id: currentUser.id, orquestador_id: _mvActiveOrqId,
+      tipo, fecha: v[iF] || new Date().toISOString().slice(0,10),
+      ordenante: v[iOr]||null, beneficiario: v[iBe]||null,
+      banco: v[iBa]||null, clabe: v[iCl]||null,
+      cantidad: cant, moneda, tc, comision: com,
+      monto_mxn: Math.round(cant * tc * 100) / 100,
+      notas: v[iNo]||null, estado,
+    })
+  }
+
+  if (!toInsert.length) { showToast('⚠ Sin filas válidas. ' + (errors[0]||'')); return }
+
+  // Confirmar
+  const ok = confirm(`¿Importar ${toInsert.length} movimiento${toInsert.length>1?'s':''} al orquestador "${_mvOrqs.find(o=>o.id===_mvActiveOrqId)?.nombre}"?\n${errors.length?'\n⚠ '+errors.slice(0,3).join('\n'+(errors.length>3?'...':'')):''}`)
+  if (!ok) return
+
+  showToast('⏳ Importando...')
+  const BATCH = 50
+  let imported = 0
+  for (let i = 0; i < toInsert.length; i += BATCH) {
+    const { error } = await supabase.from('movimientos').insert(toInsert.slice(i, i + BATCH))
+    if (error) { showToast(`❌ Error lote ${Math.floor(i/BATCH)+1}: ${error.message}`); break }
+    imported += Math.min(BATCH, toInsert.length - i)
+  }
+  showToast(`✅ ${imported} movimientos importados`)
+  await _mvLoadMovs(); renderMovimientos()
+}
+
+// ── Autocomplete contactos en modal ─────────────────────────────────────────
+window.mvSearchContact = (field, query) => {
+  const drop = document.getElementById(`mv-${field}-drop`)
+  if (!drop) return
+  if (!query || query.length < 1) { drop.style.display = 'none'; return }
+  const q        = query.toLowerCase()
+  const contacts = allNodes.filter(n => n.type === 'persona' || n.type === 'contact')
+  const matches  = contacts.filter(c => {
+    const name = (c.metadata?.name || c.content || '').toLowerCase()
+    const phone = (c.metadata?.phones?.[0]?.number || c.metadata?.phone || '').toLowerCase()
+    return name.includes(q) || phone.includes(q)
+  }).slice(0, 7)
+  if (!matches.length) { drop.style.display = 'none'; return }
+  drop.style.cssText = 'display:block;position:absolute;top:100%;left:0;right:0;z-index:9999;background:#1a2035;border:1px solid rgba(0,246,255,0.3);border-radius:10px;margin-top:4px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.5);'
+  drop.innerHTML = matches.map(c => {
+    const name     = c.metadata?.name || c.content || ''
+    const accounts = c.metadata?.contact_accounts || []
+    const phone    = c.metadata?.phones?.[0]?.number || c.metadata?.phone || ''
+    return `<div onclick="mvPickContact('${field}','${c.id}')" style="padding:9px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.06);" onmouseover="this.style.background='rgba(0,246,255,0.07)'" onmouseout="this.style.background=''">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#fff;">${esc(name)}</div>
+        ${phone ? `<div style="font-size:10px;color:#64748b;">${esc(phone)}</div>` : ''}
+      </div>
+      ${accounts.length ? `<span style="font-size:10px;color:#00f0ff;background:rgba(0,246,255,0.1);padding:2px 8px;border-radius:5px;">🏦 ${accounts.length}</span>` : ''}
+    </div>`
+  }).join('')
+}
+
+window.mvPickContact = (field, contactId) => {
+  const c = allNodes.find(n => n.id === contactId)
+  if (!c) return
+  const name     = c.metadata?.name || c.content || ''
+  const accounts = c.metadata?.contact_accounts || []
+  const inp      = document.getElementById(`mv-${field}`)
+  if (inp) inp.value = name
+  const drop = document.getElementById(`mv-${field}-drop`)
+  if (drop) drop.style.display = 'none'
+
+  if (accounts.length === 1) {
+    const acc = accounts[0]
+    const b = document.getElementById('mv-banco'); if (b) b.value = acc.banco || ''
+    const cl = document.getElementById('mv-clabe'); if (cl) cl.value = acc.clabe || ''
+  } else if (accounts.length > 1) {
+    _mvShowAccountPicker(accounts)
+  }
+}
+
+function _mvShowAccountPicker(accounts) {
+  document.getElementById('mv-acct-picker')?.remove()
+  const anchor = document.getElementById('mv-banco')?.closest('div')?.parentElement
+  if (!anchor) return
+  const wrap = document.createElement('div')
+  wrap.id = 'mv-acct-picker'
+  wrap.style.cssText = 'margin-bottom:14px;padding:12px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.2);border-radius:12px;'
+  wrap.innerHTML = `<div style="font-size:11px;font-weight:700;color:#00f0ff;margin-bottom:8px;display:flex;align-items:center;gap:6px;">${lx('Building2',12)} Selecciona cuenta bancaria</div>
+    ${accounts.map((acc, i) => `
+      <button onclick="window._mvSelectAccount(${i})" data-acct='${JSON.stringify(acc).replace(/'/g,'&apos;')}' style="display:flex;justify-content:space-between;width:100%;padding:8px 12px;margin-bottom:4px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.09);border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-primary);transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(0,246,255,0.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.09)'">
+        <span style="font-weight:600;">${esc(acc.label || acc.banco || 'Cuenta ' + (i+1))}</span>
+        <span style="color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:11px;">···${(acc.clabe||'').slice(-4)}</span>
+      </button>`).join('')}
+  `
+  anchor.insertAdjacentElement('afterend', wrap)
+}
+
+window._mvSelectAccount = (idx) => {
+  const btns = document.querySelectorAll('#mv-acct-picker button')
+  const btn  = btns[idx]; if (!btn) return
+  const acc  = JSON.parse(btn.getAttribute('data-acct').replace(/&apos;/g,"'"))
+  const b = document.getElementById('mv-banco'); if (b) b.value = acc.banco || ''
+  const cl = document.getElementById('mv-clabe'); if (cl) cl.value = acc.clabe || ''
+  document.getElementById('mv-acct-picker')?.remove()
 }
 
 // ── Boot hook ─────────────────────────────────────────────────────────────────
