@@ -5,8 +5,19 @@ import Fuse from 'fuse.js'
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
 import { getTransactions, calcBalance, buildRunningBalance, currentPeriod } from './src/finance-engine.js'
 import Sortable from 'sortablejs'
-import { Chart, DoughnutController, ArcElement, Tooltip, Legend, BarController, BarElement, CategoryScale, LinearScale } from 'chart.js'
-Chart.register(DoughnutController, ArcElement, Tooltip, Legend, BarController, BarElement, CategoryScale, LinearScale)
+import {
+  Chart, DoughnutController, ArcElement, Tooltip, Legend,
+  BarController, BarElement, CategoryScale, LinearScale,
+  LineController, LineElement, PointElement, Filler, TimeScale,
+} from 'chart.js'
+Chart.register(
+  DoughnutController, ArcElement, Tooltip, Legend,
+  BarController, BarElement, CategoryScale, LinearScale,
+  LineController, LineElement, PointElement, Filler,
+)
+
+// ── PDF Reports Engine ────────────────────────────────────────────────────────
+import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensual } from './src/pdf-reports.js'
 
 // ── Lucide Icons ──────────────────────────────────────────────────────────────
 import {
@@ -3840,6 +3851,7 @@ function renderFinance(nodes) {
       <button class="fin-action-btn" onclick="openLoanModal()">💸 Préstamo</button>
       <button class="fin-action-btn" onclick="exportFinanceCSV()">⬇ CSV</button>
       <button class="fin-action-btn" onclick="exportFinancePDF()">🖨 PDF</button>
+      <button class="fin-action-btn" onclick="exportResumenMensualPDF()" style="background:rgba(74,222,128,0.1);color:#4ade80;border-color:rgba(74,222,128,0.3);">📑 Resumen Mensual PDF</button>
       ${chartsBtn}
     </div>
   `
@@ -13031,6 +13043,7 @@ window.openProjectDashboard = (projectId) => {
       <div style="position:absolute;top:14px;right:16px;z-index:2;display:flex;gap:8px;">
         <button onclick="openProyectoModal('${p.id}')" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">✏️ Editar</button>
         <button onclick="printProjectReport('${p.id}')" style="background:rgba(0,0,0,0.55);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.2);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;">📄 Reporte</button>
+        <button onclick="window.exportProyectoPDF('${p.id}')" style="background:rgba(22,163,74,0.7);backdrop-filter:blur(8px);border:1px solid rgba(74,222,128,0.4);color:#fff;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:700;">⬇ PDF</button>
       </div>
       <!-- Big emoji icon -->
       <div style="position:absolute;bottom:-24px;left:24px;width:52px;height:52px;border-radius:14px;background:var(--bg-panel);border:2px solid ${accentColor}60;display:grid;place-items:center;font-size:28px;box-shadow:0 4px 20px rgba(0,0,0,0.5);z-index:2;">${projEmoji}</div>
@@ -15299,6 +15312,40 @@ function _buildPaymentChartScript(allPayments, chartLabels, chartAmounts, chartC
     budgetDataset + ']},' +
     'options:{responsive:true,interaction:{mode:"index",intersect:false},plugins:{legend:{position:"top",labels:{font:{size:11}}},tooltip:{callbacks:{label:function(c){return c.dataset.label+": $"+c.raw.toLocaleString("es-MX")}}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{beginAtZero:true,ticks:{font:{size:10},callback:function(v){return "$"+v.toLocaleString("es-MX")}},grid:{color:"rgba(0,0,0,0.06)"}}}}});});' +
     '<\/script>'
+}
+
+// ── PDF profesional de proyecto via pdf-reports engine ────────────────────────
+window.exportProyectoPDF = (projectId) => {
+  const proyecto = allNodes.find(n => n.id === projectId)
+  if (!proyecto) { showToast('⚠ Proyecto no encontrado'); return }
+  showToast('⏳ Generando PDF...')
+  setTimeout(() => {
+    try {
+      pdfReporteProyecto(proyecto, allNodes)
+      showToast('✅ PDF descargado')
+    } catch(e) {
+      console.error('pdfReporteProyecto:', e)
+      showToast('❌ Error: ' + e.message)
+    }
+  }, 50)
+}
+
+// ── Resumen mensual PDF ───────────────────────────────────────────────────────
+window.exportResumenMensualPDF = (period) => {
+  if (!period) {
+    const now = new Date()
+    period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  }
+  showToast('⏳ Generando resumen mensual...')
+  setTimeout(() => {
+    try {
+      pdfResumenMensual(period, allNodes, [])
+      showToast('✅ Resumen mensual descargado')
+    } catch(e) {
+      console.error('pdfResumenMensual:', e)
+      showToast('❌ Error: ' + e.message)
+    }
+  }, 50)
 }
 
 // Show filter modal before generating report
@@ -18164,10 +18211,162 @@ async function renderMovimientos() {
       ${orqTabs}
       <button onclick="mvOpenOrqModal(null, true)" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:20px;border:1px dashed rgba(0,246,255,0.25);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='rgba(0,246,255,0.5)';this.style.color='#00f0ff'" onmouseout="this.style.borderColor='rgba(0,246,255,0.25)';this.style.color='var(--text-dim)'">${lx('Plus',12)} Orquestador</button>
     </div>
-    ${_mvActiveOrqId ? kpiHtml + actionsHtml + filterHtml : nxEmptyState({ img:'/empty/no-finance.svg', title:'Sin orquestadores', sub:'Crea tu primer orquestador para registrar entradas y salidas.', cta:`<button onclick="mvOpenOrqModal(null,true)" style="margin-top:12px;padding:10px 22px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-weight:700;">+ Crear orquestador</button>` })}
+    ${_mvActiveOrqId ? kpiHtml + actionsHtml : nxEmptyState({ img:'/empty/no-finance.svg', title:'Sin orquestadores', sub:'Crea tu primer orquestador para registrar entradas y salidas.', cta:`<button onclick="mvOpenOrqModal(null,true)" style="margin-top:12px;padding:10px 22px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-weight:700;">+ Crear orquestador</button>` })}
+    ${_mvActiveOrqId ? `
+      <!-- Gráficas panel -->
+      <div id="mv-charts-panel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px;">
+        <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px;">${lx('TrendingUp',11,'',{color:'#00f0ff'})} Evolución de Saldo</div>
+          <canvas id="mv-chart-balance" height="120"></canvas>
+        </div>
+        <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px;">${lx('PieChart',11,'',{color:'#fbbf24'})} Por Moneda</div>
+          <canvas id="mv-chart-moneda" height="120"></canvas>
+        </div>
+        <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px;">${lx('BarChart2',11,'',{color:'#4ade80'})} Tendencia Mensual</div>
+          <canvas id="mv-chart-mensual" height="120"></canvas>
+        </div>
+      </div>
+    ` : ''}
+    ${_mvActiveOrqId ? filterHtml : ''}
     ${_mvActiveOrqId ? `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:20px;">${tableHtml}</div>` : ''}
   `
   requestAnimationFrame(refreshIcons)
+
+  // ── Renderizar gráficas Chart.js ──
+  if (_mvActiveOrqId && withBal.length) {
+    requestAnimationFrame(() => _mvRenderCharts(withBal))
+  }
+}
+
+// ── Charts de Movimientos ──────────────────────────────────────────────────────
+let _mvChartBalance = null
+let _mvChartMoneda  = null
+let _mvChartMensual = null
+
+function _mvRenderCharts(withBal) {
+  const isDark = true
+  const gridColor = 'rgba(255,255,255,0.05)'
+  const textColor  = '#64748b'
+
+  // ── 1. Evolución de saldo (line + area) ──
+  const balCtx = document.getElementById('mv-chart-balance')?.getContext('2d')
+  if (balCtx) {
+    if (_mvChartBalance) { _mvChartBalance.destroy(); _mvChartBalance = null }
+    // Ordenar oldest-first para la línea
+    const sorted = [...withBal].reverse()
+    const labels = sorted.map(m => m.fecha)
+    const data   = sorted.map(m => m._balance)
+    const isPos  = data[data.length - 1] >= 0
+
+    _mvChartBalance = new Chart(balCtx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          data,
+          borderColor: isPos ? '#4ade80' : '#f87171',
+          borderWidth: 2,
+          fill: true,
+          backgroundColor: isPos ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)',
+          pointRadius: data.length > 60 ? 0 : 3,
+          pointBackgroundColor: isPos ? '#4ade80' : '#f87171',
+          tension: 0.35,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: ctx => ' $' + ctx.parsed.y.toLocaleString('es-MX', { minimumFractionDigits: 2 }) },
+          backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f1f5f9',
+        }},
+        scales: {
+          x: { ticks: { color: textColor, maxTicksLimit: 6, font: { size: 9 } }, grid: { color: gridColor } },
+          y: { ticks: { color: textColor, font: { size: 9 }, callback: v => '$' + (v/1000).toFixed(0) + 'k' }, grid: { color: gridColor } },
+        },
+      },
+    })
+  }
+
+  // ── 2. Distribución por moneda (donut) ──
+  const monCtx = document.getElementById('mv-chart-moneda')?.getContext('2d')
+  if (monCtx) {
+    if (_mvChartMoneda) { _mvChartMoneda.destroy(); _mvChartMoneda = null }
+    const byMoneda = {}
+    withBal.forEach(m => {
+      if (m.estado === 'cancelado') return
+      const key = m.moneda
+      byMoneda[key] = (byMoneda[key] || 0) + _mvNetAmount(m)
+    })
+    const labels = Object.keys(byMoneda)
+    const data   = Object.values(byMoneda).map(Math.abs)
+    const COLORS  = { MXN:'#4ade80', USD:'#60a5fa', USDT:'#fbbf24', BTC:'#f7931a', ETH:'#8c8dfc', XRP:'#00aae4', SOL:'#9945ff', LTC:'#a0a0a0' }
+    const bgColors = labels.map(l => COLORS[l] || '#94a3b8')
+
+    _mvChartMoneda = new Chart(monCtx, {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{ data, backgroundColor: bgColors, borderColor: '#0f172a', borderWidth: 2, hoverOffset: 6 }],
+      },
+      options: {
+        responsive: true,
+        cutout: '68%',
+        plugins: {
+          legend: { position: 'bottom', labels: { color: textColor, font: { size: 9 }, boxWidth: 10, padding: 8 } },
+          tooltip: {
+            callbacks: { label: ctx => ` ${ctx.label}: $${ctx.parsed.toLocaleString('es-MX', { minimumFractionDigits: 2 })}` },
+            backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f1f5f9',
+          },
+        },
+      },
+    })
+  }
+
+  // ── 3. Tendencia mensual ingresos vs gastos (stacked bar) ──
+  const menCtx = document.getElementById('mv-chart-mensual')?.getContext('2d')
+  if (menCtx) {
+    if (_mvChartMensual) { _mvChartMensual.destroy(); _mvChartMensual = null }
+    const byMonth = {}
+    withBal.forEach(m => {
+      if (m.estado === 'cancelado') return
+      const key = String(m.fecha).slice(0, 7)  // YYYY-MM
+      if (!byMonth[key]) byMonth[key] = { entradas: 0, salidas: 0 }
+      if (m.tipo === 'entrada') byMonth[key].entradas += _mvNetAmount(m)
+      else byMonth[key].salidas += _mvNetAmount(m)
+    })
+    const months = Object.keys(byMonth).sort().slice(-8)  // últimos 8 meses
+    const shortLabel = (k) => {
+      const [y, m] = k.split('-')
+      return new Date(+y, +m - 1, 1).toLocaleDateString('es-MX', { month: 'short' }) + (y !== String(new Date().getFullYear()) ? ` '${y.slice(2)}` : '')
+    }
+
+    _mvChartMensual = new Chart(menCtx, {
+      type: 'bar',
+      data: {
+        labels: months.map(shortLabel),
+        datasets: [
+          { label: 'Entradas', data: months.map(k => byMonth[k]?.entradas || 0), backgroundColor: 'rgba(74,222,128,0.7)', borderRadius: 4 },
+          { label: 'Salidas',  data: months.map(k => byMonth[k]?.salidas  || 0), backgroundColor: 'rgba(248,113,113,0.7)', borderRadius: 4 },
+        ],
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { color: textColor, font: { size: 9 }, boxWidth: 10, padding: 8 } },
+          tooltip: {
+            callbacks: { label: ctx => ` ${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString('es-MX', { minimumFractionDigits: 0 })}` },
+            backgroundColor: '#1e293b', titleColor: '#94a3b8', bodyColor: '#f1f5f9',
+          },
+        },
+        scales: {
+          x: { ticks: { color: textColor, font: { size: 9 } }, grid: { color: gridColor } },
+          y: { ticks: { color: textColor, font: { size: 9 }, callback: v => '$' + (v/1000).toFixed(0) + 'k' }, grid: { color: gridColor } },
+        },
+      },
+    })
+  }
 }
 
 // ── Controladores ──────────────────────────────────────────────────────────────
@@ -18638,135 +18837,25 @@ window.mvExportCSV = () => {
   a.click()
 }
 
-// ── Estado de Cuenta — PDF al estilo hoja de cálculo ──────────────────────────
+// ── Estado de Cuenta — PDF profesional via pdf-reports engine ────────────────
 window.mvExportEstadoCuenta = () => {
-  const list  = _mvWithBalance(_mvFiltered())
+  const list = _mvWithBalance(_mvFiltered())
   if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
-  const orq   = _mvOrqs.find(o => o.id === _mvActiveOrqId)
-  const kpis  = _mvKpis(list)
-
-  // Saldo final = último balance del listado (newest-first ⟹ índice 0)
-  const saldoFinal = list[0]?._balance ?? 0
-  const estadoStr  = saldoFinal >= 0 ? 'Saldo Positivo' : 'Saldo Negativo'
-  const estadoColor = saldoFinal >= 0 ? '#16a34a' : '#dc2626'
-
-  // T/C USDT para equivalente
-  const tcUsdt   = _mvTcCache['USDT']?.price || 1
-  const equivUSDT = tcUsdt > 1 ? (Math.abs(saldoFinal) / tcUsdt) : 0
-
-  const now       = new Date()
-  const dateStr   = now.toLocaleDateString('es-MX', { year:'numeric', month:'numeric', day:'numeric' })
-  const periodoStr = (_mvFilters.dateFrom || _mvFilters.dateTo)
-    ? `${_mvFilters.dateFrom||'inicio'} → ${_mvFilters.dateTo||'hoy'}`
-    : 'Todos los movimientos'
-
-  const _fmtM = (n) => '$' + Math.abs(n).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 })
-
-  // Convertir número a letras (simplificado para importes comunes)
-  function numToLetras(n) {
-    const entero = Math.floor(Math.abs(n))
-    const cents  = Math.round((Math.abs(n) - entero) * 100)
-    const units  = ['','UN','DOS','TRES','CUATRO','CINCO','SEIS','SIETE','OCHO','NUEVE']
-    const teens  = ['DIEZ','ONCE','DOCE','TRECE','CATORCE','QUINCE','DIECISÉIS','DIECISIETE','DIECIOCHO','DIECINUEVE']
-    const tens   = ['','DIEZ','VEINTE','TREINTA','CUARENTA','CINCUENTA','SESENTA','SETENTA','OCHENTA','NOVENTA']
-    const hundreds=['','CIENTO','DOSCIENTOS','TRESCIENTOS','CUATROCIENTOS','QUINIENTOS','SEISCIENTOS','SETECIENTOS','OCHOCIENTOS','NOVECIENTOS']
-    const fn = (num) => {
-      if (num === 0) return ''
-      if (num === 100) return 'CIEN'
-      if (num < 10) return units[num]
-      if (num < 20) return teens[num-10]
-      if (num < 100) return tens[Math.floor(num/10)] + (num%10?' Y '+units[num%10]:'')
-      return hundreds[Math.floor(num/100)] + (num%100?' '+fn(num%100):'')
+  const orq  = _mvOrqs.find(o => o.id === _mvActiveOrqId)
+  const kpis = _mvKpis(list)
+  showToast('⏳ Generando PDF...')
+  setTimeout(() => {
+    try {
+      pdfEstadoCuenta(orq, list, kpis, _mvTcCache, _mvFilters)
+      showToast('✅ PDF descargado')
+    } catch (e) {
+      console.error('pdfEstadoCuenta:', e)
+      showToast('❌ Error al generar PDF: ' + e.message)
     }
-    const miles = Math.floor(entero / 1000)
-    const resto = entero % 1000
-    let str = ''
-    if (miles > 0) str += (miles === 1 ? 'MIL' : fn(miles) + ' MIL') + (resto > 0 ? ' ' : '')
-    str += fn(resto)
-    return (str || 'CERO') + ` PESOS ${String(cents).padStart(2,'0')}/100 M.N.`
-  }
-
-  const rows = list.map(m => {
-    const netMxn   = _mvNetAmount(m)
-    const isCan    = m.estado === 'cancelado'
-    const isCrypto = m.moneda !== 'MXN' && m.moneda !== 'USD'
-    const cargo    = (!isCan && m.tipo === 'salida') ? _fmtM(netMxn) : ''
-    const abono    = (!isCan && m.tipo === 'entrada') ? _fmtM(netMxn) : ''
-    const saldo    = isCan ? '—' : _fmtM(m._balance)
-    const saldoClr = m._balance >= 0 ? '#16a34a' : '#dc2626'
-    const concepto = m.tipo === 'entrada' ? (m.ordenante || m.notas || 'Depósito') : (m.beneficiario || m.notas || 'Retiro')
-    const isHoy    = m.fecha === now.toISOString().slice(0,10)
-    const rowStyle = isHoy ? 'background:#f0fdf4;font-weight:700;' : ''
-    const cryptoCol = isCrypto ? `<td style="text-align:right;font-family:monospace;color:#b45309;">${m.tipo==='entrada'?'':''} ${m.cantidad.toLocaleString('es-MX',{maximumFractionDigits:6})} ${m.moneda}</td>` : '<td></td>'
-    return `<tr style="${rowStyle}">
-      <td>${m.fecha}</td>
-      <td>${esc(concepto)}${m.banco?`<br><small style="color:#888;">${esc(m.banco)}</small>`:''}</td>
-      ${cryptoCol}
-      <td style="text-align:right;font-family:monospace;color:#dc2626;">${cargo}</td>
-      <td style="text-align:right;font-family:monospace;color:#16a34a;">${abono}</td>
-      <td style="text-align:right;font-family:monospace;color:${saldoClr};font-weight:${isHoy?800:600};">${saldo}</td>
-    </tr>`
-  }).join('')
-
-  const win = window.open('', '_blank', 'width=950,height=750')
-  if (!win) { showToast('⚠ Permite ventanas emergentes'); return }
-  win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
-    <title>Estado de Cuenta — ${orq?.nombre||''}</title>
-    <style>
-      *{box-sizing:border-box;}
-      body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#111;margin:0;padding:28px;}
-      .header-title{text-align:center;font-size:22px;font-weight:900;letter-spacing:0.12em;padding:10px 0;border-bottom:3px solid #111;border-top:3px solid #111;margin-bottom:16px;}
-      .meta-grid{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:6px 14px;margin-bottom:8px;font-size:11px;}
-      .meta-label{font-weight:700;background:#e2e8f0;padding:3px 10px;border-radius:4px;}
-      .saldo-box{text-align:right;}
-      .saldo-big{font-size:22px;font-weight:900;font-family:monospace;}
-      .saldo-words{text-align:center;font-size:10px;letter-spacing:0.04em;color:#555;margin-bottom:8px;padding:4px 0;border-top:1px solid #ddd;border-bottom:1px solid #ddd;}
-      .equiv-row{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:4px 14px;font-size:11px;margin-bottom:16px;}
-      table{width:100%;border-collapse:collapse;margin-top:4px;}
-      thead tr{background:#1e293b;color:#fff;}
-      th{padding:8px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:0.07em;}
-      th.r{text-align:right;}
-      td{padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:11px;}
-      td.r{text-align:right;}
-      tbody tr:hover{background:#f8fafc;}
-      .footer{margin-top:16px;font-size:10px;color:#888;text-align:right;}
-      @media print{@page{margin:14mm;} .no-print{display:none!important;}}
-    </style>
-  </head><body>
-    <div class="header-title">ESTADO DE CUENTA</div>
-    <div class="meta-grid">
-      <span class="meta-label">Orquestador:</span>
-      <span style="color:${estadoColor};font-weight:700;">${esc(orq?.nombre||'Sin nombre')} — ${estadoStr}</span>
-      <span class="meta-label">Fecha:</span>
-      <span class="saldo-box"><strong>${dateStr}</strong></span>
-    </div>
-    <div style="text-align:center;font-size:12px;color:#555;margin-bottom:6px;">${periodoStr}</div>
-    <div class="saldo-box" style="text-align:right;margin-bottom:4px;">
-      <span style="font-size:11px;color:#555;">$ </span><span class="saldo-big" style="color:${estadoColor};">${_fmtM(saldoFinal).replace('$','')}</span>
-    </div>
-    <div class="saldo-words">${numToLetras(saldoFinal)}</div>
-    ${equivUSDT > 0 ? `<div class="equiv-row">
-      <span class="meta-label">Equivalen a:</span>
-      <span style="font-weight:700;">${equivUSDT.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})} USDT</span>
-      <span class="meta-label">T.C.</span>
-      <span>$ ${tcUsdt.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
-    </div>` : ''}
-    <div class="no-print" style="margin-bottom:10px;display:flex;gap:8px;">
-      <button onclick="window.print()" style="padding:8px 18px;background:#1e293b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:12px;">🖨 Imprimir / Guardar PDF</button>
-    </div>
-    <table>
-      <thead><tr>
-        <th>FECHA</th><th>CONCEPTO / BENEFICIARIO</th><th class="r">CRIPTO</th>
-        <th class="r">CARGO (−)</th><th class="r">ABONO (+)</th><th class="r">SALDO</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="footer">Nexus OS · ${orq?.nombre||''} · Generado ${now.toLocaleString('es-MX')} · ${list.length} movimientos</div>
-  </body></html>`)
-  win.document.close()
+  }, 50)
 }
 
-// ── Export PDF básico (legacy — usa Estado de Cuenta) ────────────────────────
+// ── Export PDF básico (alias) ─────────────────────────────────────────────────
 window.mvExportPDF = () => window.mvExportEstadoCuenta()
 
 // ── Plantilla CSV para importación masiva ─────────────────────────────────────
