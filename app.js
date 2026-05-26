@@ -6857,140 +6857,45 @@ window.otcRemoveReceipt = function(rowId, idx) {
 window.otcExportPDF = function() {
   if (_otcData.ventaReportada <= 0) { showToast('Calcula la operación primero'); return }
   const coin = document.getElementById('otc-coin')?.value || 'USDT'
-  const qty  = document.getElementById('otc-qty')?.value || '0'
-  const tc   = document.getElementById('otc-tc')?.value || '0'
-  const feeR = document.getElementById('otc-fee-reported')?.value || '0'
+  const qty  = parseFloat(document.getElementById('otc-qty')?.value  || '0')
+  const tc   = parseFloat(document.getElementById('otc-tc')?.value   || '0')
+  const feeR = parseFloat(document.getElementById('otc-fee-reported')?.value || '0')
   const ref  = document.getElementById('otc-ref')?.value.trim() || ('OTC-' + new Date().toISOString().slice(0,10).replace(/-/g,''))
-  const nowFull = new Date()
-  const dateStr = nowFull.toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
-  const timeStr = nowFull.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'})
-  const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 
-  const totalAssigned = _otcRows.reduce((s,r) => s + r.montoMXN, 0)
-  const remaining = _floor2(_otcData.ventaReportada - totalAssigned)
-  const pctDisp = _otcData.ventaReportada > 0 ? Math.min((totalAssigned / _otcData.ventaReportada) * 100, 100) : 0
-  const statusColor = remaining <= 0.01 && remaining >= -0.01 ? '#16a34a' : remaining > 0 ? '#d97706' : '#dc2626'
-  const statusText = remaining <= 0.01 && remaining >= -0.01 ? '✅ COMPLETO' : remaining > 0 ? '⏳ PENDIENTE' : '🔴 EXCESO'
-  const linkedProjects = [...new Set(_otcRows.filter(r=>r.projectTag).map(r=>r.projectTag))]
-
-  // Build rows
-  let rowsHtml = ''
-  _otcRows.forEach((row, i) => {
-    const projBadge = row.projectTag ? '<span style="background:#ede9fe;color:#7c3aed;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;">#' + esc(row.projectTag) + '</span>' : '<span style="color:#ccc;">—</span>'
-    const recCount = row.receipts?.length || 0
-    const receiptBadge = recCount > 0
-      ? '<span style="color:#4ade80;font-size:10px;font-weight:700;">✅ ' + recCount + '</span>'
-      : '<span style="color:#ccc;font-size:10px;">—</span>'
-    rowsHtml += '<tr style="border-bottom:1px solid #f1f5f9;">'
-    rowsHtml += '<td style="padding:8px;font-weight:700;color:#64748b;">' + (i+1) + '</td>'
-    rowsHtml += '<td style="padding:8px;font-weight:700;">' + esc(row.contactName || 'Sin nombre') + '</td>'
-    rowsHtml += '<td style="padding:8px;">' + esc(row.bank || '—') + '</td>'
-    rowsHtml += '<td style="padding:8px;font-family:\'Courier New\',monospace;font-size:11px;letter-spacing:0.03em;">' + esc(row.clabe || '—') + '</td>'
-    rowsHtml += '<td style="padding:8px;text-align:right;font-weight:800;font-size:13px;">$' + _fmt$(row.montoMXN) + '</td>'
-    rowsHtml += '<td style="padding:8px;text-align:center;">' + projBadge + '</td>'
-    rowsHtml += '<td style="padding:8px;text-align:center;">' + receiptBadge + '</td>'
-    rowsHtml += '</tr>'
-  })
-
-  let h = '<!DOCTYPE html><html><head><meta charset="utf-8"/>'
-  h += '<title>OTC — ' + esc(ref) + '</title>'
-  h += '<style>'
-  h += '*{box-sizing:border-box;margin:0;padding:0}'
-  h += 'body{font-family:"Segoe UI",system-ui,sans-serif;max-width:900px;margin:0 auto;padding:30px;color:#1e293b;font-size:13px;}'
-  h += 'table{width:100%;border-collapse:collapse;} th{text-align:left;padding:8px 8px;background:#f8fafc;font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-bottom:2px solid #e2e8f0;}'
-  h += '.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px;}'
-  h += '.kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;text-align:center;}'
-  h += '.kpi-l{font-size:9px;font-weight:800;color:#94a3b8;letter-spacing:.5px;text-transform:uppercase;} .kpi-v{font-size:20px;font-weight:800;margin-top:6px;} .kpi-s{font-size:9px;color:#94a3b8;margin-top:2px;}'
-  h += '.bar-bg{height:10px;background:#e2e8f0;border-radius:5px;overflow:hidden;margin-top:6px;} .bar-fill{height:100%;border-radius:5px;transition:width 0.3s;}'
-  h += '.badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;}'
-  h += '@media print{body{padding:12px;}}'
-  h += '</style></head><body>'
-
-  // ── Header ──
-  h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:16px;margin-bottom:24px;">'
-  h += '<div>'
-  h += '<h1 style="font-size:22px;font-weight:900;color:#0f172a;margin-bottom:4px;">📊 Estado de Cuenta — Operación OTC</h1>'
-  h += '<div style="font-size:12px;color:#64748b;margin-bottom:2px;">📝 Referencia: <b style="color:#0f172a;">' + esc(ref) + '</b></div>'
-  h += '<div style="font-size:12px;color:#64748b;">📅 ' + dateStr + ' · ⏰ ' + timeStr + '</div>'
-  if (linkedProjects.length) h += '<div style="margin-top:6px;">' + linkedProjects.map(p => '<span class="badge" style="background:#ede9fe;color:#7c3aed;">📂 #' + esc(p) + '</span>').join(' ') + '</div>'
-  h += '</div>'
-  h += '<div style="text-align:right;"><div style="font-size:18px;font-weight:900;color:#0f172a;">NEXUS OS</div><div style="font-size:10px;color:#94a3b8;">Orquestador OTC v2.1</div>'
-  h += '<div class="badge" style="margin-top:6px;background:' + (statusColor==='#16a34a'?'#dcfce7':'#fef3c7') + ';color:' + statusColor + ';">' + statusText + '</div>'
-  h += '</div></div>'
-
-  // ── KPIs ──
-  h += '<div class="kpi-grid">'
-  h += '<div class="kpi"><div class="kpi-l">💱 Recibido</div><div class="kpi-v">' + esc(qty) + '</div><div class="kpi-s">' + esc(coin) + '</div></div>'
-  h += '<div class="kpi"><div class="kpi-l">📈 Tipo de Cambio</div><div class="kpi-v">$' + esc(tc) + '</div><div class="kpi-s">MXN por ' + esc(coin) + '</div></div>'
-  h += '<div class="kpi"><div class="kpi-l">💰 Venta Bruta</div><div class="kpi-v">$' + _fmt$(_otcData.ventaBruta) + '</div></div>'
-  h += '<div class="kpi"><div class="kpi-l">📊 Comisión (' + esc(feeR) + '%)</div><div class="kpi-v" style="color:#d97706;">$' + _fmt$(_otcData.comisionCliente) + '</div></div>'
-  h += '<div class="kpi" style="border-color:#16a34a;"><div class="kpi-l">✅ Neto a Dispersar</div><div class="kpi-v" style="color:#16a34a;">$' + _fmt$(_otcData.ventaReportada) + '</div></div>'
-  h += '</div>'
-
-  // ── Dispersion progress bar ──
-  h += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 18px;margin-bottom:20px;">'
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-  h += '<span style="font-size:11px;font-weight:700;color:#64748b;">Progreso de Dispersión</span>'
-  h += '<span style="font-size:13px;font-weight:800;color:' + statusColor + ';">' + pctDisp.toFixed(1) + '% — $' + _fmt$(totalAssigned) + ' de $' + _fmt$(_otcData.ventaReportada) + '</span>'
-  h += '</div>'
-  h += '<div class="bar-bg"><div class="bar-fill" style="width:' + pctDisp.toFixed(1) + '%;background:' + statusColor + ';"></div></div>'
-  if (remaining > 0.01) h += '<div style="text-align:right;font-size:10px;color:#d97706;margin-top:4px;">Restante: $' + _fmt$(remaining) + ' MXN</div>'
-  h += '</div>'
-
-  // ── Table ──
-  h += '<div style="margin-bottom:20px;">'
-  h += '<div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:8px;">💸 Detalle de Dispersión — ' + _otcRows.length + ' beneficiario' + (_otcRows.length!==1?'s':'') + '</div>'
-  h += '<table>'
-  h += '<thead><tr><th>#</th><th>Beneficiario</th><th>Banco</th><th>CLABE / Cuenta</th><th style="text-align:right;">Monto MXN</th><th style="text-align:center;">Proyecto</th><th style="text-align:center;">SPEI</th></tr></thead>'
-  h += '<tbody>' + rowsHtml + '</tbody>'
-  h += '<tfoot><tr style="border-top:3px solid #0f172a;background:#f8fafc;"><td colspan="4" style="padding:10px 8px;text-align:right;font-weight:800;font-size:12px;">TOTAL DISPERSADO:</td>'
-  h += '<td style="padding:10px 8px;text-align:right;font-size:16px;font-weight:900;">$' + _fmt$(totalAssigned) + '</td><td colspan="2"></td></tr></tfoot>'
-  h += '</table></div>'
-
-  // ── Per-beneficiary breakdown bars ──
-  if (_otcRows.length > 1) {
-    h += '<div style="margin-bottom:20px;"><div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:10px;">📊 Distribución por Beneficiario</div>'
-    _otcRows.forEach(row => {
-      const pct = totalAssigned > 0 ? (row.montoMXN / totalAssigned * 100) : 0
-      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
-      h += '<div style="font-size:11px;font-weight:600;min-width:120px;text-align:right;color:#475569;">' + esc(row.contactName||'—') + '</div>'
-      h += '<div style="flex:1;height:18px;background:#f1f5f9;border-radius:4px;overflow:hidden;position:relative;">'
-      h += '<div style="height:100%;width:' + pct.toFixed(1) + '%;background:linear-gradient(90deg,#3b82f6,#60a5fa);border-radius:4px;"></div>'
-      h += '<span style="position:absolute;right:6px;top:1px;font-size:10px;font-weight:700;color:#475569;">' + pct.toFixed(1) + '%</span>'
-      h += '</div>'
-      h += '<div style="font-size:11px;font-weight:700;min-width:80px;text-align:right;">$' + _fmt$(row.montoMXN) + '</div>'
-      h += '</div>'
-    })
-    h += '</div>'
+  const pdfData = {
+    orqName: ref,
+    coin,
+    rows: _otcRows.map(row => ({
+      beneficiario: row.contactName || 'Sin nombre',
+      banco:        row.bank   || '—',
+      clabe:        row.clabe  || '',
+      cantidad:     tc > 0 ? _floor2(row.montoMXN / tc) : 0,
+      moneda:       coin,
+      tc,
+      comision:     feeR / 100,
+      neto:         row.montoMXN,
+      comprobante:  (row.receipts?.length || 0) > 0,
+    })),
+    totals: {
+      usdt:     qty,
+      bruto:    _otcData.ventaBruta,
+      neto:     _otcData.ventaReportada,
+      ganancia: _otcData.gananciaOp,
+    },
   }
 
-  // ── Receipts ──
-  const rowsWithReceipts = _otcRows.filter(r => r.receipts?.length)
-  if (rowsWithReceipts.length) {
-    h += '<div style="margin-bottom:20px;page-break-before:auto;"><div style="font-size:12px;font-weight:800;color:#0f172a;margin-bottom:10px;">🧾 Comprobantes SPEI</div>'
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
-    rowsWithReceipts.forEach(r => {
-      ;(r.receipts || []).forEach((rc, idx) => {
-        h += '<div style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center;">'
-        h += '<div style="font-size:11px;font-weight:700;margin-bottom:6px;">' + esc(r.contactName) + ' · $' + _fmt$(r.montoMXN) + (r.receipts.length > 1 ? ' · #' + (idx+1) : '') + '</div>'
-        if (rc.isUrl && !rc.data.match(/\.(png|jpg|jpeg|gif|webp)/i) && !rc.data.startsWith('data:')) {
-          h += '<a href="' + esc(rc.data) + '" target="_blank" style="color:#3b82f6;font-size:11px;">🔗 Ver comprobante</a>'
-        } else {
-          h += '<img src="' + rc.data + '" style="max-width:100%;max-height:250px;border-radius:6px;"/>'
-        }
-        h += '</div>'
-      })
-    })
-    h += '</div></div>'
-  }
-
-  // ── Footer ──
-  h += '<div style="text-align:center;margin-top:30px;padding-top:14px;border-top:2px solid #e2e8f0;color:#94a3b8;font-size:10px;">'
-  h += 'Generado por <b>Nexus OS — Orquestador OTC v2.1</b> · ' + dateStr + ' · ' + timeStr
-  h += '</div></body></html>'
-
-  const win = window.open('', '_blank')
-  if (win) { win.document.write(h); win.document.close(); setTimeout(() => win.print(), 400) }
+  showToast('⏳ Generando PDF...')
+  setTimeout(() => {
+    try {
+      pdfDispersionOTC(pdfData, new Date(), getEmisor())
+      showToast('✅ PDF descargado')
+    } catch (e) {
+      console.error('pdfDispersionOTC:', e)
+      showToast('❌ Error: ' + e.message)
+    }
+  }, 50)
+  // (legacy HTML window removed — replaced by jsPDF pdfDispersionOTC above)
+  return
 }
 
 // Save OTC operation to Nexus nodes
@@ -15425,7 +15330,7 @@ window.exportProyectoPDF = (projectId) => {
   showToast('⏳ Generando PDF...')
   setTimeout(() => {
     try {
-      pdfReporteProyecto(proyecto, allNodes)
+      pdfReporteProyecto(proyecto, allNodes, getEmisor())
       showToast('✅ PDF descargado')
     } catch(e) {
       console.error('pdfReporteProyecto:', e)
@@ -15443,7 +15348,7 @@ window.exportResumenMensualPDF = (period) => {
   showToast('⏳ Generando resumen mensual...')
   setTimeout(() => {
     try {
-      pdfResumenMensual(period, allNodes, [])
+      pdfResumenMensual(period, allNodes, allNodes.filter(n => n.type === 'account'), getEmisor())
       showToast('✅ Resumen mensual descargado')
     } catch(e) {
       console.error('pdfResumenMensual:', e)
@@ -18950,7 +18855,7 @@ window.mvExportEstadoCuenta = () => {
   showToast('⏳ Generando PDF...')
   setTimeout(() => {
     try {
-      pdfEstadoCuenta(orq, list, kpis, _mvTcCache, _mvFilters)
+      pdfEstadoCuenta(orq, list, kpis, _mvTcCache, _mvFilters, getEmisor())
       showToast('✅ PDF descargado')
     } catch (e) {
       console.error('pdfEstadoCuenta:', e)
