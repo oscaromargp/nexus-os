@@ -777,7 +777,7 @@ function _footerTramite(doc, emisor, leyenda) {
   doc.setTextColor(...T.textMid)
   const left = emisor?.nombre
     ? `${emisor.nombre}${emisor.rfc ? ' · RFC: ' + emisor.rfc : ''}`
-    : `${T.brand} · ${T.url}`
+    : T.url
   doc.text(doc.splitTextToSize(left, (W / 2) - T.mX)[0], T.mX, H - 9)
   const ts = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
   doc.text(ts, W - T.mX, H - 9, { align: 'right' })
@@ -795,6 +795,32 @@ function _para(doc, text, y, indent = T.mX, maxW = null) {
   const lines = doc.splitTextToSize(text, w)
   doc.text(lines, indent, y)
   return y + lines.length * 5
+}
+
+/** Párrafo con justificación simulada */
+function _paraJ(doc, text, y, indent, maxW) {
+  const W  = doc.internal.pageSize.getWidth()
+  const w  = maxW ?? (W - (indent ?? T.mX) - T.mX)
+  const ix = indent ?? T.mX
+  const lines = doc.splitTextToSize(text, w)
+  const lh    = doc.getFontSize() * 0.4 + 3.2
+  lines.forEach((line, i) => {
+    const isLast = i === lines.length - 1 || line.trim() === ''
+    if (isLast) {
+      doc.text(line, ix, y + i * lh)
+    } else {
+      const words = line.trimEnd().split(' ')
+      if (words.length <= 1) { doc.text(line, ix, y + i * lh); return }
+      const textW  = doc.getTextWidth(words.join(''))
+      const gap    = (w - textW) / (words.length - 1)
+      let x = ix
+      words.forEach((word, wi) => {
+        doc.text(word, x, y + i * lh)
+        x += doc.getTextWidth(word) + gap
+      })
+    }
+  })
+  return y + lines.length * lh
 }
 
 /** Borde de firma y línea de texto */
@@ -936,6 +962,13 @@ export function pdfPagare(data, emisor = {}) {
   y = _para(doc, legal, y)
   y += 4
 
+  // MXN equivalent cuando es cripto/divisa
+  if (data.montoMxn && moneda !== 'MXN') {
+    doc.setFontSize(8); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
+    doc.text(`≈ $${parseFloat(data.montoMxn).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN al T.C. de $${data.tc} por ${moneda}`, W / 2, y, { align: 'center' })
+    y += 6
+  }
+
   if (data.metodo) {
     doc.setFont(T.font, 'bold')
     doc.setFontSize(9)
@@ -943,6 +976,19 @@ export function pdfPagare(data, emisor = {}) {
     doc.setFont(T.font, 'normal')
     doc.text(`${data.metodo}${data.referencia ? ' · Ref: ' + data.referencia : ''}`, T.mX + 38, y)
     y += 7
+  }
+
+  // Caja de datos de cobro del beneficiario
+  if (data.benefBanco || data.benefClabe) {
+    doc.setFillColor(240, 253, 250); doc.setDrawColor(...T.cyan); doc.setLineWidth(0.4)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, 20, 2, 2, 'FD')
+    doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
+    doc.text('DATOS PARA DEPÓSITO / TRANSFERENCIA AL BENEFICIARIO', T.mX + 4, y + 6)
+    doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textInk); doc.setFontSize(8)
+    const pagoCol1 = T.mX + 4, pagoCol2 = W / 2 + 4
+    if (data.benefBanco) doc.text(`Banco: ${data.benefBanco}`, pagoCol1, y + 13)
+    if (data.benefClabe) { doc.setFont(T.font, 'bold'); doc.text(`CLABE / Wallet: ${data.benefClabe}`, data.benefBanco ? pagoCol2 : pagoCol1, y + 13) }
+    y += 24
   }
 
   // Bloques de ID completos
@@ -1183,86 +1229,119 @@ export function pdfContratoServicios(data, emisor = {}) {
   const blank = '________________________'
   const monto = parseFloat(data.monto || 0)
 
+  // Campos extendidos (nuevos)
+  const prestCurp  = data.prestadorCurp  || ''
+  const prestElect = data.prestadorElect || ''
+  const prestPasap = data.prestadorPasap || ''
+  const clientCurp = data.clienteCurp    || ''
+  const clientElect = data.clienteElect  || ''
+  const clientPasap = data.clientePasap  || ''
+  const prestBanco = data.prestadorBanco || ''
+  const prestClabe = data.prestadorClabe || ''
+  const monedaC    = data.monedaContrato || 'MXN'
+
+  const _newPage = () => {
+    doc.addPage()
+    const ny = _headerTramite(doc, 'CONTRATO DE PRESTACIÓN DE SERVICIOS', folio)
+    _footerTramite(doc, emisor, 'Original para el Cliente — Copia para el Prestador de Servicios · Firmar todas las hojas al calce')
+    return ny + 4
+  }
+  const _checkY = (curY, needed = 20) => curY + needed > 260 ? _newPage() : curY
+
   let y = _headerTramite(doc, 'CONTRATO DE PRESTACIÓN DE SERVICIOS', folio)
   y += 2
 
-  doc.setFontSize(8)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textMid)
+  doc.setFontSize(8); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
   doc.text('Contrato de naturaleza civil', W / 2, y, { align: 'center' })
   y += 8
 
-  // Bloque de partes
-  doc.setFontSize(9)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.textInk)
-  doc.text('PARTES:', T.mX, y)
-  y += 5
-  doc.setFont(T.font, 'normal')
-  doc.setFontSize(9)
-  const prestRfc   = data.prestadorRfc  ? `, RFC: ${data.prestadorRfc}`  : ''
-  const prestNac   = data.prestadorNac  ? `, nacido el ${data.prestadorNac}` : ''
-  const prestDom   = data.prestadorDom  ? `, con domicilio en ${data.prestadorDom}` : ''
-  const clienteRfc = data.clienteRfc    ? `, RFC: ${data.clienteRfc}`    : ''
-  const clienteNac = data.clienteNac    ? `, nacido el ${data.clienteNac}` : ''
-  const clienteDom = data.clienteDom    ? `, con domicilio en ${data.clienteDom}` : ''
-  y = _para(doc, `- EL PRESTADOR: ${data.prestadorName || blank}${prestRfc}${prestNac}${prestDom}.`, y, T.mX + 2)
-  y += 2
-  y = _para(doc, `- EL CLIENTE: ${data.clienteName || blank}${clienteRfc}${clienteNac}${clienteDom}.`, y, T.mX + 2)
-  y += 5
+  // ── Bloque de partes con identificaciones completas ──────────────────────
+  doc.setFontSize(9); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('PARTES:', T.mX, y); y += 5
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9); doc.setTextColor(...T.textInk)
 
-  doc.setFontSize(9.5)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textInk)
+  const _idLine = (parts) => parts.filter(Boolean).join(' · ')
+
+  const prestIdParts = [
+    data.prestadorName || blank,
+    data.prestadorRfc   ? `RFC: ${data.prestadorRfc}`   : '',
+    prestCurp           ? `CURP: ${prestCurp}`          : '',
+    prestElect          ? `Clave Electoral: ${prestElect}` : '',
+    prestPasap          ? `Pasaporte: ${prestPasap}`    : '',
+    data.prestadorNac   ? `F. Nac.: ${data.prestadorNac}` : '',
+    data.prestadorDom   ? `Dom.: ${data.prestadorDom}`  : '',
+  ]
+  y = _paraJ(doc, `- EL PRESTADOR: ${_idLine(prestIdParts)}.`, y, T.mX + 2)
+  y += 3
+
+  const clientIdParts = [
+    data.clienteName || blank,
+    data.clienteRfc   ? `RFC: ${data.clienteRfc}`       : '',
+    clientCurp        ? `CURP: ${clientCurp}`            : '',
+    clientElect       ? `Clave Electoral: ${clientElect}` : '',
+    clientPasap       ? `Pasaporte: ${clientPasap}`      : '',
+    data.clienteNac   ? `F. Nac.: ${data.clienteNac}`   : '',
+    data.clienteDom   ? `Dom.: ${data.clienteDom}`       : '',
+  ]
+  y = _paraJ(doc, `- EL CLIENTE: ${_idLine(clientIdParts)}.`, y, T.mX + 2)
+  y += 6
+
+  doc.setFontSize(9.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textInk)
   const proyectoPart = data.proyectoNombre ? ` (Proyecto: "${data.proyectoNombre}")` : ''
   const intro = `En ${data.lugar || blank}, a ${data.fecha || blank}, ambas partes convienen en celebrar el presente Contrato de Prestación de Servicios${proyectoPart}, al tenor de las siguientes cláusulas:`
-  y = _para(doc, intro, y)
-  y += 5
+  y = _paraJ(doc, intro, y); y += 5
 
+  // ── Cláusulas base ────────────────────────────────────────────────────────
+  const montoStr = `$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${monedaC} (${numToLetras(monto)})`
   const clausulas = [
     { titulo: 'PRIMERA — OBJETO', texto: `EL PRESTADOR DE SERVICIOS se compromete a proporcionar al CLIENTE los siguientes servicios: ${data.servicios || blank}.${data.proyectoNombre ? ` Proyecto de referencia: "${data.proyectoNombre}".` : ''}` },
-    { titulo: 'SEGUNDA — HONORARIOS', texto: `EL CLIENTE se obliga a pagar al PRESTADOR la cantidad de $${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN (${numToLetras(monto)}) por los servicios convenidos. Forma de pago: ${data.formaPago || blank}.` },
-    { titulo: 'TERCERA — VIGENCIA', texto: `El presente contrato tendrá vigencia a partir del ${data.fechaInicio || blank} y hasta el ${data.fechaFin || blank}, renovable con previo aviso de ${data.diasAviso || '15'} días naturales.` },
-    { titulo: 'CUARTA — CONFIDENCIALIDAD', texto: `Las partes acuerdan mantener estricta confidencialidad sobre toda la información intercambiada con motivo del presente contrato, aun después de su terminación.` },
-    { titulo: 'QUINTA — RESCISIÓN', texto: `Cualquiera de las partes podrá rescindir el presente contrato mediante aviso previo de ${data.diasAviso || '15'} días naturales por escrito. El incumplimiento de alguna de las partes dará derecho a la otra a rescindir de manera inmediata.` },
+    { titulo: 'SEGUNDA — HONORARIOS Y FORMA DE PAGO', texto: `EL CLIENTE se obliga a pagar al PRESTADOR la cantidad de ${montoStr} por los servicios convenidos. Forma de pago: ${data.formaPago || blank}.${prestBanco ? ` Cuenta del prestador: ${prestBanco}` : ''}${prestClabe ? ` — CLABE/Wallet: ${prestClabe}` : ''}.` },
+    { titulo: 'TERCERA — VIGENCIA', texto: `El presente contrato tendrá vigencia a partir del ${data.fechaInicio || blank} y hasta el ${data.fechaFin || blank}, renovable con previo aviso de ${data.diasAviso || '15'} días naturales por escrito.` },
+    { titulo: 'CUARTA — CONFIDENCIALIDAD', texto: `Las partes acuerdan mantener estricta confidencialidad sobre toda la información intercambiada con motivo del presente contrato, incluyendo datos técnicos, comerciales, personales y de terceros, aun después de concluida la vigencia del mismo.` },
+    { titulo: 'QUINTA — RESCISIÓN', texto: `Cualquiera de las partes podrá rescindir el presente contrato mediante aviso previo de ${data.diasAviso || '15'} días naturales por escrito. El incumplimiento grave de alguna de las partes dará derecho a la otra a rescindir de manera inmediata sin responsabilidad alguna.` },
     { titulo: 'SEXTA — JURISDICCIÓN', texto: `Para la interpretación y cumplimiento del presente contrato, las partes se someten expresamente a la jurisdicción y competencia de los tribunales de ${data.jurisdiccion || data.lugar || blank}, renunciando a cualquier fuero que por razón de su domicilio presente o futuro pudiere corresponderles.` },
   ]
 
-  // Cláusulas adicionales
+  // Cláusulas adicionales (texto libre)
+  let clausulaIdx = 7
   if (data.clausulasExtra) {
-    clausulas.push({ titulo: 'SÉPTIMA — DISPOSICIONES ADICIONALES', texto: data.clausulasExtra })
+    clausulas.push({ titulo: `${_numRomano(clausulaIdx++)} — DISPOSICIONES ADICIONALES`, texto: data.clausulasExtra })
+  }
+
+  // Cláusulas del catálogo
+  if (Array.isArray(data.clausulasSeleccionadas) && data.clausulasSeleccionadas.length > 0) {
+    data.clausulasSeleccionadas.forEach(cl => {
+      clausulas.push({ titulo: `${_numRomano(clausulaIdx++)} — ${(cl.titulo || 'CLÁUSULA ADICIONAL').toUpperCase()}`, texto: cl.texto || '' })
+    })
   }
 
   for (const c of clausulas) {
-    if (y > 240) {
-      doc.addPage()
-      y = _headerTramite(doc, 'CONTRATO DE PRESTACIÓN DE SERVICIOS', folio)
-      y += 4
-    }
-    doc.setFontSize(9)
-    doc.setFont(T.font, 'bold')
-    doc.setTextColor(...T.textInk)
-    doc.text(c.titulo, T.mX, y)
-    y += 5
-    doc.setFont(T.font, 'normal')
-    doc.setFontSize(9.5)
-    y = _para(doc, c.texto, y)
-    y += 4
+    y = _checkY(y, 18)
+    doc.setFontSize(9); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text(c.titulo, T.mX, y); y += 5
+    doc.setFont(T.font, 'normal'); doc.setFontSize(9.5)
+    y = _paraJ(doc, c.texto, y); y += 4
   }
 
-  y += 8
-  if (y > 250) { doc.addPage(); y = 20 }
-  doc.setFontSize(9)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textInk)
-  doc.text('Leído el presente instrumento por ambas partes, lo firman de conformidad.', T.mX, y)
-  y += 14
+  // ── Firma ─────────────────────────────────────────────────────────────────
+  y = _checkY(y, 35)
+  y += 6
+  doc.setFontSize(9); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textInk)
+  y = _paraJ(doc, 'Leído el presente instrumento por ambas partes y enteradas de su contenido y alcance legal, lo firman de conformidad en todas sus hojas.', y); y += 14
 
   _firma(doc, T.mX + 8,      y, 75, `${data.clienteName || blank}\nEL CLIENTE`)
   _firma(doc, W - T.mX - 83, y, 75, `${data.prestadorName || blank}\nEL PRESTADOR DE SERVICIOS`)
 
-  _footerTramite(doc, emisor, null)
+  _footerTramite(doc, emisor, 'Original para el Cliente — Copia para el Prestador de Servicios · Firmar todas las hojas al calce')
   doc.save(`contrato-servicios-${folio}.pdf`)
+}
+
+/** Convierte número a romano (para numerar cláusulas) */
+function _numRomano(n) {
+  const vals = [10,'X',9,'IX',8,'VIII',7,'VII',6,'VI',5,'V',4,'IV',3,'III',2,'II',1,'I']
+  let r = ''
+  for (let i = 0; i < vals.length; i += 2) while (n >= vals[i]) { r += vals[i+1]; n -= vals[i] }
+  return r
 }
 
 // ─── 10. NOTA DE VENTA ───────────────────────────────────────────────────────

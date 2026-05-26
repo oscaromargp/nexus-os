@@ -6253,6 +6253,7 @@ window.switchHerrTab = function(tab) {
   const panel = document.getElementById('herr-panel-' + tab)
   if (panel) panel.style.display = ''
   if (tab === 'tramites' && typeof renderDocHistory === 'function') renderDocHistory()
+  if (tab === 'tramites' && typeof renderClausulaCatalog === 'function') renderClausulaCatalog()
   if (tab === 'otc') {
     // Auto-fetch Bitso price when opening OTC tab (onchange alone won't fire if coin already selected)
     // Reset _userEdited flag so Bitso price auto-fills, and clear cache to force fresh fetch
@@ -7338,7 +7339,6 @@ window.openDocGen = function(type) {
     recibo:     '💰 Recibo de Dinero',
     cartapoder: '✍️ Carta Poder',
     contrato:   '🤝 Contrato de Servicios',
-    nota_venta: '🧾 Nota de Venta',
   }
   if (title) title.textContent = titles[type] || 'Documento'
 
@@ -7412,6 +7412,12 @@ window.openDocGen = function(type) {
     h += '<input type="text" id="dg-benef-tel" class="modal-input" placeholder="Teléfono" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-benef-email" class="modal-input" placeholder="Email" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-benef-dir" class="modal-input" placeholder="Dirección" style="margin-top:4px;font-size:11px;"/>'
+    h += '<div style="margin-top:8px;">'
+    h += '<div style="font-size:10px;font-weight:700;color:#4ade80;margin-bottom:4px;">💳 Cuenta de cobro del beneficiario</div>'
+    h += '<select id="dg-benef-cta" class="modal-input" style="font-size:11px;" onchange="docGenSelectBenefCta()"><option value="">— Sin especificar / Efectivo —</option></select>'
+    h += '<input type="text" id="dg-benef-banco" class="modal-input" placeholder="Banco" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-benef-clabe" class="modal-input" placeholder="CLABE / Wallet" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
     h += '</div>'
 
     // Right: Emisor/Deudor
@@ -7438,11 +7444,12 @@ window.openDocGen = function(type) {
     h += '</div>'
 
     h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
-    h += '<div class="modal-field"><label class="modal-label">Monto</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Monto</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01" oninput="docGenCalcMxnEquiv()"/></div>'
     h += '<div class="modal-field"><label class="modal-label">Moneda</label>'
     h += '<select id="dg-moneda" class="modal-input" onchange="docGenToggleTC()"><option value="MXN">MXN</option><option value="USD">USD</option><option value="USDT">USDT</option><option value="BTC">BTC</option></select></div>'
-    h += '<div class="modal-field" id="dg-tc-field" style="display:none;"><label class="modal-label">Tipo de cambio</label><input type="number" id="dg-tc" class="modal-input" placeholder="T.C." step="0.01"/></div>'
+    h += '<div class="modal-field" id="dg-tc-field" style="display:none;"><label class="modal-label">Tipo de cambio</label><input type="number" id="dg-tc" class="modal-input" placeholder="T.C." step="0.01" oninput="docGenCalcMxnEquiv()"/></div>'
     h += '</div>'
+    h += '<div id="dg-mxn-equiv" style="display:none;background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.15);border-radius:8px;padding:8px 12px;font-size:11px;color:#22d3ee;margin-bottom:10px;"></div>'
 
     h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
     h += '<div class="modal-field"><label class="modal-label">Fecha de Pago</label><input type="date" id="dg-fecha-pago" class="modal-input"/></div>'
@@ -7594,6 +7601,14 @@ window.openDocGen = function(type) {
     h += '<input type="text" id="dg-prestador-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
     h += '<input type="date" id="dg-prestador-nac" class="modal-input" title="Fecha de nacimiento" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-prestador-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-prestador-curp" class="modal-input" placeholder="CURP" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-prestador-electoral" class="modal-input" placeholder="Clave Electoral" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-prestador-pasaporte" class="modal-input" placeholder="N° Pasaporte (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '<div style="margin-top:8px;"><div style="font-size:10px;font-weight:700;color:#60a5fa;margin-bottom:4px;">💳 Cuenta de pago del prestador</div>'
+    h += '<select id="dg-prestador-cta" class="modal-input" style="font-size:11px;" onchange="docGenSelectPrestadorCta()"><option value="">— Sin especificar —</option></select>'
+    h += '<input type="text" id="dg-prestador-banco" class="modal-input" placeholder="Banco" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-prestador-clabe" class="modal-input" placeholder="CLABE / Wallet" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
     h += '</div>'
 
     h += '<div style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:12px;">'
@@ -7603,6 +7618,9 @@ window.openDocGen = function(type) {
     h += '<input type="text" id="dg-cliente-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
     h += '<input type="date" id="dg-cliente-nac" class="modal-input" title="Fecha de nacimiento" style="margin-top:4px;font-size:11px;"/>'
     h += '<input type="text" id="dg-cliente-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-cliente-curp" class="modal-input" placeholder="CURP" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-cliente-electoral" class="modal-input" placeholder="Clave Electoral" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-cliente-pasaporte" class="modal-input" placeholder="N° Pasaporte (opcional)" style="margin-top:4px;font-size:11px;"/>'
     h += '</div>'
 
     h += '</div>'
@@ -7626,8 +7644,10 @@ window.openDocGen = function(type) {
     h += '<div><label class="modal-label">Días aviso rescisión</label><input type="number" id="dg-dias-aviso" class="modal-input" value="15" min="1"/></div>'
     h += '</div>'
 
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
-    h += '<div><label class="modal-label">Honorarios (MXN)</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Honorarios</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div><label class="modal-label">Moneda de pago</label>'
+    h += '<select id="dg-moneda-contrato" class="modal-input"><option value="MXN">MXN</option><option value="USD">USD</option><option value="USDT">USDT</option></select></div>'
     h += '<div><label class="modal-label">Forma de pago</label><input type="text" id="dg-forma-pago" class="modal-input" placeholder="Ej: Transferencia mensual"/></div>'
     h += '</div>'
 
@@ -7637,35 +7657,23 @@ window.openDocGen = function(type) {
     h += '<div class="modal-field"><label class="modal-label">Cláusulas adicionales (opcional)</label>'
     h += '<textarea id="dg-clausulas-extra" class="modal-input" rows="3" placeholder="Disposiciones adicionales, acuerdos especiales, penalizaciones, etc."></textarea></div>'
 
-  } else if (type === 'nota_venta') {
-    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
-    h += '<div><label class="modal-label">Fecha</label><input type="date" id="dg-fecha" class="modal-input" value="' + new Date().toISOString().slice(0, 10) + '"/></div>'
-    h += '<div>'
-    h += '<label class="modal-label">Cliente</label>'
-    h += '<select id="dg-cliente" class="modal-input" onchange="docGenFillNotaVenta()"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
-    h += '<input type="text" id="dg-cliente-name" class="modal-input" placeholder="Nombre del cliente" style="margin-top:6px;"/>'
-    h += '</div>'
-    h += '</div>'
-
-    h += '<div style="margin-bottom:14px;">'
-    h += '<div style="font-size:11px;font-weight:700;color:var(--accent-cyan);margin-bottom:8px;">📦 Conceptos / Productos</div>'
-    h += '<div style="display:grid;grid-template-columns:3fr 1fr 1fr;gap:6px;margin-bottom:4px;padding:0 2px;">'
-    h += '<span style="font-size:10px;color:var(--text-dim);">Descripción</span>'
-    h += '<span style="font-size:10px;color:var(--text-dim);">Cant.</span>'
-    h += '<span style="font-size:10px;color:var(--text-dim);">Precio Unit.</span>'
-    h += '</div>'
-    for (let i = 1; i <= 5; i++) {
-      h += '<div style="display:grid;grid-template-columns:3fr 1fr 1fr;gap:6px;margin-bottom:6px;">'
-      h += '<input type="text" id="dg-item-desc-' + i + '" class="modal-input" style="font-size:12px;" placeholder="Concepto ' + i + '"/>'
-      h += '<input type="number" id="dg-item-cant-' + i + '" class="modal-input" style="font-size:12px;" placeholder="1" min="0" step="0.01"/>'
-      h += '<input type="number" id="dg-item-precio-' + i + '" class="modal-input" style="font-size:12px;" placeholder="0.00" min="0" step="0.01"/>'
-      h += '</div>'
+    // Clause catalog multi-select
+    const clausulasCatalog = (typeof allNodes !== 'undefined') ? allNodes.filter(n => n.type === 'tramite_clausula') : []
+    if (clausulasCatalog.length > 0) {
+      const _esc2 = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+      h += '<div class="modal-field"><label class="modal-label">📜 Cláusulas del catálogo (seleccionar las que aplican)</label>'
+      h += '<div style="max-height:200px;overflow-y:auto;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:8px;">'
+      clausulasCatalog.forEach(cl => {
+        const m2 = cl.metadata || {}
+        const tituloEsc = _esc2(m2.titulo || '')
+        const textoEsc  = _esc2(m2.texto  || '')
+        h += `<label style="display:flex;align-items:start;gap:8px;padding:6px 4px;cursor:pointer;border-radius:6px;margin-bottom:4px;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background=''">`
+        h += `<input type="checkbox" class="dg-clausula-check" data-titulo="${tituloEsc}" data-texto="${textoEsc}" style="margin-top:2px;accent-color:#22d3ee;width:14px;height:14px;flex-shrink:0;"/>`
+        h += `<div><div style="font-size:12px;font-weight:700;color:#fff;">${tituloEsc}</div><div style="font-size:10px;color:#94a3b8;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;">${textoEsc}</div></div></label>`
+      })
+      h += '</div></div>'
     }
-    h += '</div>'
 
-    h += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-main);">'
-    h += '<input type="checkbox" id="dg-con-iva" style="width:16px;height:16px;accent-color:var(--accent-cyan);"/> Incluir IVA (16%)'
-    h += '</label>'
   }
 
   body.innerHTML = h
@@ -7714,6 +7722,36 @@ window.docGenFillPagare = function(role) {
   if (telEl) telEl.value = m.tel || m.phone || ''
   const emailEl = document.getElementById(prefix + '-email')
   if (emailEl) emailEl.value = m.email || ''
+  // Populate account picker for beneficiario
+  if (role === 'beneficiario') {
+    const accounts = m.contact_accounts || m.cuentas || []
+    const ctaSel   = document.getElementById('dg-benef-cta')
+    if (ctaSel && accounts.length) {
+      ctaSel.innerHTML = '<option value="">— Sin especificar / Efectivo —</option>' +
+        accounts.map(a => {
+          const label   = a.label || a.banco || 'Cuenta'
+          const preview = (a.clabe || a.wallet || '').slice(0, 10)
+          const val     = JSON.stringify({ banco: a.banco||'', clabe: a.clabe||'', wallet: a.wallet||'' })
+          return `<option value='${val.replace(/'/g,"&#39;")}'>${((a.tipo||'').includes('cripto')||a.wallet)?'₿':'🏦'} ${label} ${preview}</option>`
+        }).join('')
+      if (accounts.length >= 1) {
+        ctaSel.value = JSON.stringify({ banco: accounts[0].banco||'', clabe: accounts[0].clabe||'', wallet: accounts[0].wallet||'' })
+        docGenSelectBenefCta()
+      }
+    }
+  }
+}
+
+window.docGenSelectBenefCta = function() {
+  const sel = document.getElementById('dg-benef-cta')
+  if (!sel || !sel.value || sel.value === '') return
+  try {
+    const acct = JSON.parse(sel.value)
+    const bancoEl = document.getElementById('dg-benef-banco')
+    const clabeEl = document.getElementById('dg-benef-clabe')
+    if (bancoEl) bancoEl.value = acct.banco || ''
+    if (clabeEl) clabeEl.value = acct.clabe || acct.wallet || ''
+  } catch {}
 }
 
 window.docGenFillRecibo = function(role) {
@@ -7794,6 +7832,50 @@ window.docGenFillContrato = function(role) {
   // fecha_nac si está en metadata
   const nacEl = document.getElementById('dg-' + role + '-nac')
   if (nacEl && m.fecha_nac) nacEl.value = m.fecha_nac
+  // Extra fields for prestador/cliente
+  if (role === 'prestador') {
+    const curpEl  = document.getElementById('dg-prestador-curp')
+    const electEl = document.getElementById('dg-prestador-electoral')
+    const pasapEl = document.getElementById('dg-prestador-pasaporte')
+    if (curpEl)  curpEl.value  = m.curp           || (m.documents||[]).find(d=>d.docType==='curp')?.name || ''
+    if (electEl) electEl.value = m.clave_electoral || ''
+    if (pasapEl) pasapEl.value = m.pasaporte       || ''
+    // Populate account picker
+    const accounts = m.contact_accounts || m.cuentas || []
+    const ctaSel   = document.getElementById('dg-prestador-cta')
+    if (ctaSel && accounts.length) {
+      ctaSel.innerHTML = '<option value="">— Sin especificar —</option>' +
+        accounts.map(a => {
+          const label = a.label || a.banco || 'Cuenta'
+          const val   = JSON.stringify({ banco: a.banco||'', clabe: a.clabe||'', wallet: a.wallet||'' })
+          return `<option value='${val.replace(/'/g,"&#39;")}'>${label}</option>`
+        }).join('')
+      if (accounts.length === 1) {
+        ctaSel.value = JSON.stringify({ banco: accounts[0].banco||'', clabe: accounts[0].clabe||'', wallet: accounts[0].wallet||'' })
+        docGenSelectPrestadorCta()
+      }
+    }
+  }
+  if (role === 'cliente') {
+    const curpEl  = document.getElementById('dg-cliente-curp')
+    const electEl = document.getElementById('dg-cliente-electoral')
+    const pasapEl = document.getElementById('dg-cliente-pasaporte')
+    if (curpEl)  curpEl.value  = m.curp           || ''
+    if (electEl) electEl.value = m.clave_electoral || ''
+    if (pasapEl) pasapEl.value = m.pasaporte       || ''
+  }
+}
+
+window.docGenSelectPrestadorCta = function() {
+  const sel = document.getElementById('dg-prestador-cta')
+  if (!sel || !sel.value) return
+  try {
+    const acct = JSON.parse(sel.value)
+    const b = document.getElementById('dg-prestador-banco')
+    const c = document.getElementById('dg-prestador-clabe')
+    if (b) b.value = acct.banco || ''
+    if (c) c.value = acct.clabe || acct.wallet || ''
+  } catch {}
 }
 
 window.docGenFillNotaVenta = function() {
@@ -7806,9 +7888,24 @@ window.docGenFillNotaVenta = function() {
 }
 
 window.docGenToggleTC = function() {
-  const monedaEl = document.getElementById('dg-moneda')
+  const moneda  = document.getElementById('dg-moneda')?.value || 'MXN'
   const tcField = document.getElementById('dg-tc-field')
-  if (tcField) tcField.style.display = (monedaEl?.value && monedaEl.value !== 'MXN') ? 'block' : 'none'
+  if (tcField) tcField.style.display = moneda !== 'MXN' ? '' : 'none'
+  docGenCalcMxnEquiv()
+}
+window.docGenCalcMxnEquiv = function() {
+  const moneda = document.getElementById('dg-moneda')?.value || 'MXN'
+  const monto  = parseFloat(document.getElementById('dg-monto')?.value || '0') || 0
+  const tc     = parseFloat(document.getElementById('dg-tc')?.value    || '0') || 0
+  const equiv  = document.getElementById('dg-mxn-equiv')
+  if (!equiv) return
+  if (moneda !== 'MXN' && monto > 0 && tc > 0) {
+    const mxn = monto * tc
+    equiv.style.display = ''
+    equiv.textContent = `≈ $${mxn.toLocaleString('es-MX', { minimumFractionDigits:2 })} MXN (${monto} ${moneda} \xd7 T.C. $${tc})`
+  } else {
+    equiv.style.display = 'none'
+  }
 }
 
 window.docGenTogglePagosSerie = function() {
@@ -7937,6 +8034,9 @@ window.docGenExport = function() {
         }
       }
     }
+    const benefBanco = document.getElementById('dg-benef-banco')?.value?.trim() || ''
+    const benefClabe = document.getElementById('dg-benef-clabe')?.value?.trim() || ''
+    const montoMxn   = (monto && tc && moneda !== 'MXN') ? monto * parseFloat(tc) : null
     parteAName = benefName; parteBName = deudorName; parteAId = benefSel; parteBId = deudorSel
     docTitle   = 'Pagaré'
     data = { benefName, deudorName, lugar,
@@ -7944,7 +8044,8 @@ window.docGenExport = function() {
              monto, moneda, tc, interesMoratorio, fechaPago, concepto, metodo, referencia,
              bCurp, bRfc, bElect, bPasap, bTel, bEmail, bDir,
              dCurp, dRfc, dElect, dPasap, dTel, dEmail, dDir,
-             pagos: pagos.length ? pagos : null }
+             pagos: pagos.length ? pagos : null,
+             benefBanco, benefClabe, montoMxn }
     pdfPagare(data, emisor)
 
   } else if (type === 'recibo') {
@@ -8052,6 +8153,17 @@ window.docGenExport = function() {
     const formaPago    = document.getElementById('dg-forma-pago')?.value   || blank
     const jurisdiccion = document.getElementById('dg-jurisdiccion')?.value || lugar
     const clausulasExtra = document.getElementById('dg-clausulas-extra')?.value || ''
+    const prestadorCurp   = document.getElementById('dg-prestador-curp')?.value      || ''
+    const prestadorElect  = document.getElementById('dg-prestador-electoral')?.value || ''
+    const prestadorPasap  = document.getElementById('dg-prestador-pasaporte')?.value || ''
+    const clienteCurp     = document.getElementById('dg-cliente-curp')?.value        || ''
+    const clienteElect    = document.getElementById('dg-cliente-electoral')?.value   || ''
+    const clientePasap    = document.getElementById('dg-cliente-pasaporte')?.value   || ''
+    const prestadorBanco  = document.getElementById('dg-prestador-banco')?.value     || ''
+    const prestadorClabe  = document.getElementById('dg-prestador-clabe')?.value     || ''
+    const monedaContrato  = document.getElementById('dg-moneda-contrato')?.value     || 'MXN'
+    const clausulasSeleccionadas = Array.from(document.querySelectorAll('.dg-clausula-check:checked'))
+      .map(el => ({ titulo: el.dataset.titulo, texto: el.dataset.texto }))
     // Proyecto vinculado
     const proyectoSel  = document.getElementById('dg-proyecto')?.value || ''
     const cProyecto    = proyectoSel ? allNodes.find(n => n.id === proyectoSel) : null
@@ -8061,32 +8173,14 @@ window.docGenExport = function() {
     parteAName = prestadorName; parteBName = clienteName; parteAId = prestadorSel; parteBId = clienteSel
     docTitle   = 'Contrato de Servicios'
     data = { prestadorName, prestadorRfc, prestadorNac: toFmt(prestadorNacR), prestadorDom,
+             prestadorCurp, prestadorElect, prestadorPasap, prestadorBanco, prestadorClabe,
              clienteName, clienteRfc, clienteNac: toFmt(clienteNacR), clienteDom,
+             clienteCurp, clienteElect, clientePasap,
              lugar, fecha: toFmt(fechaRaw), servicios, proyectoNombre,
              fechaInicio: toFmt(fIniRaw), fechaFin: toFmt(fFinRaw),
-             diasAviso, monto, formaPago, jurisdiccion, clausulasExtra }
+             diasAviso, monto, monedaContrato, formaPago, jurisdiccion, clausulasExtra,
+             clausulasSeleccionadas }
     pdfContratoServicios(data, emisor)
-
-  } else if (type === 'nota_venta') {
-    const clienteSel  = document.getElementById('dg-cliente')?.value || ''
-    const cClient     = clienteSel ? allNodes.find(n => n.id === clienteSel) : null
-    const clienteName = document.getElementById('dg-cliente-name')?.value
-      || (cClient ? (cClient.metadata?.name || cClient.content) : '') || blank
-    const fechaRaw = document.getElementById('dg-fecha')?.value || ''
-    const fechaFmt = fechaRaw
-      ? new Date(fechaRaw + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : blank
-    const conIva = document.getElementById('dg-con-iva')?.checked || false
-    const items = []
-    for (let i = 1; i <= 5; i++) {
-      const desc   = document.getElementById('dg-item-desc-'  + i)?.value || ''
-      const cant   = parseFloat(document.getElementById('dg-item-cant-'  + i)?.value || '0')
-      const precio = parseFloat(document.getElementById('dg-item-precio-' + i)?.value || '0')
-      if (desc) items.push({ descripcion: desc, cantidad: cant || 1, precio, subtotal: (cant || 1) * precio })
-    }
-    parteAName = emisor.nombre || 'Emisor'; parteBName = clienteName; parteAId = ''; parteBId = clienteSel
-    docTitle   = 'Nota de Venta'
-    data = { clienteName, fecha: fechaFmt, items, conIva }
-    pdfNotaVenta(data, emisor)
   }
 
   if (!docTitle) return
@@ -8179,6 +8273,111 @@ window.deleteDoc = async function(id) {
   }
   renderDocHistory()
   showToast('Documento eliminado')
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// CATÁLOGO DE CLÁUSULAS — Gestión de cláusulas reutilizables
+// ═══════════════════════════════════════════════════════════════════
+let _clausulaEditId = null
+
+window.openClausulaModal = function(id = null) {
+  _clausulaEditId = id
+  const modal    = document.getElementById('clausula-modal')
+  if (!modal) return
+  const existing = id ? (allNodes.find(n => n.id === id)?.metadata || {}) : {}
+  const _lbl = t => `<label style="font-size:11px;font-weight:700;color:var(--text-muted);display:block;margin-bottom:4px;">${t}</label>`
+  document.getElementById('clausula-modal-title').textContent = id ? 'Editar Cláusula' : 'Nueva Cláusula'
+  document.getElementById('clausula-modal-body').innerHTML = `
+    <div style="margin-bottom:12px;">
+      ${_lbl('Título de la cláusula *')}
+      <input type="text" id="cl-titulo" class="modal-input" placeholder="Ej: Confidencialidad, Penalización por retraso..." value="${esc(existing.titulo || '')}"/>
+    </div>
+    <div style="margin-bottom:12px;">
+      ${_lbl('Categoría')}
+      <input type="text" id="cl-categoria" class="modal-input" placeholder="Ej: Contrato, Pagaré, General..." value="${esc(existing.categoria || '')}"/>
+    </div>
+    <div>
+      ${_lbl('Texto completo de la cláusula *')}
+      <textarea id="cl-texto" class="modal-input" rows="6" style="resize:vertical;" placeholder="Escribe el texto legal completo de la cláusula...">${esc(existing.texto || '')}</textarea>
+    </div>
+  `
+  modal.classList.remove('hidden')
+}
+
+window.closeClausulaModal = function() {
+  document.getElementById('clausula-modal')?.classList.add('hidden')
+  _clausulaEditId = null
+}
+
+window.saveClausula = async function() {
+  const titulo = document.getElementById('cl-titulo')?.value?.trim()
+  const texto  = document.getElementById('cl-texto')?.value?.trim()
+  if (!titulo || !texto) { showToast('⚠️ Título y texto son obligatorios'); return }
+  const meta = {
+    titulo,
+    texto,
+    categoria: document.getElementById('cl-categoria')?.value?.trim() || '',
+  }
+  const content = `[Cláusula] ${titulo}`
+  if (_clausulaEditId) {
+    const node = allNodes.find(n => n.id === _clausulaEditId)
+    if (node) {
+      node.content  = content
+      node.metadata = { ...node.metadata, ...meta }
+      if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+        await supabase.from('nodes').update({ content, metadata: node.metadata }).eq('id', _clausulaEditId)
+      }
+    }
+    showToast('✅ Cláusula actualizada')
+  } else {
+    const node = {
+      id: 'cl_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+      content, type: 'tramite_clausula', metadata: meta,
+      created_at: new Date().toISOString(),
+    }
+    allNodes.push(node)
+    if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+      await supabase.from('nodes').insert([{ id: node.id, owner_id: currentUser?.id, content, type: 'tramite_clausula', metadata: meta }])
+    }
+    showToast('✅ Cláusula guardada')
+  }
+  closeClausulaModal()
+  renderClausulaCatalog()
+}
+
+window.deleteClausula = async function(id) {
+  if (!confirm('¿Eliminar esta cláusula del catálogo?')) return
+  const idx = allNodes.findIndex(n => n.id === id)
+  if (idx !== -1) allNodes.splice(idx, 1)
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').delete().eq('id', id)
+  }
+  renderClausulaCatalog()
+  showToast('🗑 Cláusula eliminada')
+}
+
+window.renderClausulaCatalog = function() {
+  const list = document.getElementById('clausula-catalog-list')
+  if (!list) return
+  const clauses = allNodes.filter(n => n.type === 'tramite_clausula').sort((a,b) => (a.metadata?.titulo||'').localeCompare(b.metadata?.titulo||''))
+  if (!clauses.length) {
+    list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-dim);font-size:12px;">Sin cláusulas. Crea la primera con el botón "+ Nueva Cláusula".</div>'
+    return
+  }
+  list.innerHTML = clauses.map(n => {
+    const m = n.metadata || {}
+    return `<div style="display:flex;align-items:start;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.05);">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:700;color:#fff;">${esc(m.titulo || '—')}</div>
+        ${m.categoria ? `<div style="font-size:10px;color:#fbbf24;margin-bottom:3px;">${esc(m.categoria)}</div>` : ''}
+        <div style="font-size:11px;color:#94a3b8;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(m.texto || '')}</div>
+      </div>
+      <div style="display:flex;gap:5px;flex-shrink:0;margin-top:2px;">
+        <button onclick="openClausulaModal('${n.id}')" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;">✏️</button>
+        <button onclick="deleteClausula('${n.id}')" style="background:rgba(248,113,113,0.04);border:1px solid rgba(248,113,113,0.2);color:#f87171;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;">🗑</button>
+      </div>
+    </div>`
+  }).join('')
 }
 
 // Helper: number to Spanish words (simplified for amounts up to millions)

@@ -2949,13 +2949,15 @@
               <p style="font-size:11px;color:var(--text-muted);text-align:center;">Contrato de prestación de servicios con 6 cláusulas legales completas.</p>
             </div>
 
-            <!-- Nota de Venta -->
-            <div class="settings-card" style="cursor:pointer;" onclick="openDocGen('nota_venta')">
-              <div style="font-size:28px;text-align:center;margin-bottom:10px;">🧾</div>
-              <h3 style="font-size:14px;font-weight:800;color:#fff;text-align:center;margin-bottom:6px;">Nota de Venta</h3>
-              <p style="font-size:11px;color:var(--text-muted);text-align:center;">Nota de venta con tabla de conceptos, cantidades, precios y totales con IVA.</p>
-            </div>
+          </div>
 
+          <!-- Catálogo de Cláusulas -->
+          <div class="settings-card" style="margin-top:20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+              <h2 style="font-size:14px;font-weight:800;color:var(--accent-cyan);">📜 Catálogo de Cláusulas</h2>
+              <button onclick="openClausulaModal()" style="background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:11px;font-weight:700;">+ Nueva Cláusula</button>
+            </div>
+            <div id="clausula-catalog-list"></div>
           </div>
 
           <!-- Histórico de documentos generados -->
@@ -5289,6 +5291,23 @@
     <div style="display:flex;gap:10px;justify-content:flex-end;padding:14px 22px;border-top:1px solid rgba(255,255,255,0.07);">
       <button onclick="document.getElementById('cat-modal').classList.add('hidden')" style="padding:9px 18px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;font-size:13px;font-weight:600;">Cancelar</button>
       <button onclick="saveCatItem()" style="padding:9px 20px;border-radius:10px;border:1px solid rgba(167,139,250,0.35);background:rgba(167,139,250,0.12);color:#a78bfa;cursor:pointer;font-size:13px;font-weight:700;">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Catálogo de Cláusulas Modal -->
+<div id="clausula-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeClausulaModal()">
+  <div class="modal-box" style="max-width:600px;width:95%;">
+    <div class="modal-header">
+      <h2 id="clausula-modal-title" class="modal-title">Nueva Cláusula</h2>
+      <button class="modal-close" onclick="closeClausulaModal()">✕</button>
+    </div>
+    <div class="modal-body" style="padding:20px;">
+      <div id="clausula-modal-body"></div>
+    </div>
+    <div class="modal-footer" style="padding:12px 20px;display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeClausulaModal()" class="btn-secondary">Cancelar</button>
+      <button onclick="saveClausula()" class="btn-primary">💾 Guardar Cláusula</button>
     </div>
   </div>
 </div>
