@@ -218,7 +218,7 @@ let editingFinanceId = null
 let currentContactId = null
 let activeContactFilter = 'all'
 let currentCSheetTab = 'perfil'
-let tagPeriod        = '30d'      // '7d' | '30d' | '90d' | 'all'
+let tagPeriod        = 'all'      // '7d' | '30d' | '90d' | 'all'
 let tagTypeFilter    = 'all'      // node type filter for tags view
 
 // ── Módulo Movimientos — state
@@ -12960,15 +12960,15 @@ function _tagCutoff(period) {
 }
 
 // ── KPI cards ─────────────────────────────────────────────────────────────────
-function _renderTagKPIs(freq, filteredNodes) {
+function _renderTagKPIs(freq, filteredNodes, allData = {}) {
   const el = document.getElementById('tag-kpis')
   if (!el) return
 
   const totalTags    = Object.keys(freq).length
   const taggedNodes  = filteredNodes.filter(n => (n.metadata?.tags||[]).length > 0).length
-  // Active / dormant computed from ALL nodes (not period-filtered)
-  const { lastUsed: luAll } = extractTagData(allNodes)
-  const cutoff30Str = (() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().slice(0,10) })()
+  // Active / dormant computed from ALL nodes (passed in via allData)
+  const luAll        = allData.lastUsed || {}
+  const cutoff30Str  = (() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().slice(0,10) })()
   const activeCount  = Object.values(luAll).filter(d => d >= cutoff30Str).length
   const dormantCount = Object.values(luAll).filter(d => d < cutoff30Str).length
   const totalTagsAll = Object.keys(luAll).length
@@ -12988,7 +12988,7 @@ function _renderTagKPIs(freq, filteredNodes) {
 }
 
 // ── Insights automáticos ──────────────────────────────────────────────────────
-function _renderTagInsights(freq, tagNodeMap, lastUsed, pairFreq, filteredNodes) {
+function _renderTagInsights(freq, tagNodeMap, lastUsed, pairFreq, filteredNodes, allData = {}) {
   const el = document.getElementById('tag-insights')
   if (!el) return
   const insights = []
@@ -13000,11 +13000,11 @@ function _renderTagInsights(freq, tagNodeMap, lastUsed, pairFreq, filteredNodes)
     insights.push({ icon:'🏆', text:`Tu tag más activo es <b>#${top}</b> con <b>${cnt} usos</b> en el período`, color:'#fbbf24' })
   }
 
-  // 2. Tags en alza (esta semana vs anterior)
+  // 2. Tags en alza (esta semana vs anterior) — usa allData para ver historial completo
   const now = new Date()
   const w1  = new Date(now); w1.setDate(w1.getDate()-7);  const w1s = w1.toISOString().slice(0,10)
   const w2  = new Date(now); w2.setDate(w2.getDate()-14); const w2s = w2.toISOString().slice(0,10)
-  const { tagNodeMap: tnmAll } = extractTagData(allNodes)
+  const tnmAll = allData.tagNodeMap || {}
   const rising = Object.entries(tnmAll)
     .map(([tag, ns]) => {
       const tw = ns.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= w1s }).length
@@ -13017,8 +13017,8 @@ function _renderTagInsights(freq, tagNodeMap, lastUsed, pairFreq, filteredNodes)
     insights.push({ icon:'📈', text:`En alza esta semana: ${rising.map(r=>`<b>#${r.tag}</b> +${r.delta}`).join(', ')}`, color:'#4ade80' })
   }
 
-  // 3. Tag más dormido
-  const { lastUsed: luAll } = extractTagData(allNodes)
+  // 3. Tag más dormido — usa allData.lastUsed
+  const luAll      = allData.lastUsed || {}
   const dormSorted = Object.entries(luAll).sort((a,b) => a[1].localeCompare(b[1]))
   if (dormSorted.length) {
     const [dtag, ddate] = dormSorted[0]
@@ -13190,17 +13190,22 @@ function _renderTagCloud(sorted, maxFreq) {
 }
 
 window.renderTagsView = function() {
+  try {
   // ── 1. Filtrar nodos por período y tipo ─────────────────────────────────────
   const cutoff = _tagCutoff(tagPeriod)
-  let filtered = allNodes
+  let filtered = allNodes.slice()
   if (cutoff) filtered = filtered.filter(n => {
     const d = n.metadata?.date||(n.created_at?.slice(0,10)||'')
-    return d >= cutoff
+    return !d || d >= cutoff   // include nodes without date so they don't vanish
   })
   if (tagTypeFilter !== 'all') filtered = filtered.filter(n => n.type === tagTypeFilter)
 
-  // ── 2. Extraer datos de tags del período ────────────────────────────────────
-  const { freq, lastUsed, pairFreq, tagNodeMap } = extractTagData(filtered)
+  // ── 2. Extraer datos — un solo pase sobre allNodes para reutilizar ──────────
+  const allData      = extractTagData(allNodes)           // datos globales (para KPIs, dormant, trends)
+  const filteredData = cutoff || tagTypeFilter !== 'all'  // si hay filtro, extraer del subset
+    ? extractTagData(filtered)
+    : allData
+  const { freq, lastUsed, pairFreq, tagNodeMap } = filteredData
   const sorted  = Object.entries(freq).sort((a,b) => b[1]-a[1])
   const maxFreq = sorted[0]?.[1] || 1
 
@@ -13215,16 +13220,16 @@ window.renderTagsView = function() {
   })
 
   // ── 4. KPI cards ─────────────────────────────────────────────────────────────
-  _renderTagKPIs(freq, filtered)
+  _renderTagKPIs(freq, filtered, allData)
 
   // ── 5. Insights ──────────────────────────────────────────────────────────────
-  _renderTagInsights(freq, tagNodeMap, lastUsed, pairFreq, filtered)
+  _renderTagInsights(freq, tagNodeMap, lastUsed, pairFreq, filtered, allData)
 
-  // ── 6. Gráfico evolución (usa allNodes para mostrar historial completo) ──────
-  _renderTagEvolutionChart(tagPeriod)
+  // ── 6. Gráfico evolución ───────────────────────────────────────────────────
+  try { _renderTagEvolutionChart(tagPeriod) } catch(e) { console.error('[tags chart]', e) }
 
   // ── 7. Heatmap ───────────────────────────────────────────────────────────────
-  _renderTagHeatmap()
+  try { _renderTagHeatmap() } catch(e) { console.error('[tags heatmap]', e) }
 
   // ── 8. Tag cloud ──────────────────────────────────────────────────────────────
   _renderTagCloud(sorted, maxFreq)
@@ -13242,17 +13247,16 @@ window.renderTagsView = function() {
         </div>
         <span style="font-size:11px;color:var(--text-muted);width:24px;text-align:right;flex-shrink:0;">${count}</span>
       </div>`
-    }).join('') : '<span style="color:var(--text-muted);font-size:13px;">Sin etiquetas en este período.</span>'
+    }).join('') : '<span style="color:var(--text-muted);font-size:13px;">Sin etiquetas aún.</span>'
   }
 
-  // ── 10. Trends ────────────────────────────────────────────────────────────────
+  // ── 10. Trends (usa allData para comparar esta semana vs anterior) ────────────
   const trendsEl = document.getElementById('tag-trends')
   if (trendsEl) {
     const now2 = new Date()
     const w1 = new Date(now2); w1.setDate(w1.getDate()-7);  const w1s = w1.toISOString().slice(0,10)
     const w2 = new Date(now2); w2.setDate(w2.getDate()-14); const w2s = w2.toISOString().slice(0,10)
-    const { tagNodeMap: tnmFull } = extractTagData(allNodes)
-    const rising = Object.entries(tnmFull).map(([tag, nodes]) => {
+    const rising = Object.entries(allData.tagNodeMap).map(([tag, nodes]) => {
       const tw = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= w1s }).length
       const pw = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= w2s && d < w1s }).length
       return { tag, tw, pw, delta: tw - pw }
@@ -13269,13 +13273,12 @@ window.renderTagsView = function() {
         : '<div style="font-size:12px;color:var(--text-muted);">Sin tendencias esta semana.</div>')
   }
 
-  // ── 11. Durmientes (siempre desde allNodes) ───────────────────────────────────
+  // ── 11. Durmientes (usa allData) ──────────────────────────────────────────────
   const dormEl = document.getElementById('tag-dormant')
   if (dormEl) {
-    const { lastUsed: luAll } = extractTagData(allNodes)
     const cutoff30 = new Date(); cutoff30.setDate(cutoff30.getDate()-30)
     const c30str = cutoff30.toISOString().slice(0,10)
-    const dormant = Object.entries(luAll).filter(([,d]) => d < c30str).sort((a,b) => a[1].localeCompare(b[1])).slice(0,10)
+    const dormant = Object.entries(allData.lastUsed).filter(([,d]) => d < c30str).sort((a,b) => a[1].localeCompare(b[1])).slice(0,10)
     dormEl.innerHTML = dormant.length
       ? dormant.map(([tag,date]) => `
           <div onclick="openTagFolder('${esc(tag)}')" style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
@@ -13307,6 +13310,8 @@ window.renderTagsView = function() {
   const fld = document.getElementById('tag-folder-nodes')
   if (lbl) lbl.textContent = 'Selecciona una etiqueta de la nube ↑'
   if (fld) fld.innerHTML   = ''
+
+  } catch(e) { console.error('[renderTagsView]', e) }
 }
 
 window.openTagFolder = function(tag) {
