@@ -20,7 +20,9 @@ Chart.register(
 import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensual,
          pdfProrroga, pdfPagare, pdfRecibo, pdfCartaPoder,
          pdfContratoServicios, pdfNotaVenta, pdfPresupuesto,
-         pdfPresupuestoPro, pdfNotaVentaPro } from './src/pdf-reports.js'
+         pdfPresupuestoPro, pdfNotaVentaPro,
+         pdfReconocimientoAdeudo, pdfNDA, pdfConvenioPago,
+         pdfOrdenServicio, pdfCartaResponsiva } from './src/pdf-reports.js'
 
 // ── Lucide Icons ──────────────────────────────────────────────────────────────
 import {
@@ -7704,6 +7706,164 @@ window.openDocGen = function(type) {
       h += '</div></div>'
     }
 
+  } else if (type === 'adeudo') {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div style="background:rgba(248,113,113,0.05);border:1px solid rgba(248,113,113,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#f87171;margin-bottom:8px;">👤 DEUDOR</div>'
+    h += '<select id="dg-deudor" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-deudor\',\'dg-deudor-name\',\'dg-deudor-rfc\',\'dg-deudor-dom\',null)"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-deudor-name" class="modal-input" placeholder="Nombre completo del deudor" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-deudor-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;text-transform:uppercase;"/>'
+    h += '<input type="text" id="dg-deudor-curp" class="modal-input" placeholder="CURP (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-deudor-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '<div style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:8px;">🏦 ACREEDOR</div>'
+    h += '<select id="dg-acreedor" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-acreedor\',\'dg-acreedor-name\',\'dg-acreedor-rfc\',\'dg-acreedor-dom\',null)"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-acreedor-name" class="modal-input" placeholder="Nombre completo del acreedor" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-acreedor-rfc" class="modal-input" placeholder="RFC (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-acreedor-dom" class="modal-input" placeholder="Domicilio (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Lugar</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, BCS"/></div>'
+    h += '<div><label class="modal-label">Fecha del documento</label><input type="date" id="dg-fecha" class="modal-input" value="' + new Date().toISOString().slice(0,10) + '"/></div>'
+    h += '</div>'
+    h += '<div class="modal-field"><label class="modal-label">Concepto del adeudo</label><textarea id="dg-concepto" class="modal-input" rows="2" placeholder="Ej: Préstamo de dinero otorgado el día..."></textarea></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Monto adeudado</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01" oninput="docGenFillParty()"/></div>'
+    h += '<div><label class="modal-label">Moneda</label><select id="dg-moneda" class="modal-input" onchange="docGenToggleTCGeneric(\'dg-moneda\',\'dg-adeudo-tc-row\')"><option>MXN</option><option>USD</option><option>USDT</option></select></div>'
+    h += '<div><label class="modal-label">Fecha compromiso de pago</label><input type="date" id="dg-fecha-pago" class="modal-input"/></div>'
+    h += '</div>'
+    h += '<div id="dg-adeudo-tc-row" style="display:none;margin-bottom:14px;"><label class="modal-label">Tipo de cambio (MXN)</label><input type="number" id="dg-tc" class="modal-input" placeholder="Ej: 17.50" step="0.01"/></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Forma de pago comprometida</label><select id="dg-forma-pago" class="modal-input"><option value="Transferencia bancaria">Transferencia bancaria</option><option value="Efectivo">Efectivo</option><option value="USDT / Criptomoneda">USDT / Criptomoneda</option><option value="Depósito en efectivo">Depósito en efectivo</option><option value="Cheque">Cheque</option></select></div>'
+    h += '<div><label class="modal-label">Interés moratorio (% mensual, opcional)</label><input type="number" id="dg-intereses" class="modal-input" placeholder="Ej: 2.5 (dejar vacío si no aplica)" step="0.1" min="0"/></div>'
+    h += '</div>'
+    h += '<div class="modal-field"><label class="modal-label">Condiciones adicionales (opcional)</label><textarea id="dg-notas" class="modal-input" rows="2" placeholder="Garantías, avales, condiciones especiales..."></textarea></div>'
+
+  } else if (type === 'nda') {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div style="background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:8px;">📤 PARTE DIVULGADORA</div>'
+    h += '<select id="dg-parte1" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-parte1\',\'dg-parte1-name\',\'dg-parte1-rfc\',\'dg-parte1-dom\',null)"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-parte1-name" class="modal-input" placeholder="Nombre / empresa" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-parte1-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-parte1-dom" class="modal-input" placeholder="Domicilio (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '<div style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;">📥 PARTE RECEPTORA</div>'
+    h += '<select id="dg-parte2" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-parte2\',\'dg-parte2-name\',\'dg-parte2-rfc\',\'dg-parte2-dom\',null)"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-parte2-name" class="modal-input" placeholder="Nombre / empresa" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-parte2-rfc" class="modal-input" placeholder="RFC" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-parte2-dom" class="modal-input" placeholder="Domicilio (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Lugar de firma</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, BCS"/></div>'
+    h += '<div><label class="modal-label">Fecha</label><input type="date" id="dg-fecha" class="modal-input" value="' + new Date().toISOString().slice(0,10) + '"/></div>'
+    h += '</div>'
+    h += '<div class="modal-field"><label class="modal-label">Objeto / Propósito de la revelación de información</label><textarea id="dg-objeto" class="modal-input" rows="2" placeholder="Ej: Evaluación de proyecto de colaboración comercial, desarrollo de software, etc."></textarea></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Vigencia del NDA</label><select id="dg-vigencia" class="modal-input"><option value="1 año">1 año</option><option value="2 años" selected>2 años</option><option value="3 años">3 años</option><option value="5 años">5 años</option><option value="indefinida">Indefinida</option></select></div>'
+    h += '<div><label class="modal-label">Ciudad para jurisdicción</label><input type="text" id="dg-jurisdiccion" class="modal-input" placeholder="La Paz, BCS"/></div>'
+    h += '</div>'
+    h += '<div class="modal-field"><label class="modal-label">Cláusulas adicionales (opcional)</label><textarea id="dg-clausulas-extra" class="modal-input" rows="2" placeholder="Disposiciones especiales, excepciones adicionales..."></textarea></div>'
+
+  } else if (type === 'convenio') {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:8px;">🏦 ACREEDOR</div>'
+    h += '<select id="dg-acreedor" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-acreedor\',\'dg-acreedor-name\',\'dg-acreedor-rfc\',\'dg-acreedor-dom\',null)"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-acreedor-name" class="modal-input" placeholder="Nombre / empresa" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-acreedor-rfc" class="modal-input" placeholder="RFC (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-acreedor-dom" class="modal-input" placeholder="Domicilio (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '<div style="background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#fb923c;margin-bottom:8px;">👤 DEUDOR</div>'
+    h += '<select id="dg-deudor" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-deudor\',\'dg-deudor-name\',\'dg-deudor-rfc\',\'dg-deudor-dom\',null)"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-deudor-name" class="modal-input" placeholder="Nombre completo" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-deudor-rfc" class="modal-input" placeholder="RFC (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-deudor-dom" class="modal-input" placeholder="Domicilio (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Lugar</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, BCS"/></div>'
+    h += '<div><label class="modal-label">Fecha del convenio</label><input type="date" id="dg-fecha" class="modal-input" value="' + new Date().toISOString().slice(0,10) + '"/></div>'
+    h += '</div>'
+    h += '<div class="modal-field"><label class="modal-label">Concepto del adeudo</label><textarea id="dg-concepto" class="modal-input" rows="2" placeholder="Ej: Factura #001 por servicios de desarrollo web, préstamo personal, etc."></textarea></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Monto total</label><input type="number" id="dg-monto-total" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div><label class="modal-label">N° de parcialidades</label><input type="number" id="dg-n-pagos" class="modal-input" value="3" min="1" max="60"/></div>'
+    h += '<div><label class="modal-label">Frecuencia</label><select id="dg-frecuencia" class="modal-input"><option value="mensual">Mensual</option><option value="quincenal">Quincenal</option><option value="semanal">Semanal</option></select></div>'
+    h += '<div><label class="modal-label">Día de pago (mensual)</label><input type="number" id="dg-dia-pago" class="modal-input" placeholder="Ej: 5" min="1" max="28"/></div>'
+    h += '</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Fecha del primer pago</label><input type="date" id="dg-fecha-primer-pago" class="modal-input"/></div>'
+    h += '<div><label class="modal-label">Interés moratorio (% mensual, opcional)</label><input type="number" id="dg-intereses" class="modal-input" placeholder="Ej: 2.5 (vacío si no aplica)" step="0.1" min="0"/></div>'
+    h += '</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Ciudad para jurisdicción</label><input type="text" id="dg-jurisdiccion" class="modal-input" placeholder="La Paz, BCS"/></div>'
+    h += '<div></div>'
+    h += '</div>'
+
+  } else if (type === 'ordenservicio') {
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div style="background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:8px;">👤 CLIENTE / SOLICITANTE</div>'
+    h += '<select id="dg-cliente" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-cliente\',\'dg-cliente-name\',\'dg-cliente-rfc\',null,\'dg-cliente-tel\')"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-cliente-name" class="modal-input" placeholder="Nombre del cliente" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-cliente-rfc" class="modal-input" placeholder="RFC (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-cliente-tel" class="modal-input" placeholder="Teléfono" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '<div style="background:rgba(167,139,250,0.05);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px;">🔧 PROVEEDOR / TÉCNICO</div>'
+    h += '<select id="dg-prestador" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-prestador\',\'dg-prestador-name\',\'dg-prestador-rfc\',null,\'dg-prestador-tel\')"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-prestador-name" class="modal-input" placeholder="Nombre del proveedor" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-prestador-rfc" class="modal-input" placeholder="RFC (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-prestador-tel" class="modal-input" placeholder="Teléfono" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Lugar</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, BCS"/></div>'
+    h += '<div><label class="modal-label">Fecha</label><input type="date" id="dg-fecha" class="modal-input" value="' + new Date().toISOString().slice(0,10) + '"/></div>'
+    h += '</div>'
+    h += '<div class="modal-field"><label class="modal-label">Descripción del servicio solicitado</label><textarea id="dg-descripcion" class="modal-input" rows="3" placeholder="Describir detalladamente el servicio, equipo a reparar, trabajo a realizar..."></textarea></div>'
+    h += '<div class="modal-field"><label class="modal-label">Materiales / equipos utilizados (opcional)</label><textarea id="dg-materiales" class="modal-input" rows="2" placeholder="Lista de refacciones, materiales o equipos..."></textarea></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Costo del servicio</label><input type="number" id="dg-monto" class="modal-input" placeholder="0.00" step="0.01"/></div>'
+    h += '<div><label class="modal-label">Moneda</label><select id="dg-moneda" class="modal-input" onchange="docGenToggleTCGeneric(\'dg-moneda\',\'dg-os-tc-row\')"><option>MXN</option><option>USD</option><option>USDT</option></select></div>'
+    h += '<div><label class="modal-label">Forma de pago</label><select id="dg-forma-pago" class="modal-input"><option value="Transferencia">Transferencia</option><option value="Efectivo">Efectivo</option><option value="Tarjeta">Tarjeta</option><option value="USDT / Cripto">USDT / Cripto</option></select></div>'
+    h += '</div>'
+    h += '<div id="dg-os-tc-row" style="display:none;margin-bottom:14px;"><label class="modal-label">Tipo de cambio (MXN)</label><input type="number" id="dg-tc" class="modal-input" placeholder="Ej: 17.50" step="0.01"/></div>'
+    h += '<div class="modal-field"><label class="modal-label">Notas técnicas / Observaciones (opcional)</label><textarea id="dg-notas-tecnicas" class="modal-input" rows="2" placeholder="Diagnóstico previo, advertencias, garantía del servicio..."></textarea></div>'
+
+  } else if (type === 'responsiva') {
+    h += '<div class="modal-field"><label class="modal-label">🔧 Bien / Activo entregado</label><textarea id="dg-bien-descripcion" class="modal-input" rows="2" placeholder="Ej: Laptop HP Pavilion 15, color gris, con cargador y funda"></textarea></div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">N° de serie / inventario (opcional)</label><input type="text" id="dg-bien-serie" class="modal-input" placeholder="Ej: HP-2024-001 / SN: XYZ123"/></div>'
+    h += '<div><label class="modal-label">Uso autorizado del bien</label><input type="text" id="dg-uso" class="modal-input" placeholder="Ej: Trabajo remoto desde casa"/></div>'
+    h += '</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div style="background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#fb923c;margin-bottom:8px;">👤 RESPONSABLE / USUARIO</div>'
+    h += '<select id="dg-responsable" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-responsable\',\'dg-responsable-name\',\'dg-responsable-rfc\',\'dg-responsable-dom\',null)"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-responsable-name" class="modal-input" placeholder="Nombre del responsable" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-responsable-rfc" class="modal-input" placeholder="RFC / CURP (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '<input type="text" id="dg-responsable-dom" class="modal-input" placeholder="Domicilio" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '<div style="background:rgba(96,165,250,0.05);border:1px solid rgba(96,165,250,0.2);border-radius:10px;padding:12px;">'
+    h += '<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:8px;">🏢 PROPIETARIO / EMPRESA</div>'
+    h += '<select id="dg-propietario" class="modal-input" style="font-size:11px;" onchange="docGenFillParty(\'dg-propietario\',\'dg-propietario-name\',\'dg-propietario-rfc\',null,null)"><option value="">— Seleccionar contacto —</option>' + contactOpts + '</select>'
+    h += '<input type="text" id="dg-propietario-name" class="modal-input" placeholder="Nombre / empresa propietaria" style="margin-top:4px;"/>'
+    h += '<input type="text" id="dg-propietario-rfc" class="modal-input" placeholder="RFC (opcional)" style="margin-top:4px;font-size:11px;"/>'
+    h += '</div>'
+    h += '</div>'
+    h += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">'
+    h += '<div><label class="modal-label">Lugar</label><input type="text" id="dg-lugar" class="modal-input" placeholder="La Paz, BCS"/></div>'
+    h += '<div><label class="modal-label">Fecha</label><input type="date" id="dg-fecha" class="modal-input" value="' + new Date().toISOString().slice(0,10) + '"/></div>'
+    h += '<div><label class="modal-label">Vigencia de la responsiva</label><select id="dg-vigencia" class="modal-input"><option value="mientras el bien esté en posesión del responsable">Indefinida (hasta devolución)</option><option value="6 meses">6 meses</option><option value="1 año">1 año</option><option value="durante la relación laboral">Durante la relación laboral</option></select></div>'
+    h += '</div>'
+    h += '<div class="modal-field"><label class="modal-label">Compromisos adicionales (opcional)</label><textarea id="dg-compromisos-extra" class="modal-input" rows="2" placeholder="Obligaciones específicas adicionales..."></textarea></div>'
   }
 
   body.innerHTML = h
@@ -7712,6 +7872,28 @@ window.openDocGen = function(type) {
 
 window.closeDocGen = function() {
   document.getElementById('docgen-modal')?.classList.add('hidden')
+}
+
+// ── Generic party auto-fill (for new templates) ─────────────────
+window.docGenFillParty = function(selId, nameId, rfcId, domId, telId) {
+  const sel = document.getElementById(selId)
+  if (!sel?.value) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (!c) return
+  const m = c.metadata || {}
+  const addr = m.domicilio_legal || [m.address_street, m.city, m.address_state].filter(Boolean).join(', ')
+  const setV = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val }
+  setV(nameId, m.name || c.content || '')
+  setV(rfcId,  m.rfc  || '')
+  setV(domId,  addr   || '')
+  setV(telId,  m.tel  || m.phone || '')
+}
+
+/** Toggle TC field visibility by generic moneda select + target row ID */
+window.docGenToggleTCGeneric = function(monedaId, rowId) {
+  const moneda = document.getElementById(monedaId)?.value || 'MXN'
+  const row    = document.getElementById(rowId)
+  if (row) row.style.display = moneda !== 'MXN' ? '' : 'none'
 }
 
 // ── Auto-fill helpers for each template ──────────────────────────
@@ -8276,6 +8458,131 @@ window.docGenExport = function() {
              diasAviso, monto, monedaContrato, tc: tcContrato, formaPago, jurisdiccion, clausulasExtra,
              clausulasSeleccionadas }
     pdfContratoServicios(data, emisor)
+
+  } else if (type === 'adeudo') {
+    const deudorName   = document.getElementById('dg-deudor-name')?.value   || blank
+    const acreedorName = document.getElementById('dg-acreedor-name')?.value || blank
+    const deudorRfc    = document.getElementById('dg-deudor-rfc')?.value    || ''
+    const deudorCurp   = document.getElementById('dg-deudor-curp')?.value   || ''
+    const deudorDom    = document.getElementById('dg-deudor-dom')?.value    || ''
+    const acreedorRfc  = document.getElementById('dg-acreedor-rfc')?.value  || ''
+    const acreedorDom  = document.getElementById('dg-acreedor-dom')?.value  || ''
+    const lugar    = document.getElementById('dg-lugar')?.value    || blank
+    const fechaRaw = document.getElementById('dg-fecha')?.value    || ''
+    const fechaPR  = document.getElementById('dg-fecha-pago')?.value || ''
+    const monto    = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const moneda   = document.getElementById('dg-moneda')?.value   || 'MXN'
+    const tc       = parseFloat(document.getElementById('dg-tc')?.value || '0') || 0
+    const concepto = document.getElementById('dg-concepto')?.value || blank
+    const formaPago= document.getElementById('dg-forma-pago')?.value || ''
+    const intereses= document.getElementById('dg-intereses')?.value || ''
+    const notas    = document.getElementById('dg-notas')?.value    || ''
+    const toFmtL   = raw => raw ? new Date(raw+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}) : blank
+    parteAName = deudorName; parteBName = acreedorName
+    parteAId   = document.getElementById('dg-deudor')?.value || ''
+    parteBId   = document.getElementById('dg-acreedor')?.value || ''
+    docTitle   = 'Reconocimiento de Adeudo'
+    data = { deudorName, deudorRfc, deudorCurp, deudorDom, acreedorName, acreedorRfc, acreedorDom,
+             lugar, fecha: toFmtL(fechaRaw), fechaPago: toFmtL(fechaPR),
+             monto, moneda, tc, concepto, formaPago, intereses, notas }
+    pdfReconocimientoAdeudo(data, emisor)
+
+  } else if (type === 'nda') {
+    const parte1Name = document.getElementById('dg-parte1-name')?.value || blank
+    const parte2Name = document.getElementById('dg-parte2-name')?.value || blank
+    const parte1Rfc  = document.getElementById('dg-parte1-rfc')?.value  || ''
+    const parte2Rfc  = document.getElementById('dg-parte2-rfc')?.value  || ''
+    const parte1Dom  = document.getElementById('dg-parte1-dom')?.value  || ''
+    const parte2Dom  = document.getElementById('dg-parte2-dom')?.value  || ''
+    const lugar      = document.getElementById('dg-lugar')?.value       || blank
+    const fechaRaw   = document.getElementById('dg-fecha')?.value       || ''
+    const objeto     = document.getElementById('dg-objeto')?.value      || blank
+    const vigencia   = document.getElementById('dg-vigencia')?.value    || '2 años'
+    const jurisdiccion = document.getElementById('dg-jurisdiccion')?.value || lugar
+    const clausulasExtra = document.getElementById('dg-clausulas-extra')?.value || ''
+    const toFmtL   = raw => raw ? new Date(raw+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}) : blank
+    parteAName = parte1Name; parteBName = parte2Name
+    parteAId   = document.getElementById('dg-parte1')?.value || ''
+    parteBId   = document.getElementById('dg-parte2')?.value || ''
+    docTitle   = 'NDA / Acuerdo de Confidencialidad'
+    data = { parte1Name, parte1Rfc, parte1Dom, parte2Name, parte2Rfc, parte2Dom,
+             lugar, fecha: toFmtL(fechaRaw), objeto, vigencia, jurisdiccion, clausulasExtra }
+    pdfNDA(data, emisor)
+
+  } else if (type === 'convenio') {
+    const acreedorName = document.getElementById('dg-acreedor-name')?.value || blank
+    const deudorName   = document.getElementById('dg-deudor-name')?.value   || blank
+    const acreedorRfc  = document.getElementById('dg-acreedor-rfc')?.value  || ''
+    const deudorRfc    = document.getElementById('dg-deudor-rfc')?.value    || ''
+    const acreedorDom  = document.getElementById('dg-acreedor-dom')?.value  || ''
+    const deudorDom    = document.getElementById('dg-deudor-dom')?.value    || ''
+    const lugar        = document.getElementById('dg-lugar')?.value         || blank
+    const fechaRaw     = document.getElementById('dg-fecha')?.value         || ''
+    const concepto     = document.getElementById('dg-concepto')?.value      || blank
+    const montoTotal   = parseFloat(document.getElementById('dg-monto-total')?.value || '0')
+    const nPagos       = parseInt(document.getElementById('dg-n-pagos')?.value || '1')
+    const frecuencia   = document.getElementById('dg-frecuencia')?.value    || 'mensual'
+    const diaPago      = document.getElementById('dg-dia-pago')?.value      || ''
+    const fechaPPRaw   = document.getElementById('dg-fecha-primer-pago')?.value || ''
+    const intereses    = document.getElementById('dg-intereses')?.value     || ''
+    const jurisdiccion = document.getElementById('dg-jurisdiccion')?.value  || lugar
+    const toFmtL   = raw => raw ? new Date(raw+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}) : blank
+    parteAName = acreedorName; parteBName = deudorName
+    parteAId   = document.getElementById('dg-acreedor')?.value || ''
+    parteBId   = document.getElementById('dg-deudor')?.value   || ''
+    docTitle   = 'Convenio de Pago en Parcialidades'
+    data = { acreedorName, acreedorRfc, acreedorDom, deudorName, deudorRfc, deudorDom,
+             lugar, fecha: toFmtL(fechaRaw), concepto, montoTotal, nPagos, frecuencia,
+             diaPago, fechaPrimerPago: fechaPPRaw, intereses, jurisdiccion }
+    pdfConvenioPago(data, emisor)
+
+  } else if (type === 'ordenservicio') {
+    const clienteName   = document.getElementById('dg-cliente-name')?.value   || blank
+    const prestadorName = document.getElementById('dg-prestador-name')?.value || blank
+    const clienteRfc    = document.getElementById('dg-cliente-rfc')?.value    || ''
+    const prestadorRfc  = document.getElementById('dg-prestador-rfc')?.value  || ''
+    const clienteTel    = document.getElementById('dg-cliente-tel')?.value    || ''
+    const prestadorTel  = document.getElementById('dg-prestador-tel')?.value  || ''
+    const lugar         = document.getElementById('dg-lugar')?.value          || blank
+    const fechaRaw      = document.getElementById('dg-fecha')?.value          || ''
+    const descripcion   = document.getElementById('dg-descripcion')?.value    || blank
+    const materiales    = document.getElementById('dg-materiales')?.value     || ''
+    const monto         = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const moneda        = document.getElementById('dg-moneda')?.value         || 'MXN'
+    const tc            = parseFloat(document.getElementById('dg-tc')?.value  || '0') || 0
+    const formaPago     = document.getElementById('dg-forma-pago')?.value     || ''
+    const notasTecnicas = document.getElementById('dg-notas-tecnicas')?.value || ''
+    const toFmtL   = raw => raw ? new Date(raw+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}) : blank
+    parteAName = clienteName; parteBName = prestadorName
+    parteAId   = document.getElementById('dg-cliente')?.value   || ''
+    parteBId   = document.getElementById('dg-prestador')?.value || ''
+    docTitle   = 'Orden de Servicio'
+    data = { clienteName, clienteRfc, clienteTel, prestadorName, prestadorRfc, prestadorTel,
+             lugar, fecha: toFmtL(fechaRaw), descripcion, materiales, monto, moneda, tc,
+             formaPago, notasTecnicas }
+    pdfOrdenServicio(data, emisor)
+
+  } else if (type === 'responsiva') {
+    const bienDescripcion = document.getElementById('dg-bien-descripcion')?.value || blank
+    const bienSerie       = document.getElementById('dg-bien-serie')?.value       || ''
+    const uso             = document.getElementById('dg-uso')?.value              || blank
+    const responsableName = document.getElementById('dg-responsable-name')?.value || blank
+    const responsableRfc  = document.getElementById('dg-responsable-rfc')?.value  || ''
+    const responsableDom  = document.getElementById('dg-responsable-dom')?.value  || ''
+    const propietarioName = document.getElementById('dg-propietario-name')?.value || blank
+    const propietarioRfc  = document.getElementById('dg-propietario-rfc')?.value  || ''
+    const lugar           = document.getElementById('dg-lugar')?.value            || blank
+    const fechaRaw        = document.getElementById('dg-fecha')?.value            || ''
+    const vigencia        = document.getElementById('dg-vigencia')?.value         || 'indefinida'
+    const compromisosExtra= document.getElementById('dg-compromisos-extra')?.value|| ''
+    const toFmtL   = raw => raw ? new Date(raw+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}) : blank
+    parteAName = responsableName; parteBName = propietarioName
+    parteAId   = document.getElementById('dg-responsable')?.value  || ''
+    parteBId   = document.getElementById('dg-propietario')?.value  || ''
+    docTitle   = 'Carta Responsiva'
+    data = { bienDescripcion, bienSerie, uso, responsableName, responsableRfc, responsableDom,
+             propietarioName, propietarioRfc, lugar, fecha: toFmtL(fechaRaw), vigencia, compromisosExtra }
+    pdfCartaResponsiva(data, emisor)
   }
 
   if (!docTitle) return
@@ -8494,7 +8801,7 @@ function renderDocHistory() {
   const docs = allNodes.filter(n => n.metadata?.is_legal_doc).sort((a, b) => (b.metadata?.doc_date || '').localeCompare(a.metadata?.doc_date || ''))
   if (docs.length === 0) { grid.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim);font-size:12px;">Sin documentos generados aún.</div>'; return }
   const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')
-  const icons = { prorroga: '📋', pagare: '📜', recibo: '💰', cartapoder: '✍️', contrato: '🤝', nota_venta: '🧾', arrendamiento: '🏠', compraventa: '🤝', recomendacion: '⭐' }
+  const icons = { prorroga: '📋', pagare: '📜', recibo: '💰', cartapoder: '✍️', contrato: '🤝', nota_venta: '🧾', arrendamiento: '🏠', compraventa: '🤝', recomendacion: '⭐', adeudo: '🧾', nda: '🔏', convenio: '🤙', ordenservicio: '🔧', responsiva: '📦' }
   let h = ''
   docs.forEach(d => {
     const m = d.metadata || {}
@@ -8521,12 +8828,17 @@ window.reprintDoc = function(id) {
   // New jsPDF reprint (nodes saved after PDF standardization)
   if (m.doc_data) {
     switch (m.doc_type) {
-      case 'prorroga':   pdfProrroga(m.doc_data, emisor);          return
-      case 'pagare':     pdfPagare(m.doc_data, emisor);            return
-      case 'recibo':     pdfRecibo(m.doc_data, emisor);            return
-      case 'cartapoder': pdfCartaPoder(m.doc_data, emisor);        return
-      case 'contrato':   pdfContratoServicios(m.doc_data, emisor); return
-      case 'nota_venta': pdfNotaVenta(m.doc_data, emisor);         return
+      case 'prorroga':      pdfProrroga(m.doc_data, emisor);             return
+      case 'pagare':        pdfPagare(m.doc_data, emisor);              return
+      case 'recibo':        pdfRecibo(m.doc_data, emisor);              return
+      case 'cartapoder':    pdfCartaPoder(m.doc_data, emisor);          return
+      case 'contrato':      pdfContratoServicios(m.doc_data, emisor);   return
+      case 'nota_venta':    pdfNotaVenta(m.doc_data, emisor);           return
+      case 'adeudo':        pdfReconocimientoAdeudo(m.doc_data, emisor);return
+      case 'nda':           pdfNDA(m.doc_data, emisor);                 return
+      case 'convenio':      pdfConvenioPago(m.doc_data, emisor);        return
+      case 'ordenservicio': pdfOrdenServicio(m.doc_data, emisor);       return
+      case 'responsiva':    pdfCartaResponsiva(m.doc_data, emisor);     return
     }
   }
 

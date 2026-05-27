@@ -2130,3 +2130,491 @@ export function pdfNotaVentaPro(data, emisor = {}) {
   _footerCotizacion(doc, 1, doc.internal.getNumberOfPages(), emisor)
   doc.save(`nota-venta-${folio}.pdf`)
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// NUEVAS PLANTILLAS — Trámites adicionales v2.1
+// ════════════════════════════════════════════════════════════════════════════
+
+// ─── 11. RECONOCIMIENTO DE ADEUDO ────────────────────────────────────────────
+export function pdfReconocimientoAdeudo(data, emisor = {}) {
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W     = doc.internal.pageSize.getWidth()
+  const folio = _folio()
+  const blank = '________________________'
+
+  const _checkY = (curY, needed = 20) => {
+    if (curY + needed > 265) {
+      doc.addPage()
+      _footerTramite(doc, emisor, 'Original para el acreedor — Copia para el deudor · Firmar todas las hojas')
+      return _headerTramite(doc, 'RECONOCIMIENTO DE ADEUDO', folio) + 4
+    }
+    return curY
+  }
+
+  let y = _headerTramite(doc, 'RECONOCIMIENTO DE ADEUDO', folio)
+  y += 4
+
+  // Lugar y fecha
+  doc.setFontSize(9); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  doc.text(`${data.lugar || blank}, a ${data.fecha || blank}.`, W - T.mX, y, { align: 'right' })
+  y += 8
+
+  // Identificación del deudor
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('I.   DEUDOR', T.mX, y); y += 5
+  doc.setFillColor(245, 248, 252)
+  doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+  doc.roundedRect(T.mX, y, W - T.mX * 2, 26, 2, 2, 'FD')
+  // borde cyan izquierdo
+  doc.setFillColor(...T.cyan); doc.rect(T.mX, y, 1.5, 26, 'F')
+  doc.setFontSize(9); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text(data.deudorName || blank, T.mX + 6, y + 7)
+  doc.setFontSize(8); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  const dId = [data.deudorRfc && `RFC: ${data.deudorRfc}`, data.deudorCurp && `CURP: ${data.deudorCurp}`, data.deudorDom && `Dom.: ${data.deudorDom}`].filter(Boolean).join('  ·  ')
+  if (dId) { const dl = doc.splitTextToSize(dId, W - T.mX * 2 - 10); doc.text(dl, T.mX + 6, y + 13) }
+  y += 32
+
+  // Identificación del acreedor
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('II.  ACREEDOR', T.mX, y); y += 5
+  doc.setFillColor(245, 248, 252)
+  doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+  doc.roundedRect(T.mX, y, W - T.mX * 2, 26, 2, 2, 'FD')
+  doc.setFillColor(...T.blue); doc.rect(T.mX, y, 1.5, 26, 'F')
+  doc.setFontSize(9); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text(data.acreedorName || blank, T.mX + 6, y + 7)
+  doc.setFontSize(8); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  const aId = [data.acreedorRfc && `RFC: ${data.acreedorRfc}`, data.acreedorDom && `Dom.: ${data.acreedorDom}`].filter(Boolean).join('  ·  ')
+  if (aId) { const al = doc.splitTextToSize(aId, W - T.mX * 2 - 10); doc.text(al, T.mX + 6, y + 13) }
+  y += 32
+
+  // Monto reconocido
+  const monto = parseFloat(data.monto || 0)
+  const moneda = data.moneda || 'MXN'
+  const tc     = parseFloat(data.tc || 0)
+  const montoMxn = (moneda !== 'MXN' && tc > 0) ? monto * tc : null
+  const montoStr = montoMxn
+    ? `$${montoMxn.toLocaleString('es-MX',{minimumFractionDigits:2})} MXN (${numToLetras(montoMxn)}), equivalente a ${monto.toLocaleString('es-MX',{minimumFractionDigits:2})} ${moneda} al tipo de cambio de $${tc.toLocaleString('es-MX',{minimumFractionDigits:2})} MXN`
+    : `$${monto.toLocaleString('es-MX',{minimumFractionDigits:2})} MXN (${numToLetras(monto)})`
+
+  y = _checkY(y, 22)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('III. MONTO RECONOCIDO', T.mX, y); y += 5
+  doc.setFillColor(244, 252, 247); doc.setDrawColor(...T.greenD); doc.setLineWidth(0.2)
+  doc.roundedRect(T.mX, y, W - T.mX * 2, 14, 2, 2, 'FD')
+  doc.setFontSize(11); doc.setFont(T.font, 'bold'); doc.setTextColor(...[22,163,74])
+  doc.text(montoStr, W / 2, y + 9, { align: 'center' })
+  y += 20
+
+  // Cuerpo legal
+  y = _checkY(y, 16)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('IV.  DECLARACIÓN', T.mX, y); y += 5
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  const texto1 = `Por medio del presente instrumento, el suscrito ${data.deudorName || blank}, reconoce deber y adeudar legítimamente a ${data.acreedorName || blank} la cantidad de ${montoStr}, por concepto de: ${data.concepto || blank}.`
+  y = _paraJ(doc, texto1, y); y += 4
+
+  y = _checkY(y, 16)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('V.   COMPROMISO DE PAGO', T.mX, y); y += 5
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  const texto2 = `El deudor se compromete a liquidar la cantidad adeudada a más tardar el día ${data.fechaPago || blank}, mediante ${data.formaPago || 'transferencia bancaria o forma acordada entre las partes'}.${data.intereses ? ` En caso de mora se generarán intereses del ${data.intereses}% mensual sobre saldo insoluto.` : ' No se generarán intereses siempre que el pago se realice en la fecha acordada.'}`
+  y = _paraJ(doc, texto2, y); y += 4
+
+  if (data.notas) {
+    y = _checkY(y, 14)
+    doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('VI.  CONDICIONES ADICIONALES', T.mX, y); y += 5
+    doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textInk)
+    y = _paraJ(doc, data.notas, y); y += 4
+  }
+
+  y = _checkY(y, 16)
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  y = _paraJ(doc, 'El presente reconocimiento tiene plena fuerza y valor legal y podrá ser utilizado por el acreedor para todos los efectos jurídicos a que haya lugar.', y); y += 12
+
+  y = _checkY(y, 40)
+  _firma(doc, T.mX + 8,      y, 75, `${data.deudorName || blank}\nDeudor`)
+  _firma(doc, W - T.mX - 83, y, 75, `${data.acreedorName || blank}\nAcreedor (Testigo)`)
+
+  _footerTramite(doc, emisor, 'Original para el acreedor — Copia para el deudor')
+  doc.save(`reconocimiento-adeudo-${folio}.pdf`)
+}
+
+// ─── 12. NDA / ACUERDO DE CONFIDENCIALIDAD ───────────────────────────────────
+export function pdfNDA(data, emisor = {}) {
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W     = doc.internal.pageSize.getWidth()
+  const folio = _folio()
+  const blank = '________________________'
+
+  const _checkY = (curY, needed = 20) => {
+    if (curY + needed > 265) {
+      doc.addPage()
+      _footerTramite(doc, emisor, 'Original para ambas partes · Firmar todas las hojas')
+      return _headerTramite(doc, 'ACUERDO DE CONFIDENCIALIDAD', folio) + 4
+    }
+    return curY
+  }
+
+  let y = _headerTramite(doc, 'ACUERDO DE CONFIDENCIALIDAD (NDA)', folio)
+  y += 3
+
+  doc.setFontSize(9); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  doc.text(`${data.lugar || blank}, a ${data.fecha || blank}.`, W - T.mX, y, { align: 'right' })
+  y += 7
+
+  // Partes
+  const boxW = (W - T.mX * 2 - 6) / 2
+  ;[{ label: 'PARTE DIVULGADORA', name: data.parte1Name, rfc: data.parte1Rfc, dom: data.parte1Dom, color: T.cyan },
+    { label: 'PARTE RECEPTORA', name: data.parte2Name, rfc: data.parte2Rfc, dom: data.parte2Dom, color: T.violet }].forEach((p, i) => {
+    const px = T.mX + i * (boxW + 6)
+    doc.setFillColor(245, 248, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+    doc.roundedRect(px, y, boxW, 26, 2, 2, 'FD')
+    doc.setFillColor(...p.color); doc.rect(px, y, 1.5, 26, 'F')
+    doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...p.color)
+    doc.text(p.label, px + 5, y + 5)
+    doc.setFontSize(8.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text(doc.splitTextToSize(p.name || blank, boxW - 8), px + 5, y + 11)
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    if (p.rfc) doc.text(`RFC: ${p.rfc}`, px + 5, y + 20)
+  })
+  y += 33
+
+  const _ORDINALES = ['','PRIMERA','SEGUNDA','TERCERA','CUARTA','QUINTA','SEXTA','SÉPTIMA','OCTAVA','NOVENA','DÉCIMA']
+  let ci = 1
+
+  const clausulas = [
+    { titulo: `${_ORDINALES[ci++]} — OBJETO`, texto: `Las partes acuerdan mantener estricta confidencialidad sobre toda la Información Confidencial que sea divulgada por la Parte Divulgadora a la Parte Receptora con motivo de: ${data.objeto || blank}.` },
+    { titulo: `${_ORDINALES[ci++]} — DEFINICIÓN DE INFORMACIÓN CONFIDENCIAL`, texto: 'Se considerará Información Confidencial toda aquella información técnica, comercial, financiera, estratégica, de clientes, proveedores, procesos internos, datos personales, know-how, modelos de negocio y cualquier otro dato que sea revelado de forma oral, escrita, digital o por cualquier otro medio, y que no sea de dominio público.' },
+    { titulo: `${_ORDINALES[ci++]} — OBLIGACIONES DE LA PARTE RECEPTORA`, texto: 'La Parte Receptora se obliga a: (a) utilizar la Información Confidencial exclusivamente para los fines del presente acuerdo; (b) no divulgar, copiar, distribuir ni transmitir la información a terceros sin autorización escrita previa; (c) proteger la información con el mismo nivel de cuidado que aplica a su propia información confidencial, y en ningún caso con menos de diligencia razonable.' },
+    { titulo: `${_ORDINALES[ci++]} — EXCLUSIONES`, texto: 'Las obligaciones de confidencialidad no aplican a información que: (a) sea o llegue a ser de dominio público sin incumplimiento del presente; (b) sea conocida por la Parte Receptora antes de su divulgación; (c) sea desarrollada de forma independiente; o (d) deba revelarse por mandato de autoridad competente, dando aviso previo a la Parte Divulgadora en la medida en que la ley lo permita.' },
+    { titulo: `${_ORDINALES[ci++]} — VIGENCIA`, texto: `El presente acuerdo tendrá una vigencia de ${data.vigencia || '2 años'} a partir de la fecha de su firma, o hasta que la información deje de ser confidencial, lo que ocurra primero.` },
+    { titulo: `${_ORDINALES[ci++]} — SANCIONES`, texto: 'El incumplimiento de las obligaciones establecidas dará derecho a la Parte Divulgadora a exigir el cese inmediato del uso o divulgación no autorizado, así como a reclamar los daños y perjuicios que el incumplimiento hubiere ocasionado, sin perjuicio de las sanciones penales aplicables.' },
+    { titulo: `${_ORDINALES[ci++]} — JURISDICCIÓN`, texto: `Para la interpretación y cumplimiento del presente acuerdo, las partes se someten a los tribunales de ${data.jurisdiccion || data.lugar || blank}, renunciando a cualquier fuero que pudiera corresponderles.` },
+  ]
+  if (data.clausulasExtra) clausulas.push({ titulo: `${_ORDINALES[ci++]} — DISPOSICIONES ADICIONALES`, texto: data.clausulasExtra })
+
+  for (const c of clausulas) {
+    y = _checkY(y, 18)
+    doc.setFontSize(9); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text(c.titulo, T.mX, y); y += 5
+    doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+    y = _paraJ(doc, c.texto, y); y += 4
+  }
+
+  y = _checkY(y, 16)
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  y = _paraJ(doc, 'Leído el presente instrumento y enteradas las partes de su contenido y alcance legal, lo suscriben en señal de conformidad en la fecha indicada.', y); y += 14
+
+  y = _checkY(y, 40)
+  _firma(doc, T.mX + 8,      y, 75, `${data.parte1Name || blank}\nParte Divulgadora`)
+  _firma(doc, W - T.mX - 83, y, 75, `${data.parte2Name || blank}\nParte Receptora`)
+
+  _footerTramite(doc, emisor, 'Se emiten dos originales de igual valor — Una copia para cada parte')
+  doc.save(`nda-confidencialidad-${folio}.pdf`)
+}
+
+// ─── 13. CONVENIO DE PAGO EN PARCIALIDADES ───────────────────────────────────
+export function pdfConvenioPago(data, emisor = {}) {
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W     = doc.internal.pageSize.getWidth()
+  const folio = _folio()
+  const blank = '________________________'
+
+  const _checkY = (curY, needed = 20) => {
+    if (curY + needed > 265) {
+      doc.addPage()
+      _footerTramite(doc, emisor, 'Original para el acreedor — Copia para el deudor')
+      return _headerTramite(doc, 'CONVENIO DE PAGO EN PARCIALIDADES', folio) + 4
+    }
+    return curY
+  }
+
+  let y = _headerTramite(doc, 'CONVENIO DE PAGO EN PARCIALIDADES', folio)
+  y += 3
+
+  doc.setFontSize(9); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  doc.text(`${data.lugar || blank}, a ${data.fecha || blank}.`, W - T.mX, y, { align: 'right' })
+  y += 7
+
+  // Partes
+  const boxW = (W - T.mX * 2 - 6) / 2
+  ;[{ label: 'ACREEDOR', name: data.acreedorName, rfc: data.acreedorRfc, dom: data.acreedorDom, color: T.blue },
+    { label: 'DEUDOR', name: data.deudorName, rfc: data.deudorRfc, dom: data.deudorDom, color: T.orange }].forEach((p, i) => {
+    const px = T.mX + i * (boxW + 6)
+    doc.setFillColor(245, 248, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+    doc.roundedRect(px, y, boxW, 26, 2, 2, 'FD')
+    doc.setFillColor(...p.color); doc.rect(px, y, 1.5, 26, 'F')
+    doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...p.color)
+    doc.text(p.label, px + 5, y + 5)
+    doc.setFontSize(8.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text(doc.splitTextToSize(p.name || blank, boxW - 8), px + 5, y + 11)
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    if (p.rfc) doc.text(`RFC: ${p.rfc}`, px + 5, y + 20)
+    if (p.dom) { const dl = doc.splitTextToSize(`Dom.: ${p.dom}`, boxW - 8); doc.text(dl[0], px + 5, p.rfc ? y + 23 : y + 20) }
+  })
+  y += 33
+
+  // Monto total y concepto
+  const montoTotal = parseFloat(data.montoTotal || 0)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('DECLARACIÓN DEL ADEUDO', T.mX, y); y += 5
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  const texto1 = `Las partes reconocen que ${data.deudorName || blank} adeuda a ${data.acreedorName || blank} la cantidad total de $${montoTotal.toLocaleString('es-MX',{minimumFractionDigits:2})} MXN (${numToLetras(montoTotal)}), por concepto de: ${data.concepto || blank}.`
+  y = _paraJ(doc, texto1, y); y += 4
+
+  y = _checkY(y, 14)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('ACUERDO DE PAGOS', T.mX, y); y += 5
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  const nPagos = parseInt(data.nPagos || 1)
+  const montoParcial = montoTotal / nPagos
+  const texto2 = `Las partes acuerdan liquidar la deuda mediante ${nPagos} ${nPagos === 1 ? 'pago' : 'pagos'} ${data.frecuencia || 'mensuales'} de $${montoParcial.toLocaleString('es-MX',{minimumFractionDigits:2})} MXN (${numToLetras(montoParcial)}) cada uno, siendo el primero el día ${data.fechaPrimerPago || blank}${data.diaPago ? ` y los subsecuentes el día ${data.diaPago} de cada mes` : ''}.`
+  y = _paraJ(doc, texto2, y); y += 4
+
+  // Tabla de pagos
+  if (nPagos > 1 && data.fechaPrimerPago) {
+    y = _checkY(y, 10)
+    const rows = []
+    let fecha = new Date(data.fechaPrimerPago + 'T12:00:00')
+    for (let i = 0; i < Math.min(nPagos, 24); i++) {
+      rows.push([
+        `${i + 1}`,
+        fecha.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }),
+        `$${montoParcial.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`,
+      ])
+      // Avanzar según frecuencia
+      const freq = (data.frecuencia || 'mensual').toLowerCase()
+      if (freq.includes('sem') && !freq.includes('man')) fecha.setDate(fecha.getDate() + 7)
+      else if (freq.includes('quinc')) fecha.setDate(fecha.getDate() + 15)
+      else fecha.setMonth(fecha.getMonth() + 1)
+    }
+    autoTable(doc, {
+      startY: y,
+      head: [['#', 'Fecha de pago', 'Monto']],
+      body: rows,
+      theme: 'grid',
+      headStyles: { fillColor: T.ink, textColor: T.cyan, fontSize: 8, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 8, textColor: T.textInk },
+      alternateRowStyles: { fillColor: [248, 250, 253] },
+      columnStyles: { 0: { cellWidth: 12 }, 2: { halign: 'right' } },
+      margin: { left: T.mX, right: T.mX },
+    })
+    y = doc.lastAutoTable.finalY + 6
+  }
+
+  y = _checkY(y, 18)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('INCUMPLIMIENTO', T.mX, y); y += 5
+  doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textInk)
+  const texto3 = `El incumplimiento de cualquier pago facultará al acreedor a exigir el pago total del saldo insoluto de forma inmediata${data.intereses ? `, más intereses moratorios del ${data.intereses}% mensual sobre el saldo vencido` : ''}. Se emitirán los comprobantes de pago correspondientes.`
+  y = _paraJ(doc, texto3, y); y += 6
+
+  y = _checkY(y, 16)
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5)
+  y = _paraJ(doc, `Las partes se someten a los tribunales de ${data.jurisdiccion || data.lugar || blank} para todo lo relacionado con el presente convenio.`, y); y += 4
+  y = _paraJ(doc, 'Leído el presente convenio y enteradas las partes de su contenido, lo suscriben de conformidad en todas sus hojas.', y); y += 14
+
+  y = _checkY(y, 40)
+  _firma(doc, T.mX + 8,      y, 75, `${data.acreedorName || blank}\nAcreedor`)
+  _firma(doc, W - T.mX - 83, y, 75, `${data.deudorName || blank}\nDeudor`)
+
+  _footerTramite(doc, emisor, 'Original para el acreedor — Copia para el deudor · Firmar todas las hojas')
+  doc.save(`convenio-pago-${folio}.pdf`)
+}
+
+// ─── 14. ORDEN DE SERVICIO ───────────────────────────────────────────────────
+export function pdfOrdenServicio(data, emisor = {}) {
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W     = doc.internal.pageSize.getWidth()
+  const folio = data.folio || _folio()
+  const blank = '________________________'
+
+  let y = _headerTramite(doc, 'ORDEN DE SERVICIO', folio)
+  y += 2
+
+  // Fecha y lugar — fila superior
+  doc.setFontSize(9); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  doc.text(`Fecha: ${data.fecha || blank}  ·  Lugar: ${data.lugar || blank}`, T.mX, y); y += 8
+
+  // ── Bloque cliente / prestador ──
+  const boxW = (W - T.mX * 2 - 6) / 2
+  ;[{ label: 'CLIENTE / SOLICITANTE', name: data.clienteName, rfc: data.clienteRfc, tel: data.clienteTel, color: T.cyan },
+    { label: 'PROVEEDOR / TÉCNICO', name: data.prestadorName, rfc: data.prestadorRfc, tel: data.prestadorTel, color: T.violet }].forEach((p, i) => {
+    const px = T.mX + i * (boxW + 6)
+    doc.setFillColor(245, 248, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+    doc.roundedRect(px, y, boxW, 28, 2, 2, 'FD')
+    doc.setFillColor(...p.color); doc.rect(px, y, 1.5, 28, 'F')
+    doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...p.color)
+    doc.text(p.label, px + 5, y + 5)
+    doc.setFontSize(9); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text(doc.splitTextToSize(p.name || blank, boxW - 8), px + 5, y + 11)
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    if (p.rfc) doc.text(`RFC: ${p.rfc}`, px + 5, y + 19)
+    if (p.tel) doc.text(`Tel: ${p.tel}`, px + 5, y + 24)
+  })
+  y += 34
+
+  // ── Descripción del servicio ──
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('DESCRIPCIÓN DEL SERVICIO SOLICITADO', T.mX, y); y += 5
+  const srvLines = doc.splitTextToSize(data.descripcion || blank, W - T.mX * 2)
+  doc.setFillColor(248, 250, 253); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+  const srvH = Math.max(18, srvLines.length * 5 + 8)
+  doc.roundedRect(T.mX, y, W - T.mX * 2, srvH, 2, 2, 'FD')
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  doc.text(srvLines, T.mX + 4, y + 6)
+  y += srvH + 6
+
+  // ── Materiales / equipos ──
+  if (data.materiales) {
+    doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('MATERIALES / EQUIPOS UTILIZADOS', T.mX, y); y += 5
+    const matLines = doc.splitTextToSize(data.materiales, W - T.mX * 2)
+    const matH = Math.max(14, matLines.length * 5 + 8)
+    doc.setFillColor(248, 250, 253); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, matH, 2, 2, 'FD')
+    doc.setFont(T.font, 'normal'); doc.setFontSize(9); doc.setTextColor(...T.textInk)
+    doc.text(matLines, T.mX + 4, y + 5)
+    y += matH + 6
+  }
+
+  // ── Costo ──
+  const monto  = parseFloat(data.monto || 0)
+  const moneda = data.moneda || 'MXN'
+  const tc     = parseFloat(data.tc || 0)
+  const mxnEq  = (moneda !== 'MXN' && tc) ? monto * tc : null
+  if (monto > 0) {
+    doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('COSTO DEL SERVICIO', T.mX, y); y += 5
+    doc.setFillColor(244, 252, 247); doc.setDrawColor(...T.greenD); doc.setLineWidth(0.2)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, 16, 2, 2, 'FD')
+    doc.setFontSize(10); doc.setFont(T.font, 'bold'); doc.setTextColor(...[22,163,74])
+    const costoStr = mxnEq
+      ? `$${mxnEq.toLocaleString('es-MX',{minimumFractionDigits:2})} MXN  (equivalente a ${monto.toLocaleString('es-MX',{minimumFractionDigits:2})} ${moneda} × T.C. $${tc})`
+      : `$${monto.toLocaleString('es-MX',{minimumFractionDigits:2})} MXN (${numToLetras(monto)})`
+    doc.text(costoStr, W / 2, y + 10, { align: 'center' })
+    y += 22
+    if (data.formaPago) {
+      doc.setFontSize(8.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+      doc.text(`Forma de pago: ${data.formaPago}`, T.mX, y); y += 6
+    }
+  }
+
+  // ── Notas técnicas ──
+  if (data.notasTecnicas) {
+    doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('NOTAS TÉCNICAS / OBSERVACIONES', T.mX, y); y += 5
+    const ntLines = doc.splitTextToSize(data.notasTecnicas, W - T.mX * 2)
+    const ntH = Math.max(14, ntLines.length * 5 + 8)
+    doc.setFillColor(254, 252, 232); doc.setDrawColor(...T.yellow); doc.setLineWidth(0.2)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, ntH, 2, 2, 'FD')
+    doc.setFont(T.font, 'normal'); doc.setFontSize(9); doc.setTextColor(...T.textInk)
+    doc.text(ntLines, T.mX + 4, y + 5)
+    y += ntH + 6
+  }
+
+  // ── Autorización de conformidad ──
+  y += 6
+  doc.setFontSize(9); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textInk)
+  y = _paraJ(doc, 'El cliente declara haber recibido el servicio a su entera satisfacción, conforme a lo descrito en la presente orden.', y); y += 14
+
+  _firma(doc, T.mX + 8,      y, 75, `${data.clienteName || blank}\nCliente — Firma de conformidad`)
+  _firma(doc, W - T.mX - 83, y, 75, `${data.prestadorName || blank}\nProveedor / Técnico`)
+
+  _footerTramite(doc, emisor, 'Original para el cliente — Copia para el proveedor')
+  doc.save(`orden-servicio-${folio}.pdf`)
+}
+
+// ─── 15. CARTA RESPONSIVA ────────────────────────────────────────────────────
+export function pdfCartaResponsiva(data, emisor = {}) {
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W     = doc.internal.pageSize.getWidth()
+  const folio = _folio()
+  const blank = '________________________'
+
+  let y = _headerTramite(doc, 'CARTA RESPONSIVA', folio)
+  y += 4
+
+  // Lugar y fecha
+  doc.setFontSize(9); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  doc.text(`${data.lugar || blank}, a ${data.fecha || blank}.`, W - T.mX, y, { align: 'right' })
+  y += 10
+
+  // Descripción del bien
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('I.   BIEN / ACTIVO ENTREGADO', T.mX, y); y += 5
+  doc.setFillColor(245, 248, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+  const bienLines = doc.splitTextToSize(data.bienDescripcion || blank, W - T.mX * 2 - 8)
+  const bienH = Math.max(18, bienLines.length * 5 + 8)
+  doc.roundedRect(T.mX, y, W - T.mX * 2, bienH, 2, 2, 'FD')
+  doc.setFillColor(...T.orange); doc.rect(T.mX, y, 1.5, bienH, 'F')
+  doc.setFont(T.font, 'bold'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  doc.text(bienLines, T.mX + 6, y + 6)
+  if (data.bienSerie) {
+    doc.setFont(T.font, 'normal'); doc.setFontSize(8); doc.setTextColor(...T.textMid)
+    doc.text(`Serie / N° inventario: ${data.bienSerie}`, T.mX + 6, y + bienH - 4)
+  }
+  y += bienH + 6
+
+  // Responsable y propietario
+  const boxW = (W - T.mX * 2 - 6) / 2
+  ;[{ label: 'RESPONSABLE / USUARIO', name: data.responsableName, rfc: data.responsableRfc, dom: data.responsableDom, color: T.orange },
+    { label: 'PROPIETARIO / EMPRESA', name: data.propietarioName, rfc: data.propietarioRfc, color: T.blue }].forEach((p, i) => {
+    const px = T.mX + i * (boxW + 6)
+    doc.setFillColor(245, 248, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
+    doc.roundedRect(px, y, boxW, 26, 2, 2, 'FD')
+    doc.setFillColor(...p.color); doc.rect(px, y, 1.5, 26, 'F')
+    doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...p.color)
+    doc.text(p.label, px + 5, y + 5)
+    doc.setFontSize(8.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text(doc.splitTextToSize(p.name || blank, boxW - 8), px + 5, y + 11)
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    if (p.rfc) doc.text(`RFC: ${p.rfc}`, px + 5, y + 20)
+    if (p.dom) { const dl = doc.splitTextToSize(`Dom.: ${p.dom}`, boxW - 8); doc.text(dl[0], px + 5, p.rfc ? y + 23 : y + 20) }
+  })
+  y += 33
+
+  // Cuerpo legal
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('II.  DECLARACIÓN DE RESPONSABILIDAD', T.mX, y); y += 5
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  const texto1 = `Por medio de la presente, yo ${data.responsableName || blank}${data.responsableRfc ? ', RFC: ' + data.responsableRfc : ''}, me hago responsable del bien descrito en la sección I del presente documento, propiedad de ${data.propietarioName || blank}, que me ha sido entregado en comodato/préstamo para el siguiente uso: ${data.uso || blank}.`
+  y = _paraJ(doc, texto1, y); y += 4
+
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('III. COMPROMISOS', T.mX, y); y += 5
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5); doc.setTextColor(...T.textInk)
+  const compromisos = [
+    'Usar el bien exclusivamente para el fin indicado y de manera responsable.',
+    'Mantener el bien en buen estado de conservación y funcionamiento.',
+    'No ceder, prestar, modificar ni subcontratar el bien sin autorización escrita del propietario.',
+    'Devolver el bien en las mismas condiciones en que fue recibido, salvo desgaste natural por uso normal.',
+    'Responsabilizarme económicamente por cualquier daño, pérdida o robo que ocurra durante mi posesión del bien.',
+  ]
+  if (data.compromisosExtra) compromisos.push(data.compromisosExtra)
+  compromisos.forEach(c => {
+    const ls = doc.splitTextToSize(`• ${c}`, W - T.mX * 2 - 6)
+    doc.text(ls, T.mX + 4, y)
+    y += ls.length * 5 + 1
+  })
+  y += 3
+
+  if (data.vigencia) {
+    doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('IV.  VIGENCIA', T.mX, y); y += 5
+    doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textInk)
+    y = _paraJ(doc, `La presente carta responsiva tendrá vigencia ${data.vigencia}.`, y); y += 4
+  }
+
+  y += 4
+  doc.setFont(T.font, 'normal'); doc.setFontSize(9.5)
+  y = _paraJ(doc, 'Firmo la presente carta responsiva de manera libre y voluntaria, consciente de las obligaciones que asumo.', y); y += 14
+
+  _firma(doc, T.mX + 8,      y, 75, `${data.responsableName || blank}\nResponsable`)
+  _firma(doc, W - T.mX - 83, y, 75, `${data.propietarioName || blank}\nPropietario`)
+
+  _footerTramite(doc, emisor, 'Original para el propietario — Copia para el responsable')
+  doc.save(`carta-responsiva-${folio}.pdf`)
+}

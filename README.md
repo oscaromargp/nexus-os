@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.3.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.4.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -20,6 +20,7 @@
 
 <p align="center">
   <a href="#-acerca-del-proyecto">Acerca</a> •
+  <a href="#-novedades-v240">Novedades</a> •
   <a href="#-características">Características</a> •
   <a href="#-vistas-del-sistema">Vistas</a> •
   <a href="#-demo">Demo</a> •
@@ -29,6 +30,36 @@
   <a href="#-deploy">Deploy</a> •
   <a href="#-contacto">Contacto</a>
 </p>
+
+---
+
+## 🆕 Novedades v2.4.0
+
+### Centro de Trámites — 10 Plantillas Legales
+
+El módulo de documentos legales ahora cuenta con **10 plantillas** completamente funcionales (antes 5):
+
+| # | Plantilla | Descripción |
+|---|---|---|
+| 1 | 📋 Prórroga de Pago de Renta | Solicitud formal al arrendador con motivo y fecha |
+| 2 | 📜 Pagaré | Título de crédito con CURP/RFC/electoral y tabla de pagos en serie |
+| 3 | 💰 Recibo de Dinero | Constancia con monto en número y letra, datos de identificación completos |
+| 4 | ✍️ Carta Poder | Poder especial con 14 facultades seleccionables y testigos |
+| 5 | 🤝 Contrato de Servicios | Contrato con 6+ cláusulas, vinculación a cotización, exportación DOC |
+| 6 | 🧾 Reconocimiento de Adeudo | El deudor reconoce formalmente la deuda y fecha de pago |
+| 7 | 🔏 NDA / Confidencialidad | Acuerdo de no divulgación con 7 cláusulas legales completas |
+| 8 | 🤙 Convenio de Pago | Convenio en parcialidades con **tabla de amortización automática** |
+| 9 | 🔧 Orden de Servicio | Autorización de trabajo técnico con costo y firma de conformidad |
+| 10 | 📦 Carta Responsiva | Entrega de bienes en comodato con compromisos del responsable |
+
+### Mejoras al módulo de Trámites
+
+- **Forma de pago → Dropdown**: 9 opciones predefinidas (ya no texto libre)
+- **Cotización vinculada en Contrato**: pre-llena descripción, monto y cliente automáticamente desde Cotizaciones
+- **PDF Contrato**: cláusula OBJETO menciona el presupuesto/folio vinculado (Anexo A)
+- **Exportación DOC**: descarga Word editable para Contrato y Carta Poder
+- **Form Persistence**: al exportar un PDF se guarda snapshot del formulario → botón **✏️ Editar** en el historial
+- **Auto-fill genérico**: todos los formularios nuevos rellenan datos desde tus contactos en un clic
 
 ---
 
@@ -48,11 +79,12 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
   <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite"/>
   <img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black" alt="JavaScript"/>
   <img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS"/>
+  <img src="https://img.shields.io/badge/DaisyUI-5A0EF8?style=for-the-badge&logo=daisyui&logoColor=white" alt="DaisyUI"/>
   <img src="https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase"/>
   <img src="https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Vercel"/>
+  <img src="https://img.shields.io/badge/jsPDF-FF5500?style=for-the-badge" alt="jsPDF"/>
   <img src="https://img.shields.io/badge/Chart.js-FF6384?style=for-the-badge&logo=chart.js&logoColor=white" alt="Chart.js"/>
-  <img src="https://img.shields.io/badge/Lucide-F56040?style=for-the-badge&logo=lucide&logoColor=white" alt="Lucide Icons"/>
-  <img src="https://img.shields.io/badge/DaisyUI-5A0EF8?style=for-the-badge&logo=daisyui&logoColor=white" alt="DaisyUI"/>
+  <img src="https://img.shields.io/badge/Lucide-F56040?style=for-the-badge" alt="Lucide Icons"/>
   <img src="https://img.shields.io/badge/Fuse.js-1B1F23?style=for-the-badge&logo=github&logoColor=white" alt="Fuse.js"/>
   <img src="https://img.shields.io/badge/SortableJS-FF4500?style=for-the-badge" alt="SortableJS"/>
 </p>
@@ -69,29 +101,23 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 🔒 **Auth completa** | Login/registro con Supabase Auth — cada usuario solo ve sus propios datos (RLS) |
 | 🖼️ **Adjuntos con Ctrl+V** | Pega imágenes directamente desde el portapapeles con compresión automática |
 | 🔍 **Búsqueda global** | Fuzzy search con Fuse.js sobre todo el contenido, filtros por tipo y tag |
-| 📊 **Dashboard ejecutivo** | KPIs tintados por tipo, próximos pagos con estado, distribución Kanban, abonos a vencer, próximos a liquidar |
-| 🔢 **KPI de cotizaciones** | Abonos a vencer (30 días) y proyectos próximos a liquidar (≥70%) en Panel de Comandos |
-| 📅 **Pagos recurrentes avanzados** | Frecuencias: mensual · bimestral · trimestral · semestral · anual · bianual · trianual. Fecha específica para anclar mes+día exacto |
-| ⚡ **Filtros rápidos** | Filtra movimientos del Feed y Bio-Finanzas por Todos / Ingresos / Gastos con un clic |
-| 🟢 **Semáforo financiero** | Cada fila del log muestra badge visual por tipo: ingreso · gasto · evento · nota |
-| 🎨 **Visual Upgrade v2.3** | Lucide Icons (~80 iconos), DaisyUI v5, tailwindcss-animate, micro-interacciones spring, tooltips glassmorphism |
-| 💫 **Micro-interacciones** | Cards con lift on hover, botones con press scale, modales con slide-in, toasts animados, skeleton de carga |
-| 🏷️ **Badge system** | `nxBadge()` unificado: 10 tipos de nodo + 4 estados Kanban con iconos Lucide contextuales |
-| 🖼️ **Empty states** | Ilustraciones SVG propias (paleta cyan Nexus) en 6 vistas: Feed, Notas, Kanban, Contactos, Búsqueda, Finanzas |
+| 📊 **Dashboard ejecutivo** | KPIs tintados por tipo, próximos pagos con estado, distribución Kanban, abonos a vencer |
+| 📅 **Pagos recurrentes avanzados** | Frecuencias: mensual · bimestral · trimestral · semestral · anual · bianual · trianual |
+| ⚡ **Filtros rápidos** | Filtra movimientos por Todos / Ingresos / Gastos / Pendientes con un clic |
+| 🟢 **Semáforo financiero** | Badge visual por tipo en cada fila: ingreso · gasto · evento · nota |
+| 🎨 **Visual Upgrade** | Lucide Icons (~80), DaisyUI v5, micro-interacciones spring, tooltips glassmorphism |
+| 💫 **Micro-interacciones** | Cards con lift on hover, botones con press scale, modales con slide-in, toasts animados |
 | 📤 **Print / Export CSV** | Exporta transacciones y movimientos financieros en un clic |
 | 📱 **PWA-ready** | Diseño responsivo, usable en móvil y tablet |
 | 🎨 **Editor rico** | Bóveda Neural con colores de texto, resaltado, tamaños XS–3X y formato completo |
-| 👤 **Ficha de contacto** | Perfil de página completa con tabs (Info/Docs/Pagos/Proyectos), upload de foto, preview docs e impresión |
-| 🧾 **CEP universal** | Comprobante Electrónico de Pago accesible desde cualquier vista |
-| 📥 **CSV masivo** | Importación masiva de contactos con 48 columnas y detección de duplicados (fuzzy) |
+| 👤 **Ficha de contacto** | Perfil de página completa con tabs (Info/Docs/Pagos/Proyectos), foto, documentos |
 | 💎 **Portafolio Crypto** | Seguimiento multi-moneda con edición de compras y precio actual |
-| 📊 **Stats visuales** | Donut chart, progress bar y gráfica semanal con Chart.js en Kanban y proyectos |
-| 📈 **Reporte financiero** | Timeline de pagos con gráfica, filtros por proveedor/fecha, comprobantes |
 | 📊 **Orquestador OTC** | Calculadora cripto-fiat con dispersión bancaria, semáforo, WhatsApp, PDF ejecutivo |
-| 💳 **Centro de Pagos** | Cuentas propias con botón copiar CLABE/cuenta para compartir con clientes |
-| 📜 **Documentos legales** | Pagarés, contratos, cartas poder y recomendación con auto-fill desde contactos |
+| 📜 **10 Plantillas Legales** | Documentos jurídicos con auto-fill desde contactos, export PDF y Word editable |
+| 📋 **Form Persistence** | Guarda snapshot del formulario → re-abre con ✏️ Editar para re-exportar |
+| 🤙 **Amortización automática** | Convenio de Pago genera tabla de cuotas por fecha y monto automáticamente |
 | 🪙 **Bitso real-time** | Precio de venta USDT/BTC/ETH/XRP/SOL desde API Bitso en el OTC |
-| 📋 **Histórico legal** | Documentos generados se guardan como nodos — busca, reimprime o elimina |
+| 📋 **Histórico legal** | Documentos generados se guardan como nodos — busca, edita, reimprime o elimina |
 
 ---
 
@@ -103,12 +129,12 @@ Nexus OS tiene **9 vistas** accesibles desde la barra lateral:
 |---|---|---|
 | 1 | 🖥️ **Panel de Comandos** | Dashboard ejecutivo con KPIs, próximos pagos, distribución de tareas Kanban, proyectos expandibles con deuda |
 | 2 | 🗂️ **Muro Táctico** | Kanban drag & drop (Pendiente / En Progreso / Hecho). Modal de detalle por tarjeta |
-| 3 | 💰 **Bio-Finanzas** | Dashboard financiero con pirámide de información: KPIs de cotizaciones pendientes + vencimiento crítico, gráficos Chart.js (bar/donut/línea), mini-calendario financiero con abonos, filtros rápidos [Todos/Ingresos/Gastos/Pendientes] y semáforo visual 🟢🔴🟡 por movimiento |
+| 3 | 💰 **Bio-Finanzas** | KPIs de cotizaciones, gráficos Chart.js (bar/donut/línea), mini-calendario financiero, filtros rápidos y semáforo visual 🟢🔴🟡 |
 | 4 | 🧠 **Bóveda Neural** | Notas estilo Google Keep con editor de página completa, colores, etiquetas, pin y recordatorios |
 | 5 | 📅 **Calendario** | Línea de tiempo con vistas mes / semana / día, sincronizado con tareas y eventos |
 | 6 | 📜 **Crónica** | Histórico diario en 3 columnas: lo que pasó, decisiones tomadas, pendientes |
 | 7 | 👥 **Contactos** | Directorio con ficha completa: foto, teléfonos, documentos, WhatsApp, historial de pagos |
-| 8 | 🧮 **Herramientas** | Orquestador OTC, Centro de Trámites y Plantillas, Utilidades |
+| 8 | 🧮 **Herramientas** | Orquestador OTC, Centro de Trámites (10 plantillas), Utilidades |
 | 9 | ❓ **Ayuda** | Guía interactiva completa de la sintaxis del parser y todas las funciones |
 
 ---
@@ -153,6 +179,14 @@ Nexus OS tiene **9 vistas** accesibles desde la barra lateral:
   <img src="assets/screenshots/10-ayuda.png" alt="Ayuda" width="45%"/>
 </p>
 
+### 📄 Centro de Trámites — 10 Plantillas Legales
+
+<p align="center">
+  <img src="assets/screenshots/tramites-plantillas.png" alt="Centro de Trámites — 10 Plantillas" width="800"/>
+</p>
+
+*Todos los formularios se auto-llenan desde tu directorio de contactos (nombre, RFC, CLABE, domicilio). Los documentos se guardan en el historial y pueden re-editarse y re-exportarse en cualquier momento.*
+
 ---
 
 ## 👤 Contactos — Ficha Completa
@@ -185,15 +219,6 @@ El módulo de contactos es un **CRM ligero** integrado con el resto del sistema:
 | 🏠 Comprobante de Domicilio | Dirección verificada |
 | 📷 Fotografía | Foto adicional |
 
-### Ficha de Perfil — Página completa con Tabs
-
-- **Hero**: foto grande, nombre, roles, rating, especialidades, ciudad, RFC
-- **Acciones rápidas**: 📞 Llamar · 💬 WhatsApp · ✉️ Email · 🧾 Copiar RFC · 🖨️ Imprimir · ✏️ Editar
-- **Tab 📋 Info**: teléfonos, correos, dirección, fechas especiales, cuentas de cobro, notas
-- **Tab 📎 Docs**: grid de documentos con lightbox iframe para preview dentro de la app
-- **Tab 💰 Pagos**: historial financiero con totales de ingresos y egresos vinculados
-- **Tab 🏗️ Proyectos**: proyectos donde aparece como equipo/cliente con acceso directo
-
 ---
 
 ## 🧮 Herramientas — Orquestador OTC + Centro de Trámites
@@ -207,24 +232,36 @@ Calculadora de operaciones cripto-fiat con dispersión bancaria inteligente:
 | Bloque | Función |
 |---|---|
 | **Entrada de Operación** | Moneda, cantidad, T/C Bitso real-time, comisión reportada vs. real |
-| **KPI Cards (2×2)** | Venta bruta, comisión cliente, neto a dispersar, ganancia operador (toggle oculto) |
-| **Tabla de Dispersión** | Beneficiarios con autocomplete de contactos, Banco/CLABE auto-fill, monto fijo o %, copiar rápido |
-| **Semáforo** | Barra visual: 🟡 <100% · 🟢 100% · 🔴 >100% — bloquea exceso de fondos |
-| **Intersección Proyectos** | Si el beneficiario tiene cotización pendiente → tag parpadeante `🔗 Vincular a Proyecto` |
-| **Mensaje WhatsApp** | Texto de pre-aprobación con dispersión completa — copiar al portapapeles |
-| **Comprobantes SPEI** | Drag & drop de capturas por beneficiario |
-| **Export PDF** | Estado de cuenta ejecutivo con KPIs, tabla, comprobantes |
-| **Guardar en Nexus** | Inyecta abonos en cotizaciones vinculadas automáticamente |
+| **KPI Cards (2×2)** | Venta bruta, comisión cliente, neto a dispersar, ganancia operador |
+| **Tabla de Dispersión** | Beneficiarios con autocomplete, Banco/CLABE auto-fill, monto fijo o % |
+| **Semáforo** | Barra visual: 🟡 <100% · 🟢 100% · 🔴 >100% |
+| **Mensaje WhatsApp** | Texto de pre-aprobación con dispersión completa |
+| **Export PDF** | Estado de cuenta ejecutivo con KPIs, tabla y comprobantes |
 
-### Tab 2: 📄 Centro de Trámites y Plantillas
+### Tab 2: 📄 Centro de Trámites y Plantillas (v2.4.0)
 
-| Sub-módulo | Función |
-|---|---|
-| **Datos de Pago** | Tus cuentas bancarias/crypto con botón gigante copiar — para compartir con clientes |
-| **Documentos Legales** | Pagarés, contratos (arrendamiento, compraventa), carta poder, carta de recomendación |
-| **Histórico** | Documentos generados se guardan como nodos — busca, reimprime o elimina |
+**10 documentos legales** listos para usar:
 
-Los documentos se auto-llenan con datos de tus **Contactos** (nombre, RFC, dirección, CLABE) y se exportan como PDF imprimible.
+| Plantilla | Auto-fill contactos | Export PDF | Export DOC | Tabla amortización |
+|---|:---:|:---:|:---:|:---:|
+| Prórroga de Renta | ✅ | ✅ | — | — |
+| Pagaré | ✅ | ✅ | — | — |
+| Recibo de Dinero | ✅ | ✅ | — | — |
+| Carta Poder | ✅ | ✅ | ✅ | — |
+| Contrato de Servicios | ✅ | ✅ | ✅ | — |
+| Reconocimiento de Adeudo | ✅ | ✅ | — | — |
+| NDA / Confidencialidad | ✅ | ✅ | — | — |
+| Convenio de Pago | ✅ | ✅ | — | ✅ |
+| Orden de Servicio | ✅ | ✅ | — | — |
+| Carta Responsiva | ✅ | ✅ | — | — |
+
+**Características del motor de documentos:**
+- Todos los formularios se rellenan automáticamente desde tus **Contactos** (nombre, RFC, domicilio, CLABE)
+- **Folio único** generado por documento (`NX-YYYYMMDD-XXXX`)
+- **Justificación tipográfica** en el cuerpo legal (texto a dos columnas como notaría)
+- **Regla MXN**: montos siempre en MXN como primario; USDT/USD solo como referencia comercial
+- **Form snapshot**: al exportar, guarda todos los valores del formulario → botón **✏️ Editar** para re-exportar con cambios
+- **Catálogo de cláusulas**: crea y reutiliza cláusulas personalizadas en cualquier contrato
 
 ### Tab 3: 🛠 Utilidades
 
@@ -384,8 +421,8 @@ Abre [http://localhost:5173](http://localhost:5173) — crea tu cuenta y empieza
 
 ```
 nexus-os/
-├── app.js                  # Lógica principal — parser, render engine, todas las vistas (~12 000 líneas)
-├── app.html                # Shell HTML — estructura de vistas, modales y estilos (~5 000 líneas)
+├── app.js                  # Lógica principal — parser, render engine, todas las vistas (~21 000 líneas)
+├── app.html                # Shell HTML — estructura de vistas, modales y estilos (~3 000 líneas)
 ├── main.js                 # Entry point Vite — Supabase init, auth, router
 ├── style.css               # Design tokens y clases base (complementa Tailwind)
 ├── index.html              # Landing / login page
@@ -393,6 +430,7 @@ nexus-os/
 ├── src/
 │   ├── parser.js           # Parser semántico v2 — detecta tipos, fechas, montos
 │   ├── finance-engine.js   # Motor financiero — balances, running balance, periodos
+│   ├── pdf-reports.js      # Motor de PDFs (jsPDF) — reportes + 10 plantillas legales
 │   ├── logic.js            # Lógica auxiliar compartida
 │   └── __tests__/          # Tests unitarios (Vitest)
 ├── vite.config.js          # Config Vite (multi-page)
@@ -400,15 +438,9 @@ nexus-os/
 ├── vercel.json             # Config deploy Vercel (SPA routing)
 ├── docs/
 │   └── database_schema.md  # Esquema SQL completo documentado
-├── scripts/
-│   └── take-screenshots.mjs # Utilidad para generar screenshots
 ├── assets/
 │   ├── banner.png          # Banner del proyecto
 │   └── screenshots/        # Capturas por vista (01 a 10)
-├── public/
-│   ├── manifest.json       # PWA manifest
-│   ├── sw.js               # Service Worker
-│   └── empty/              # SVGs de empty states (no-data, no-tasks, no-finance, no-notes, no-contacts, no-search)
 └── .env.example            # Plantilla de variables de entorno
 ```
 
@@ -416,34 +448,39 @@ nexus-os/
 
 | Función | Vista / Módulo |
 |---|---|
-| `renderPanelDashboard()` | Panel de Comandos — KPIs, pagos, distribución Kanban, abonos |
+| `renderPanelDashboard()` | Panel de Comandos — KPIs, pagos, distribución Kanban |
 | `renderKanban()` | Muro Táctico — board Kanban drag & drop |
 | `renderFinance()` | Bio-Finanzas — cuentas, transacciones, semáforo |
 | `renderNotes()` | Bóveda Neural — grilla o editor full-page |
 | `renderCalendar()` | Calendario / Línea de Tiempo |
 | `renderCronica()` | Crónica — histórico diario |
-| `renderProyectos()` | Proyectos — dashboard + finanzas + Kanban |
 | `renderContacts()` | Contactos — tarjetas del directorio |
-| `calcNextDueDate(freq, dayOfMonth, weekday, customDays, specificDate)` | Calcula próxima fecha de vencimiento (soporta bianual/trianual) |
-| `feedItemHtml(n)` | HTML de una fila del Feed con `nxBadge()` y Lucide icons |
-| `nxBadge(label, opts)` | Genera pill de badge unificado con icono Lucide opcional |
-| `NX_TYPE_BADGE[type]()` | Badge preconfigurado por tipo de nodo (10 tipos) |
-| `NX_STATUS_BADGE[status]()` | Badge de estado Kanban (todo/in_progress/done/archived) |
-| `nxEmptyState({ img, title, sub, cta })` | HTML de empty state con SVG + texto + botón CTA |
-| `lx(name, size, cls, opts)` | Genera SVG string de Lucide para uso en innerHTML templates |
-| `refreshIcons()` | Activa `data-lucide="..."` en DOM tras cada render |
-| `_renderSkeletonFeed()` | Muestra skeleton de 5 filas shimmer mientras carga datos |
-| `openContactProfile(id)` | Ficha completa de contacto con tabs |
-| `buildNoteBlockEditor()` | Editor rico con colores/tamaños/paste limpio |
-| `printFinanceCEP()` | Comprobante Electrónico de Pago |
-| `printProjectReport(id)` | Reporte financiero con Chart.js |
-| `openCotizacionDetail(id)` | Detalle de cotización con historial de pagos |
-| `importContactsCSV()` | Importación masiva CSV con detección de duplicados |
+| `openDocGen(type)` | Generador de documentos — abre formulario por tipo |
+| `docGenFillParty()` | Auto-fill genérico desde contacto seleccionado |
+| `docGenLinkCotizacion()` | Pre-popula contrato con datos de cotización vinculada |
+| `editDoc(id)` | Reabre formulario con snapshot guardado para re-editar |
+| `pdfReconocimientoAdeudo()` | PDF: Reconocimiento de Adeudo |
+| `pdfNDA()` | PDF: NDA / Acuerdo de Confidencialidad |
+| `pdfConvenioPago()` | PDF: Convenio de Pago con tabla de amortización |
+| `pdfOrdenServicio()` | PDF: Orden de Servicio |
+| `pdfCartaResponsiva()` | PDF: Carta Responsiva de bien entregado |
 | `otcRecalc()` | Motor de cálculo OTC con truncamiento a 2 decimales |
 | `otcFetchBitso()` | Consulta precio Bitso real-time |
-| `otcCopyWhatsApp()` | Genera mensaje de pre-aprobación WhatsApp |
-| `otcExportPDF()` | Exporta estado de cuenta ejecutivo en PDF |
-| `openDocGen(type)` | Generador de documentos legales con auto-fill |
+
+### Funciones PDF en `src/pdf-reports.js`
+
+| Función | Documento |
+|---|---|
+| `pdfProrroga(data, emisor)` | Prórroga de Pago de Renta |
+| `pdfPagare(data, emisor)` | Pagaré |
+| `pdfRecibo(data, emisor)` | Recibo de Dinero |
+| `pdfCartaPoder(data, emisor)` | Carta Poder |
+| `pdfContratoServicios(data, emisor)` | Contrato de Servicios |
+| `pdfReconocimientoAdeudo(data, emisor)` | Reconocimiento de Adeudo *(nuevo v2.4)* |
+| `pdfNDA(data, emisor)` | NDA / Confidencialidad *(nuevo v2.4)* |
+| `pdfConvenioPago(data, emisor)` | Convenio de Pago en Parcialidades *(nuevo v2.4)* |
+| `pdfOrdenServicio(data, emisor)` | Orden de Servicio *(nuevo v2.4)* |
+| `pdfCartaResponsiva(data, emisor)` | Carta Responsiva *(nuevo v2.4)* |
 
 ---
 
@@ -456,9 +493,6 @@ nexus-os/
 npm i -g vercel
 
 # Deploy desde el directorio del proyecto
-vercel
-
-# Para producción
 vercel --prod
 ```
 
@@ -546,7 +580,8 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para m�
 </p>
 
 <p align="center">
-  <a href="https://github.com/oscaromargp/nexus-os">Ver Repositorio</a>
+  <a href="https://github.com/oscaromargp/nexus-os">Ver Repositorio</a> &nbsp;·&nbsp;
+  <a href="https://nexus-os-chi.vercel.app">Ver Demo en Vivo</a>
 </p>
 
 ---
@@ -582,6 +617,8 @@ Distribuido bajo la licencia MIT. Consulta el archivo [LICENSE](LICENSE) para m�
 
 - [Supabase](https://supabase.com) — por el backend serverless y la autenticación
 - [Vite](https://vitejs.dev) — por el tooling de desarrollo ultrarrápido
+- [jsPDF](https://github.com/parallax/jsPDF) — por el motor de generación de PDFs
+- [jspdf-autotable](https://github.com/simonbengtsson/jsPDF-AutoTable) — por las tablas en PDF
 - [Lucide](https://lucide.dev) — por el sistema de iconos SVG consistente (~80 iconos usados)
 - [DaisyUI](https://daisyui.com) — por los componentes CSS (badges, tooltips, skeletons)
 - [tailwindcss-animate](https://github.com/jamiebuilds/tailwindcss-animate) — por las clases de animación spring
