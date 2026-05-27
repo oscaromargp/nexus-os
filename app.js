@@ -218,6 +218,8 @@ let editingFinanceId = null
 let currentContactId = null
 let activeContactFilter = 'all'
 let currentCSheetTab = 'perfil'
+let tagPeriod        = '30d'      // '7d' | '30d' | '90d' | 'all'
+let tagTypeFilter    = 'all'      // node type filter for tags view
 
 // ── Módulo Movimientos — state
 let _mvOrqs        = []
@@ -12910,13 +12912,13 @@ function initFxWidget() {
 // INTELIGENCIA DE TAGS — Sprint 11
 // ═══════════════════════════════════════════════════════════
 
-function extractTagData() {
+function extractTagData(nodes = allNodes) {
   const freq = {}
   const lastUsed = {}
   const pairFreq = {}
   const tagNodeMap = {}
 
-  allNodes.forEach(n => {
+  nodes.forEach(n => {
     const raw = n.metadata?.tags || []
     const tags = raw.map(t => t.replace(/^#/,'').toLowerCase().trim()).filter(Boolean)
     const date = n.metadata?.date || (n.created_at ? n.created_at.slice(0,10) : null)
@@ -12938,116 +12940,373 @@ function extractTagData() {
   return { freq, lastUsed, pairFreq, tagNodeMap }
 }
 
-window.renderTagsView = function() {
-  const { freq, lastUsed, pairFreq, tagNodeMap } = extractTagData()
+// ── Tag period / type setters ─────────────────────────────────────────────────
+window.setTagPeriod = function(p) {
+  tagPeriod = p
+  renderTagsView()
+}
+window.setTagTypeFilter = function(t) {
+  tagTypeFilter = t
+  renderTagsView()
+}
+
+// ── Tag cutoff date helper ────────────────────────────────────────────────────
+function _tagCutoff(period) {
+  if (period === 'all') return ''
+  const d = new Date()
+  const days = { '7d': 7, '30d': 30, '90d': 90 }
+  d.setDate(d.getDate() - (days[period] || 30))
+  return d.toISOString().slice(0, 10)
+}
+
+// ── KPI cards ─────────────────────────────────────────────────────────────────
+function _renderTagKPIs(freq, filteredNodes) {
+  const el = document.getElementById('tag-kpis')
+  if (!el) return
+
+  const totalTags    = Object.keys(freq).length
+  const taggedNodes  = filteredNodes.filter(n => (n.metadata?.tags||[]).length > 0).length
+  // Active / dormant computed from ALL nodes (not period-filtered)
+  const { lastUsed: luAll } = extractTagData(allNodes)
+  const cutoff30Str = (() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().slice(0,10) })()
+  const activeCount  = Object.values(luAll).filter(d => d >= cutoff30Str).length
+  const dormantCount = Object.values(luAll).filter(d => d < cutoff30Str).length
+  const totalTagsAll = Object.keys(luAll).length
+
+  const card = (icon, label, val, color, sub) =>
+    `<div style="background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:14px;padding:16px 18px;">
+      <div style="font-size:10px;font-weight:700;color:var(--text-muted);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:8px;">${icon} ${label}</div>
+      <div style="font-size:26px;font-weight:800;color:${color};font-family:monospace;line-height:1;">${val}</div>
+      ${sub ? `<div style="font-size:11px;color:var(--text-dim);margin-top:5px;">${sub}</div>` : ''}
+    </div>`
+
+  el.innerHTML =
+    card('🏷️', 'Total Tags', totalTags, '#e2e8f0', `de ${totalTagsAll} tags globales`) +
+    card('⚡', 'Tags Activos', activeCount, '#4ade80', 'con uso en últimos 30d') +
+    card('😴', 'Durmientes', dormantCount, '#f87171', 'sin uso en >30d') +
+    card('📝', 'Nodos Tagueados', taggedNodes, '#00f0ff', `de ${filteredNodes.length} en período`)
+}
+
+// ── Insights automáticos ──────────────────────────────────────────────────────
+function _renderTagInsights(freq, tagNodeMap, lastUsed, pairFreq, filteredNodes) {
+  const el = document.getElementById('tag-insights')
+  if (!el) return
+  const insights = []
   const sorted = Object.entries(freq).sort((a,b) => b[1]-a[1])
+
+  // 1. Tag más usado en período
+  if (sorted.length > 0) {
+    const [top, cnt] = sorted[0]
+    insights.push({ icon:'🏆', text:`Tu tag más activo es <b>#${top}</b> con <b>${cnt} usos</b> en el período`, color:'#fbbf24' })
+  }
+
+  // 2. Tags en alza (esta semana vs anterior)
+  const now = new Date()
+  const w1  = new Date(now); w1.setDate(w1.getDate()-7);  const w1s = w1.toISOString().slice(0,10)
+  const w2  = new Date(now); w2.setDate(w2.getDate()-14); const w2s = w2.toISOString().slice(0,10)
+  const { tagNodeMap: tnmAll } = extractTagData(allNodes)
+  const rising = Object.entries(tnmAll)
+    .map(([tag, ns]) => {
+      const tw = ns.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= w1s }).length
+      const pw = ns.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= w2s && d < w1s }).length
+      return { tag, tw, pw, delta: tw - pw }
+    })
+    .filter(x => x.delta > 0 && x.tw > 0)
+    .sort((a,b) => b.delta - a.delta).slice(0, 3)
+  if (rising.length) {
+    insights.push({ icon:'📈', text:`En alza esta semana: ${rising.map(r=>`<b>#${r.tag}</b> +${r.delta}`).join(', ')}`, color:'#4ade80' })
+  }
+
+  // 3. Tag más dormido
+  const { lastUsed: luAll } = extractTagData(allNodes)
+  const dormSorted = Object.entries(luAll).sort((a,b) => a[1].localeCompare(b[1]))
+  if (dormSorted.length) {
+    const [dtag, ddate] = dormSorted[0]
+    const days = Math.floor((Date.now() - new Date(ddate).getTime()) / 86400000)
+    if (days > 14) insights.push({ icon:'😴', text:`<b>#${dtag}</b> lleva <b>${days} días</b> sin uso — ¿sigue vigente?`, color:'#f87171' })
+  }
+
+  // 4. Co-ocurrencia más fuerte
+  const topPair = Object.entries(pairFreq).sort((a,b) => b[1]-a[1])[0]
+  if (topPair?.[1] >= 3) {
+    const [a, b] = topPair[0].split('|')
+    insights.push({ icon:'🔗', text:`<b>#${a}</b> y <b>#${b}</b> van juntos ${topPair[1]}× — considera un tag combinado`, color:'#a855f7' })
+  }
+
+  // 5. Promedio de tags por nodo
+  const taggedNs = filteredNodes.filter(n => (n.metadata?.tags||[]).length > 0)
+  if (taggedNs.length) {
+    const avg = (taggedNs.reduce((s,n) => s+(n.metadata?.tags||[]).length, 0) / taggedNs.length).toFixed(1)
+    insights.push({ icon:'📊', text:`Promedio de <b>${avg} tags</b> por nodo — ${avg < 2 ? 'podrías enriquecer más tus nodos' : 'buena densidad de etiquetado'}`, color:'#60a5fa' })
+  }
+
+  // 6. Día más productivo
+  const dayCount = {}
+  const DOW = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+  filteredNodes.forEach(n => {
+    const d = n.metadata?.date||(n.created_at?.slice(0,10)||'')
+    if (d && (n.metadata?.tags||[]).length) {
+      const dow = DOW[new Date(d+'T12:00').getDay()]
+      dayCount[dow] = (dayCount[dow] || 0) + 1
+    }
+  })
+  const topDay = Object.entries(dayCount).sort((a,b) => b[1]-a[1])[0]
+  if (topDay) insights.push({ icon:'📅', text:`Tu día más activo etiquetando es <b>${topDay[0]}</b> con ${topDay[1]} nodos`, color:'#34d399' })
+
+  if (!insights.length) { el.innerHTML = ''; return }
+  el.innerHTML = `
+    <div style="background:rgba(0,240,255,0.03);border:1px solid rgba(0,240,255,0.15);border-radius:14px;padding:16px 20px;margin-bottom:20px;">
+      <div style="font-size:10px;font-weight:800;color:var(--accent-cyan);letter-spacing:0.1em;margin-bottom:12px;">✨ INSIGHTS AUTOMÁTICOS</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${insights.map(ins => `
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;background:rgba(255,255,255,0.02);border-radius:8px;border-left:2px solid ${ins.color}40;">
+            <span style="font-size:15px;flex-shrink:0;line-height:1.5;">${ins.icon}</span>
+            <span style="font-size:13px;color:var(--text-muted);line-height:1.6;">${ins.text}</span>
+          </div>`).join('')}
+      </div>
+    </div>`
+}
+
+// ── Chart de evolución semanal ────────────────────────────────────────────────
+function _renderTagEvolutionChart(period) {
+  const canvas = document.getElementById('tag-evolution-chart')
+  if (!canvas) return
+  if (window._tagChartInst) { try { window._tagChartInst.destroy() } catch {} window._tagChartInst = null }
+
+  const numWeeks = period === '7d' ? 7 : period === '30d' ? 8 : period === '90d' ? 14 : 26
+  const now = new Date()
+  // Build week start dates (Sunday-aligned)
+  const starts = []
+  for (let i = numWeeks - 1; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i * 7); starts.push(d.toISOString().slice(0,10))
+  }
+  const labels = starts.map(s => { const d = new Date(s+'T12:00'); return `${d.getDate()}/${d.getMonth()+1}` })
+
+  // Count tagged nodes per weekly bucket
+  const counts = starts.map((ws, idx) => {
+    const we = idx < starts.length - 1 ? starts[idx+1] : new Date(now.getTime() + 86400000).toISOString().slice(0,10)
+    return allNodes.filter(n => {
+      const d = n.metadata?.date||(n.created_at?.slice(0,10)||'')
+      return d >= ws && d < we && (n.metadata?.tags||[]).length > 0
+    }).length
+  })
+
+  window._tagChartInst = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Nodos tagueados',
+        data: counts,
+        borderColor: '#00f0ff',
+        backgroundColor: 'rgba(0,240,255,0.07)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: '#00f0ff',
+        pointBorderColor: 'transparent',
+        fill: true,
+        tension: 0.4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'rgba(10,12,24,0.92)',
+          titleColor: '#e2e8f0', bodyColor: '#94a3b8',
+          callbacks: { label: ctx => `${ctx.raw} nodo${ctx.raw!==1?'s':''} tagueados` }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#64748b', font: { size: 10 }, stepSize: 1 }, beginAtZero: true }
+      }
+    }
+  })
+}
+
+// ── Heatmap de actividad ──────────────────────────────────────────────────────
+function _renderTagHeatmap() {
+  const el = document.getElementById('tag-heatmap')
+  if (!el) return
+
+  // Build day → tagged node count map (last 364 days)
+  const dayMap = {}
+  allNodes.forEach(n => {
+    const d = n.metadata?.date||(n.created_at?.slice(0,10)||'')
+    if (d && (n.metadata?.tags||[]).length > 0) dayMap[d] = (dayMap[d] || 0) + 1
+  })
+
+  const maxCount = Math.max(1, ...Object.values(dayMap))
+  const now = new Date()
+  const cells = []
+  for (let i = 364; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i)
+    const key = d.toISOString().slice(0,10)
+    const cnt = dayMap[key] || 0
+    const ratio = cnt / maxCount
+    const bg = cnt === 0 ? 'rgba(255,255,255,0.04)'
+      : ratio < 0.25 ? 'rgba(0,240,255,0.18)'
+      : ratio < 0.5  ? 'rgba(0,240,255,0.42)'
+      : ratio < 0.75 ? 'rgba(0,240,255,0.68)'
+      : 'rgba(0,240,255,0.94)'
+    cells.push(`<div title="${key}: ${cnt} nodo${cnt!==1?'s':''}" style="width:11px;height:11px;border-radius:2px;background:${bg};cursor:default;transition:transform 0.1s;" onmouseover="this.style.transform='scale(1.4)'" onmouseout="this.style.transform=''"></div>`)
+  }
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-rows:repeat(7,11px);grid-auto-flow:column;gap:2.5px;">
+      ${cells.join('')}
+    </div>
+    <div style="display:flex;align-items:center;gap:5px;margin-top:8px;font-size:10px;color:var(--text-dim);">
+      <span>Menos</span>
+      ${['rgba(255,255,255,0.04)','rgba(0,240,255,0.18)','rgba(0,240,255,0.42)','rgba(0,240,255,0.68)','rgba(0,240,255,0.94)'].map(c=>`<div style="width:11px;height:11px;border-radius:2px;background:${c};flex-shrink:0;"></div>`).join('')}
+      <span>Más</span>
+    </div>`
+}
+
+// ── Tag Cloud helper ───────────────────────────────────────────────────────────
+function _renderTagCloud(sorted, maxFreq) {
+  const cloud = document.getElementById('tag-cloud')
+  if (!cloud) return
+  if (!sorted.length) {
+    cloud.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">Aún no hay etiquetas. Empieza a etiquetar tus nodos con #.</span>'
+    return
+  }
+  const palette = ['#a855f7','#00f0ff','#4ade80','#f87171','#fbbf24','#60a5fa','#f97316','#34d399']
+  cloud.innerHTML = sorted.map(([tag, count]) => {
+    const ratio = count / maxFreq
+    const size  = 11 + Math.round(ratio * 22)
+    const op    = 0.5 + ratio * 0.5
+    const color = palette[tag.charCodeAt(0) % palette.length]
+    return `<span onclick="openTagFolder('${esc(tag)}')" title="${count} nodo${count>1?'s':''}"
+      style="font-size:${size}px;color:${color};opacity:${op};cursor:pointer;
+             background:${color}18;border:1px solid ${color}30;border-radius:100px;
+             padding:3px 12px;transition:all 0.2s;font-weight:${ratio>0.5?700:500};"
+      onmouseover="this.style.opacity=1;this.style.transform='scale(1.08)'"
+      onmouseout="this.style.opacity='${op}';this.style.transform=''"
+      >#${tag} <sup style="font-size:9px;">${count}</sup></span>`
+  }).join('')
+}
+
+window.renderTagsView = function() {
+  // ── 1. Filtrar nodos por período y tipo ─────────────────────────────────────
+  const cutoff = _tagCutoff(tagPeriod)
+  let filtered = allNodes
+  if (cutoff) filtered = filtered.filter(n => {
+    const d = n.metadata?.date||(n.created_at?.slice(0,10)||'')
+    return d >= cutoff
+  })
+  if (tagTypeFilter !== 'all') filtered = filtered.filter(n => n.type === tagTypeFilter)
+
+  // ── 2. Extraer datos de tags del período ────────────────────────────────────
+  const { freq, lastUsed, pairFreq, tagNodeMap } = extractTagData(filtered)
+  const sorted  = Object.entries(freq).sort((a,b) => b[1]-a[1])
   const maxFreq = sorted[0]?.[1] || 1
 
-  // Tag Cloud
-  const cloud = document.getElementById('tag-cloud')
-  if (cloud) {
-    if (!sorted.length) {
-      cloud.innerHTML = '<span style="color:var(--text-muted);font-size:13px;">Aún no hay etiquetas. Empieza a etiquetar tus nodos con #.</span>'
-    } else {
-      const palette = ['#a855f7','#00f0ff','#4ade80','#f87171','#fbbf24','#60a5fa','#f97316','#34d399']
-      cloud.innerHTML = sorted.map(([tag, count]) => {
-        const ratio = count / maxFreq
-        const size = 11 + Math.round(ratio * 22)
-        const op = 0.5 + ratio * 0.5
-        const color = palette[tag.charCodeAt(0) % palette.length]
-        return `<span onclick="openTagFolder('${esc(tag)}')" title="${count} nodo${count>1?'s':''}"
-          style="font-size:${size}px;color:${color};opacity:${op};cursor:pointer;
-                 background:${color}18;border:1px solid ${color}30;border-radius:100px;
-                 padding:3px 12px;transition:all 0.2s;font-weight:${ratio>0.5?700:500};"
-          onmouseover="this.style.opacity=1;this.style.transform='scale(1.08)'"
-          onmouseout="this.style.opacity='${op}';this.style.transform=''"
-          >#${tag} <sup style="font-size:9px;">${count}</sup></span>`
-      }).join('')
-    }
-  }
+  // ── 3. Actualizar botones de período ────────────────────────────────────────
+  ;['7d','30d','90d','all'].forEach(p => {
+    const btn = document.getElementById(`tag-period-${p}`)
+    if (!btn) return
+    const active = p === tagPeriod
+    btn.style.background   = active ? 'rgba(0,240,255,0.15)' : 'transparent'
+    btn.style.color        = active ? 'var(--accent-cyan)'   : 'var(--text-muted)'
+    btn.style.fontWeight   = active ? '700' : '600'
+  })
 
-  // Top 10 con bar charts visuales
+  // ── 4. KPI cards ─────────────────────────────────────────────────────────────
+  _renderTagKPIs(freq, filtered)
+
+  // ── 5. Insights ──────────────────────────────────────────────────────────────
+  _renderTagInsights(freq, tagNodeMap, lastUsed, pairFreq, filtered)
+
+  // ── 6. Gráfico evolución (usa allNodes para mostrar historial completo) ──────
+  _renderTagEvolutionChart(tagPeriod)
+
+  // ── 7. Heatmap ───────────────────────────────────────────────────────────────
+  _renderTagHeatmap()
+
+  // ── 8. Tag cloud ──────────────────────────────────────────────────────────────
+  _renderTagCloud(sorted, maxFreq)
+
+  // ── 9. Top 10 ─────────────────────────────────────────────────────────────────
   const top10El = document.getElementById('tag-top10')
   if (top10El) {
-    const maxCount = sorted[0]?.[1] || 1
     const top = sorted.slice(0, 10)
     top10El.innerHTML = top.length ? top.map(([tag, count]) => {
-      const pct = Math.round((count / maxCount) * 100)
+      const pct = Math.round((count / maxFreq) * 100)
       return `<div onclick="openTagFolder('${esc(tag)}')" style="display:flex;align-items:center;gap:8px;margin-bottom:8px;cursor:pointer;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-        <span style="font-size:12px;color:#fff;width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;">#${esc(tag)}</span>
-        <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:8px;overflow:hidden;">
+        <span style="font-size:12px;color:#e2e8f0;width:100px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;">#${esc(tag)}</span>
+        <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:4px;height:7px;overflow:hidden;">
           <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#00f0ff,#a78bfa);border-radius:4px;"></div>
         </div>
-        <span style="font-size:11px;color:var(--text-muted);width:28px;text-align:right;flex-shrink:0;">${count}</span>
+        <span style="font-size:11px;color:var(--text-muted);width:24px;text-align:right;flex-shrink:0;">${count}</span>
       </div>`
-    }).join('') : '<span style="color:var(--text-muted);font-size:13px;">Sin etiquetas aún.</span>'
+    }).join('') : '<span style="color:var(--text-muted);font-size:13px;">Sin etiquetas en este período.</span>'
   }
 
-  // Trends — tags en alza esta semana vs semana pasada
+  // ── 10. Trends ────────────────────────────────────────────────────────────────
   const trendsEl = document.getElementById('tag-trends')
   if (trendsEl) {
     const now2 = new Date()
-    const weekAgo = new Date(now2); weekAgo.setDate(weekAgo.getDate()-7)
-    const twoWeeksAgo = new Date(now2); twoWeeksAgo.setDate(twoWeeksAgo.getDate()-14)
-    const weekAgoStr = weekAgo.toISOString().slice(0,10)
-    const twoWeeksAgoStr = twoWeeksAgo.toISOString().slice(0,10)
-    const todayStr = now2.toISOString().slice(0,10)
-    const rising = Object.entries(tagNodeMap).map(([tag, nodes]) => {
-      const thisWeek = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= weekAgoStr && d <= todayStr }).length
-      const prevWeek = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= twoWeeksAgoStr && d < weekAgoStr }).length
-      return { tag, thisWeek, prevWeek, delta: thisWeek - prevWeek }
-    }).filter(x => x.delta > 0 && x.thisWeek > 0).sort((a,b) => b.delta - a.delta).slice(0, 5)
-    trendsEl.innerHTML = rising.length ? `
-      <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">📈 Tags en Alza (esta semana)</div>
-      ${rising.map(r => `
-        <div onclick="openTagFolder('${esc(r.tag)}')" style="display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
-          <span style="font-size:13px;color:#4ade80;font-weight:600;">#${esc(r.tag)}</span>
-          <span style="flex:1;font-size:11px;color:var(--text-dim);">${r.thisWeek} usos esta semana</span>
-          <span style="font-size:12px;color:#4ade80;font-weight:700;">+${r.delta} ↑</span>
-        </div>`).join('')}` :
-      `<div style="font-size:12px;color:var(--text-muted);">No hay tendencias detectadas esta semana.</div>`
+    const w1 = new Date(now2); w1.setDate(w1.getDate()-7);  const w1s = w1.toISOString().slice(0,10)
+    const w2 = new Date(now2); w2.setDate(w2.getDate()-14); const w2s = w2.toISOString().slice(0,10)
+    const { tagNodeMap: tnmFull } = extractTagData(allNodes)
+    const rising = Object.entries(tnmFull).map(([tag, nodes]) => {
+      const tw = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= w1s }).length
+      const pw = nodes.filter(n => { const d = n.metadata?.date||(n.created_at?.slice(0,10)||''); return d >= w2s && d < w1s }).length
+      return { tag, tw, pw, delta: tw - pw }
+    }).filter(x => x.delta > 0 && x.tw > 0).sort((a,b) => b.delta - a.delta).slice(0, 5)
+
+    trendsEl.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">📈 En Alza Esta Semana</div>` +
+      (rising.length
+        ? rising.map(r => `
+          <div onclick="openTagFolder('${esc(r.tag)}')" style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;border-radius:6px;border-bottom:1px solid rgba(255,255,255,0.04);" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+            <span style="font-size:13px;color:#4ade80;font-weight:600;flex:1;">#${esc(r.tag)}</span>
+            <span style="font-size:11px;color:var(--text-dim);">${r.tw} usos</span>
+            <span style="font-size:12px;color:#4ade80;font-weight:700;">+${r.delta}↑</span>
+          </div>`).join('')
+        : '<div style="font-size:12px;color:var(--text-muted);">Sin tendencias esta semana.</div>')
   }
 
-  // Durmientes (sin uso >30 días)
+  // ── 11. Durmientes (siempre desde allNodes) ───────────────────────────────────
   const dormEl = document.getElementById('tag-dormant')
   if (dormEl) {
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30)
-    const cutoffStr = cutoff.toISOString().slice(0,10)
-    const dormant = Object.entries(lastUsed)
-      .filter(([,d]) => d < cutoffStr)
-      .sort((a,b) => a[1].localeCompare(b[1]))
-      .slice(0,10)
+    const { lastUsed: luAll } = extractTagData(allNodes)
+    const cutoff30 = new Date(); cutoff30.setDate(cutoff30.getDate()-30)
+    const c30str = cutoff30.toISOString().slice(0,10)
+    const dormant = Object.entries(luAll).filter(([,d]) => d < c30str).sort((a,b) => a[1].localeCompare(b[1])).slice(0,10)
     dormEl.innerHTML = dormant.length
       ? dormant.map(([tag,date]) => `
-          <div onclick="openTagFolder('${esc(tag)}')" style="display:flex;align-items:center;gap:10px;padding:5px 4px;cursor:pointer;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
-            <span style="font-size:13px;color:#94a3b8;">#${tag}</span>
-            <span style="font-size:11px;color:var(--text-dim);margin-left:auto;">último: ${date}</span>
-            <span style="font-size:10px;background:rgba(248,113,113,0.12);color:#f87171;padding:1px 7px;border-radius:5px;flex-shrink:0;">dormida</span>
+          <div onclick="openTagFolder('${esc(tag)}')" style="display:flex;align-items:center;gap:8px;padding:5px 4px;cursor:pointer;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+            <span style="font-size:12px;color:#94a3b8;flex:1;">#${tag}</span>
+            <span style="font-size:10px;color:var(--text-dim);">${date}</span>
+            <span style="font-size:9px;background:rgba(248,113,113,0.12);color:#f87171;padding:1px 6px;border-radius:5px;flex-shrink:0;">dormida</span>
           </div>`).join('')
-      : '<span style="color:#4ade80;font-size:13px;">✓ Todas tus etiquetas están activas.</span>'
+      : '<span style="color:#4ade80;font-size:13px;">✓ Todas activas.</span>'
   }
 
-  // Co-ocurrencias
+  // ── 12. Co-ocurrencias ────────────────────────────────────────────────────────
   const coEl = document.getElementById('tag-cooccur')
   if (coEl) {
     const topPairs = Object.entries(pairFreq).filter(([,c])=>c>=2).sort((a,b)=>b[1]-a[1]).slice(0,12)
     coEl.innerHTML = topPairs.length
-      ? `<div style="display:flex;flex-wrap:wrap;gap:10px;">${topPairs.map(([pair,count])=>{
+      ? `<div style="display:flex;flex-wrap:wrap;gap:8px;">${topPairs.map(([pair,count])=>{
           const [a,b]=pair.split('|')
-          return `<div onclick="openTagFolderMulti('${esc(a)}','${esc(b)}')" style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:6px 14px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.15s;" onmouseover="this.style.background='rgba(168,85,247,0.15)'" onmouseout="this.style.background='rgba(168,85,247,0.08)'">
-            <span style="color:#a855f7;font-size:13px;font-weight:600;">#${a}</span>
-            <span style="color:var(--text-dim);font-size:11px;">+</span>
-            <span style="color:#a855f7;font-size:13px;font-weight:600;">#${b}</span>
-            <span style="background:rgba(168,85,247,0.25);color:#a855f7;font-size:10px;padding:1px 6px;border-radius:4px;margin-left:2px;">${count}×</span>
+          return `<div onclick="openTagFolderMulti('${esc(a)}','${esc(b)}')" style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2);border-radius:10px;padding:5px 12px;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all 0.15s;font-size:12px;" onmouseover="this.style.background='rgba(168,85,247,0.15)'" onmouseout="this.style.background='rgba(168,85,247,0.08)'">
+            <span style="color:#a855f7;font-weight:600;">#${a}</span>
+            <span style="color:var(--text-dim);">·</span>
+            <span style="color:#a855f7;font-weight:600;">#${b}</span>
+            <span style="background:rgba(168,85,247,0.25);color:#a855f7;font-size:9px;padding:1px 5px;border-radius:4px;margin-left:2px;">${count}×</span>
           </div>`}).join('')}</div>`
-      : '<span style="color:var(--text-muted);font-size:13px;">Se necesitan nodos con 2+ etiquetas para detectar co-ocurrencias.</span>'
+      : '<span style="color:var(--text-muted);font-size:13px;">Se necesitan nodos con 2+ etiquetas.</span>'
   }
 
-  // Reset tag folder
+  // ── 13. Reset carpeta ─────────────────────────────────────────────────────────
   const lbl = document.getElementById('tag-folder-label')
   const fld = document.getElementById('tag-folder-nodes')
   if (lbl) lbl.textContent = 'Selecciona una etiqueta de la nube ↑'
-  if (fld) fld.innerHTML = ''
+  if (fld) fld.innerHTML   = ''
 }
 
 window.openTagFolder = function(tag) {
