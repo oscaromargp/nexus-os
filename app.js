@@ -10213,168 +10213,482 @@ window.closeDocPreview = function() {
 window.printContactProfile = function(id) {
   const c = allNodes.find(n => n.id === id)
   if (!c) return
-  const m = c.metadata || {}
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;')
-  const name = esc(m.name || c.content || 'Contacto')
+  const m    = c.metadata || {}
+  const esc  = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  const name = m.name || c.content || 'Contacto'
+  const nameEsc = esc(name)
+
   const phones   = m.phones   || (m.phone  ? [{ label:'Personal', number:m.phone  }] : [])
   const emails   = m.emails   || (m.email  ? [{ label:'Personal', address:m.email }] : [])
-  const docs     = m.documents || []
+  const idDocs   = m.documents || []
   const accounts = m.contact_accounts || []
   const roles    = m.roles || (m.cType ? [m.cType] : ['persona'])
   const specs    = m.specialties || (m.specialty ? [m.specialty] : [])
   const rating   = m.rating || 0
-  const fmtDate  = d => { if (!d) return ''; const [y,mo,dy] = d.split('-'); return `${dy}/${mo}/${y}` }
 
-  // ── Financial summary ──
+  // ── Helpers de formato ────────────────────────────────────────────────────
+  const fmtDate = d => {
+    if (!d) return '—'
+    const [y,mo,dy] = String(d).slice(0,10).split('-')
+    return `${dy}/${mo}/${y}`
+  }
+  const fmtDateTime = iso => {
+    if (!iso) return '—'
+    const dt = new Date(iso)
+    if (isNaN(dt)) return fmtDate(iso)
+    return dt.toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })
+  }
+  const fmtMon = (n, mon='MXN') => {
+    const v = Math.abs(+(n||0))
+    return `$${v.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})} ${mon}`
+  }
+  const fmtLink = url => {
+    if (!url || url === 'undefined') return ''
+    const short = url.length > 55 ? url.slice(0,52)+'…' : url
+    return `<a href="${esc(url)}" target="_blank" style="color:#0369a1;text-decoration:none;font-size:10px;" title="${esc(url)}">🔗 ${esc(short)}</a><br><span class="print-url">${esc(url)}</span>`
+  }
+
+  // ── Cuentas del usuario (para lookup) ────────────────────────────────────
+  const userAccounts = allNodes.filter(n => n.type === 'account')
+  const acctName = (acId, acIdx) => {
+    if (acId) { const a = userAccounts.find(a => a.id === acId); if (a) return a.content || a.metadata?.name || '' }
+    if (acIdx !== undefined && acIdx !== null) { const a = userAccounts[+acIdx]; if (a) return a.content || a.metadata?.name || '' }
+    return ''
+  }
+
+  // ── Proyectos lookup ──────────────────────────────────────────────────────
+  const projNodes = allNodes.filter(n => n.type === 'proyecto')
+  const projName  = pid => { if (!pid) return ''; const p = projNodes.find(n => n.id === pid); return p ? (p.metadata?.nombre || p.content || '') : '' }
+
+  // ── Transacciones financieras vinculadas al contacto ─────────────────────
+  const nameTag = '#' + name.toLowerCase().replace(/\s+/g,'-').normalize('NFD').replace(/[̀-ͯ]/g,'')
   const relatedFinance = allNodes.filter(n =>
     (n.type === 'income' || n.type === 'expense') &&
-    (n.metadata?.contact_id === id || n.metadata?.provider_id === id || (n.metadata?.tags||[]).includes(name))
-  )
-  const totalIncome  = relatedFinance.filter(n => n.type === 'income').reduce((s,n) => s + (+(n.metadata?.amount||0)), 0)
-  const totalExpense = relatedFinance.filter(n => n.type === 'expense').reduce((s,n) => s + (+(n.metadata?.amount||0)), 0)
+    (n.metadata?.contact_id === id ||
+     n.metadata?.provider_id === id ||
+     n.metadata?.ordenante_id === id ||
+     (n.metadata?.tags||[]).some(t => t.toLowerCase() === name.toLowerCase() || t.toLowerCase() === nameTag) ||
+     (n.metadata?.contact_name||'').toLowerCase() === name.toLowerCase() ||
+     (n.metadata?.ordenante||'').toLowerCase() === name.toLowerCase())
+  ).sort((a,b) => {
+    const da = new Date(a.metadata?.fecha || a.created_at)
+    const db = new Date(b.metadata?.fecha || b.created_at)
+    return da - db
+  })
+
+  const totalIncome  = relatedFinance.filter(n => n.type === 'income').reduce((s,n) => s+(+(n.metadata?.amount||0)),0)
+  const totalExpense = relatedFinance.filter(n => n.type === 'expense').reduce((s,n) => s+(+(n.metadata?.amount||0)),0)
+  const balanceNeto  = totalIncome - totalExpense
   const txnCount     = relatedFinance.length
-  const dates = relatedFinance.map(n => new Date(n.created_at)).sort((a,b) => a-b)
-  const firstDate = dates.length ? fmtDate(dates[0].toISOString().slice(0,10)) : '—'
-  const lastDate  = dates.length > 1 ? fmtDate(dates[dates.length-1].toISOString().slice(0,10)) : firstDate
+  const allDates     = relatedFinance.map(n => new Date(n.metadata?.fecha || n.created_at)).filter(d => !isNaN(d)).sort((a,b)=>a-b)
+  const firstDate    = allDates.length ? fmtDate(allDates[0].toISOString().slice(0,10)) : '—'
+  const lastDate     = allDates.length ? fmtDate(allDates[allDates.length-1].toISOString().slice(0,10)) : '—'
+  const hasReceipts  = relatedFinance.some(n => n.metadata?.cep_url)
 
-  // ── Related projects ──
-  const relatedProjects = allNodes.filter(n => n.type === 'proyecto' && (
-    (n.metadata?.team||[]).includes(id) || (n.metadata?.client_id === id)
-  ))
+  // ── Cotizaciones (proveedor + cliente) ────────────────────────────────────
+  const relatedCots = allNodes.filter(n =>
+    (n.type === 'cotizacion' || n.type === 'cot_presupuesto' || n.type === 'cot_nota_venta') &&
+    (n.metadata?.provider_id === id || n.metadata?.client_id === id || n.metadata?.clienteId === id)
+  ).sort((a,b) => (b.metadata?.fecha||b.created_at||'').localeCompare(a.metadata?.fecha||a.created_at||''))
+  const totalCotizado = relatedCots.reduce((s,n)=>s+(+(n.metadata?.total||n.metadata?.amount||0)),0)
+  const totalAbonado  = relatedCots.reduce((s,n)=>s+((n.metadata?.abonos||[]).reduce((a,b)=>a+(+(b.amount||0)),0)),0)
 
-  // ── Related cotizaciones ──
-  const relatedCots = allNodes.filter(n => n.type === 'cotizacion' && n.metadata?.provider_id === id)
-  const totalCotizado = relatedCots.reduce((s,n) => s + (+(n.metadata?.total||n.metadata?.amount||0)), 0)
-  const totalAbonado  = relatedCots.reduce((s,n) => s + ((n.metadata?.abonos||[]).reduce((a,b) => a+(+(b.amount||0)),0)), 0)
+  // ── Documentos legales (trámites) ─────────────────────────────────────────
+  const legalDocs = allNodes.filter(n =>
+    n.metadata?.is_legal_doc &&
+    (n.metadata?.parteA_id === id || n.metadata?.parteB_id === id ||
+     (n.metadata?.parteA||'').toLowerCase() === name.toLowerCase() ||
+     (n.metadata?.parteB||'').toLowerCase() === name.toLowerCase())
+  ).sort((a,b) => (b.metadata?.doc_date||'').localeCompare(a.metadata?.doc_date||''))
 
-  // ── Avatar ──
+  // ── Proyectos vinculados ──────────────────────────────────────────────────
+  const relatedProjs = projNodes.filter(n =>
+    (n.metadata?.team||[]).includes(id) ||
+    n.metadata?.client_id === id ||
+    n.metadata?.provider_id === id
+  )
+
+  // ── Avatar ────────────────────────────────────────────────────────────────
   const photoUrl = m.photo_url || m.photoUrl || ''
-  const initials = (name.split(' ').slice(0,2).map(w => w[0]).join('') || '?').toUpperCase()
+  const initials = (nameEsc.split(' ').slice(0,2).map(w=>w[0]).join('') || '?').toUpperCase()
   const avatarHtml = photoUrl
-    ? `<img src="${esc(photoUrl)}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0;"/>`
-    : `<div style="width:90px;height:90px;border-radius:50%;background:linear-gradient(135deg,#60a5fa,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#fff;">${initials}</div>`
-
+    ? `<img src="${esc(photoUrl)}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #e2e8f0;" onerror="this.style.display='none'"/>`
+    : `<div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#60a5fa,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#fff;">${initials}</div>`
   const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating)
 
+  // ── Tipo de documento icon ────────────────────────────────────────────────
+  const docIcons = { prorroga:'📋', pagare:'📜', recibo:'🧾', cartapoder:'📋', contrato:'📑', nda:'🔏', convenio:'🤝', ordenservicio:'📋', responsiva:'📋', adeudo:'📋' }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // HTML
+  // ══════════════════════════════════════════════════════════════════════════
   const w = window.open('', '_blank')
-  let h = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name} — Dossier Nexus OS</title>
+  if (!w) { showToast('⚠️ Permite ventanas emergentes'); return }
+
+  let h = `<!DOCTYPE html><html lang="es"><head>
+  <meta charset="utf-8">
+  <title>${nameEsc} — Historial Detallado Nexus OS</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Segoe UI',system-ui,sans-serif;color:#1a1a1a;max-width:800px;margin:0 auto;padding:30px;font-size:13px}
-    .header{display:flex;align-items:center;gap:20px;padding-bottom:20px;border-bottom:2px solid #1a1a1a;margin-bottom:20px;}
-    .header-info{flex:1;}
-    .header-info h1{font-size:24px;font-weight:800;margin-bottom:4px;}
-    .badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;margin-right:4px;margin-bottom:4px;}
-    .badge-role{background:#e0f2fe;color:#0284c7;} .badge-spec{background:#f0fdf4;color:#16a34a;}
-    .stars{color:#f59e0b;font-size:16px;letter-spacing:2px;margin-top:2px;}
-    .section{margin-bottom:18px;} .section-title{font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #e2e8f0;}
-    table{width:100%;border-collapse:collapse;} td,th{padding:6px 10px;border-bottom:1px solid #f1f5f9;font-size:12px;text-align:left;}
-    th{font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;background:#f8fafc;}
-    .kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
-    .kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;text-align:center;}
-    .kpi-label{font-size:9px;font-weight:700;color:#94a3b8;letter-spacing:.5px;text-transform:uppercase;} .kpi-val{font-size:18px;font-weight:800;margin-top:4px;}
-    .kpi-sub{font-size:9px;color:#94a3b8;margin-top:2px;}
-    @media print{body{padding:12px;} .no-print{display:none;}}
-  </style></head><body>`
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;max-width:960px;margin:0 auto;padding:28px 20px;font-size:12.5px;line-height:1.5}
+    /* ── Brand header ── */
+    .brand-bar{background:#050810;color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #22d3ee;border-radius:8px 8px 0 0;margin-bottom:0;}
+    .brand-bar .brand{font-size:13px;font-weight:800;color:#22d3ee;letter-spacing:.05em;}
+    .brand-bar .rpt-title{font-size:10px;color:#94a3b8;}
+    .brand-bar .date{font-size:10px;color:#94a3b8;text-align:right;}
+    /* ── Contact header ── */
+    .contact-header{display:flex;align-items:flex-start;gap:18px;padding:18px 0 16px;border-bottom:2px solid #0f172a;margin-bottom:18px;}
+    .contact-header h1{font-size:22px;font-weight:900;margin-bottom:3px;}
+    .header-meta{flex:1;}
+    .badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:9.5px;font-weight:700;margin:2px 3px 2px 0;text-transform:capitalize;}
+    .r-proveedor{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;}
+    .r-cliente{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;}
+    .r-persona{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;}
+    .r-colaborador{background:#faf5ff;color:#7e22ce;border:1px solid #e9d5ff;}
+    .spec{background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;}
+    .stars{color:#f59e0b;font-size:15px;letter-spacing:1.5px;}
+    /* ── KPI grid ── */
+    .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px;}
+    .kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 8px;text-align:center;}
+    .kpi-label{font-size:8px;font-weight:800;color:#94a3b8;letter-spacing:.5px;text-transform:uppercase;margin-bottom:2px;}
+    .kpi-val{font-size:16px;font-weight:900;color:#0f172a;}
+    .kpi-sub{font-size:8.5px;color:#94a3b8;margin-top:2px;}
+    .green{color:#15803d!important} .red{color:#b91c1c!important} .blue{color:#1d4ed8!important} .purple{color:#7e22ce!important}
+    /* ── Sections ── */
+    .section{margin-bottom:22px;}
+    .section-title{font-size:10.5px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;padding-bottom:5px;border-bottom:1.5px solid #e2e8f0;display:flex;align-items:center;gap:6px;}
+    /* ── Tables ── */
+    table{width:100%;border-collapse:collapse;font-size:11.5px;}
+    th{font-size:9px;color:#64748b;font-weight:800;text-transform:uppercase;letter-spacing:.04em;background:#f8fafc;padding:6px 8px;border-bottom:1.5px solid #e2e8f0;text-align:left;}
+    td{padding:5px 8px;border-bottom:1px solid #f1f5f9;vertical-align:top;}
+    tr:last-child td{border-bottom:none;}
+    tr:nth-child(even) td{background:#fafbfc;}
+    .mono{font-family:'Courier New',monospace;font-size:10px;}
+    .chip{display:inline-block;padding:1px 6px;border-radius:20px;font-size:9px;font-weight:700;}
+    .chip-in{background:#dcfce7;color:#15803d;}
+    .chip-out{background:#fee2e2;color:#b91c1c;}
+    /* ── Receipt links ── */
+    .print-url{display:none;font-size:8px;color:#94a3b8;word-break:break-all;}
+    a{color:#0369a1;text-decoration:none;}
+    a:hover{text-decoration:underline;}
+    /* ── Abono rows ── */
+    .abono-row{background:#f0fdf4!important;}
+    .abono-row td{font-size:10.5px;color:#14532d;}
+    .pending-row td{color:#92400e;background:#fffbeb!important;}
+    /* ── Empty state ── */
+    .empty{text-align:center;color:#94a3b8;font-size:11px;padding:16px;font-style:italic;}
+    /* ── Print ── */
+    @media print{
+      body{padding:10px;max-width:100%;}
+      .no-print{display:none!important;}
+      .print-url{display:block!important;}
+      a{color:#0369a1;text-decoration:none;}
+      .brand-bar{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      tr:nth-child(even) td{background:#fafbfc!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      .chip{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      .abono-row{background:#f0fdf4!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      .pending-row{background:#fffbeb!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      .kpi{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    }
+  </style>
+  </head><body>`
 
-  // Header with avatar
-  h += `<div class="header">
+  // ── Brand bar ──
+  h += `<div class="brand-bar">
+    <div><div class="brand">NEXUS OS</div><div class="rpt-title">Historial Detallado de Contacto</div></div>
+    <div class="date">${new Date().toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}<br>
+    Generado: ${new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}</div>
+  </div>`
+
+  // ── Contact header ──
+  const roleBadges = roles.map(r => `<span class="badge r-${r}">${esc(r)}</span>`).join('')
+  const specBadges = specs.map(s => `<span class="badge spec">${esc(s)}</span>`).join('')
+  h += `<div class="contact-header">
     ${avatarHtml}
-    <div class="header-info">
-      <h1>${name}</h1>
-      <div style="margin:4px 0;">${roles.map(r => `<span class="badge badge-role">${esc(r)}</span>`).join('')}${specs.map(s => `<span class="badge badge-spec">${esc(s)}</span>`).join('')}</div>
-      <div style="font-size:12px;color:#64748b;">${[m.city, m.address_state, m.address_country].filter(Boolean).map(s=>esc(s)).join(', ')}</div>
-      ${m.rfc ? `<div style="font-size:11px;color:#94a3b8;margin-top:2px;">RFC: <b>${esc(m.rfc)}</b></div>` : ''}
-      ${rating ? `<div class="stars">${stars}</div>` : ''}
+    <div class="header-meta">
+      <h1>${nameEsc}</h1>
+      <div style="margin:4px 0;">${roleBadges}${specBadges}</div>
+      ${[m.city, m.address_state].filter(Boolean).length ? `<div style="font-size:11.5px;color:#64748b;margin-top:2px;">📍 ${[m.city,m.address_state,m.address_country].filter(Boolean).map(s=>esc(s)).join(', ')}</div>` : ''}
+      ${m.rfc ? `<div style="font-size:11px;color:#64748b;margin-top:1px;">RFC: <b>${esc(m.rfc)}</b>${m.curp?` &nbsp;·&nbsp; CURP: <b>${esc(m.curp)}</b>`:''}</div>` : ''}
+      ${m.specialty||specs.length ? '' : ''}
+      ${rating ? `<div class="stars" style="margin-top:3px;">${stars}</div>` : ''}
+      <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:6px;font-size:11px;">
+        ${phones.map(p=>`<span>📞 <b>${esc(p.number)}</b> <span style="color:#94a3b8;">${esc(p.label)}</span></span>`).join('')}
+        ${emails.map(e=>`<span>✉️ <b>${esc(e.address)}</b> <span style="color:#94a3b8;">${esc(e.label)}</span></span>`).join('')}
+      </div>
     </div>
-    <div style="text-align:right;font-size:10px;color:#94a3b8;">
-      <div style="font-weight:700;font-size:14px;color:#1a1a1a;">NEXUS OS</div>
-      <div>Dossier de Contacto</div>
-      <div>${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}</div>
+    <div class="no-print" style="text-align:right;">
+      <button onclick="window.print()" style="background:#0f172a;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:700;font-size:12px;">🖨 Imprimir / PDF</button>
     </div>
   </div>`
 
-  // KPI strip
+  // ── KPI strip ──
+  const pendienteCot = Math.max(0, totalCotizado - totalAbonado)
   h += `<div class="kpi-grid">
     <div class="kpi"><div class="kpi-label">Transacciones</div><div class="kpi-val">${txnCount}</div><div class="kpi-sub">${firstDate} → ${lastDate}</div></div>
-    <div class="kpi"><div class="kpi-label">Ingresos</div><div class="kpi-val" style="color:#16a34a;">$${_fmt$(totalIncome)}</div></div>
-    <div class="kpi"><div class="kpi-label">Egresos</div><div class="kpi-val" style="color:#dc2626;">$${_fmt$(totalExpense)}</div></div>
-    <div class="kpi"><div class="kpi-label">Cotizado</div><div class="kpi-val" style="color:#7c3aed;">$${_fmt$(totalCotizado)}</div><div class="kpi-sub">Abonado: $${_fmt$(totalAbonado)}</div></div>
+    <div class="kpi"><div class="kpi-label">Total ingresos</div><div class="kpi-val green">${fmtMon(totalIncome)}</div></div>
+    <div class="kpi"><div class="kpi-label">Total egresos</div><div class="kpi-val red">${fmtMon(totalExpense)}</div></div>
+    <div class="kpi"><div class="kpi-label">Balance neto</div><div class="kpi-val ${balanceNeto>=0?'green':'red'}">${balanceNeto>=0?'+':''}${fmtMon(balanceNeto)}</div></div>
+    <div class="kpi"><div class="kpi-label">Cotizado total</div><div class="kpi-val purple">${fmtMon(totalCotizado)}</div><div class="kpi-sub">Pendiente: ${fmtMon(pendienteCot)}</div></div>
   </div>`
 
-  // Contact info
-  if (phones.length || emails.length) {
-    h += `<div class="section"><div class="section-title">📞 Contacto</div><table>`
-    phones.forEach(p => { h += `<tr><td style="color:#94a3b8;width:90px;">${esc(p.label)}</td><td style="font-weight:600;">${esc(p.number)}</td></tr>` })
-    emails.forEach(e => { h += `<tr><td style="color:#94a3b8;width:90px;">${esc(e.label)}</td><td>${esc(e.address)}</td></tr>` })
-    h += `</table></div>`
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECCIÓN 1 — HISTORIAL DE TRANSACCIONES FINANCIERAS
+  // ══════════════════════════════════════════════════════════════════════════
+  h += `<div class="section"><div class="section-title">💸 Historial Detallado de Transacciones (${txnCount})</div>`
+  if (!relatedFinance.length) {
+    h += `<div class="empty">Sin transacciones financieras registradas para este contacto.</div>`
+  } else {
+    // Tabla detallada — columnas según disponibilidad
+    const hasTC    = relatedFinance.some(n => n.metadata?.tc && n.metadata.moneda !== 'MXN')
+    const hasOrd   = relatedFinance.some(n => n.metadata?.ordenante || n.metadata?.contact_name)
+    const hasBank  = relatedFinance.some(n => n.metadata?.banco || n.metadata?.clabe)
+    const hasRef   = relatedFinance.some(n => n.metadata?.referencia)
+    const hasProy  = relatedFinance.some(n => { const tags=(n.metadata?.tags||[]); return tags.some(t=>t.startsWith('#') && t.length>2) || n.metadata?.project_id })
+    const hasRecpt = relatedFinance.some(n => n.metadata?.cep_url)
 
-  // Address
-  if (m.address_street || m.city) {
-    const parts = [m.address_street, [m.address_postal, m.city].filter(Boolean).join(' '), [m.address_state, m.address_country].filter(Boolean).join(', ')].filter(Boolean)
-    h += `<div class="section"><div class="section-title">📍 Dirección</div><p style="font-size:13px;line-height:1.6;">${parts.map(p=>esc(p)).join('<br>')}</p></div>`
-  }
+    h += `<table><thead><tr>
+      <th style="width:80px;">Fecha</th>
+      <th style="width:52px;">Tipo</th>
+      <th>Concepto / Descripción</th>
+      <th style="width:90px;text-align:right;">Monto</th>
+      ${hasTC ? '<th style="width:70px;text-align:right;">MXN equiv.</th>' : ''}
+      <th style="width:80px;">Cuenta</th>
+      ${hasOrd  ? '<th style="width:80px;">Ordenante</th>' : ''}
+      ${hasBank ? '<th style="width:90px;">Banco / CLABE</th>' : ''}
+      ${hasRef  ? '<th style="width:72px;">Referencia</th>' : ''}
+      ${hasProy ? '<th style="width:80px;">Proyecto/Tags</th>' : ''}
+      ${hasRecpt ? '<th style="width:100px;">Comprobante</th>' : ''}
+    </tr></thead><tbody>`
 
-  // Dates
-  if (m.birthday || m.anniversary) {
-    h += `<div class="section"><div class="section-title">🎉 Fechas Especiales</div><div style="display:flex;gap:30px;">`
-    if (m.birthday) h += `<div><span style="font-size:10px;color:#94a3b8;">🎂 Cumpleaños</span><br><b style="font-size:14px;">${fmtDate(m.birthday)}</b></div>`
-    if (m.anniversary) h += `<div><span style="font-size:10px;color:#94a3b8;">💑 Aniversario</span><br><b style="font-size:14px;">${fmtDate(m.anniversary)}</b></div>`
-    h += `</div></div>`
-  }
+    relatedFinance.forEach(n => {
+      const nm   = n.metadata || {}
+      const isIn = n.type === 'income'
+      const fecha = nm.fecha
+        ? fmtDate(nm.fecha)
+        : fmtDateTime(n.created_at).slice(0,10).split('-').reverse().join('/')
+      const hora = n.created_at
+        ? new Date(n.created_at).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
+        : ''
+      const mon    = nm.moneda || 'MXN'
+      const tc     = +(nm.tc||0)
+      const amount = +(nm.amount||0)
+      const mxnEq  = mon !== 'MXN' && tc ? amount * tc : null
+      const acName = acctName(nm.account_id, nm.dest_account_idx) || nm.account_hint || ''
+      const ordName= nm.ordenante || nm.contact_name || ''
+      const banco  = nm.banco || ''
+      const clabe  = nm.clabe || ''
+      const ref    = nm.referencia || ''
+      const concepto = esc(nm.label || n.content || '—')
+      const ivaStr = nm.iva ? ` <span style="font-size:9px;color:#94a3b8;">IVA $${nm.iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</span>` : ''
+      const tags   = (nm.tags||[]).filter(t=>t&&t!==name).join(' ')
+      const proy   = projName(nm.project_id) || tags
+      const cepUrl = nm.cep_url && nm.cep_url !== 'undefined' ? nm.cep_url : ''
 
-  // Bank accounts
-  if (accounts.length) {
-    h += `<div class="section"><div class="section-title">🏦 Cuentas de Cobro</div><table><tr><th>Tipo</th><th>Banco / Red</th><th>CLABE / Wallet</th></tr>`
-    accounts.forEach(a => {
-      h += `<tr><td>${esc(a.type||'')}</td><td>${esc(a.bank||a.network||'')}</td><td style="font-family:monospace;font-size:11px;">${esc(a.clabe||a.wallet||'')}</td></tr>`
+      h += `<tr>
+        <td class="mono">${esc(fecha)}<br><span style="color:#94a3b8;font-size:9px;">${esc(hora)}</span></td>
+        <td><span class="chip ${isIn?'chip-in':'chip-out'}">${isIn?'↑ ING':'↓ GST'}</span></td>
+        <td style="font-weight:600;">${concepto}${ivaStr}
+          ${nm.notas ? `<div style="font-size:10px;color:#64748b;margin-top:1px;">${esc(nm.notas)}</div>` : ''}
+        </td>
+        <td style="text-align:right;font-weight:700;color:${isIn?'#15803d':'#b91c1c'};">${isIn?'+':'-'}${fmtMon(amount,mon)}</td>
+        ${hasTC ? `<td style="text-align:right;font-size:10.5px;color:#64748b;">${mxnEq!=null?fmtMon(mxnEq):'—'}</td>` : ''}
+        <td style="font-size:10.5px;color:#475569;">${esc(acName)}</td>
+        ${hasOrd  ? `<td style="font-size:10.5px;">${esc(ordName)}</td>` : ''}
+        ${hasBank ? `<td class="mono" style="font-size:9.5px;">${esc(banco)}<br>${esc(clabe)}</td>` : ''}
+        ${hasRef  ? `<td class="mono" style="font-size:10px;">${esc(ref)}</td>` : ''}
+        ${hasProy ? `<td style="font-size:10px;color:#64748b;">${esc(proy)}</td>` : ''}
+        ${hasRecpt ? `<td>${cepUrl ? fmtLink(cepUrl) : '<span style="color:#cbd5e1;font-size:10px;">—</span>'}</td>` : ''}
+      </tr>`
     })
-    h += `</table></div>`
-  }
 
-  // Related projects
-  if (relatedProjects.length) {
-    h += `<div class="section"><div class="section-title">🏗️ Proyectos Vinculados</div><table><tr><th>Proyecto</th><th>Estado</th></tr>`
-    relatedProjects.forEach(p => {
-      const pm = p.metadata || {}
-      h += `<tr><td style="font-weight:600;">${esc(pm.name||p.content)}</td><td>${esc(pm.status||'activo')}</td></tr>`
-    })
-    h += `</table></div>`
+    // Totales por tipo
+    const totalInHTML = relatedFinance.filter(n=>n.type==='income').reduce((s,n)=>s+(+(n.metadata?.amount||0)),0)
+    const totalExHTML = relatedFinance.filter(n=>n.type==='expense').reduce((s,n)=>s+(+(n.metadata?.amount||0)),0)
+    h += `<tr style="background:#f1f5f9;">
+      <td colspan="${2+(hasTC?1:0)+(hasOrd?1:0)+(hasBank?1:0)+(hasRef?1:0)+(hasProy?1:0)+(hasRecpt?1:0)+(hasBank?0:0)}" style="font-weight:700;font-size:10px;color:#475569;">TOTALES (${txnCount} movimientos)</td>
+      <td style="text-align:right;font-weight:800;font-size:12px;">
+        <span style="color:#15803d;">+${fmtMon(totalInHTML)}</span><br>
+        <span style="color:#b91c1c;">-${fmtMon(totalExHTML)}</span>
+      </td>
+      ${hasTC?`<td></td>`:''}
+      <td colspan="${1+(hasOrd?1:0)+(hasBank?1:0)+(hasRef?1:0)+(hasProy?1:0)+(hasRecpt?1:0)}" style="text-align:right;font-weight:800;font-size:12px;color:${balanceNeto>=0?'#15803d':'#b91c1c'};">Neto: ${balanceNeto>=0?'+':''}${fmtMon(balanceNeto)}</td>
+    </tr>`
+    h += `</tbody></table>`
   }
+  h += `</div>`
 
-  // Cotizaciones
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECCIÓN 2 — COTIZACIONES / PRESUPUESTOS con desglose de abonos
+  // ══════════════════════════════════════════════════════════════════════════
   if (relatedCots.length) {
-    h += `<div class="section"><div class="section-title">🧾 Cotizaciones</div><table><tr><th>Concepto</th><th style="text-align:right;">Total</th><th style="text-align:right;">Abonado</th><th style="text-align:right;">Saldo</th></tr>`
+    h += `<div class="section"><div class="section-title">🧾 Cotizaciones y Presupuestos (${relatedCots.length})</div>`
     relatedCots.forEach(ct => {
-      const cm = ct.metadata || {}
+      const cm   = ct.metadata || {}
       const total = +(cm.total||cm.amount||0)
-      const paid = (cm.abonos||[]).reduce((s,a)=>s+(+(a.amount||0)),0)
-      h += `<tr><td>${esc(cm.description||ct.content)}</td><td style="text-align:right;font-weight:600;">$${_fmt$(total)}</td><td style="text-align:right;color:#16a34a;">$${_fmt$(paid)}</td><td style="text-align:right;color:${paid>=total?'#16a34a':'#dc2626'};">$${_fmt$(total-paid)}</td></tr>`
+      const mon   = cm.moneda || 'MXN'
+      const abonos= cm.abonos || []
+      const paid  = abonos.reduce((s,a) => s+(+(a.amount||0)),0)
+      const saldo = Math.max(0, total - paid)
+      const estado= cm.status || cm.estado || 'borrador'
+      const estadoColor = { pagada:'#15803d',aceptada:'#1d4ed8',enviada:'#d97706',pendiente:'#92400e',rechazada:'#b91c1c',borrador:'#64748b' }[estado] || '#64748b'
+      const pct = total > 0 ? Math.round(paid/total*100) : 0
+
+      h += `<div style="border:1px solid #e2e8f0;border-radius:8px;margin-bottom:12px;overflow:hidden;">`
+      // Header de la cotización
+      h += `<div style="background:#f8fafc;padding:10px 14px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #e2e8f0;">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:800;color:#0f172a;">${esc(cm.titulo||cm.description||ct.content||'Sin título')}</div>
+          <div style="font-size:10px;color:#64748b;margin-top:1px;">
+            ${cm.folio ? `Folio: <b>${esc(cm.folio)}</b> &nbsp;·&nbsp;` : ''}
+            Fecha: <b>${fmtDate(cm.fecha||ct.created_at?.slice(0,10))}</b>
+            ${cm.proyectoNombre ? ` &nbsp;·&nbsp; Proyecto: <b>${esc(cm.proyectoNombre)}</b>` : ''}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:15px;font-weight:900;color:#0f172a;">${fmtMon(total,mon)}</div>
+          <span style="font-size:9px;font-weight:700;color:${estadoColor};background:${estadoColor}1a;padding:2px 8px;border-radius:10px;border:1px solid ${estadoColor}40;">${estado.toUpperCase()}</span>
+        </div>
+      </div>`
+      // Barra de progreso
+      h += `<div style="padding:8px 14px;background:#fff;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;gap:12px;">
+        <div style="flex:1;background:#e2e8f0;border-radius:4px;height:6px;overflow:hidden;">
+          <div style="background:${pct>=100?'#15803d':'#3b82f6'};height:100%;width:${Math.min(pct,100)}%;border-radius:4px;transition:.3s;"></div>
+        </div>
+        <div style="font-size:10px;font-weight:700;color:#475569;white-space:nowrap;">${pct}% · Abonado ${fmtMon(paid,mon)} · Saldo <span style="color:${saldo>0?'#b91c1c':'#15803d'}">${fmtMon(saldo,mon)}</span></div>
+      </div>`
+      // Tabla de abonos
+      if (abonos.length) {
+        h += `<table style="margin:0;"><thead><tr>
+          <th style="width:80px;">Fecha</th>
+          <th>Concepto del abono</th>
+          <th style="width:75px;">Método</th>
+          <th style="width:90px;text-align:right;">Monto</th>
+          <th>Comprobante</th>
+        </tr></thead><tbody>`
+        abonos.forEach((a,i) => {
+          const isPaid = a.paid_at || (!a.due_date)
+          const cls = isPaid ? 'abono-row' : (a.due_date && a.due_date < new Date().toISOString().slice(0,10) ? 'pending-row' : '')
+          const aFecha = a.date || a.paid_at || a.due_date || ''
+          const aUrl   = a.receipt_url || ''
+          h += `<tr class="${cls}">
+            <td class="mono">${esc(fmtDate(aFecha))}</td>
+            <td style="font-size:11px;">${esc(a.note||a.concepto||`Abono ${i+1}`)}</td>
+            <td style="font-size:10.5px;">${esc(a.method||a.metodo||'—')}</td>
+            <td style="text-align:right;font-weight:700;color:#15803d;">${fmtMon(+(a.amount||0),mon)}</td>
+            <td>${aUrl ? fmtLink(aUrl) : '<span style="color:#cbd5e1;font-size:10px;">Sin comprobante</span>'}</td>
+          </tr>`
+        })
+        h += `</tbody></table>`
+      } else {
+        h += `<div class="empty" style="padding:10px;">Sin abonos registrados — saldo total pendiente</div>`
+      }
+      h += `</div>` // end cotización card
     })
-    h += `</table></div>`
+    h += `</div>`
   }
 
-  // Docs
-  if (docs.length) {
-    h += `<div class="section"><div class="section-title">📎 Documentos</div><table>`
-    docs.forEach(d => { h += `<tr><td>${esc(d.name||d.docType)}</td><td style="font-size:11px;color:#64748b;">${d.url ? 'Vinculado' : 'Sin enlace'}</td></tr>` })
-    h += `</table></div>`
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECCIÓN 3 — DOCUMENTOS LEGALES
+  // ══════════════════════════════════════════════════════════════════════════
+  if (legalDocs.length) {
+    h += `<div class="section"><div class="section-title">📑 Documentos Legales / Trámites (${legalDocs.length})</div>
+    <table><thead><tr><th style="width:22px;">Tipo</th><th>Documento</th><th style="width:80px;">Fecha</th><th>Partes</th><th style="width:80px;">Folio</th></tr></thead><tbody>`
+    legalDocs.forEach(d => {
+      const dm = d.metadata || {}
+      const ico = docIcons[dm.doc_type] || '📄'
+      h += `<tr>
+        <td style="font-size:14px;">${ico}</td>
+        <td style="font-weight:700;">${esc(dm.doc_title||dm.doc_type||'—')}</td>
+        <td class="mono" style="font-size:10px;">${esc(fmtDate(dm.doc_date))}</td>
+        <td style="font-size:10.5px;">${esc(dm.parteA||'—')} <span style="color:#94a3b8;">↔</span> ${esc(dm.parteB||'—')}</td>
+        <td class="mono" style="font-size:9.5px;color:#64748b;">${esc(dm.folio||d.id?.slice(0,8)||'—')}</td>
+      </tr>`
+    })
+    h += `</tbody></table></div>`
   }
 
-  // Notes
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECCIÓN 4 — PROYECTOS
+  // ══════════════════════════════════════════════════════════════════════════
+  if (relatedProjs.length) {
+    h += `<div class="section"><div class="section-title">🏗️ Proyectos Vinculados (${relatedProjs.length})</div>
+    <table><thead><tr><th>Proyecto</th><th>Estado</th><th style="width:80px;">Inicio</th><th style="width:90px;">Presupuesto</th><th>Etiquetas</th></tr></thead><tbody>`
+    relatedProjs.forEach(p => {
+      const pm = p.metadata || {}
+      h += `<tr>
+        <td style="font-weight:700;">${esc(pm.nombre||pm.name||p.content||'—')}</td>
+        <td><span class="chip" style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;">${esc(pm.status||pm.stage||'activo')}</span></td>
+        <td class="mono" style="font-size:10px;">${esc(fmtDate(pm.startDate||pm.start_date||''))}</td>
+        <td style="font-size:10.5px;">${pm.budget ? fmtMon(pm.budget) : '—'}</td>
+        <td style="font-size:10px;color:#64748b;">${(pm.tags||[]).map(t=>esc(t)).join(' ')}</td>
+      </tr>`
+    })
+    h += `</tbody></table></div>`
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECCIÓN 5 — CUENTAS DE COBRO + DATOS DE CONTACTO + NOTAS
+  // ══════════════════════════════════════════════════════════════════════════
+  if (accounts.length) {
+    h += `<div class="section"><div class="section-title">🏦 Cuentas de Cobro / Depósito</div>
+    <table><thead><tr><th>Tipo</th><th>Banco / Red</th><th>CLABE / Wallet / Número</th><th>Titular</th></tr></thead><tbody>`
+    accounts.forEach(a => {
+      h += `<tr>
+        <td style="font-size:11px;">${esc(a.type||'—')}</td>
+        <td style="font-weight:600;">${esc(a.bank||a.network||'—')}</td>
+        <td class="mono" style="font-size:10.5px;letter-spacing:.02em;">${esc(a.clabe||a.wallet||a.account_number||'—')}</td>
+        <td style="font-size:10.5px;">${esc(a.titular||a.holder||nameEsc)}</td>
+      </tr>`
+    })
+    h += `</tbody></table></div>`
+  }
+
+  // Dirección + fechas especiales + docs de identidad
+  const hasMeta = m.address_street || m.city || m.birthday || m.anniversary || idDocs.length
+  if (hasMeta) {
+    h += `<div class="section"><div class="section-title">📋 Datos Adicionales</div>`
+    if (m.address_street || m.city) {
+      const parts = [m.address_street, [m.address_postal,m.city].filter(Boolean).join(' '), [m.address_state,m.address_country].filter(Boolean).join(', ')].filter(Boolean)
+      h += `<p style="margin-bottom:8px;"><b>📍 Domicilio:</b> ${parts.map(p=>esc(p)).join(', ')}</p>`
+    }
+    if (m.domicilio_legal) h += `<p style="margin-bottom:8px;"><b>Domicilio legal:</b> ${esc(m.domicilio_legal)}</p>`
+    if (m.birthday)    h += `<p style="margin-bottom:4px;">🎂 <b>Cumpleaños:</b> ${fmtDate(m.birthday)}</p>`
+    if (m.anniversary) h += `<p style="margin-bottom:8px;">💑 <b>Aniversario:</b> ${fmtDate(m.anniversary)}</p>`
+    if (idDocs.length) {
+      h += `<table style="margin-top:8px;"><thead><tr><th>Documento</th><th>Número / Clave</th><th>Enlace</th></tr></thead><tbody>`
+      idDocs.forEach(d => {
+        h += `<tr><td>${esc(d.name||d.docType||'—')}</td><td class="mono" style="font-size:10.5px;">${esc(d.number||'')}</td><td>${d.url?fmtLink(d.url):'—'}</td></tr>`
+      })
+      h += `</tbody></table>`
+    }
+    h += `</div>`
+  }
+
   if (m.notes) {
-    h += `<div class="section"><div class="section-title">📝 Notas</div><p style="font-size:12px;white-space:pre-wrap;color:#475569;line-height:1.6;">${esc(m.notes)}</p></div>`
+    h += `<div class="section"><div class="section-title">📝 Notas</div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;font-size:12px;line-height:1.7;white-space:pre-wrap;color:#374151;">${esc(m.notes)}</div>
+    </div>`
   }
 
-  h += `<div style="margin-top:24px;text-align:center;font-size:10px;color:#cbd5e1;border-top:1px solid #e2e8f0;padding-top:12px;">
-    Dossier generado por <b>Nexus OS</b> · ${new Date().toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'})}
-  </div></body></html>`
+  // ── Footer ──
+  h += `<div style="margin-top:28px;padding-top:12px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:flex-end;">
+    <div style="font-size:9px;color:#94a3b8;">
+      <b style="color:#64748b;">NEXUS OS</b> · nexus-os-chi.vercel.app<br>
+      Historial generado el ${new Date().toLocaleString('es-MX',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+      ${hasReceipts ? '<br>🔗 Los enlaces de comprobantes requieren conexión a internet para abrirse.' : ''}
+    </div>
+    <div style="font-size:9px;color:#94a3b8;text-align:right;">
+      Confidencial — Uso interno<br>
+      ${txnCount} transacciones · ${relatedCots.length} cotizaciones · ${legalDocs.length} documentos
+    </div>
+  </div>
+  </body></html>`
 
   w.document.write(h)
   w.document.close()
   w.focus()
-  setTimeout(() => w.print(), 600)
+  // No auto-print — user clicks button to review first
 }
 
 // ── Tab switching inside full-page profile ────────────────────────────────
