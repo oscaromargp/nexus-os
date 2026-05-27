@@ -56,6 +56,98 @@ export const NEXUS_PDF_THEME = {
 
 const T = NEXUS_PDF_THEME  // alias
 
+// ─── Banda de proyecto ─────────────────────────────────────────────────────────
+
+/**
+ * Carga una imagen desde URL y la devuelve como data URL lista para jsPDF.
+ * Devuelve '' si la URL está vacía o si ocurre cualquier error.
+ * @param {string} url
+ * @returns {Promise<string>}
+ */
+export async function preloadCover(url) {
+  if (!url || typeof url !== 'string') return ''
+  try {
+    const res  = await fetch(url)
+    if (!res.ok) return ''
+    const blob = await res.blob()
+    return await new Promise((resolve, reject) => {
+      const reader     = new FileReader()
+      reader.onload  = () => resolve(/** @type {string} */ (reader.result))
+      reader.onerror = () => reject(new Error('FileReader error'))
+      reader.readAsDataURL(blob)
+    })
+  } catch { return '' }
+}
+
+/**
+ * Detecta el formato de imagen a partir del data URL.
+ * @param {string} dataUrl
+ * @returns {'PNG'|'WEBP'|'JPEG'}
+ */
+function _imgFormat(dataUrl) {
+  if (dataUrl.startsWith('data:image/png'))  return 'PNG'
+  if (dataUrl.startsWith('data:image/webp')) return 'WEBP'
+  return 'JPEG'
+}
+
+/**
+ * Dibuja la banda del proyecto en la parte superior de la página (y = 0).
+ * Aparece solo cuando hay un proyecto vinculado (cover y/o nombre).
+ * Diseño: fondo oscuro · thumbnail portada a la izquierda · nombre a la derecha.
+ *
+ * @param {jsPDF} doc
+ * @param {string} [coverDataUrl]  — data URL de la portada (puede estar vacío)
+ * @param {string} [proyName]      — nombre del proyecto (puede estar vacío)
+ * @returns {number} altura consumida en mm (0 si no hay info de proyecto)
+ */
+function _projectBand(doc, coverDataUrl, proyName) {
+  if (!coverDataUrl && !proyName) return 0
+  const W  = doc.internal.pageSize.getWidth()
+  const BH = 14                            // alto de banda en mm
+  const IW = coverDataUrl ? BH : 0         // thumbnail cuadrado
+
+  // ── Fondo oscuro ─────────────────────────────────────────────────────────
+  doc.setFillColor(...T.ink)
+  doc.rect(0, 0, W, BH, 'F')
+
+  // ── Imagen portada ────────────────────────────────────────────────────────
+  if (coverDataUrl) {
+    try {
+      doc.addImage(coverDataUrl, _imgFormat(coverDataUrl), 0, 0, IW, BH)
+    } catch { /* imagen inválida — solo banda oscura */ }
+    // Separador vertical cyan
+    doc.setFillColor(...T.cyan)
+    doc.rect(IW, 0, 0.7, BH, 'F')
+  }
+
+  // ── Texto — etiqueta + nombre del proyecto ────────────────────────────────
+  const tx = IW + (IW ? 4 : T.mX)
+  doc.setFontSize(6)
+  doc.setFont(T.font, 'normal')
+  doc.setTextColor(...T.textMid)
+  doc.text('PROYECTO', tx, 5)
+
+  if (proyName) {
+    doc.setFontSize(8.5)
+    doc.setFont(T.font, 'bold')
+    doc.setTextColor(...T.textMain)
+    const maxW = W - tx - T.mX - 28
+    doc.text(doc.splitTextToSize(proyName, maxW)[0], tx, 10.5)
+  }
+
+  // ── Marca Nexus OS — extremo derecho ──────────────────────────────────────
+  doc.setFontSize(6)
+  doc.setFont(T.font, 'bold')
+  doc.setTextColor(...T.cyan)
+  doc.text(T.brand, W - T.mX, 8.5, { align: 'right' })
+
+  // ── Línea cyan inferior ────────────────────────────────────────────────────
+  doc.setFillColor(...T.cyan)
+  doc.rect(0, BH - 0.5, W, 0.5, 'F')
+
+  return BH  // offset para el header principal
+}
+
 // ─── Utilidades de formato ─────────────────────────────────────────────────────
 
 /** Genera folio único NX-YYYYMMDD-XXXX */
@@ -101,30 +193,31 @@ export function numToLetras(n) {
  * Barra oscura con NEXUS OS + título + folio
  * @returns {number} Y después del header
  */
-function _headerReport(doc, title, subtitle, folio) {
-  const W = doc.internal.pageSize.getWidth()
+function _headerReport(doc, title, subtitle, folio, opts = {}) {
+  const W  = doc.internal.pageSize.getWidth()
+  const po = _projectBand(doc, opts.coverDataUrl, opts.proyName)
   // Barra oscura
   doc.setFillColor(...T.ink)
-  doc.rect(0, 0, W, 26, 'F')
+  doc.rect(0, po, W, 26, 'F')
   // Línea cyan
   doc.setDrawColor(...T.cyan)
   doc.setLineWidth(1.8)
-  doc.line(0, 26, W, 26)
+  doc.line(0, po + 26, W, po + 26)
   // NEXUS OS — izquierda
   doc.setTextColor(...T.cyan)
   doc.setFontSize(12)
   doc.setFont(T.font, 'bold')
-  doc.text(T.brand, T.mX, 17)
+  doc.text(T.brand, T.mX, po + 17)
   // Título — derecha arriba
   doc.setTextColor(...T.textMain)
   doc.setFontSize(9)
   doc.setFont(T.font, 'normal')
-  doc.text(title.toUpperCase(), W - T.mX, 11, { align: 'right' })
+  doc.text(title.toUpperCase(), W - T.mX, po + 11, { align: 'right' })
   // Folio — derecha abajo
   if (folio) {
     doc.setTextColor(...T.textMid)
     doc.setFontSize(7)
-    doc.text('Folio: ' + folio, W - T.mX, 18, { align: 'right' })
+    doc.text('Folio: ' + folio, W - T.mX, po + 18, { align: 'right' })
   }
   // Subtítulo (bajo línea cyan)
   if (subtitle) {
@@ -132,10 +225,10 @@ function _headerReport(doc, title, subtitle, folio) {
     doc.setFontSize(8)
     doc.setFont(T.font, 'normal')
     const lines = doc.splitTextToSize(subtitle, W - T.mX * 2)
-    doc.text(lines, T.mX, 33)
-    return 38 + (lines.length - 1) * 4
+    doc.text(lines, T.mX, po + 33)
+    return po + 38 + (lines.length - 1) * 4
   }
-  return 32
+  return po + 32
 }
 
 /**
@@ -502,9 +595,10 @@ export function pdfReporteProyecto(proyecto, nodes = [], emisor = {}) {
   const now   = new Date()
   const meta  = proyecto.metadata || {}
   const folio = _folio()
+  const RPTS_OPTS = { coverDataUrl: meta.cover_url || '', proyName: meta.name || proyecto.content || '' }
 
   let y = _headerReport(doc, 'Reporte de Proyecto',
-    `${meta.name || proyecto.content} · ${now.toLocaleDateString('es-MX')}`, folio)
+    `${meta.name || proyecto.content} · ${now.toLocaleDateString('es-MX')}`, folio, RPTS_OPTS)
 
   // ── Encabezado del proyecto ──
   doc.setFillColor(...T.surface)
@@ -576,7 +670,7 @@ export function pdfReporteProyecto(proyecto, nodes = [], emisor = {}) {
         }
       },
       didDrawPage: (d) => {
-        _headerReport(doc, 'Reporte de Proyecto', meta.name || '', folio)
+        _headerReport(doc, 'Reporte de Proyecto', meta.name || '', folio, RPTS_OPTS)
         _footer(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
       },
     })
@@ -607,7 +701,7 @@ export function pdfReporteProyecto(proyecto, nodes = [], emisor = {}) {
           data.cell.styles.textColor = txRows[data.row.index]?._tipo === 'Ingreso' ? T.greenD : T.redD
       },
       didDrawPage: (d) => {
-        _headerReport(doc, 'Reporte de Proyecto', meta.name || '', folio)
+        _headerReport(doc, 'Reporte de Proyecto', meta.name || '', folio, RPTS_OPTS)
         _footer(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
       },
     })
@@ -739,28 +833,29 @@ export function pdfResumenMensual(period, allNodes = [], accounts = [], emisor =
  * Línea cyan delgada + folio derecha + título centrado bold
  * @returns {number} Y = 26 (inicio del cuerpo)
  */
-function _headerTramite(doc, titulo, folio) {
-  const W = doc.internal.pageSize.getWidth()
+function _headerTramite(doc, titulo, folio, opts = {}) {
+  const W  = doc.internal.pageSize.getWidth()
+  const po = _projectBand(doc, opts.coverDataUrl, opts.proyName)
   // Línea cyan superior
   doc.setFillColor(...T.cyan)
-  doc.rect(0, 0, W, 1.5, 'F')
+  doc.rect(0, po, W, 1.5, 'F')
   // Folio alineado a la derecha
   if (folio) {
     doc.setFontSize(7.5)
     doc.setFont(T.font, 'normal')
     doc.setTextColor(...T.textMid)
-    doc.text('Folio: ' + folio, W - T.mX, 10, { align: 'right' })
+    doc.text('Folio: ' + folio, W - T.mX, po + 10, { align: 'right' })
   }
   // Título del documento centrado
   doc.setFontSize(18)
   doc.setFont(T.font, 'bold')
   doc.setTextColor(...T.textInk)
-  doc.text(titulo, W / 2, 18, { align: 'center' })
+  doc.text(titulo, W / 2, po + 18, { align: 'center' })
   // Separador delgado
   doc.setDrawColor(...T.textDim)
   doc.setLineWidth(0.25)
-  doc.line(T.mX, 22, W - T.mX, 22)
-  return 26  // inicio del cuerpo
+  doc.line(T.mX, po + 22, W - T.mX, po + 22)
+  return po + 26  // inicio del cuerpo
 }
 
 /**
@@ -841,8 +936,9 @@ export function pdfProrroga(data, emisor = {}) {
   const W     = doc.internal.pageSize.getWidth()
   const folio = _folio()
   const blank = '________________________'
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
-  let y = _headerTramite(doc, 'SOLICITUD DE PRÓRROGA DE PAGO DE RENTA', folio)
+  let y = _headerTramite(doc, 'SOLICITUD DE PRÓRROGA DE PAGO DE RENTA', folio, OPTS)
   y += 4
 
   // Lugar y fecha
@@ -917,8 +1013,9 @@ export function pdfPagare(data, emisor = {}) {
   const montoFmt   = monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })
   const montoLetra = numToLetras(monto)
   const interesMoratorio = data.interesMoratorio || '2.5'
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
-  let y = _headerTramite(doc, 'P A G A R É', folio)
+  let y = _headerTramite(doc, 'P A G A R É', folio, OPTS)
   y += 2
 
   // Subtítulo
@@ -1090,8 +1187,9 @@ export function pdfRecibo(data, emisor = {}) {
     m.elect ? `C.Elect.: ${m.elect}` : '',
     m.dom   ? `Dom.: ${m.dom}`  : '',
   ].filter(Boolean).join(' · ')
+  const OPTS = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
-  let y = _headerTramite(doc, 'RECIBO DE DINERO', folio)
+  let y = _headerTramite(doc, 'RECIBO DE DINERO', folio, OPTS)
   y += 4
 
   // Lugar y fecha — alineado a la derecha
@@ -1162,17 +1260,18 @@ export function pdfCartaPoder(data, emisor = {}) {
   const W     = doc.internal.pageSize.getWidth()
   const folio = _folio()
   const blank = '________________________'
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
   const _checkY = (curY, needed = 20) => {
     if (curY + needed > 265) {
       doc.addPage()
       _footerTramite(doc, emisor, 'Original para el apoderado — Copia para el otorgante · Firmar todas las hojas')
-      return _headerTramite(doc, 'C A R T A   P O D E R', folio) + 4
+      return _headerTramite(doc, 'C A R T A   P O D E R', folio, OPTS) + 4
     }
     return curY
   }
 
-  let y = _headerTramite(doc, 'C A R T A   P O D E R', folio)
+  let y = _headerTramite(doc, 'C A R T A   P O D E R', folio, OPTS)
   y += 2
 
   // Destinatario
@@ -1280,6 +1379,7 @@ export function pdfContratoServicios(data, emisor = {}) {
   const folio = _folio()
   const blank = '________________________'
   const monto = parseFloat(data.monto || 0)
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
   // Campos extendidos (nuevos)
   const prestCurp  = data.prestadorCurp  || ''
@@ -1294,13 +1394,13 @@ export function pdfContratoServicios(data, emisor = {}) {
 
   const _newPage = () => {
     doc.addPage()
-    const ny = _headerTramite(doc, 'CONTRATO DE PRESTACIÓN DE SERVICIOS', folio)
+    const ny = _headerTramite(doc, 'CONTRATO DE PRESTACIÓN DE SERVICIOS', folio, OPTS)
     _footerTramite(doc, emisor, 'Original para el Cliente — Copia para el Prestador de Servicios · Firmar todas las hojas al calce')
     return ny + 4
   }
   const _checkY = (curY, needed = 20) => curY + needed > 260 ? _newPage() : curY
 
-  let y = _headerTramite(doc, 'CONTRATO DE PRESTACIÓN DE SERVICIOS', folio)
+  let y = _headerTramite(doc, 'CONTRATO DE PRESTACIÓN DE SERVICIOS', folio, OPTS)
   y += 2
 
   doc.setFontSize(8); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
@@ -1420,8 +1520,9 @@ export function pdfNotaVenta(data, emisor = {}) {
   const folio = data.folio || _folio()
   const blank = '________________________'
   const items = data.items || []
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
-  let y = _headerTramite(doc, 'NOTA DE VENTA', folio)
+  let y = _headerTramite(doc, 'NOTA DE VENTA', folio, OPTS)
   y += 4
 
   // ── Encabezado del emisor ──
@@ -1496,7 +1597,7 @@ export function pdfNotaVenta(data, emisor = {}) {
         4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
       },
       didDrawPage: (d) => {
-        _headerTramite(doc, 'NOTA DE VENTA', folio)
+        _headerTramite(doc, 'NOTA DE VENTA', folio, OPTS)
         _footerTramite(doc, emisor, null)
       },
     })
@@ -1705,34 +1806,35 @@ export function pdfPresupuesto(data, emisor = {}) {
  * Si hay titulo: debajo del tipo en gris.
  * @returns {number} Y de inicio del cuerpo
  */
-function _headerCotizacion(doc, tipo, folio, titulo) {
-  const W = doc.internal.pageSize.getWidth()
+function _headerCotizacion(doc, tipo, folio, titulo, opts = {}) {
+  const W  = doc.internal.pageSize.getWidth()
+  const po = _projectBand(doc, opts.coverDataUrl, opts.proyName)
   // Línea cyan top
   doc.setFillColor(...T.cyan)
-  doc.rect(0, 0, W, 2, 'F')
+  doc.rect(0, po, W, 2, 'F')
   // Tipo de documento — izquierda, bold grande
   doc.setFontSize(16)
   doc.setFont(T.font, 'bold')
   doc.setTextColor(...T.textInk)
-  doc.text(tipo.toUpperCase(), T.mX, 14)
+  doc.text(tipo.toUpperCase(), T.mX, po + 14)
   // Folio — derecha, monospace elegante
   doc.setFontSize(10)
   doc.setFont('courier', 'bold')
   doc.setTextColor(...T.textMid)
-  doc.text(folio || '', W - T.mX, 14, { align: 'right' })
+  doc.text(folio || '', W - T.mX, po + 14, { align: 'right' })
   // Titulo debajo del tipo, en gris muted
   if (titulo) {
     doc.setFontSize(8)
     doc.setFont(T.font, 'normal')
     doc.setTextColor(...T.textMid)
     const tLines = doc.splitTextToSize(titulo, W - T.mX * 2 - 40)
-    doc.text(tLines[0], T.mX, 21)
+    doc.text(tLines[0], T.mX, po + 21)
   }
-  // Línea separadora a los 26mm
+  // Línea separadora
   doc.setDrawColor(...T.textDim)
   doc.setLineWidth(0.25)
-  doc.line(T.mX, 26, W - T.mX, 26)
-  return 32
+  doc.line(T.mX, po + 26, W - T.mX, po + 26)
+  return po + 32
 }
 
 /**
@@ -1786,8 +1888,9 @@ export function pdfPresupuestoPro(data, emisor = {}) {
   const items = (data.items || []).filter(it => it.descripcion)
   const mon   = data.moneda || 'MXN'
   const blank = '________________________'
+  const COT_OPTS = { coverDataUrl: data.cover_data_url || '', proyName: data.proyectoNombre || '' }
 
-  let y = _headerCotizacion(doc, 'Presupuesto', folio, data.titulo)
+  let y = _headerCotizacion(doc, 'Presupuesto', folio, data.titulo, COT_OPTS)
 
   // ── Bloque emisor + cliente ──────────────────────────────────────────────────
   const boxW = (W - T.mX * 2) / 2 - 3
@@ -1880,7 +1983,7 @@ export function pdfPresupuestoPro(data, emisor = {}) {
         ? { 0: { cellWidth: 8, halign: 'center' }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 28, halign: 'right' }, 4: { cellWidth: 16, halign: 'center' }, 5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } }
         : { 0: { cellWidth: 10, halign: 'center' }, 2: { cellWidth: 18, halign: 'center' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } },
       didDrawPage: (d) => {
-        _headerCotizacion(doc, 'Presupuesto', folio, data.titulo)
+        _headerCotizacion(doc, 'Presupuesto', folio, data.titulo, COT_OPTS)
         _footerCotizacion(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
       },
     })
@@ -1983,8 +2086,9 @@ export function pdfNotaVentaPro(data, emisor = {}) {
   const items = (data.items || []).filter(it => it.descripcion)
   const mon   = data.moneda || 'MXN'
   const blank = '________________________'
+  const COT_OPTS = { coverDataUrl: data.cover_data_url || '', proyName: data.proyectoNombre || '' }
 
-  let y = _headerCotizacion(doc, 'Nota de Venta', folio, data.titulo)
+  let y = _headerCotizacion(doc, 'Nota de Venta', folio, data.titulo, COT_OPTS)
 
   // ── Bloque emisor + cliente ──────────────────────────────────────────────────
   const boxW = (W - T.mX * 2) / 2 - 3
@@ -2056,7 +2160,7 @@ export function pdfNotaVentaPro(data, emisor = {}) {
         ? { 0: { cellWidth: 8, halign: 'center' }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 28, halign: 'right' }, 4: { cellWidth: 16, halign: 'center' }, 5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } }
         : { 0: { cellWidth: 10, halign: 'center' }, 2: { cellWidth: 18, halign: 'center' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } },
       didDrawPage: (d) => {
-        _headerCotizacion(doc, 'Nota de Venta', folio, data.titulo)
+        _headerCotizacion(doc, 'Nota de Venta', folio, data.titulo, COT_OPTS)
         _footerCotizacion(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
       },
     })
@@ -2141,17 +2245,18 @@ export function pdfReconocimientoAdeudo(data, emisor = {}) {
   const W     = doc.internal.pageSize.getWidth()
   const folio = _folio()
   const blank = '________________________'
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
   const _checkY = (curY, needed = 20) => {
     if (curY + needed > 265) {
       doc.addPage()
       _footerTramite(doc, emisor, 'Original para el acreedor — Copia para el deudor · Firmar todas las hojas')
-      return _headerTramite(doc, 'RECONOCIMIENTO DE ADEUDO', folio) + 4
+      return _headerTramite(doc, 'RECONOCIMIENTO DE ADEUDO', folio, OPTS) + 4
     }
     return curY
   }
 
-  let y = _headerTramite(doc, 'RECONOCIMIENTO DE ADEUDO', folio)
+  let y = _headerTramite(doc, 'RECONOCIMIENTO DE ADEUDO', folio, OPTS)
   y += 4
 
   // Lugar y fecha
@@ -2247,17 +2352,18 @@ export function pdfNDA(data, emisor = {}) {
   const W     = doc.internal.pageSize.getWidth()
   const folio = _folio()
   const blank = '________________________'
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
   const _checkY = (curY, needed = 20) => {
     if (curY + needed > 265) {
       doc.addPage()
       _footerTramite(doc, emisor, 'Original para ambas partes · Firmar todas las hojas')
-      return _headerTramite(doc, 'ACUERDO DE CONFIDENCIALIDAD', folio) + 4
+      return _headerTramite(doc, 'ACUERDO DE CONFIDENCIALIDAD', folio, OPTS) + 4
     }
     return curY
   }
 
-  let y = _headerTramite(doc, 'ACUERDO DE CONFIDENCIALIDAD (NDA)', folio)
+  let y = _headerTramite(doc, 'ACUERDO DE CONFIDENCIALIDAD (NDA)', folio, OPTS)
   y += 3
 
   doc.setFontSize(9); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
@@ -2321,17 +2427,18 @@ export function pdfConvenioPago(data, emisor = {}) {
   const W     = doc.internal.pageSize.getWidth()
   const folio = _folio()
   const blank = '________________________'
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
   const _checkY = (curY, needed = 20) => {
     if (curY + needed > 265) {
       doc.addPage()
       _footerTramite(doc, emisor, 'Original para el acreedor — Copia para el deudor')
-      return _headerTramite(doc, 'CONVENIO DE PAGO EN PARCIALIDADES', folio) + 4
+      return _headerTramite(doc, 'CONVENIO DE PAGO EN PARCIALIDADES', folio, OPTS) + 4
     }
     return curY
   }
 
-  let y = _headerTramite(doc, 'CONVENIO DE PAGO EN PARCIALIDADES', folio)
+  let y = _headerTramite(doc, 'CONVENIO DE PAGO EN PARCIALIDADES', folio, OPTS)
   y += 3
 
   doc.setFontSize(9); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
@@ -2430,8 +2537,9 @@ export function pdfOrdenServicio(data, emisor = {}) {
   const W     = doc.internal.pageSize.getWidth()
   const folio = data.folio || _folio()
   const blank = '________________________'
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
-  let y = _headerTramite(doc, 'ORDEN DE SERVICIO', folio)
+  let y = _headerTramite(doc, 'ORDEN DE SERVICIO', folio, OPTS)
   y += 2
 
   // Fecha y lugar — fila superior
@@ -2533,8 +2641,9 @@ export function pdfCartaResponsiva(data, emisor = {}) {
   const W     = doc.internal.pageSize.getWidth()
   const folio = _folio()
   const blank = '________________________'
+  const OPTS  = { coverDataUrl: data.cover_data_url, proyName: data.proyecto_nombre }
 
-  let y = _headerTramite(doc, 'CARTA RESPONSIVA', folio)
+  let y = _headerTramite(doc, 'CARTA RESPONSIVA', folio, OPTS)
   y += 4
 
   // Lugar y fecha
@@ -2638,7 +2747,7 @@ export function pdfBitacora(entries = [], proyecto = {}, emisor = {}) {
   const folio = `BIT-${slug}-${ymd}`
 
   // ── Header estándar ────────────────────────────────────────────────────────
-  let y = _headerTramite(doc, 'BITÁCORA DE ACTIVIDADES', folio)
+  let y = _headerTramite(doc, 'BITÁCORA DE ACTIVIDADES', folio, { coverDataUrl: proyecto.cover_data_url, proyName: proyecto.content || proyecto.metadata?.nombre })
 
   // ── Watermark vertical (costilla izquierda) ────────────────────────────────
   const _drawWatermark = () => {

@@ -23,7 +23,7 @@ import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensua
          pdfPresupuestoPro, pdfNotaVentaPro,
          pdfReconocimientoAdeudo, pdfNDA, pdfConvenioPago,
          pdfOrdenServicio, pdfCartaResponsiva,
-         pdfBitacora } from './src/pdf-reports.js'
+         pdfBitacora, preloadCover } from './src/pdf-reports.js'
 
 // ── Lucide Icons ──────────────────────────────────────────────────────────────
 import {
@@ -8208,10 +8208,26 @@ window._downloadAsDoc = function(html, filename) {
   setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url) }, 1000)
 }
 
-window.docGenExport = function() {
+window.docGenExport = async function() {
   const type  = _docGenType
   const blank = '________________________'
   const emisor = getEmisor()
+
+  // ── Extracción universal del proyecto vinculado ───────────────────────────
+  const _dgProjSel  = document.getElementById('dg-proyecto')?.value || ''
+  const _dgProjNode = _dgProjSel ? allNodes.find(n => n.id === _dgProjSel) : null
+  const _dgProjName = _dgProjNode ? (_dgProjNode.metadata?.nombre || _dgProjNode.content || '') : ''
+  const _dgCoverUrl = _dgProjNode?.metadata?.cover_url || ''
+  let   _dgCoverData = ''
+  if (_dgCoverUrl) {
+    try { _dgCoverData = await preloadCover(_dgCoverUrl) } catch {}
+  }
+  // Helper para inyectar cover en cualquier data object antes del pdf call
+  const _injectCover = (obj) => {
+    if (_dgProjName)  obj.proyecto_nombre = _dgProjName
+    if (_dgCoverData) obj.cover_data_url  = _dgCoverData
+    return obj
+  }
 
   let data = {}, docTitle = '', parteAName = '', parteBName = '', parteAId = '', parteBId = ''
 
@@ -8238,7 +8254,7 @@ window.docGenExport = function() {
     data = { arrendadorName, arrendadorCargo, arrendatarioName: arrName, arrendatarioDom: arrDom,
              arrendatarioCurp: arrCurp, montoRenta,
              dia, mes, anio, mesRenta, motivo, diaPago, mesPago, anioPago }
-    pdfProrroga(data, emisor)
+    pdfProrroga(_injectCover(data), emisor)
 
   } else if (type === 'pagare') {
     const benefSel  = document.getElementById('dg-beneficiario')?.value || ''
@@ -8302,7 +8318,7 @@ window.docGenExport = function() {
              dCurp, dRfc, dElect, dPasap, dTel, dEmail, dDir,
              pagos: pagos.length ? pagos : null,
              benefBanco, benefClabe, montoMxn }
-    pdfPagare(data, emisor)
+    pdfPagare(_injectCover(data), emisor)
 
   } else if (type === 'recibo') {
     const receptorSel   = document.getElementById('dg-receptor')?.value   || ''
@@ -8354,7 +8370,7 @@ window.docGenExport = function() {
     data = { receptorName, receptorRfc, receptorCurp, receptorElect, receptorDom,
              entreganteName, entreganteRfc, entreganteCurp, entreganteElect, entreganteDom,
              lugar, fecha: fechaFmt, monto, moneda, tc, montoMxn, concepto, via }
-    pdfRecibo(data, emisor)
+    pdfRecibo(_injectCover(data), emisor)
 
   } else if (type === 'cartapoder') {
     const otorganteSel = document.getElementById('dg-otorgante')?.value || ''
@@ -8394,7 +8410,7 @@ window.docGenExport = function() {
              otorgIdType, otorgIdNum, otorgCurp, otorgRfc, otorgDom,
              apodIdType, apodIdNum, apodCurp, apodRfc, apodDom,
              actos: facultadesExtra, facultadesList, testigo1Name, testigo2Name }
-    pdfCartaPoder(data, emisor)
+    pdfCartaPoder(_injectCover(data), emisor)
 
   } else if (type === 'contrato') {
     const prestadorSel  = document.getElementById('dg-prestador')?.value || ''
@@ -8458,7 +8474,7 @@ window.docGenExport = function() {
              fechaInicio: toFmt(fIniRaw) || blank, fechaFin: toFmt(fFinRaw) || blank,
              diasAviso, monto, monedaContrato, tc: tcContrato, formaPago, jurisdiccion, clausulasExtra,
              clausulasSeleccionadas }
-    pdfContratoServicios(data, emisor)
+    pdfContratoServicios(_injectCover(data), emisor)
 
   } else if (type === 'adeudo') {
     const deudorName   = document.getElementById('dg-deudor-name')?.value   || blank
@@ -8508,7 +8524,7 @@ window.docGenExport = function() {
     docTitle   = 'NDA / Acuerdo de Confidencialidad'
     data = { parte1Name, parte1Rfc, parte1Dom, parte2Name, parte2Rfc, parte2Dom,
              lugar, fecha: toFmtL(fechaRaw), objeto, vigencia, jurisdiccion, clausulasExtra }
-    pdfNDA(data, emisor)
+    pdfNDA(_injectCover(data), emisor)
 
   } else if (type === 'convenio') {
     const acreedorName = document.getElementById('dg-acreedor-name')?.value || blank
@@ -8535,7 +8551,7 @@ window.docGenExport = function() {
     data = { acreedorName, acreedorRfc, acreedorDom, deudorName, deudorRfc, deudorDom,
              lugar, fecha: toFmtL(fechaRaw), concepto, montoTotal, nPagos, frecuencia,
              diaPago, fechaPrimerPago: fechaPPRaw, intereses, jurisdiccion }
-    pdfConvenioPago(data, emisor)
+    pdfConvenioPago(_injectCover(data), emisor)
 
   } else if (type === 'ordenservicio') {
     const clienteName   = document.getElementById('dg-cliente-name')?.value   || blank
@@ -8561,7 +8577,7 @@ window.docGenExport = function() {
     data = { clienteName, clienteRfc, clienteTel, prestadorName, prestadorRfc, prestadorTel,
              lugar, fecha: toFmtL(fechaRaw), descripcion, materiales, monto, moneda, tc,
              formaPago, notasTecnicas }
-    pdfOrdenServicio(data, emisor)
+    pdfOrdenServicio(_injectCover(data), emisor)
 
   } else if (type === 'responsiva') {
     const bienDescripcion = document.getElementById('dg-bien-descripcion')?.value || blank
@@ -8583,7 +8599,7 @@ window.docGenExport = function() {
     docTitle   = 'Carta Responsiva'
     data = { bienDescripcion, bienSerie, uso, responsableName, responsableRfc, responsableDom,
              propietarioName, propietarioRfc, lugar, fecha: toFmtL(fechaRaw), vigencia, compromisosExtra }
-    pdfCartaResponsiva(data, emisor)
+    pdfCartaResponsiva(_injectCover(data), emisor)
   }
 
   if (!docTitle) return
@@ -8641,6 +8657,19 @@ window.docGenExportDoc = function() {
   const esc   = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const folio = `DOC-${new Date().getFullYear()}-${String(Math.floor(Math.random()*9000)+1000)}`
 
+  // Encabezado de proyecto (si hay uno vinculado)
+  const _dgProjSelDoc  = document.getElementById('dg-proyecto')?.value || ''
+  const _dgProjNodeDoc = _dgProjSelDoc ? allNodes.find(n => n.id === _dgProjSelDoc) : null
+  const _dgProjNameDoc = _dgProjNodeDoc ? esc(_dgProjNodeDoc.metadata?.nombre || _dgProjNodeDoc.content || '') : ''
+  const _dgCoverUrlDoc = _dgProjNodeDoc?.metadata?.cover_url || ''
+  const _proyHeaderDoc = _dgProjNameDoc
+    ? `<div style="background:#050810;color:#fff;padding:8pt 12pt;margin-bottom:12pt;display:flex;align-items:center;gap:10pt;border-bottom:2pt solid #22d3ee;">` +
+      (_dgCoverUrlDoc ? `<img src="${esc(_dgCoverUrlDoc)}" style="width:32pt;height:32pt;object-fit:cover;border-radius:2pt;flex-shrink:0;" onerror="this.style.display='none'" />` : '') +
+      `<div><div style="font-size:6pt;color:#7a8899;letter-spacing:.05em;">PROYECTO</div>` +
+      `<div style="font-size:9pt;font-weight:700;color:#e8f0f9;">${_dgProjNameDoc}</div></div>` +
+      `<div style="margin-left:auto;font-size:6pt;font-weight:700;color:#22d3ee;">NEXUS OS</div></div>`
+    : ''
+
   const _idRow = (label, val) => val && val !== blank
     ? `<p><strong>${label}:</strong> ${esc(val)}</p>` : ''
 
@@ -8665,6 +8694,7 @@ window.docGenExportDoc = function() {
       .map(el => `<li><strong>${esc(el.dataset.titulo)}</strong> — ${esc(el.dataset.texto)}</li>`).join('')
 
     const html = `
+      ${_proyHeaderDoc}
       <h1>CONTRATO DE PRESTACIÓN DE SERVICIOS</h1>
       <p style="text-align:center;color:#666;">Folio: ${folio} &nbsp;·&nbsp; ${lugar}, a ${fecha}</p>
       <h2>PARTES</h2>
@@ -8708,6 +8738,7 @@ window.docGenExportDoc = function() {
     const t2        = esc(document.getElementById('dg-testigo2-name')?.value || '')
 
     const html = `
+      ${_proyHeaderDoc}
       <h1>CARTA PODER</h1>
       <p style="text-align:center;color:#666;">Para: ${dest}</p>
       <p style="text-align:right;">${lugar}, a ${fecha}.</p>
@@ -8820,7 +8851,7 @@ function renderDocHistory() {
   grid.innerHTML = h
 }
 
-window.reprintDoc = function(id) {
+window.reprintDoc = async function(id) {
   const node = allNodes.find(n => n.id === id)
   if (!node) { showToast('Documento no encontrado'); return }
   const m = node.metadata || {}
@@ -8828,18 +8859,25 @@ window.reprintDoc = function(id) {
 
   // New jsPDF reprint (nodes saved after PDF standardization)
   if (m.doc_data) {
+    // Re-cargar portada del proyecto si quedó guardada en doc_data
+    const dd = m.doc_data
+    if (dd.proyecto_nombre && !dd.cover_data_url) {
+      const pNode = allNodes.find(n => n.type === 'proyecto' && (n.metadata?.nombre || n.content) === dd.proyecto_nombre)
+      const coverUrl = pNode?.metadata?.cover_url || ''
+      if (coverUrl) { try { dd.cover_data_url = await preloadCover(coverUrl) } catch {} }
+    }
     switch (m.doc_type) {
-      case 'prorroga':      pdfProrroga(m.doc_data, emisor);             return
-      case 'pagare':        pdfPagare(m.doc_data, emisor);              return
-      case 'recibo':        pdfRecibo(m.doc_data, emisor);              return
-      case 'cartapoder':    pdfCartaPoder(m.doc_data, emisor);          return
-      case 'contrato':      pdfContratoServicios(m.doc_data, emisor);   return
-      case 'nota_venta':    pdfNotaVenta(m.doc_data, emisor);           return
-      case 'adeudo':        pdfReconocimientoAdeudo(m.doc_data, emisor);return
-      case 'nda':           pdfNDA(m.doc_data, emisor);                 return
-      case 'convenio':      pdfConvenioPago(m.doc_data, emisor);        return
-      case 'ordenservicio': pdfOrdenServicio(m.doc_data, emisor);       return
-      case 'responsiva':    pdfCartaResponsiva(m.doc_data, emisor);     return
+      case 'prorroga':      pdfProrroga(dd, emisor);             return
+      case 'pagare':        pdfPagare(dd, emisor);              return
+      case 'recibo':        pdfRecibo(dd, emisor);              return
+      case 'cartapoder':    pdfCartaPoder(dd, emisor);          return
+      case 'contrato':      pdfContratoServicios(dd, emisor);   return
+      case 'nota_venta':    pdfNotaVenta(dd, emisor);           return
+      case 'adeudo':        pdfReconocimientoAdeudo(dd, emisor);return
+      case 'nda':           pdfNDA(dd, emisor);                 return
+      case 'convenio':      pdfConvenioPago(dd, emisor);        return
+      case 'ordenservicio': pdfOrdenServicio(dd, emisor);       return
+      case 'responsiva':    pdfCartaResponsiva(dd, emisor);     return
     }
   }
 
@@ -15973,12 +16011,14 @@ window.deleteBitacoraEntry = async function(id) {
   switchProjTab('bitacora')
 }
 
-window.exportBitacoraPDF = function(projId) {
+window.exportBitacoraPDF = async function(projId) {
   const proj = allNodes.find(n => n.id === projId)
   if (!proj) { showToast('❌ Proyecto no encontrado'); return }
   const entries = allNodes.filter(n => n.type === 'bitacora' && n.metadata?.proyecto_id === projId)
     .sort((a,b) => new Date(a.metadata?.fecha_ejecucion||a.created_at) - new Date(b.metadata?.fecha_ejecucion||b.created_at))
   if (!entries.length) { showToast('⚠️ No hay actividades registradas en la bitácora'); return }
+  const coverUrl = proj.metadata?.cover_url || ''
+  if (coverUrl) proj.cover_data_url = await preloadCover(coverUrl)
   const m = currentUser?.user_metadata || {}
   const emisor = { name: m.nombre || m.full_name || 'Nexus OS', rfc: m.rfc||'', domicilio: m.domicilio||'', tel: m.tel||m.phone||'' }
   pdfBitacora(entries, proj, emisor)
@@ -16708,19 +16748,19 @@ function _buildPaymentChartScript(allPayments, chartLabels, chartAmounts, chartC
 }
 
 // ── PDF profesional de proyecto via pdf-reports engine ────────────────────────
-window.exportProyectoPDF = (projectId) => {
+window.exportProyectoPDF = async (projectId) => {
   const proyecto = allNodes.find(n => n.id === projectId)
   if (!proyecto) { showToast('⚠ Proyecto no encontrado'); return }
   showToast('⏳ Generando PDF...')
-  setTimeout(() => {
-    try {
-      pdfReporteProyecto(proyecto, allNodes, getEmisor())
-      showToast('✅ PDF descargado')
-    } catch(e) {
-      console.error('pdfReporteProyecto:', e)
-      showToast('❌ Error: ' + e.message)
-    }
-  }, 50)
+  try {
+    const coverUrl  = proyecto.metadata?.cover_url || ''
+    if (coverUrl) proyecto.cover_data_url = await preloadCover(coverUrl)
+    pdfReporteProyecto(proyecto, allNodes, getEmisor())
+    showToast('✅ PDF descargado')
+  } catch(e) {
+    console.error('pdfReporteProyecto:', e)
+    showToast('❌ Error: ' + e.message)
+  }
 }
 
 // ── Resumen mensual PDF ───────────────────────────────────────────────────────
@@ -21276,8 +21316,21 @@ async function _persistCot(exportPdf = false) {
 
   if (exportPdf) {
     const pdfData = { ...data, folio: meta.folio, emisor }
-    if (isP) pdfPresupuestoPro(pdfData, emisor)
-    else     pdfNotaVentaPro(pdfData, emisor)
+    // Preload project cover for PDF
+    const _pdfCoverUrl = proyectoNode?.metadata?.cover_url || ''
+    if (_pdfCoverUrl) {
+      preloadCover(_pdfCoverUrl).then(dataUrl => {
+        pdfData.cover_data_url = dataUrl
+        if (isP) pdfPresupuestoPro(pdfData, emisor)
+        else     pdfNotaVentaPro(pdfData, emisor)
+      }).catch(() => {
+        if (isP) pdfPresupuestoPro(pdfData, emisor)
+        else     pdfNotaVentaPro(pdfData, emisor)
+      })
+    } else {
+      if (isP) pdfPresupuestoPro(pdfData, emisor)
+      else     pdfNotaVentaPro(pdfData, emisor)
+    }
   }
 
   closeCotModal()
@@ -21285,12 +21338,19 @@ async function _persistCot(exportPdf = false) {
 }
 
 // ── Exportar PDF desde la lista ────────────────────────────────────────────────
-window.exportCotPDF = function(id) {
+window.exportCotPDF = async function(id) {
   const node = allNodes.find(n => n.id === id)
   if (!node) { showToast('Documento no encontrado'); return }
   const m      = node.metadata || {}
   const emisor = getEmisor()
   const data   = { ...m }
+  // Inyectar portada del proyecto vinculado
+  if (data.proyectoId && !data.cover_data_url) {
+    const pNode = allNodes.find(n => n.id === data.proyectoId)
+    const coverUrl = pNode?.metadata?.cover_url || ''
+    if (coverUrl) { try { data.cover_data_url = await preloadCover(coverUrl) } catch {} }
+    if (!data.proyectoNombre && pNode) data.proyectoNombre = pNode.metadata?.nombre || pNode.content || ''
+  }
   if (node.type === 'cot_presupuesto') pdfPresupuestoPro(data, emisor)
   else                                  pdfNotaVentaPro(data, emisor)
   showToast('📥 PDF generado')
