@@ -1063,79 +1063,96 @@ export function pdfPagare(data, emisor = {}) {
 
 // ─── 7. RECIBO DE DINERO ─────────────────────────────────────────────────────
 export function pdfRecibo(data, emisor = {}) {
-  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const W     = doc.internal.pageSize.getWidth()
-  const folio = _folio()
-  const blank = '________________________'
-  const monto = parseFloat(data.monto || 0)
+  const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W      = doc.internal.pageSize.getWidth()
+  const folio  = _folio()
+  const blank  = '________________________'
+  const monto  = parseFloat(data.monto || 0)
   const moneda = data.moneda || 'MXN'
-  const montoLetra = numToLetras(monto)
+  const tc     = parseFloat(data.tc || 0)
+  const montoMxn = data.montoMxn ? parseFloat(data.montoMxn) : (moneda !== 'MXN' && tc > 0 ? monto * tc : null)
+
+  // Texto canónico del monto según regla oficial mexicana
+  const _fmtMxn = n => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN (${numToLetras(n)} MONEDA NACIONAL)`
+  let montoTexto = ''
+  if (moneda === 'MXN') {
+    montoTexto = _fmtMxn(monto)
+  } else if (montoMxn) {
+    montoTexto = `${_fmtMxn(montoMxn)}, calculado con base en una referencia comercial equivalente a ${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${moneda} a un tipo de cambio acordado de $${tc.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`
+  } else {
+    montoTexto = `$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${moneda} (${numToLetras(monto)})`
+  }
+
+  // ID helpers — solo mostrar si tienen valor
+  const _idParts = m => [
+    m.rfc   ? `RFC: ${m.rfc}`   : '',
+    m.curp  ? `CURP: ${m.curp}` : '',
+    m.elect ? `C.Elect.: ${m.elect}` : '',
+    m.dom   ? `Dom.: ${m.dom}`  : '',
+  ].filter(Boolean).join(' · ')
 
   let y = _headerTramite(doc, 'RECIBO DE DINERO', folio)
   y += 4
 
-  // Lugar y fecha
-  doc.setFontSize(9.5)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textInk)
-  doc.text(`En ${data.lugar || blank}, a ${data.fecha || blank}`, W - T.mX, y, { align: 'right' })
+  // Lugar y fecha — alineado a la derecha
+  doc.setFontSize(9.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textInk)
+  doc.text(`En ${data.lugar || blank}, a ${data.fecha || blank}.`, W - T.mX, y, { align: 'right' })
   y += 10
 
-  // Cuerpo
-  const entRfc = data.entreganteRfc ? ` (RFC: ${data.entreganteRfc})` : ''
-  const cuerpo = `Por medio del presente, hago constar que he recibido de: ${data.entreganteName || blank}${entRfc}, la cantidad de:`
-  y = _para(doc, cuerpo, y)
-  y += 2
+  // Cuerpo — quién entrega
+  const entIdParts = _idParts({ rfc: data.entreganteRfc, curp: data.entreganteCurp, elect: data.entreganteElect, dom: data.entreganteDom })
+  const cuerpo = `Por medio del presente instrumento, hago constar que he recibido de: ${data.entreganteName || blank}${entIdParts ? ', '+entIdParts : ''}, la cantidad de:`
+  y = _paraJ(doc, cuerpo, y)
+  y += 3
 
-  // Caja de monto con moneda
-  doc.setFillColor(245, 248, 252)
-  doc.setDrawColor(...T.cyan)
-  doc.setLineWidth(0.5)
-  doc.roundedRect(T.mX, y, W - T.mX * 2, 22, 2, 2, 'FD')
-  doc.setFontSize(14)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.textInk)
-  doc.text(`$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${moneda}`, T.mX + 6, y + 10)
-  doc.setFontSize(7.5)
-  doc.setFont(T.font, 'italic')
-  doc.setTextColor(...T.textMid)
-  doc.text(doc.splitTextToSize(montoLetra, W - T.mX * 2 - 12), T.mX + 6, y + 17)
-  if (data.tc && moneda !== 'MXN') {
-    doc.setFontSize(7)
-    doc.setFont(T.font, 'normal')
-    doc.text(`TC: ${data.tc}`, W - T.mX - 4, y + 10, { align: 'right' })
+  // Caja de monto — regla oficial MXN
+  const montoBoxH = montoMxn && moneda !== 'MXN' ? 30 : 22
+  doc.setFillColor(245, 248, 252); doc.setDrawColor(...T.cyan); doc.setLineWidth(0.5)
+  doc.roundedRect(T.mX, y, W - T.mX * 2, montoBoxH, 2, 2, 'FD')
+  doc.setFontSize(13); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  const montoDisplay = moneda === 'MXN'
+    ? `$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`
+    : `$${(montoMxn || monto).toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`
+  doc.text(montoDisplay, T.mX + 6, y + 9)
+  doc.setFontSize(7); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
+  const letraLine = moneda === 'MXN'
+    ? `(${numToLetras(monto)} MONEDA NACIONAL)`
+    : `(${numToLetras(montoMxn || monto)} MONEDA NACIONAL)`
+  doc.text(doc.splitTextToSize(letraLine, W - T.mX * 2 - 12), T.mX + 6, y + 15)
+  if (montoMxn && moneda !== 'MXN') {
+    doc.setFontSize(7); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    doc.text(`Referencia: ${monto.toLocaleString('es-MX',{minimumFractionDigits:2})} ${moneda} × T.C. acordado $${tc.toLocaleString('es-MX',{minimumFractionDigits:2})} MXN`, T.mX + 6, y + 22)
   }
-  y += 26
+  y += montoBoxH + 4
 
   const concepto = `Por concepto de: ${data.concepto || blank}.`
-  y = _para(doc, concepto, y)
+  y = _paraJ(doc, concepto, y)
   y += 4
 
   if (data.via) {
-    doc.setFont(T.font, 'bold')
-    doc.setFontSize(9)
-    doc.text('Vía:', T.mX, y)
+    doc.setFontSize(9); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('Forma de pago:', T.mX, y)
     doc.setFont(T.font, 'normal')
-    y = _para(doc, `${data.via}${data.receptorName && data.via !== 'Efectivo / Cash' ? ' · A nombre de ' + data.receptorName : ''}`, y, T.mX + 12)
-    y += 2
+    y = _para(doc, data.via, y, T.mX + 36)
+    y += 4
   }
 
-  // Datos del receptor (con RFC si hay)
-  const recRfc = data.receptorRfc ? ` · RFC: ${data.receptorRfc}` : ''
-  doc.setFontSize(8.5)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textMid)
-  doc.text(`Receptor: ${data.receptorName || blank}${recRfc}`, T.mX, y + 3)
-  y += 8
+  // Identificación completa del receptor
+  const recIdParts = _idParts({ rfc: data.receptorRfc, curp: data.receptorCurp, elect: data.receptorElect, dom: data.receptorDom })
+  doc.setFontSize(8.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('Receptor:', T.mX, y + 4)
+  doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  y = _para(doc, `${data.receptorName || blank}${recIdParts ? ' · '+recIdParts : ''}`, y + 4, T.mX + 22)
+  y += 6
 
-  y = _para(doc, 'Este recibo se extiende para los fines legales a que haya lugar, en la fecha antes mencionada.', y + 2)
-  y += 20
+  y = _paraJ(doc, 'El presente recibo se extiende de conformidad, para los fines legales a que haya lugar, en la fecha antes mencionada.', y + 2)
+  y += 22
 
   // Firmas
-  _firma(doc, T.mX + 10,     y, 70, `${data.receptorName || blank}\n(Quien recibe)`)
-  _firma(doc, W - T.mX - 80, y, 70, `${data.entreganteName || blank}\n(Quien entrega)`)
+  _firma(doc, T.mX + 6,      y, 74, `${data.receptorName  || blank}\n(Quien recibe el dinero)`)
+  _firma(doc, W - T.mX - 80, y, 74, `${data.entreganteName || blank}\n(Quien entrega el dinero)`)
 
-  _footerTramite(doc, emisor, null)
+  _footerTramite(doc, emisor, 'Original para quien entrega — Copia para el receptor')
   doc.save(`recibo-dinero-${folio}.pdf`)
 }
 
@@ -1146,78 +1163,123 @@ export function pdfCartaPoder(data, emisor = {}) {
   const folio = _folio()
   const blank = '________________________'
 
+  const _checkY = (curY, needed = 20) => {
+    if (curY + needed > 265) {
+      doc.addPage()
+      _footerTramite(doc, emisor, 'Original para el apoderado — Copia para el otorgante · Firmar todas las hojas')
+      return _headerTramite(doc, 'C A R T A   P O D E R', folio) + 4
+    }
+    return curY
+  }
+
   let y = _headerTramite(doc, 'C A R T A   P O D E R', folio)
   y += 2
 
   // Destinatario
-  doc.setFontSize(8.5)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textMid)
-  const dest = `Para: ${data.destinatario || '[Institución o destinatario]'}`
-  doc.text(dest, W / 2, y, { align: 'center' })
+  doc.setFontSize(8.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  doc.text(`Para: ${data.destinatario || 'A QUIEN CORRESPONDA'}`, W / 2, y, { align: 'center' })
   y += 8
 
   // Lugar y fecha
-  doc.setFontSize(9.5)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textInk)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textInk)
   doc.text(`${data.lugar || blank}, a ${data.fecha || blank}.`, W - T.mX, y, { align: 'right' })
   y += 8
 
-  // Cuerpo legal
-  const otorgCurp = data.otorgCurp ? `, CURP: ${data.otorgCurp}` : ''
-  const otorgRfc  = data.otorgRfc  ? `, RFC: ${data.otorgRfc}`   : ''
-  const cuerpo1 = `Yo, ${data.otorgName || blank}${otorgCurp}${otorgRfc}, identificado con ${data.otorgIdType || 'INE/IFE'}: ${data.otorgIdNum || blank}, con domicilio en ${data.otorgDom || blank}, declaro ser mayor de edad y estar en plenas facultades físicas y mentales.`
-  y = _para(doc, cuerpo1, y)
+  // Otorgante — solo mostrar campos con valor
+  const _idOpts = (idType, idNum, curp, rfc, dom) => [
+    idNum && idNum !== blank ? `identificado con ${idType || 'INE'}: ${idNum}` : '',
+    curp  ? `CURP: ${curp}` : '',
+    rfc   ? `RFC: ${rfc}`   : '',
+    dom && dom !== blank ? `con domicilio en ${dom}` : '',
+  ].filter(Boolean).join(', ')
+
+  const otorgId = _idOpts(data.otorgIdType, data.otorgIdNum, data.otorgCurp, data.otorgRfc, data.otorgDom)
+  const cuerpo1 = `Yo, ${data.otorgName || blank}${otorgId ? ', '+otorgId : ''}, declaro ser mayor de edad y estar en plenas facultades físicas y mentales.`
+  y = _checkY(y, 16)
+  y = _paraJ(doc, cuerpo1, y)
   y += 5
 
-  const apodCurp = data.apodCurp ? `, CURP: ${data.apodCurp}` : ''
-  const apodRfc  = data.apodRfc  ? `, RFC: ${data.apodRfc}`   : ''
-  const cuerpo2 = `Por medio de la presente, otorgo PODER ESPECIAL, AMPLIO Y SUFICIENTE a favor de: ${data.apodName || blank}${apodCurp}${apodRfc}, identificado con ${data.apodIdType || 'INE/IFE'}: ${data.apodIdNum || blank}, con domicilio en ${data.apodDom || blank};`
-  y = _para(doc, cuerpo2, y)
+  const apodId = _idOpts(data.apodIdType, data.apodIdNum, data.apodCurp, data.apodRfc, data.apodDom)
+  const cuerpo2 = `Por medio de la presente, otorgo PODER ESPECIAL, AMPLIO Y SUFICIENTE a favor de: ${data.apodName || blank}${apodId ? ', '+apodId : ''}.`
+  y = _checkY(y, 16)
+  y = _paraJ(doc, cuerpo2, y)
   y += 5
 
-  // Facultades
-  let facultadesText = ''
+  // Facultades — lista + texto libre
+  y = _checkY(y, 20)
+  doc.setFontSize(9.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+  doc.text('PARA QUE EN MI NOMBRE Y REPRESENTACIÓN PUEDA:', T.mX, y); y += 5
+  doc.setFont(T.font, 'normal')
+
   if (data.facultadesList && data.facultadesList.length > 0) {
-    facultadesText = `Para que en mi nombre y representación pueda: ${data.facultadesList.join(', ')}.`
-  } else {
-    facultadesText = `Para que en mi nombre y representación pueda realizar los siguientes actos: ${data.actos || '[Describir los actos autorizados]'}.`
+    data.facultadesList.forEach(f => {
+      y = _checkY(y, 8)
+      doc.setFontSize(9)
+      y = _para(doc, `• ${f}.`, y, T.mX + 4)
+      y += 1
+    })
+    y += 2
   }
-  if (data.facultadesExtra) facultadesText += ` ${data.facultadesExtra}`
-  y = _para(doc, facultadesText, y)
-  y += 4
+  if (data.actos) {
+    y = _checkY(y, 10)
+    y = _paraJ(doc, data.actos, y, T.mX + 4)
+    y += 3
+  }
+  if (!data.facultadesList?.length && !data.actos) {
+    y = _paraJ(doc, '[Describir los actos autorizados].', y, T.mX + 4)
+    y += 3
+  }
 
-  y = _para(doc, 'Para presentar o contestar demandas, ofrecer pruebas, interponer recursos, promover amparo, suscribir convenios y ejecutar todos los actos necesarios para el cumplimiento de este poder.', y)
+  // Cláusulas estándar
+  y = _checkY(y, 16)
+  y = _paraJ(doc, 'El presente poder tendrá vigencia mientras no sea revocado expresamente por el otorgante mediante escrito dirigido al apoderado.', y)
   y += 4
-  y = _para(doc, 'El presente poder tendrá vigencia mientras no sea revocado expresamente por el otorgante mediante escrito dirigido al apoderado.', y)
-  y += 4
-  y = _para(doc, 'Se otorga la presente carta poder para todos los efectos legales a que haya lugar.', y)
-  y += 14
+  y = _checkY(y, 10)
+  y = _paraJ(doc, 'Se otorga la presente carta poder para todos los efectos legales a que haya lugar.', y)
+  y += 5
+
+  // Anexo de cotización
+  if (data.cotAnexo) {
+    y = _checkY(y, 14)
+    doc.setFontSize(8.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('ANEXO:', T.mX, y); y += 4
+    doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    const cotTxt = `El presente poder se extiende con referencia al ${data.cotAnexo.folio ? 'Folio '+data.cotAnexo.folio+' — ' : ''}${data.cotAnexo.titulo || ''}${data.cotAnexo.total ? ' por $'+data.cotAnexo.total.toLocaleString('es-MX',{minimumFractionDigits:2})+' '+data.cotAnexo.moneda : ''}, adjunto como parte integral de este instrumento.`
+    y = _para(doc, cotTxt, y); y += 6
+  }
+
+  // Nota de identificaciones
+  y = _checkY(y, 10)
+  doc.setFontSize(8); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
+  doc.text('NOTA: Este documento debe presentarse acompañado de copia de las identificaciones oficiales vigentes de todos los firmantes.', T.mX, y, { maxWidth: W - T.mX * 2 })
+  y += 12
 
   // Firmas principales
-  _firma(doc, T.mX + 8,      y, 75, `${data.otorgName || blank}\nOtorgó el poder`)
-  _firma(doc, W - T.mX - 83, y, 75, `${data.apodName || blank}\nAceptó el poder`)
+  y = _checkY(y, 35)
+  y += 4
+  _firma(doc, T.mX + 6,      y, 75, `${data.otorgName || blank}\nOTORGANTE`)
+  _firma(doc, W - T.mX - 81, y, 75, `${data.apodName || blank}\nAPODERADO`)
 
-  // Testigos
-  y += 24
-  doc.setFontSize(8.5)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.textInk)
-  doc.text('TESTIGOS:', T.mX, y)
-  y += 12
-  const t1Label = data.testigo1Name ? `${data.testigo1Name}\nTestigo 1` : 'Testigo 1\n_________________________'
-  const t2Label = data.testigo2Name ? `${data.testigo2Name}\nTestigo 2` : 'Testigo 2\n_________________________'
-  _firma(doc, T.mX + 8,    y, 65, t1Label)
-  _firma(doc, W / 2 + 4,   y, 65, t2Label)
+  // Testigos — solo los que tienen nombre
+  const testigos = [
+    { name: data.testigo1Name, label: 'TESTIGO 1' },
+    { name: data.testigo2Name, label: 'TESTIGO 2' },
+  ].filter(t => t.name && t.name.trim())
 
-  y += 20
-  doc.setFontSize(7.5)
-  doc.setFont(T.font, 'italic')
-  doc.setTextColor(...T.textMid)
-  doc.text('El presente documento debe entregarse con copias de las identificaciones.', T.mX, y)
+  if (testigos.length > 0) {
+    y += 30
+    y = _checkY(y, 30)
+    doc.setFontSize(8.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
+    doc.text('TESTIGOS:', T.mX, y); y += 10
+    if (testigos.length === 1) {
+      _firma(doc, W / 2 - 37, y, 74, `${testigos[0].name}\n${testigos[0].label}`)
+    } else {
+      _firma(doc, T.mX + 6,    y, 74, `${testigos[0].name}\n${testigos[0].label}`)
+      _firma(doc, W / 2 + 4,   y, 74, `${testigos[1].name}\n${testigos[1].label}`)
+    }
+  }
 
-  _footerTramite(doc, emisor, 'Original para el apoderado - Copia para el otorgante')
+  _footerTramite(doc, emisor, 'Original para el apoderado — Copia para el otorgante')
   doc.save(`carta-poder-${folio}.pdf`)
 }
 
@@ -1291,27 +1353,44 @@ export function pdfContratoServicios(data, emisor = {}) {
   const intro = `En ${data.lugar || blank}, a ${data.fecha || blank}, ambas partes convienen en celebrar el presente Contrato de Prestación de Servicios${proyectoPart}, al tenor de las siguientes cláusulas:`
   y = _paraJ(doc, intro, y); y += 5
 
+  // ── Conversor ordinal español ─────────────────────────────────────────────────
+  const _ORDINALES = ['','PRIMERA','SEGUNDA','TERCERA','CUARTA','QUINTA','SEXTA',
+    'SÉPTIMA','OCTAVA','NOVENA','DÉCIMA','UNDÉCIMA','DUODÉCIMA','DECIMOTERCERA',
+    'DECIMOCUARTA','DECIMOQUINTA','DECIMOSEXTA','DECIMOSÉPTIMA','DECIMOCTAVA','DECIMONOVENA','VIGÉSIMA']
+  const _ordinal = n => _ORDINALES[n] || `${n}A`
+
+  // ── Texto de honorarios con regla oficial MXN ────────────────────────────────
+  const tc = parseFloat(data.tc || 0)
+  const montoMxn = (monedaC !== 'MXN' && tc > 0) ? monto * tc : null
+  let montoStr = ''
+  if (monedaC === 'MXN') {
+    montoStr = `$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN (${numToLetras(monto)} MONEDA NACIONAL)`
+  } else if (montoMxn) {
+    montoStr = `$${montoMxn.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN (${numToLetras(montoMxn)} MONEDA NACIONAL), calculado con base en ${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${monedaC} a un tipo de cambio acordado de $${tc.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN por ${monedaC}`
+  } else {
+    montoStr = `$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${monedaC} (${numToLetras(monto)})`
+  }
+
   // ── Cláusulas base ────────────────────────────────────────────────────────
-  const montoStr = `$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${monedaC} (${numToLetras(monto)})`
+  let clausulaIdx = 1
   const clausulas = [
-    { titulo: 'PRIMERA — OBJETO', texto: `EL PRESTADOR DE SERVICIOS se compromete a proporcionar al CLIENTE los siguientes servicios: ${data.servicios || blank}.${data.proyectoNombre ? ` Proyecto de referencia: "${data.proyectoNombre}".` : ''}` },
-    { titulo: 'SEGUNDA — HONORARIOS Y FORMA DE PAGO', texto: `EL CLIENTE se obliga a pagar al PRESTADOR la cantidad de ${montoStr} por los servicios convenidos. Forma de pago: ${data.formaPago || blank}.${prestBanco ? ` Cuenta del prestador: ${prestBanco}` : ''}${prestClabe ? ` — CLABE/Wallet: ${prestClabe}` : ''}.` },
-    { titulo: 'TERCERA — VIGENCIA', texto: `El presente contrato tendrá vigencia a partir del ${data.fechaInicio || blank} y hasta el ${data.fechaFin || blank}, renovable con previo aviso de ${data.diasAviso || '15'} días naturales por escrito.` },
-    { titulo: 'CUARTA — CONFIDENCIALIDAD', texto: `Las partes acuerdan mantener estricta confidencialidad sobre toda la información intercambiada con motivo del presente contrato, incluyendo datos técnicos, comerciales, personales y de terceros, aun después de concluida la vigencia del mismo.` },
-    { titulo: 'QUINTA — RESCISIÓN', texto: `Cualquiera de las partes podrá rescindir el presente contrato mediante aviso previo de ${data.diasAviso || '15'} días naturales por escrito. El incumplimiento grave de alguna de las partes dará derecho a la otra a rescindir de manera inmediata sin responsabilidad alguna.` },
-    { titulo: 'SEXTA — JURISDICCIÓN', texto: `Para la interpretación y cumplimiento del presente contrato, las partes se someten expresamente a la jurisdicción y competencia de los tribunales de ${data.jurisdiccion || data.lugar || blank}, renunciando a cualquier fuero que por razón de su domicilio presente o futuro pudiere corresponderles.` },
+    { titulo: `${_ordinal(clausulaIdx++)} — OBJETO`, texto: `EL PRESTADOR DE SERVICIOS se compromete a proporcionar al CLIENTE los siguientes servicios: ${data.servicios || blank}.${data.proyectoNombre ? ` Proyecto de referencia: "${data.proyectoNombre}".` : ''}` },
+    { titulo: `${_ordinal(clausulaIdx++)} — HONORARIOS Y FORMA DE PAGO`, texto: `EL CLIENTE se obliga a pagar al PRESTADOR la cantidad de ${montoStr} por los servicios convenidos. Forma de pago: ${data.formaPago || blank}.${prestBanco ? ` Cuenta del prestador: ${prestBanco}` : ''}${prestClabe ? ` — CLABE/Wallet: ${prestClabe}` : ''}.` },
+    { titulo: `${_ordinal(clausulaIdx++)} — VIGENCIA`, texto: `El presente contrato tendrá vigencia a partir del ${data.fechaInicio || blank} y hasta el ${data.fechaFin || blank}, renovable con previo aviso de ${data.diasAviso || '15'} días naturales por escrito.` },
+    { titulo: `${_ordinal(clausulaIdx++)} — CONFIDENCIALIDAD`, texto: `Las partes acuerdan mantener estricta confidencialidad sobre toda la información intercambiada con motivo del presente contrato, incluyendo datos técnicos, comerciales, personales y de terceros, aun después de concluida la vigencia del mismo.` },
+    { titulo: `${_ordinal(clausulaIdx++)} — RESCISIÓN`, texto: `Cualquiera de las partes podrá rescindir el presente contrato mediante aviso previo de ${data.diasAviso || '15'} días naturales por escrito. El incumplimiento grave de alguna de las partes dará derecho a la otra a rescindir de manera inmediata sin responsabilidad alguna.` },
+    { titulo: `${_ordinal(clausulaIdx++)} — JURISDICCIÓN`, texto: `Para la interpretación y cumplimiento del presente contrato, las partes se someten expresamente a la jurisdicción y competencia de los tribunales de ${data.jurisdiccion || data.lugar || blank}, renunciando a cualquier fuero que por razón de su domicilio presente o futuro pudiere corresponderles.` },
   ]
 
   // Cláusulas adicionales (texto libre)
-  let clausulaIdx = 7
   if (data.clausulasExtra) {
-    clausulas.push({ titulo: `${_numRomano(clausulaIdx++)} — DISPOSICIONES ADICIONALES`, texto: data.clausulasExtra })
+    clausulas.push({ titulo: `${_ordinal(clausulaIdx++)} — DISPOSICIONES ADICIONALES`, texto: data.clausulasExtra })
   }
 
   // Cláusulas del catálogo
   if (Array.isArray(data.clausulasSeleccionadas) && data.clausulasSeleccionadas.length > 0) {
     data.clausulasSeleccionadas.forEach(cl => {
-      clausulas.push({ titulo: `${_numRomano(clausulaIdx++)} — ${(cl.titulo || 'CLÁUSULA ADICIONAL').toUpperCase()}`, texto: cl.texto || '' })
+      clausulas.push({ titulo: `${_ordinal(clausulaIdx++)} — ${(cl.titulo || 'CLÁUSULA ADICIONAL').toUpperCase()}`, texto: cl.texto || '' })
     })
   }
 
