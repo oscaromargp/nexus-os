@@ -2618,3 +2618,189 @@ export function pdfCartaResponsiva(data, emisor = {}) {
   _footerTramite(doc, emisor, 'Original para el propietario — Copia para el responsable')
   doc.save(`carta-responsiva-${folio}.pdf`)
 }
+
+// ─── 16. BITÁCORA DE ACTIVIDADES ────────────────────────────────────────────
+/**
+ * Exporta las entradas de la Bitácora de un proyecto en PDF.
+ *
+ * @param {Array<{id:string,type:string,content:string,metadata:Object}>} entries
+ * @param {{content?:string,metadata?:{nombre?:string}}} proyecto
+ * @param {{nombre?:string,rfc?:string}} emisor
+ */
+export function pdfBitacora(entries = [], proyecto = {}, emisor = {}) {
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W     = doc.internal.pageSize.getWidth()
+  const H     = doc.internal.pageSize.getHeight()
+  const now   = new Date()
+  const slug  = (proyecto.content || proyecto.metadata?.nombre || 'proyecto')
+                  .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 20)
+  const ymd   = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const folio = `BIT-${slug}-${ymd}`
+
+  // ── Header estándar ────────────────────────────────────────────────────────
+  let y = _headerTramite(doc, 'BITÁCORA DE ACTIVIDADES', folio)
+
+  // ── Watermark vertical (costilla izquierda) ────────────────────────────────
+  const _drawWatermark = () => {
+    doc.setFontSize(6)
+    doc.setFont(T.font, 'normal')
+    doc.setTextColor(210, 218, 230)
+    doc.text('Documento controlado digitalmente por Nexus OS', 4, H * 0.72, { angle: 90 })
+  }
+  _drawWatermark()
+
+  // ── Meta del proyecto ──────────────────────────────────────────────────────
+  const proyName  = proyecto.content || proyecto.metadata?.nombre || '—'
+  const fechaHoy  = now.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })
+  doc.setFontSize(8.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  doc.text(
+    `Proyecto: ${proyName}   ·   Emitido: ${fechaHoy}   ·   Registros: ${entries.length}`,
+    T.mX, y
+  )
+  y += 8
+
+  // ── Formateador de detalles_clave por contexto ─────────────────────────────
+  const _fmtDetalles = (ctx, det) => {
+    if (!det || typeof det !== 'object') return '—'
+    try {
+      switch (ctx) {
+        case 'CONTENIDO_POST':
+          return [
+            det.plataforma       ? `Plataforma: ${det.plataforma}`                                  : '',
+            det.tipo_contenido   ? `Tipo: ${det.tipo_contenido}`                                     : '',
+            det.titulo_tema      ? `Tema: ${det.titulo_tema}`                                        : '',
+            Array.isArray(det.keywords) && det.keywords.length
+                                 ? `KW: ${det.keywords.slice(0, 3).join(', ')}`                      : '',
+            det.hora_publicacion ? `Hora: ${String(det.hora_publicacion).slice(0, 16)}`              : '',
+            det.url_publicado    ? `URL: ${String(det.url_publicado).slice(0, 30)}`                  : '',
+          ].filter(Boolean).join('\n')
+        case 'ADMIN_FINANZAS':
+          return [
+            det.cuenta               ? `Cuenta: ${det.cuenta}`                                       : '',
+            det.categoria            ? `Cat: ${det.categoria}`                                       : '',
+            det.monto_informativo != null
+                                     ? `Monto: $${Number(det.monto_informativo).toLocaleString('es-MX')}` : '',
+            det.periodo              ? `Periodo: ${det.periodo}`                                     : '',
+            det.concepto             ? `Concepto: ${det.concepto}`                                   : '',
+          ].filter(Boolean).join('\n')
+        case 'GESTION_OBRA':
+          return [
+            det.etapa         ? `Etapa: ${det.etapa}`                                                : '',
+            det.contratista   ? `Cont: ${det.contratista}`                                           : '',
+            det.avance_pct != null ? `Avance: ${det.avance_pct}%`                                   : '',
+            det.area_ubicacion ? `Área: ${det.area_ubicacion}`                                       : '',
+            det.observacion   ? `Obs: ${String(det.observacion).slice(0, 50)}`                       : '',
+          ].filter(Boolean).join('\n')
+        case 'TRAMITE':
+          return [
+            det.tipo_doc        ? `Doc: ${det.tipo_doc}`                                             : '',
+            det.contraparte     ? `Parte: ${det.contraparte}`                                        : '',
+            det.estado_tramite  ? `Estado: ${det.estado_tramite}`                                    : '',
+            det.folio_nexus     ? `Folio: ${det.folio_nexus}`                                        : '',
+          ].filter(Boolean).join('\n')
+        case 'GENERAL':
+          return [
+            det.descripcion ? String(det.descripcion).slice(0, 110)                                  : '',
+            Array.isArray(det.etiquetas) && det.etiquetas.length
+                            ? `Tags: ${det.etiquetas.slice(0, 4).join(', ')}`                        : '',
+          ].filter(Boolean).join('\n')
+        default:
+          return JSON.stringify(det).slice(0, 100)
+      }
+    } catch { return '—' }
+  }
+
+  const _ctxLabel = ctx => ({
+    CONTENIDO_POST: 'Contenido/Post',
+    ADMIN_FINANZAS: 'Admin Finanzas',
+    GESTION_OBRA:   'Gestión Obra',
+    TRAMITE:        'Trámite',
+    GENERAL:        'General',
+  }[ctx] || ctx || '—')
+
+  // ── Construir filas ────────────────────────────────────────────────────────
+  const head = [['Fecha y Hora', 'Contexto', 'Actividad / Concepto', 'Datos Clave', 'Evidencia', 'Impacto / Estado']]
+  const body = entries.length
+    ? entries.map(e => {
+        const m   = e.metadata || {}
+        const det = m.detalles_clave || {}
+        const imp = m.impacto_metricas || {}
+        const fecha = m.fecha_ejecucion
+          ? new Date(m.fecha_ejecucion).toLocaleString('es-MX', {
+              day: '2-digit', month: 'short', year: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            })
+          : '—'
+        const evidencia = m.enlace_evidencia
+          ? String(m.enlace_evidencia).length > 32
+            ? String(m.enlace_evidencia).slice(0, 30) + '…'
+            : String(m.enlace_evidencia)
+          : '—'
+        const impTxt = Object.keys(imp).length
+          ? Object.entries(imp).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join('\n')
+          : '—'
+        return [
+          fecha,
+          _ctxLabel(m.modulo_contexto),
+          e.content || '—',
+          _fmtDetalles(m.modulo_contexto, det),
+          evidencia,
+          impTxt,
+        ]
+      })
+    : [['—', '—', 'Sin registros en este período', '—', '—', '—']]
+
+  // ── Tabla principal — 178mm total (210 - 16*2) ────────────────────────────
+  // 24 + 24 + 44 + 42 + 24 + 20 = 178
+  autoTable(doc, {
+    startY: y,
+    head,
+    body,
+    theme: 'grid',
+    styles: {
+      fontSize: 7.5,
+      cellPadding: { top: 2, right: 2.5, bottom: 2, left: 2.5 },
+      font: T.font,
+      overflow: 'linebreak',
+      lineColor: [220, 228, 240],
+      lineWidth: 0.1,
+      valign: 'top',
+      textColor: T.textInk,
+    },
+    headStyles: {
+      fillColor: T.ink,
+      textColor: T.cyan,
+      fontStyle: 'bold',
+      fontSize: 7,
+      halign: 'center',
+      lineColor: T.cyan,
+      lineWidth: { bottom: 0.8 },
+    },
+    alternateRowStyles: { fillColor: T.rowAlt },
+    columnStyles: {
+      0: { cellWidth: 24, halign: 'center' },
+      1: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },
+      2: { cellWidth: 44 },
+      3: { cellWidth: 42, fontSize: 7 },
+      4: { cellWidth: 24, fontSize: 7, textColor: T.textMid },
+      5: { cellWidth: 20, fontSize: 7 },
+    },
+    margin: { left: T.mX, right: T.mX },
+    didDrawPage: () => { _drawWatermark() },
+  })
+
+  y = doc.lastAutoTable.finalY + 10
+
+  // ── Firmas ─────────────────────────────────────────────────────────────────
+  if (y > H - 55) { doc.addPage(); _drawWatermark(); y = 24 }
+
+  doc.setFontSize(8); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+  doc.text('Firmas de conformidad:', T.mX, y); y += 10
+
+  _firma(doc, T.mX + 6,        y, 74, 'Responsable de Ejecución')
+  _firma(doc, W - T.mX - 80,   y, 74, 'Conformidad de Recepción')
+
+  // ── Footer ─────────────────────────────────────────────────────────────────
+  _footerTramite(doc, emisor, 'Original para el solicitante — Copia para archivo del proyecto')
+  doc.save(`bitacora-${folio}.pdf`)
+}

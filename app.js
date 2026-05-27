@@ -22,7 +22,8 @@ import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensua
          pdfContratoServicios, pdfNotaVenta, pdfPresupuesto,
          pdfPresupuestoPro, pdfNotaVentaPro,
          pdfReconocimientoAdeudo, pdfNDA, pdfConvenioPago,
-         pdfOrdenServicio, pdfCartaResponsiva } from './src/pdf-reports.js'
+         pdfOrdenServicio, pdfCartaResponsiva,
+         pdfBitacora } from './src/pdf-reports.js'
 
 // ── Lucide Icons ──────────────────────────────────────────────────────────────
 import {
@@ -14042,6 +14043,7 @@ window.openProjectDashboard = (projectId) => {
     { id:'kanban',   label:'✅ Kanban'   },
     { id:'notas',    label:'🧠 Notas'    },
     { id:'wiki',     label:'📖 Wiki'     },
+    { id:'bitacora', label:'📝 Bitácora' },
   ]
 
   root.innerHTML = `
@@ -14150,6 +14152,7 @@ function _renderProjTab(tab, d) {
   if (tab === 'kanban')   return _renderProjKanban(d)
   if (tab === 'notas')    return _renderProjNotas(d)
   if (tab === 'wiki')     return _renderProjWiki(d)
+  if (tab === 'bitacora') return _renderProjBitacora(d)
   return ''
 }
 
@@ -15603,6 +15606,385 @@ Escribe aquí la descripción completa del proyecto...
     </div>
   </div>`
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── TAB: BITÁCORA DE ACTIVIDADES ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @typedef {'CONTENIDO_POST'|'ADMIN_FINANZAS'|'GESTION_OBRA'|'TRAMITE'|'GENERAL'} BitacoraCtx
+ * @typedef {{plataforma:string, tipo_contenido:string, titulo_tema:string, keywords:string[], hora_publicacion:string, url_publicado:string}} BitDetallesPost
+ * @typedef {{cuenta:string, categoria:string, periodo:string, monto_informativo:number, concepto:string}} BitDetallesFinanzas
+ * @typedef {{etapa:string, contratista:string, avance_pct:number, area_ubicacion:string, observacion:string}} BitDetallesObra
+ * @typedef {{tipo_doc:string, contraparte:string, estado_tramite:string, folio_nexus:string}} BitDetallesTramite
+ * @typedef {{descripcion:string, etiquetas:string[]}} BitDetallesGeneral
+ * @typedef {BitDetallesPost|BitDetallesFinanzas|BitDetallesObra|BitDetallesTramite|BitDetallesGeneral} BitDetalles
+ * @typedef {{id:string, type:'bitacora', content:string, owner_id:string, metadata:{proyecto_id:string, modulo_contexto:BitacoraCtx, fecha_ejecucion:string, detalles_clave:BitDetalles, enlace_evidencia:string|null, impacto_metricas:Object}}} BitacoraNode
+ */
+
+/** @param {BitacoraCtx} ctx @returns {string} */
+function _bitacoraCtxBadge(ctx) {
+  const MAP = {
+    CONTENIDO_POST: { icon:'📱', label:'Contenido',  color:'#7c3aed', bg:'#ede9fe' },
+    ADMIN_FINANZAS: { icon:'💼', label:'Finanzas',   color:'#059669', bg:'#d1fae5' },
+    GESTION_OBRA:   { icon:'🏗️', label:'Obra',       color:'#b45309', bg:'#fef3c7' },
+    TRAMITE:        { icon:'📄', label:'Trámite',    color:'#0369a1', bg:'#e0f2fe' },
+    GENERAL:        { icon:'📋', label:'General',    color:'#4b5563', bg:'#f3f4f6' },
+  }
+  const c = MAP[ctx] || MAP.GENERAL
+  return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;background:${c.bg};color:${c.color};white-space:nowrap;">${c.icon} ${c.label}</span>`
+}
+
+/** @param {BitacoraCtx} ctx @param {BitDetalles} dk @returns {string} */
+function _bitacoraFormatDatos(ctx, dk) {
+  if (!dk) return '<span style="color:#9ca3af;">—</span>'
+  const s = (v, st='') => v ? `<span style="font-size:12px;${st}">${esc(String(v))}</span>` : ''
+  if (ctx === 'CONTENIDO_POST') {
+    const kws = (dk.keywords||[]).slice(0,4).map(k=>`<code style="font-size:10px;background:#f3f4f6;color:#374151;padding:1px 4px;border-radius:3px;margin-right:2px;">${esc(k)}</code>`).join('')
+    return `${s(dk.plataforma,'color:#7c3aed;font-weight:700;')}${dk.tipo_contenido ? ` <span style="color:#9ca3af;font-size:11px;">· ${esc(dk.tipo_contenido)}</span>` : ''}<br/>${s(dk.titulo_tema,'font-weight:600;color:#111827;')}${kws ? `<br/>${kws}` : ''}${dk.hora_publicacion ? `<br/><span style="font-size:11px;color:#6b7280;">🕐 ${esc(dk.hora_publicacion.replace('T',' ').slice(0,16))}</span>` : ''}`
+  }
+  if (ctx === 'ADMIN_FINANZAS') {
+    return `${s(dk.cuenta,'font-weight:700;color:#111827;')}${dk.categoria?`<br/><span style="font-size:11px;color:#6b7280;">${esc(dk.categoria)}</span>`:''}<br/>${s(dk.periodo,'font-size:11px;color:#6b7280;')}${dk.monto_informativo?`<br/><span style="color:#059669;font-weight:700;">$${Number(dk.monto_informativo).toLocaleString('es-MX')}</span>`:''}`
+  }
+  if (ctx === 'GESTION_OBRA') {
+    return `${s(dk.etapa,'font-weight:700;color:#111827;')}${dk.contratista?`<br/><span style="font-size:11px;color:#6b7280;">${esc(dk.contratista)}</span>`:''}<br/><span style="color:#b45309;font-weight:700;">⬛ ${dk.avance_pct||0}% avance</span>`
+  }
+  if (ctx === 'TRAMITE') {
+    const eCol = {Firmado:'#059669',Enviado:'#0369a1',Borrador:'#6b7280',Archivado:'#7c3aed',Cancelado:'#dc2626'}[dk.estado_tramite]||'#6b7280'
+    return `${s(dk.tipo_doc,'font-weight:700;color:#111827;')}${dk.contraparte?`<br/><span style="font-size:11px;color:#6b7280;">${esc(dk.contraparte)}</span>`:''}<br/><span style="color:${eCol};font-weight:700;font-size:11px;">● ${esc(dk.estado_tramite||'—')}</span>`
+  }
+  const desc = dk.descripcion||''
+  return `<span style="font-size:12px;color:#374151;">${esc(desc.length>70?desc.slice(0,70)+'…':desc)}</span>${(dk.etiquetas||[]).length?`<br/><span style="font-size:10px;color:#6b7280;">${esc(dk.etiquetas.join(', '))}</span>`:''}`
+}
+
+/** @param {BitacoraCtx} ctx @param {Object} im @param {BitDetalles} dk @returns {string} */
+function _bitacoraFormatImpacto(ctx, im, dk) {
+  if (ctx === 'CONTENIDO_POST') {
+    if (!im || (!im.vistas && !im.clics && !im.compartidos)) return '<span style="font-size:11px;color:#9ca3af;">Sin métricas aún</span>'
+    return `<span style="font-size:11px;color:#374151;line-height:1.8;">👁 ${im.vistas||0} vistas<br/>🔗 ${im.clics||0} clics${im.compartidos?`<br/>↗ ${im.compartidos} compartidos`:''}</span>`
+  }
+  if (ctx === 'ADMIN_FINANZAS') {
+    return dk.monto_informativo ? `<span style="font-weight:700;color:#059669;font-size:13px;">$${Number(dk.monto_informativo).toLocaleString('es-MX')}</span>` : '<span style="color:#9ca3af;">—</span>'
+  }
+  if (ctx === 'GESTION_OBRA') {
+    const pct = dk.avance_pct||0
+    return `<div style="width:56px;height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin-bottom:3px;"><div style="width:${pct}%;height:100%;background:#b45309;border-radius:3px;"></div></div><span style="font-size:11px;color:#374151;">${pct}%</span>`
+  }
+  if (ctx === 'TRAMITE') {
+    const cfg = {Firmado:{c:'#059669',b:'#d1fae5'},Enviado:{c:'#0369a1',b:'#e0f2fe'},Borrador:{c:'#6b7280',b:'#f3f4f6'},Archivado:{c:'#7c3aed',b:'#ede9fe'},Cancelado:{c:'#dc2626',b:'#fee2e2'}}[dk.estado_tramite]||{c:'#6b7280',b:'#f3f4f6'}
+    return dk.estado_tramite ? `<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:${cfg.b};color:${cfg.c};">${esc(dk.estado_tramite)}</span>` : '<span style="color:#9ca3af;">—</span>'
+  }
+  return '<span style="color:#9ca3af;">—</span>'
+}
+
+/** @param {BitacoraCtx} ctx @param {BitDetalles} [dk] @returns {string} */
+function _bitacoraCtxFieldsHtml(ctx, dk = {}) {
+  const IS = (id, lbl, type='text', extra='', ph='', val='') =>
+    `<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">${lbl}</label><input type="${type}" id="${id}" placeholder="${ph}" value="${esc(String(val))}" ${extra} style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:var(--text-primary);padding:7px 10px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;"/></div>`
+  const SS = (id, lbl, opts, val='') =>
+    `<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">${lbl}</label><select id="${id}" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:var(--text-primary);padding:7px 10px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;">${opts.map(o=>`<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}</select></div>`
+  const TA = (id, lbl, ph='', val='') =>
+    `<div style="grid-column:1/-1"><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">${lbl}</label><textarea id="${id}" placeholder="${ph}" rows="2" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:var(--text-primary);padding:7px 10px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;resize:vertical;">${esc(val)}</textarea></div>`
+
+  if (ctx === 'CONTENIDO_POST') {
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;">
+      ${SS('bt-plataforma','Plataforma',['WordPress Blog','Instagram','Facebook','LinkedIn','X / Twitter','TikTok','YouTube','Newsletter'],dk.plataforma||'WordPress Blog')}
+      ${SS('bt-tipo-contenido','Tipo de contenido',['Artículo','Reel','Post / Foto','Historia','Thread','Video','Correo'],dk.tipo_contenido||'Artículo')}
+      ${IS('bt-hora-publicacion','Hora de publicación','datetime-local','','',(dk.hora_publicacion||'').slice(0,16))}
+      ${IS('bt-titulo-tema','Título / Tema','text','','Título del post o artículo...',dk.titulo_tema||'')}
+      ${IS('bt-keywords','Keywords / Hashtags','text','','seo, marketing, #hashtag',(dk.keywords||[]).join(', '))}
+      ${IS('bt-url-publicado','URL publicado','url','','https://...',dk.url_publicado||'')}
+    </div>`
+  }
+  if (ctx === 'ADMIN_FINANZAS') {
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;">
+      ${IS('bt-cuenta','Cuenta / Banco','text','','BBVA, Nu, Efectivo...',dk.cuenta||'')}
+      ${IS('bt-categoria','Categoría','text','','Gastos Op., Nómina...',dk.categoria||'')}
+      ${IS('bt-periodo','Período','text','','Mayo 2026',dk.periodo||'')}
+      ${IS('bt-monto','Monto informativo','number','min="0" step="0.01"','0.00',dk.monto_informativo||'')}
+      ${IS('bt-concepto','Concepto fiscal','text','','Descripción contable',dk.concepto||'')}
+    </div>`
+  }
+  if (ctx === 'GESTION_OBRA') {
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px;">
+      ${IS('bt-etapa','Etapa','text','','Cimentación, Estructura...',dk.etapa||'')}
+      ${IS('bt-contratista','Contratista / Proveedor','text','','Nombre o empresa',dk.contratista||'')}
+      ${IS('bt-avance','Avance %','number','min="0" max="100"','0',dk.avance_pct||'')}
+      ${IS('bt-area-ubicacion','Área / Ubicación','text','','Zona, frente, eje...',dk.area_ubicacion||'')}
+      ${TA('bt-obs','Observaciones técnicas','Notas del supervisor, incidentes, materiales usados...',dk.observacion||'')}
+    </div>`
+  }
+  if (ctx === 'TRAMITE') {
+    return `<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px;">
+      ${SS('bt-tipo-doc','Tipo de documento',['Contrato de Servicios','Pagaré','Carta Poder','NDA / Confidencialidad','Reconocimiento de Adeudo','Convenio de Pago','Orden de Servicio','Carta Responsiva','Prórroga de Renta','Otro'],dk.tipo_doc||'Contrato de Servicios')}
+      ${IS('bt-contraparte','Contraparte / Cliente','text','','Nombre del firmante',dk.contraparte||'')}
+      ${SS('bt-estado-tramite','Estado',['Borrador','Enviado','Firmado','Archivado','Cancelado'],dk.estado_tramite||'Borrador')}
+      ${IS('bt-folio-nexus','Folio Nexus (opcional)','text','','REF-...',dk.folio_nexus||'')}
+    </div>`
+  }
+  // GENERAL
+  return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+    ${TA('bt-descripcion','Descripción detallada','Detalla la actividad, resultado esperado, observaciones...',dk.descripcion||'')}
+    ${IS('bt-etiquetas','Etiquetas','text','','etiqueta1, etiqueta2',(dk.etiquetas||[]).join(', '))}
+  </div>`
+}
+
+// ── Main renderer ──────────────────────────────────────────────────────────────
+function _renderProjBitacora(d) {
+  const { p, m } = d
+  const linkedIds = new Set(m.linkedTo || [])
+
+  /** @type {BitacoraNode[]} */
+  const all = allNodes.filter(n => {
+    if (n.type !== 'bitacora') return false
+    return n.metadata?.proyecto_id === p.id || linkedIds.has(n.id)
+  }).sort((a,b) => new Date(b.metadata?.fecha_ejecucion||b.created_at) - new Date(a.metadata?.fecha_ejecucion||a.created_at))
+
+  const filtered = _projBitacoraCtxFilter === 'all' ? all
+    : all.filter(n => n.metadata?.modulo_contexto === _projBitacoraCtxFilter)
+
+  const CTX_OPTS = [
+    { v:'all',            l:'Todos' },
+    { v:'CONTENIDO_POST', l:'📱 Contenido' },
+    { v:'ADMIN_FINANZAS', l:'💼 Finanzas' },
+    { v:'GESTION_OBRA',   l:'🏗️ Obra' },
+    { v:'TRAMITE',        l:'📄 Trámite' },
+    { v:'GENERAL',        l:'📋 General' },
+  ]
+
+  // ── Form (add/edit) ──
+  let formHtml = ''
+  if (_projBitacoraFormOpen) {
+    const editNode = _projBitacoraEditId ? allNodes.find(n=>n.id===_projBitacoraEditId) : null
+    const em = editNode?.metadata || {}
+    const dk = em.detalles_clave || {}
+    const formCtx = em.modulo_contexto || 'GENERAL'
+    const IS = (id,lbl,type='text',extra='',ph='',val='') =>
+      `<div><label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">${lbl}</label><input type="${type}" id="${id}" placeholder="${ph}" value="${esc(String(val))}" ${extra} style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:var(--text-primary);padding:7px 10px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;"/></div>`
+
+    const fechaVal = em.fecha_ejecucion
+      ? (() => { const d2=new Date(em.fecha_ejecucion); return new Date(d2-d2.getTimezoneOffset()*60000).toISOString().slice(0,16) })()
+      : (() => { const d2=new Date(); return new Date(d2-d2.getTimezoneOffset()*60000).toISOString().slice(0,16) })()
+
+    formHtml = `
+    <div style="background:var(--bg-panel);border:1px solid rgba(0,246,255,0.18);border-radius:12px;padding:20px;margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--text-primary);">${_projBitacoraEditId ? '✏️ Editar Actividad' : '+ Nueva Actividad'}</h3>
+        <button onclick="cancelBitacoraForm()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;">✕</button>
+      </div>
+      <!-- Row 1: Fecha + Contexto + Actividad -->
+      <div style="display:grid;grid-template-columns:190px 200px 1fr;gap:12px;margin-bottom:4px;">
+        ${IS('bt-fecha-ejecucion','Fecha y hora','datetime-local','','',fechaVal)}
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:4px;">Contexto</label>
+          <select id="bt-contexto" onchange="updateBitacoraCtxFields()" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:var(--text-primary);padding:7px 10px;font-size:13px;box-sizing:border-box;outline:none;font-family:inherit;">
+            <option value="GENERAL"        ${formCtx==='GENERAL'        ?'selected':''}>📋 General</option>
+            <option value="CONTENIDO_POST" ${formCtx==='CONTENIDO_POST' ?'selected':''}>📱 Contenido / Post</option>
+            <option value="ADMIN_FINANZAS" ${formCtx==='ADMIN_FINANZAS' ?'selected':''}>💼 Admin Finanzas</option>
+            <option value="GESTION_OBRA"   ${formCtx==='GESTION_OBRA'   ?'selected':''}>🏗️ Gestión de Obra</option>
+            <option value="TRAMITE"        ${formCtx==='TRAMITE'        ?'selected':''}>📄 Trámite Legal</option>
+          </select>
+        </div>
+        ${IS('bt-actividad','Actividad / Concepto *','text','required','Describe la actividad principal...',editNode?.content||'')}
+      </div>
+      <!-- Dynamic fields -->
+      <div id="bt-ctx-fields">${_bitacoraCtxFieldsHtml(formCtx, dk)}</div>
+      <!-- Evidencia (common) -->
+      <div style="margin-top:12px;">
+        ${IS('bt-evidencia','Enlace de evidencia (URL)','url','','https://post, drive, folio...', em.enlace_evidencia||'')}
+      </div>
+      <!-- Actions -->
+      <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">
+        <button onclick="cancelBitacoraForm()" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;padding:8px 20px;cursor:pointer;font-size:13px;font-family:inherit;">Cancelar</button>
+        <button onclick="saveBitacoraEntry()" style="background:rgba(0,246,255,0.15);border:1px solid rgba(0,246,255,0.3);color:#00f6ff;border-radius:8px;padding:8px 24px;cursor:pointer;font-size:13px;font-weight:700;font-family:inherit;">✅ ${_projBitacoraEditId ? 'Actualizar' : 'Guardar'}</button>
+      </div>
+    </div>`
+  }
+
+  // ── Table rows ──
+  const thS = 'padding:10px 12px;text-align:left;font-weight:700;font-size:12px;color:#374151;border-bottom:1px solid #e5e7eb;white-space:nowrap;'
+  const rows = filtered.map((e, i) => {
+    const bg = i % 2 === 0 ? '#ffffff' : '#f9fafb'
+    const em = e.metadata || {}
+    const dk = em.detalles_clave || {}
+    const im = em.impacto_metricas || {}
+    const fecha = em.fecha_ejecucion
+      ? new Date(em.fecha_ejecucion).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
+      : ''
+    const tdS = `padding:8px 12px;border-bottom:1px solid #e5e7eb;background:${bg};vertical-align:top;`
+    return `<tr>
+      <td style="${tdS}font-size:12px;color:#6b7280;white-space:nowrap;">${fecha}</td>
+      <td style="${tdS}">${_bitacoraCtxBadge(em.modulo_contexto)}</td>
+      <td style="${tdS}font-weight:600;color:#111827;max-width:200px;word-break:break-word;">${esc(e.content||'')}</td>
+      <td style="${tdS}max-width:240px;">${_bitacoraFormatDatos(em.modulo_contexto, dk)}</td>
+      <td style="${tdS}font-size:11px;max-width:140px;word-break:break-all;">${em.enlace_evidencia ? `<a href="${em.enlace_evidencia}" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:underline;">Ver enlace →</a>` : '<span style="color:#9ca3af;">—</span>'}</td>
+      <td style="${tdS}">${_bitacoraFormatImpacto(em.modulo_contexto, im, dk)}</td>
+      <td style="${tdS}white-space:nowrap;">
+        <button onclick="openBitacoraEdit('${e.id}')" title="Editar" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:#6b7280;opacity:0.7;" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.7">✏️</button>
+        <button onclick="deleteBitacoraEntry('${e.id}')" title="Eliminar" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px 4px;color:#ef4444;opacity:0.6;" onmouseenter="this.style.opacity=1" onmouseleave="this.style.opacity=0.6">🗑️</button>
+      </td>
+    </tr>`
+  }).join('')
+
+  const emptyState = `<tr><td colspan="7" style="padding:48px;text-align:center;background:#fff;">
+    <div style="font-size:32px;margin-bottom:12px;">📝</div>
+    <div style="font-size:14px;font-weight:700;color:#374151;">Sin actividades registradas</div>
+    <div style="font-size:12px;color:#9ca3af;margin-top:4px;">Registra la primera actividad con el botón "+ Registrar"</div>
+  </td></tr>`
+
+  return `
+  <!-- Header -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <h2 style="margin:0;font-size:16px;font-weight:800;color:var(--text-primary);">📝 Bitácora de Actividades</h2>
+      <span style="font-size:12px;color:var(--text-muted);background:rgba(255,255,255,0.06);border-radius:20px;padding:2px 10px;">${all.length} registros</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <!-- Filter -->
+      <select onchange="filterBitacora(this.value)" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:7px;color:var(--text-primary);padding:6px 10px;font-size:12px;outline:none;font-family:inherit;">
+        ${CTX_OPTS.map(o=>`<option value="${o.v}" ${_projBitacoraCtxFilter===o.v?'selected':''}>${o.l}</option>`).join('')}
+      </select>
+      <button onclick="exportBitacoraPDF('${p.id}')" style="font-size:12px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:7px;padding:6px 12px;cursor:pointer;font-weight:600;">📄 Exportar PDF</button>
+      <button onclick="openBitacoraNew('${p.id}')" style="font-size:12px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:7px;padding:6px 14px;cursor:pointer;font-weight:700;">+ Registrar</button>
+    </div>
+  </div>
+
+  ${formHtml}
+
+  <!-- Table -->
+  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;color:#111827;">
+      <thead>
+        <tr style="background:#f3f4f6;">
+          <th style="${thS}min-width:110px;">Fecha y Hora</th>
+          <th style="${thS}min-width:90px;">Contexto</th>
+          <th style="${thS}min-width:160px;">Actividad / Concepto</th>
+          <th style="${thS}min-width:180px;">Datos Clave</th>
+          <th style="${thS}min-width:100px;">Evidencia</th>
+          <th style="${thS}min-width:90px;">Impacto / Estado</th>
+          <th style="${thS}width:60px;"></th>
+        </tr>
+      </thead>
+      <tbody>${filtered.length ? rows : emptyState}</tbody>
+    </table>
+  </div>
+  ${filtered.length < all.length ? `<p style="font-size:12px;color:var(--text-muted);margin-top:8px;text-align:right;">Mostrando ${filtered.length} de ${all.length} — <button onclick="filterBitacora('all')" style="background:none;border:none;color:#00f6ff;cursor:pointer;font-size:12px;">Ver todos</button></p>` : ''}`
+}
+
+// ── Global actions ─────────────────────────────────────────────────────────────
+window.updateBitacoraCtxFields = function() {
+  const ctx = document.getElementById('bt-contexto')?.value || 'GENERAL'
+  const container = document.getElementById('bt-ctx-fields')
+  if (container) container.innerHTML = _bitacoraCtxFieldsHtml(ctx)
+}
+
+window.openBitacoraNew = function() {
+  _projBitacoraFormOpen = true
+  _projBitacoraEditId   = null
+  switchProjTab('bitacora')
+  setTimeout(() => document.getElementById('bt-actividad')?.focus(), 80)
+}
+
+window.openBitacoraEdit = function(id) {
+  _projBitacoraEditId  = id
+  _projBitacoraFormOpen = true
+  switchProjTab('bitacora')
+  setTimeout(() => document.getElementById('bt-actividad')?.focus(), 80)
+}
+
+window.cancelBitacoraForm = function() {
+  _projBitacoraFormOpen = false
+  _projBitacoraEditId   = null
+  switchProjTab('bitacora')
+}
+
+window.filterBitacora = function(ctx) {
+  _projBitacoraCtxFilter = ctx
+  switchProjTab('bitacora')
+}
+
+window.saveBitacoraEntry = async function() {
+  const ctx      = document.getElementById('bt-contexto')?.value || 'GENERAL'
+  const actividad = document.getElementById('bt-actividad')?.value.trim()
+  if (!actividad) { showToast('⚠️ Escribe la actividad / concepto principal'); return }
+
+  const fechaEl = document.getElementById('bt-fecha-ejecucion')
+  const fecha_ejecucion = fechaEl?.value ? new Date(fechaEl.value).toISOString() : new Date().toISOString()
+  const enlace_evidencia = document.getElementById('bt-evidencia')?.value.trim() || null
+
+  const gv = id => document.getElementById(id)?.value?.trim() || ''
+  const gn = id => parseFloat(document.getElementById(id)?.value) || 0
+
+  /** @type {BitDetalles} */
+  let detalles_clave = {}
+  /** @type {Object} */
+  let impacto_metricas = {}
+
+  if (ctx === 'CONTENIDO_POST') {
+    detalles_clave  = { plataforma:gv('bt-plataforma'), tipo_contenido:gv('bt-tipo-contenido'), titulo_tema:gv('bt-titulo-tema'), keywords:gv('bt-keywords').split(',').map(k=>k.trim()).filter(Boolean), hora_publicacion:gv('bt-hora-publicacion'), url_publicado:gv('bt-url-publicado') }
+    impacto_metricas = { vistas:0, clics:0, compartidos:0 }
+  } else if (ctx === 'ADMIN_FINANZAS') {
+    detalles_clave  = { cuenta:gv('bt-cuenta'), categoria:gv('bt-categoria'), periodo:gv('bt-periodo'), monto_informativo:gn('bt-monto'), concepto:gv('bt-concepto') }
+    impacto_metricas = { monto: gn('bt-monto') }
+  } else if (ctx === 'GESTION_OBRA') {
+    detalles_clave  = { etapa:gv('bt-etapa'), contratista:gv('bt-contratista'), avance_pct:gn('bt-avance'), area_ubicacion:gv('bt-area-ubicacion'), observacion:gv('bt-obs') }
+    impacto_metricas = { avance_pct: gn('bt-avance') }
+  } else if (ctx === 'TRAMITE') {
+    detalles_clave  = { tipo_doc:gv('bt-tipo-doc'), contraparte:gv('bt-contraparte'), estado_tramite:gv('bt-estado-tramite'), folio_nexus:gv('bt-folio-nexus') }
+    impacto_metricas = { estado: gv('bt-estado-tramite') }
+  } else {
+    detalles_clave  = { descripcion:gv('bt-descripcion'), etiquetas:gv('bt-etiquetas').split(',').map(k=>k.trim()).filter(Boolean) }
+  }
+
+  const isEdit = !!_projBitacoraEditId
+  const nodeId = isEdit ? _projBitacoraEditId : crypto.randomUUID()
+
+  /** @type {BitacoraNode} */
+  const node = {
+    id:       nodeId,
+    type:     'bitacora',
+    content:  actividad,
+    owner_id: currentUser.id,
+    metadata: { proyecto_id:_projDashId, modulo_contexto:ctx, fecha_ejecucion, detalles_clave, enlace_evidencia, impacto_metricas }
+  }
+
+  let error
+  if (isEdit) {
+    ;({ error } = await supabase.from('nodes').update({ content:node.content, metadata:node.metadata }).eq('id', nodeId))
+    if (!error) { const idx = allNodes.findIndex(n=>n.id===nodeId); if (idx>-1) allNodes[idx] = { ...allNodes[idx], ...node } }
+  } else {
+    ;({ error } = await supabase.from('nodes').insert(node))
+    if (!error) allNodes.unshift(node)
+  }
+
+  if (error) { showToast('❌ Error al guardar: ' + error.message); console.error(error); return }
+  showToast(isEdit ? '✅ Actividad actualizada' : '✅ Actividad registrada en bitácora')
+  _projBitacoraEditId   = null
+  _projBitacoraFormOpen = false
+  switchProjTab('bitacora')
+}
+
+window.deleteBitacoraEntry = async function(id) {
+  if (!confirm('¿Eliminar esta actividad de la bitácora? Esta acción no se puede deshacer.')) return
+  const { error } = await supabase.from('nodes').delete().eq('id', id)
+  if (error) { showToast('❌ Error al eliminar'); return }
+  allNodes = allNodes.filter(n => n.id !== id)
+  showToast('🗑️ Actividad eliminada')
+  switchProjTab('bitacora')
+}
+
+window.exportBitacoraPDF = function(projId) {
+  const proj = allNodes.find(n => n.id === projId)
+  if (!proj) { showToast('❌ Proyecto no encontrado'); return }
+  const entries = allNodes.filter(n => n.type === 'bitacora' && n.metadata?.proyecto_id === projId)
+    .sort((a,b) => new Date(a.metadata?.fecha_ejecucion||a.created_at) - new Date(b.metadata?.fecha_ejecucion||b.created_at))
+  if (!entries.length) { showToast('⚠️ No hay actividades registradas en la bitácora'); return }
+  const m = currentUser?.user_metadata || {}
+  const emisor = { name: m.nombre || m.full_name || 'Nexus OS', rfc: m.rfc||'', domicilio: m.domicilio||'', tel: m.tel||m.phone||'' }
+  pdfBitacora(entries, proj, emisor)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 
 function _wikiMdToHtml(text) {
   return text
@@ -17708,6 +18090,9 @@ window.changeCotizacionStatus = async (id, status) => {
 let currentProyectoId = null
 let _projDashTab  = 'resumen'   // active tab inside project dashboard
 let _projDashId   = null        // project ID currently open
+let _projBitacoraCtxFilter = 'all'   // context filter in bitácora tab
+let _projBitacoraFormOpen  = false   // add/edit form visible
+let _projBitacoraEditId    = null    // null=new, string=editing node id
 let _projNoteEditorId = null    // note ID open in project full-page editor (null = grid)
 
 window.openProyectoModal = (id) => {
