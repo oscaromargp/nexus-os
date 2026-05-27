@@ -174,7 +174,7 @@ Nexus OS tiene **9 vistas** accesibles desde la barra lateral:
 </p>
 
 <p align="center">
-  <img src="assets/screenshots/09-configuracion.png" alt="Configuración" width="45%"/>
+  <img src="assets/screenshots/09-configuracion.png" alt="Proyectos" width="45%"/>
   &nbsp;&nbsp;
   <img src="assets/screenshots/10-ayuda.png" alt="Ayuda" width="45%"/>
 </p>
@@ -182,7 +182,7 @@ Nexus OS tiene **9 vistas** accesibles desde la barra lateral:
 ### 📄 Centro de Trámites — 10 Plantillas Legales
 
 <p align="center">
-  <img src="assets/screenshots/tramites-plantillas.png" alt="Centro de Trámites — 10 Plantillas" width="800"/>
+  <img src="assets/screenshots/11-tramites.png" alt="Centro de Trámites — 10 Plantillas" width="800"/>
 </p>
 
 *Todos los formularios se auto-llenan desde tu directorio de contactos (nombre, RFC, CLABE, domicilio). Los documentos se guardan en el historial y pueden re-editarse y re-exportarse en cualquier momento.*
