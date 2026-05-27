@@ -385,6 +385,24 @@ const TYPE_LABELS = {
 }
 
 // ─────────────────────────────────────────
+// _normNode — Normaliza un nodo de Supabase para garantizar tipos correctos
+// Algunos nodos guardados antes de la estandarización tienen metadata.tags
+// como string en lugar de array. Se normaliza aquí para proteger todos los
+// renderizadores descendentes.
+// ─────────────────────────────────────────
+function _normNode(n) {
+  if (!n || !n.metadata) return n
+  const t = n.metadata.tags
+  if (t == null) {
+    n.metadata.tags = []
+  } else if (!Array.isArray(t)) {
+    // string → split por coma, espacio o punto y coma
+    n.metadata.tags = String(t).split(/[\s,;]+/).map(s => s.trim()).filter(Boolean)
+  }
+  return n
+}
+
+// ─────────────────────────────────────────
 // Boot — Fix sidebar CSS immediately (module scripts run after DOM is parsed)
 // ─────────────────────────────────────────
 fixLayoutDOM()   // Run BEFORE async IIFE — DOM is ready at module parse time
@@ -459,11 +477,11 @@ function setupRealtimeSubscription() {
       if (payload.eventType === 'INSERT') {
         // Solo agregar si no existe ya (evita duplicado cuando el mismo cliente hizo el insert)
         if (!allNodes.find(n => n.id === payload.new.id)) {
-          allNodes.unshift(payload.new)
+          allNodes.unshift(_normNode(payload.new))
         }
       } else if (payload.eventType === 'UPDATE') {
         const idx = allNodes.findIndex(n => n.id === payload.new.id)
-        if (idx !== -1) allNodes[idx] = payload.new
+        if (idx !== -1) allNodes[idx] = _normNode(payload.new)
       } else if (payload.eventType === 'DELETE') {
         allNodes = allNodes.filter(n => n.id !== payload.old.id)
       }
@@ -514,7 +532,7 @@ async function loadNodes() {
   // Renderiza inmediatamente desde caché mientras llega Supabase
   const cached = loadNodesFromCache()
   if (cached?.length) {
-    allNodes = cached
+    allNodes = cached.map(_normNode)
     renderAll()
     showToast(`📦 ${cached.length} nodos desde caché — sincronizando...`, 2500)
   } else {
@@ -531,7 +549,7 @@ async function loadNodes() {
     if (!cached?.length) showToast('⚠️ Sin conexión — no hay datos en caché')
     console.error('[loadNodes]', error)
   } else {
-    allNodes = data || []
+    allNodes = (data || []).map(_normNode)
     saveNodesToCache(allNodes)
     renderAll()
   }
@@ -12919,8 +12937,9 @@ function extractTagData(nodes = allNodes) {
   const tagNodeMap = {}
 
   nodes.forEach(n => {
-    const raw = n.metadata?.tags || []
-    const tags = raw.map(t => t.replace(/^#/,'').toLowerCase().trim()).filter(Boolean)
+    const rawTags = n.metadata?.tags
+    const raw     = Array.isArray(rawTags) ? rawTags : []   // defensive: _normNode ya debería haber normalizado
+    const tags    = raw.map(t => t.replace(/^#/,'').toLowerCase().trim()).filter(Boolean)
     const date = n.metadata?.date || (n.created_at ? n.created_at.slice(0,10) : null)
     tags.forEach(t => {
       freq[t] = (freq[t] || 0) + 1
