@@ -7585,19 +7585,6 @@ window.openDocGen = function(type) {
     })
     h += '</div>'
     h += '<textarea id="dg-razon" class="modal-input" rows="2" placeholder="Facultades adicionales o descripción específica del poder..."></textarea></div>'
-    // Vinculación a cotización / nota de venta
-    const cotNodes = (typeof allNodes !== 'undefined') ? allNodes.filter(n => n.type === 'cot_presupuesto' || n.type === 'cot_nota') : []
-    if (cotNodes.length) {
-      h += '<div class="modal-field"><label class="modal-label">📎 Vincular Presupuesto / Nota de Venta (Anexo opcional)</label>'
-      h += '<select id="dg-cp-cotizacion" class="modal-input"><option value="">— Sin anexo —</option>'
-      cotNodes.forEach(n => {
-        const m = n.metadata || {}
-        const tipo = n.type === 'cot_presupuesto' ? 'Presupuesto' : 'Nota'
-        h += `<option value="${n.id}">${tipo} ${m.folio || ''} — ${m.clienteName || ''} — $${(m.total||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</option>`
-      })
-      h += '</select></div>'
-    }
-
     // Testigos
     h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px;">'
     h += '<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;">'
@@ -7659,6 +7646,19 @@ window.openDocGen = function(type) {
       h += '<select id="dg-proyecto" class="modal-input"><option value="">— Sin vincular —</option>' + projectOpts + '</select></div>'
     }
 
+    // Cotización vinculada — pre-popula descripción y monto
+    const cotNodesC = (typeof allNodes !== 'undefined') ? allNodes.filter(n => n.type === 'cot_presupuesto' || n.type === 'cot_nota') : []
+    if (cotNodesC.length) {
+      h += '<div class="modal-field"><label class="modal-label">📎 Vincular Cotización / Presupuesto <span style="font-size:10px;color:#94a3b8;font-weight:400;">(rellena descripción y monto automáticamente)</span></label>'
+      h += '<select id="dg-contrato-cotizacion" class="modal-input" onchange="docGenLinkCotizacion()">'
+      h += '<option value="">— Sin vincular —</option>'
+      cotNodesC.forEach(n => {
+        const mc = n.metadata || {}
+        const tipo = n.type === 'cot_presupuesto' ? 'Presupuesto' : 'Nota de Venta'
+        h += `<option value="${n.id}">${tipo} ${mc.folio || ''} — ${mc.clienteName || mc.prestadorName || ''} — $${(mc.total||0).toLocaleString('es-MX',{minimumFractionDigits:2})}</option>`
+      })
+      h += '</select></div>'
+    }
     h += '<div class="modal-field"><label class="modal-label">Descripción de servicios</label>'
     h += '<textarea id="dg-servicios" class="modal-input" rows="3" placeholder="Describir detalladamente los servicios a prestar..."></textarea></div>'
 
@@ -7673,7 +7673,7 @@ window.openDocGen = function(type) {
     h += '<div><label class="modal-label">Moneda de pago</label>'
     h += '<select id="dg-moneda-contrato" class="modal-input" onchange="docGenToggleContratoTC()">'
     h += '<option value="MXN">MXN</option><option value="USD">USD</option><option value="USDT">USDT</option></select></div>'
-    h += '<div><label class="modal-label">Forma de pago</label><input type="text" id="dg-forma-pago" class="modal-input" placeholder="Ej: Transferencia mensual"/></div>'
+    h += '<div><label class="modal-label">Forma de pago</label><select id="dg-forma-pago" class="modal-input"><option value="Transferencia mensual">Transferencia mensual</option><option value="Transferencia semanal">Transferencia semanal</option><option value="Transferencia quincenal">Transferencia quincenal</option><option value="Pago único al inicio">Pago único al inicio</option><option value="50% al inicio / 50% a la entrega">50% al inicio / 50% a la entrega</option><option value="Por hitos / avances">Por hitos / avances</option><option value="Efectivo">Efectivo</option><option value="USDT / Criptomoneda">USDT / Criptomoneda</option><option value="Depósito en efectivo">Depósito en efectivo</option></select></div>'
     h += '</div>'
     h += '<div id="dg-contrato-tc-field" style="display:none;margin-bottom:14px;">'
     h += '<label class="modal-label">Tipo de cambio (MXN por unidad de moneda extranjera)</label>'
@@ -8200,10 +8200,6 @@ window.docGenExport = function() {
     const facultadesChecks = Array.from(document.querySelectorAll('.dg-facultad-check:checked'))
     const facultadesList = facultadesChecks.map(el => el.getAttribute('data-label'))
     const facultadesExtra = document.getElementById('dg-razon')?.value || ''
-    // Vinculación a cotización/nota de venta
-    const cotSelId   = document.getElementById('dg-cp-cotizacion')?.value || ''
-    const cotNode    = cotSelId ? allNodes.find(n => n.id === cotSelId) : null
-    const cotAnexo   = cotNode ? { folio: cotNode.metadata?.folio || '', titulo: cotNode.metadata?.titulo || cotNode.content, total: cotNode.metadata?.total || 0, moneda: cotNode.metadata?.moneda || 'MXN' } : null
     let fechaFmt = blank
     if (fechaRaw) {
       const d = new Date(fechaRaw + 'T12:00:00')
@@ -8214,7 +8210,7 @@ window.docGenExport = function() {
     data = { otorgName, apodName, destinatario, lugar, fecha: fechaFmt,
              otorgIdType, otorgIdNum, otorgCurp, otorgRfc, otorgDom,
              apodIdType, apodIdNum, apodCurp, apodRfc, apodDom,
-             actos: facultadesExtra, facultadesList, testigo1Name, testigo2Name, cotAnexo }
+             actos: facultadesExtra, facultadesList, testigo1Name, testigo2Name }
     pdfCartaPoder(data, emisor)
 
   } else if (type === 'contrato') {
@@ -8257,6 +8253,15 @@ window.docGenExport = function() {
     const proyectoSel  = document.getElementById('dg-proyecto')?.value || ''
     const cProyecto    = proyectoSel ? allNodes.find(n => n.id === proyectoSel) : null
     const proyectoNombre = cProyecto ? (cProyecto.content || cProyecto.metadata?.name || '') : ''
+    // Cotización vinculada
+    const cotVinId  = document.getElementById('dg-contrato-cotizacion')?.value || ''
+    const cotVinNode = cotVinId ? allNodes.find(n => n.id === cotVinId) : null
+    const cotizacionVinculada = cotVinNode ? {
+      folio:  cotVinNode.metadata?.folio  || '',
+      titulo: cotVinNode.metadata?.titulo || cotVinNode.content || '',
+      total:  cotVinNode.metadata?.total  || 0,
+      moneda: cotVinNode.metadata?.moneda || 'MXN'
+    } : null
     const toFmt    = raw => raw
       ? new Date(raw + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' }) : ''
     const tcContrato = parseFloat(document.getElementById('dg-contrato-tc')?.value || '0') || 0
@@ -8266,7 +8271,7 @@ window.docGenExport = function() {
              prestadorCurp, prestadorElect, prestadorPasap, prestadorBanco, prestadorClabe,
              clienteName, clienteRfc, clienteNac: toFmt(clienteNacR), clienteDom,
              clienteCurp, clienteElect, clientePasap,
-             lugar, fecha: toFmt(fechaRaw) || blank, servicios, proyectoNombre,
+             lugar, fecha: toFmt(fechaRaw) || blank, servicios, proyectoNombre, cotizacionVinculada,
              fechaInicio: toFmt(fIniRaw) || blank, fechaFin: toFmt(fFinRaw) || blank,
              diasAviso, monto, monedaContrato, tc: tcContrato, formaPago, jurisdiccion, clausulasExtra,
              clausulasSeleccionadas }
@@ -8274,6 +8279,23 @@ window.docGenExport = function() {
   }
 
   if (!docTitle) return
+
+  // Capture all form field values for later re-edit
+  const _snap = {}
+  const _modalBody = document.getElementById('docgen-modal-body')
+  if (_modalBody) {
+    _modalBody.querySelectorAll('input, textarea, select').forEach(el => {
+      if (el.id) _snap[el.id] = (el.type === 'checkbox') ? el.checked : el.value
+    })
+    _modalBody.querySelectorAll('.dg-facultad-check').forEach(el => {
+      const lbl = el.getAttribute('data-label') || ''
+      if (lbl) _snap['__fac__' + lbl] = el.checked
+    })
+    _modalBody.querySelectorAll('.dg-clausula-check').forEach(el => {
+      const tit = el.getAttribute('data-titulo') || ''
+      if (tit) _snap['__cl__' + tit] = el.checked
+    })
+  }
 
   // Save to history as a node (doc_data for jsPDF reprint)
   const docNode = {
@@ -8286,6 +8308,7 @@ window.docGenExport = function() {
       parteB: parteBName, parteB_id: parteBId,
       doc_date: new Date().toISOString().slice(0, 10),
       doc_data: data,
+      form_snapshot: _snap,
       tags: ['#documento', '#' + type],
       is_legal_doc: true
     },
@@ -8340,7 +8363,7 @@ window.docGenExportDoc = function() {
       <p><strong>EL PRESTADOR:</strong> ${prestName}${_idRow('RFC',document.getElementById('dg-prestador-rfc')?.value)}</p>
       <p><strong>EL CLIENTE:</strong> ${clientName}${_idRow('RFC',document.getElementById('dg-cliente-rfc')?.value)}</p>
       <h2>PRIMERA — OBJETO</h2>
-      <p>EL PRESTADOR se compromete a proporcionar al CLIENTE los siguientes servicios: ${servicios}.</p>
+      <p>EL PRESTADOR se compromete a proporcionar al CLIENTE los siguientes servicios: ${servicios}.${(() => { const cId = document.getElementById('dg-contrato-cotizacion')?.value; const cN = cId ? allNodes.find(n => n.id === cId) : null; return cN ? ` Los servicios se detallan conforme a la ${esc(cN.metadata?.titulo || cN.content || '')}${cN.metadata?.folio ? ' (Folio ' + esc(cN.metadata.folio) + ')' : ''} por $${(cN.metadata?.total || 0).toLocaleString('es-MX', {minimumFractionDigits:2})} ${esc(cN.metadata?.moneda || 'MXN')}, adjunto como Anexo A.` : '' })()} </p>
       <h2>SEGUNDA — HONORARIOS Y FORMA DE PAGO</h2>
       <p>EL CLIENTE se obliga a pagar la cantidad de <strong>${montoStr}</strong>. Forma de pago: ${formaPago}.${prestBanco ? `<br>Cuenta del prestador: <strong>${prestBanco}</strong>${prestClabe ? ' — CLABE/Wallet: <strong>'+prestClabe+'</strong>' : ''}` : ''}</p>
       <h2>TERCERA — VIGENCIA</h2>
@@ -8401,6 +8424,69 @@ window.docGenExportDoc = function() {
   }
 }
 
+/** Auto-fill contrato form from linked cotización */
+window.docGenLinkCotizacion = function() {
+  const selId  = document.getElementById('dg-contrato-cotizacion')?.value || ''
+  if (!selId) return
+  const node   = allNodes.find(n => n.id === selId)
+  if (!node) return
+  const m      = node.metadata || {}
+  // Fill descripción de servicios
+  const srvEl  = document.getElementById('dg-servicios')
+  if (srvEl && !srvEl.value.trim()) {
+    const items = (m.items || []).map(it => `• ${it.descripcion || it.desc || ''}${it.cantidad > 1 ? ' (x' + it.cantidad + ')' : ''}`).join('\n')
+    srvEl.value = items || m.descripcion || m.titulo || node.content || ''
+  }
+  // Fill monto from cotización total
+  const montoEl = document.getElementById('dg-monto')
+  if (montoEl && !parseFloat(montoEl.value)) montoEl.value = m.total || ''
+  // Fill moneda
+  const monedaEl = document.getElementById('dg-moneda-contrato')
+  if (monedaEl && m.moneda && m.moneda !== 'MXN') { monedaEl.value = m.moneda; docGenToggleContratoTC() }
+  // Fill cliente from cotización if not yet set
+  const clienteNameEl = document.getElementById('dg-cliente-name')
+  if (clienteNameEl && !clienteNameEl.value.trim() && m.clienteName) clienteNameEl.value = m.clienteName
+  showToast('✅ Datos de cotización aplicados al contrato')
+}
+
+/** Open a previously-saved document for re-editing */
+window.editDoc = function(id) {
+  const node = allNodes.find(n => n.id === id)
+  if (!node) { showToast('Documento no encontrado'); return }
+  const m = node.metadata || {}
+  if (!m.doc_type) { showToast('Tipo de documento desconocido'); return }
+  if (!m.form_snapshot) { showToast('ℹ️ Este documento fue generado sin snapshot — solo disponible reimprimir'); return }
+  // Open the form
+  openDocGen(m.doc_type)
+  // Restore all field values synchronously (innerHTML already set)
+  const snap = m.form_snapshot || {}
+  const body = document.getElementById('docgen-modal-body')
+  if (!body) return
+  Object.entries(snap).forEach(([key, val]) => {
+    if (key.startsWith('__')) return
+    const el = document.getElementById(key)
+    if (!el) return
+    if (el.type === 'checkbox') el.checked = val
+    else el.value = val
+  })
+  // Restore facultades checkboxes
+  body.querySelectorAll('.dg-facultad-check').forEach(el => {
+    const lbl = el.getAttribute('data-label') || ''
+    if (snap['__fac__' + lbl] !== undefined) el.checked = snap['__fac__' + lbl]
+  })
+  // Restore cláusulas checkboxes
+  body.querySelectorAll('.dg-clausula-check').forEach(el => {
+    const tit = el.getAttribute('data-titulo') || ''
+    if (snap['__cl__' + tit] !== undefined) el.checked = snap['__cl__' + tit]
+  })
+  // Re-trigger TC visibility if needed
+  if (m.doc_type === 'contrato') {
+    const monedaEl = document.getElementById('dg-moneda-contrato')
+    if (monedaEl) { monedaEl.dispatchEvent(new Event('change')) }
+  }
+  showToast('✏️ Formulario restaurado — edita y exporta de nuevo')
+}
+
 // Render doc history in Centro de Trámites
 function renderDocHistory() {
   const grid = document.getElementById('docgen-history')
@@ -8419,6 +8505,7 @@ function renderDocHistory() {
     h += '<div style="font-size:10px;color:var(--text-muted);">' + esc(m.parteA) + ' ↔ ' + esc(m.parteB) + ' — ' + esc(m.doc_date) + '</div>'
     h += '</div>'
     h += '<button onclick="event.stopPropagation();reprintDoc(\'' + esc(d.id) + '\')" style="background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.2);color:var(--accent-cyan);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:10px;font-weight:700;">🖨 Reimprimir</button>'
+    if (m.form_snapshot) h += '<button onclick="event.stopPropagation();editDoc(\'' + esc(d.id) + '\')" style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);color:#fbbf24;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:10px;font-weight:700;" title="Editar y re-exportar">✏️ Editar</button>'
     h += '<button onclick="event.stopPropagation();deleteDoc(\'' + esc(d.id) + '\')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;" title="Eliminar">✕</button>'
     h += '</div>'
   })

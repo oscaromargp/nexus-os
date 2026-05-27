@@ -1238,16 +1238,6 @@ export function pdfCartaPoder(data, emisor = {}) {
   y = _paraJ(doc, 'Se otorga la presente carta poder para todos los efectos legales a que haya lugar.', y)
   y += 5
 
-  // Anexo de cotización
-  if (data.cotAnexo) {
-    y = _checkY(y, 14)
-    doc.setFontSize(8.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
-    doc.text('ANEXO:', T.mX, y); y += 4
-    doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    const cotTxt = `El presente poder se extiende con referencia al ${data.cotAnexo.folio ? 'Folio '+data.cotAnexo.folio+' — ' : ''}${data.cotAnexo.titulo || ''}${data.cotAnexo.total ? ' por $'+data.cotAnexo.total.toLocaleString('es-MX',{minimumFractionDigits:2})+' '+data.cotAnexo.moneda : ''}, adjunto como parte integral de este instrumento.`
-    y = _para(doc, cotTxt, y); y += 6
-  }
-
   // Nota de identificaciones
   y = _checkY(y, 10)
   doc.setFontSize(8); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
@@ -1374,7 +1364,7 @@ export function pdfContratoServicios(data, emisor = {}) {
   // ── Cláusulas base ────────────────────────────────────────────────────────
   let clausulaIdx = 1
   const clausulas = [
-    { titulo: `${_ordinal(clausulaIdx++)} — OBJETO`, texto: `EL PRESTADOR DE SERVICIOS se compromete a proporcionar al CLIENTE los siguientes servicios: ${data.servicios || blank}.${data.proyectoNombre ? ` Proyecto de referencia: "${data.proyectoNombre}".` : ''}` },
+    { titulo: `${_ordinal(clausulaIdx++)} — OBJETO`, texto: `EL PRESTADOR DE SERVICIOS se compromete a proporcionar al CLIENTE los siguientes servicios: ${data.servicios || blank}.${data.proyectoNombre ? ` Proyecto de referencia: "${data.proyectoNombre}".` : ''}${data.cotizacionVinculada ? ` Los servicios se detallan conforme a la ${data.cotizacionVinculada.titulo || ''}${data.cotizacionVinculada.folio ? ' (Folio ' + data.cotizacionVinculada.folio + ')' : ''} por un importe de $${(data.cotizacionVinculada.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${data.cotizacionVinculada.moneda || 'MXN'}, documento que se adjunta como Anexo A del presente contrato.` : ''}` },
     { titulo: `${_ordinal(clausulaIdx++)} — HONORARIOS Y FORMA DE PAGO`, texto: `EL CLIENTE se obliga a pagar al PRESTADOR la cantidad de ${montoStr} por los servicios convenidos. Forma de pago: ${data.formaPago || blank}.${prestBanco ? ` Cuenta del prestador: ${prestBanco}` : ''}${prestClabe ? ` — CLABE/Wallet: ${prestClabe}` : ''}.` },
     { titulo: `${_ordinal(clausulaIdx++)} — VIGENCIA`, texto: `El presente contrato tendrá vigencia a partir del ${data.fechaInicio || blank} y hasta el ${data.fechaFin || blank}, renovable con previo aviso de ${data.diasAviso || '15'} días naturales por escrito.` },
     { titulo: `${_ordinal(clausulaIdx++)} — CONFIDENCIALIDAD`, texto: `Las partes acuerdan mantener estricta confidencialidad sobre toda la información intercambiada con motivo del presente contrato, incluyendo datos técnicos, comerciales, personales y de terceros, aun después de concluida la vigencia del mismo.` },
