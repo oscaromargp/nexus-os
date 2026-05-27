@@ -1975,13 +1975,16 @@ export function pdfPresupuestoPro(data, emisor = {}) {
       return row
     })
 
+    // margin.top = header height on continuation pages (project band 14 + header 32 + 2 gap)
+    const _cotTopMargin = (COT_OPTS.coverDataUrl ? 14 : 0) + 34
     _autoTable(doc, {
       startY: y,
       head,
       body,
+      margin: { left: T.mX, right: T.mX, top: _cotTopMargin, bottom: 18 },
       columnStyles: hasDiscount
-        ? { 0: { cellWidth: 8, halign: 'center' }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 28, halign: 'right' }, 4: { cellWidth: 16, halign: 'center' }, 5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } }
-        : { 0: { cellWidth: 10, halign: 'center' }, 2: { cellWidth: 18, halign: 'center' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } },
+        ? { 0: { cellWidth: 8, halign: 'center' }, 2: { cellWidth: 14, halign: 'center' }, 3: { cellWidth: 26, halign: 'right' }, 4: { cellWidth: 14, halign: 'center' }, 5: { cellWidth: 26, halign: 'right', fontStyle: 'bold' } }
+        : { 0: { cellWidth: 10, halign: 'center' }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 28, halign: 'right' }, 4: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } },
       didDrawPage: (d) => {
         _headerCotizacion(doc, 'Presupuesto', folio, data.titulo, COT_OPTS)
         _footerCotizacion(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
@@ -2017,8 +2020,9 @@ export function pdfPresupuestoPro(data, emisor = {}) {
     // Monto en letras (solo MXN)
     if (mon === 'MXN') {
       doc.setFontSize(7); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
-      doc.text(numToLetras(total), T.mX, y)
-      y += 7
+      const letrasLines = doc.splitTextToSize(numToLetras(total), W - T.mX * 2)
+      doc.text(letrasLines, T.mX, y)
+      y += letrasLines.length * 4 + 3
     }
   }
 
@@ -2039,19 +2043,24 @@ export function pdfPresupuestoPro(data, emisor = {}) {
   // ── Datos de pago — caja destacada ───────────────────────────────────────────
   if (data.metodoPago || data.bancoPago || data.clabePago) {
     y += 3
-    const pagoRows = [data.metodoPago, data.bancoPago, data.clabePago].filter(Boolean).length
-    const pagoH    = pagoRows * 7 + 14
+    const _pagoW   = W - T.mX * 2 - 8
+    const _pagoTxt = (s) => doc.splitTextToSize(s, _pagoW)
+    const metLines  = data.metodoPago ? _pagoTxt(`Método:  ${data.metodoPago}`) : []
+    const banLines  = data.bancoPago  ? _pagoTxt(`Banco:   ${data.bancoPago}`)   : []
+    const claLines  = data.clabePago  ? _pagoTxt(`CLABE / Wallet:  ${data.clabePago}`) : []
+    const allPagoLines = metLines.length + banLines.length + claLines.length
+    const pagoH     = allPagoLines * 5.5 + 16
     doc.setFillColor(0, 240, 255, 0.04); doc.setDrawColor(...T.cyan); doc.setLineWidth(0.4)
     doc.roundedRect(T.mX, y, W - T.mX * 2, pagoH, 2, 2, 'D')
     doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
     doc.text('DATOS DE PAGO', T.mX + 4, y + 7)
-    doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
     let py = y + 14
-    if (data.metodoPago) { doc.text(`Método:  ${data.metodoPago}`, T.mX + 4, py); py += 7 }
-    if (data.bancoPago)  { doc.text(`Banco:   ${data.bancoPago}`,   T.mX + 4, py); py += 7 }
-    if (data.clabePago)  {
+    if (metLines.length) { doc.text(metLines, T.mX + 4, py); py += metLines.length * 5.5 }
+    if (banLines.length) { doc.text(banLines, T.mX + 4, py); py += banLines.length * 5.5 }
+    if (claLines.length) {
       doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
-      doc.text(`CLABE / Wallet:  ${data.clabePago}`, T.mX + 4, py)
+      doc.text(claLines, T.mX + 4, py)
       doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
     }
     y += pagoH + 4
@@ -2154,11 +2163,14 @@ export function pdfNotaVentaPro(data, emisor = {}) {
       return row
     })
 
+    // margin.top = header height on continuation pages (project band 14 + header 32 + 2 gap)
+    const _cotTopMarginNV = (COT_OPTS.coverDataUrl ? 14 : 0) + 34
     _autoTable(doc, {
       startY: y, head, body,
+      margin: { left: T.mX, right: T.mX, top: _cotTopMarginNV, bottom: 18 },
       columnStyles: hasDiscount
-        ? { 0: { cellWidth: 8, halign: 'center' }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 28, halign: 'right' }, 4: { cellWidth: 16, halign: 'center' }, 5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } }
-        : { 0: { cellWidth: 10, halign: 'center' }, 2: { cellWidth: 18, halign: 'center' }, 3: { cellWidth: 30, halign: 'right' }, 4: { cellWidth: 30, halign: 'right', fontStyle: 'bold' } },
+        ? { 0: { cellWidth: 8, halign: 'center' }, 2: { cellWidth: 14, halign: 'center' }, 3: { cellWidth: 26, halign: 'right' }, 4: { cellWidth: 14, halign: 'center' }, 5: { cellWidth: 26, halign: 'right', fontStyle: 'bold' } }
+        : { 0: { cellWidth: 10, halign: 'center' }, 2: { cellWidth: 16, halign: 'center' }, 3: { cellWidth: 28, halign: 'right' }, 4: { cellWidth: 28, halign: 'right', fontStyle: 'bold' } },
       didDrawPage: (d) => {
         _headerCotizacion(doc, 'Nota de Venta', folio, data.titulo, COT_OPTS)
         _footerCotizacion(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
@@ -2192,7 +2204,9 @@ export function pdfNotaVentaPro(data, emisor = {}) {
 
     if (mon === 'MXN') {
       doc.setFontSize(7); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
-      doc.text(numToLetras(total), T.mX, y); y += 7
+      const letrasLinesNV = doc.splitTextToSize(numToLetras(total), W - T.mX * 2)
+      doc.text(letrasLinesNV, T.mX, y)
+      y += letrasLinesNV.length * 4 + 3
     }
   }
 
@@ -2213,19 +2227,24 @@ export function pdfNotaVentaPro(data, emisor = {}) {
   // ── Datos de pago — caja destacada ───────────────────────────────────────────
   if (data.metodoPago || data.bancoPago || data.clabePago) {
     y += 3
-    const pagoRows = [data.metodoPago, data.bancoPago, data.clabePago].filter(Boolean).length
-    const pagoH    = pagoRows * 7 + 14
+    const _pagoWnv   = W - T.mX * 2 - 8
+    const _pagoTxtNV = (s) => doc.splitTextToSize(s, _pagoWnv)
+    const metLinesNV = data.metodoPago ? _pagoTxtNV(`Método:  ${data.metodoPago}`) : []
+    const banLinesNV = data.bancoPago  ? _pagoTxtNV(`Banco:   ${data.bancoPago}`)   : []
+    const claLinesNV = data.clabePago  ? _pagoTxtNV(`CLABE / Wallet:  ${data.clabePago}`) : []
+    const allPagoLinesNV = metLinesNV.length + banLinesNV.length + claLinesNV.length
+    const pagoH     = allPagoLinesNV * 5.5 + 16
     doc.setFillColor(0, 240, 255, 0.04); doc.setDrawColor(...T.cyan); doc.setLineWidth(0.4)
     doc.roundedRect(T.mX, y, W - T.mX * 2, pagoH, 2, 2, 'D')
     doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
     doc.text('DATOS DE PAGO', T.mX + 4, y + 7)
-    doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
     let py = y + 14
-    if (data.metodoPago) { doc.text(`Método:  ${data.metodoPago}`, T.mX + 4, py); py += 7 }
-    if (data.bancoPago)  { doc.text(`Banco:   ${data.bancoPago}`,   T.mX + 4, py); py += 7 }
-    if (data.clabePago)  {
+    if (metLinesNV.length) { doc.text(metLinesNV, T.mX + 4, py); py += metLinesNV.length * 5.5 }
+    if (banLinesNV.length) { doc.text(banLinesNV, T.mX + 4, py); py += banLinesNV.length * 5.5 }
+    if (claLinesNV.length) {
       doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
-      doc.text(`CLABE / Wallet:  ${data.clabePago}`, T.mX + 4, py)
+      doc.text(claLinesNV, T.mX + 4, py)
       doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
     }
     y += pagoH + 4
