@@ -12868,9 +12868,12 @@ window.downloadContactCSVTemplate = function() {
     'website','linkedin','instagram','facebook',
     'especialidad_1','especialidad_2','especialidad_3',
     'color','rating','notas','foto_url',
-    'cuenta_1_tipo','cuenta_1_banco','cuenta_1_clabe','cuenta_1_etiqueta',
-    'cuenta_2_tipo','cuenta_2_banco','cuenta_2_clabe','cuenta_2_etiqueta',
-    'cuenta_3_tipo','cuenta_3_banco','cuenta_3_clabe','cuenta_3_etiqueta'
+    // 5 cuentas por contacto (tipo, banco, clabe, wallet, etiqueta) — agrega más columnas si necesitas
+    'cuenta_1_tipo','cuenta_1_banco','cuenta_1_clabe','cuenta_1_wallet','cuenta_1_etiqueta',
+    'cuenta_2_tipo','cuenta_2_banco','cuenta_2_clabe','cuenta_2_wallet','cuenta_2_etiqueta',
+    'cuenta_3_tipo','cuenta_3_banco','cuenta_3_clabe','cuenta_3_wallet','cuenta_3_etiqueta',
+    'cuenta_4_tipo','cuenta_4_banco','cuenta_4_clabe','cuenta_4_wallet','cuenta_4_etiqueta',
+    'cuenta_5_tipo','cuenta_5_banco','cuenta_5_clabe','cuenta_5_wallet','cuenta_5_etiqueta',
   ]
   const example = [
     'Juan Pérez García','proveedor','Constructora MX','Gerente General','Operaciones',
@@ -12881,9 +12884,11 @@ window.downloadContactCSVTemplate = function() {
     'https://constructoramx.com','https://linkedin.com/in/juanperez','@juanperez','juanperez',
     'Albañilería','Plomería','Electricidad',
     '#f97316','4','Proveedor de confianza desde 2018','https://example.com/foto.jpg',
-    'bank','BBVA','012345678901234567','Cuenta nómina',
-    'bank','Banorte','072345678901234567','Cuenta empresarial',
-    'crypto','BTC','bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh','Bitcoin wallet'
+    'bank','BBVA','012345678901234567','','Cuenta nómina',
+    'bank','Banorte','072345678901234567','','Cuenta empresarial',
+    'bank','HSBC','021180000000000001','','Cuenta ahorro',
+    'crypto','ETH','','0x742d35Cc6634C0532925a3b844Bc454e4438f44e','ETH wallet',
+    'crypto','BTC','','bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh','BTC wallet',
   ]
   const csv = [headers.join(','), example.map(v => `"${(v||'').replace(/"/g,'""')}"`).join(',')].join('\n')
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
@@ -12891,7 +12896,7 @@ window.downloadContactCSVTemplate = function() {
   a.href = URL.createObjectURL(blob)
   a.download = 'nexus-os-contactos-plantilla.csv'
   a.click()
-  showToast('📥 Plantilla CSV descargada — ábrela en Excel o Google Sheets')
+  showToast('📥 Plantilla CSV descargada — 5 cuentas/contacto · ábrela en Excel o Google Sheets')
 }
 
 // ── Fuzzy name similarity (for duplicate detection) ────────────────────────
@@ -12974,11 +12979,24 @@ window.importContactsCSV = async function(input) {
     // Specialties
     const specialties = [row[h('especialidad_1')], row[h('especialidad_2')], row[h('especialidad_3')]].map(s=>(s||'').trim()).filter(Boolean)
 
-    // Accounts (up to 3)
+    // Accounts — detecta dinámicamente cuenta_1..N desde encabezados (soporta 5+ cuentas)
     const accts = []
-    for (const idx of ['1','2','3']) {
-      const aType = (row[h(`cuenta_${idx}_tipo`)] || '').trim().toLowerCase()
-      if (aType) accts.push({ type: aType, bank: row[h(`cuenta_${idx}_banco`)]||'', clabe: row[h(`cuenta_${idx}_clabe`)]||'', label: row[h(`cuenta_${idx}_etiqueta`)]||'' })
+    const _maxAcct = headers.reduce((mx, hdr) => {
+      const m = hdr.match(/^cuenta_(\d+)_tipo$/)
+      return m ? Math.max(mx, parseInt(m[1])) : mx
+    }, 5) // mínimo 5 aunque no estén todos en el encabezado
+    for (let ai = 1; ai <= _maxAcct; ai++) {
+      const aType = (row[h(`cuenta_${ai}_tipo`)] || '').trim().toLowerCase()
+      if (!aType) continue
+      const acctObj = {
+        type:   aType,
+        bank:   row[h(`cuenta_${ai}_banco`)]    || '',
+        clabe:  row[h(`cuenta_${ai}_clabe`)]    || '',
+        label:  row[h(`cuenta_${ai}_etiqueta`)] || '',
+      }
+      const aw = row[h(`cuenta_${ai}_wallet`)] || ''
+      if (aw) acctObj.wallet = aw
+      accts.push(acctObj)
     }
 
     // Social links
@@ -13377,18 +13395,7 @@ const CONTACT_CSV_HEADERS = [
   'nombre','tipo','empresa','telefono','email','banco','clabe','cuenta','red_cripto','wallet','color','notas'
 ]
 
-window.downloadContactTemplate = () => {
-  const header = CONTACT_CSV_HEADERS.join(',')
-  const example = [
-    'Juan Pérez','persona','ACME Corp','5512345678','juan@correo.com','BBVA','021180000000000000','1234567890','','','#00f0ff','Proveedor frecuente'
-  ].map(v => `"${v}"`).join(',')
-  const csv = `${header}\n${example}\n`
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url  = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = 'nexus_contactos_plantilla.csv'; a.click()
-  URL.revokeObjectURL(url)
-  showToast('📄 Plantilla descargada')
-}
+// downloadContactTemplate eliminado — usar downloadContactCSVTemplate (versión completa con 5 cuentas)
 
 window.exportContactsCSV = () => {
   const contacts = getContacts()
@@ -13584,45 +13591,7 @@ window.importBankCSV = async () => {
   showToast(msg)
 }
 
-window.importContactsCSV = async (input) => {
-  const file = input.files?.[0]; if (!file) return
-  const text = await file.text()
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) { showToast('⚠️ CSV vacío o sin datos'); return }
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g,''))
-  const idxOf = key => headers.indexOf(key)
-  const parseCell = cell => cell?.trim().replace(/^"|"$/g,'').replace(/""/g,'"') || ''
-
-  let imported = 0, errors = 0
-  for (let i = 1; i < lines.length; i++) {
-    // Respect quoted commas
-    const cells = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g)?.map(parseCell) || []
-    const nombre = cells[idxOf('nombre')] || cells[0] || ''
-    if (!nombre) { errors++; continue }
-    const cType  = cells[idxOf('tipo')] || 'persona'
-    const meta = {
-      name:     nombre,
-      cType:    ['persona','bank','crypto'].includes(cType) ? cType : 'persona',
-      company:  cells[idxOf('empresa')] || '',
-      phone:    cells[idxOf('telefono')] || '',
-      email:    cells[idxOf('email')] || '',
-      bank_name:cells[idxOf('banco')] || '',
-      clabe:    cells[idxOf('clabe')] || '',
-      account:  cells[idxOf('cuenta')] || '',
-      network:  cells[idxOf('red_cripto')] || '',
-      color:    cells[idxOf('color')] || '#00f0ff',
-      notes:    cells[idxOf('notas')] || '',
-    }
-    const wallet = cells[idxOf('wallet')] || ''
-    if (wallet) meta.address = { wallet }
-    try {
-      await insertDirectNode('contact', nombre, meta)
-      imported++
-    } catch { errors++ }
-  }
-  input.value = ''
-  showToast(`✅ ${imported} contactos importados${errors?` (${errors} errores)`:''}`)
-}
+// importContactsCSV (versión simple) eliminada — usar importContactsCSV v2 arriba (línea ~12930)
 
 // ═══════════════════════════════════════════════════════════════
 //  SIDEBAR — TIPO DE CAMBIO EN VIVO
@@ -21644,15 +21613,19 @@ window.mvExportPDF = () => window.mvExportEstadoCuenta()
 
 // ── Plantilla CSV para importación masiva ─────────────────────────────────────
 window.mvDownloadTemplate = () => {
-  const hdr  = 'fecha,tipo,ordenante,beneficiario,banco,clabe,cantidad,moneda,tc,comision,notas,estado'
+  // Columnas: fecha tipo ordenante beneficiario banco clabe cantidad moneda tc comision notas estado categoria proyecto
+  const hdr  = 'fecha,tipo,ordenante,beneficiario,banco,clabe,cantidad,moneda,tc,comision,notas,estado,categoria,proyecto'
   const demo = [
-    '2026-05-25,entrada,JUAN GARCIA,,BBVA,012345678901234567,5000,USDT,17.29,0.97,Bancalización mayo,hecho',
-    '2026-05-25,salida,,MARIA LOPEZ,HSBC,021000400000000001,12000,MXN,1,,Retiro operaciones,hecho',
-    '2026-05-20,entrada,PEDRO SÁNCHEZ,,STP,072180001107853210,1500,USD,17.10,,Ingreso USD,pendiente',
+    '2026-05-25,entrada,JUAN GARCIA,,BBVA,012345678901234567,5000,USDT,17.29,0.97,Bancalización mayo,hecho,Operaciones,',
+    '2026-05-25,salida,,MARIA LOPEZ,HSBC,021000400000000001,12000,MXN,1,,Retiro nómina,hecho,Nómina,',
+    '2026-05-20,entrada,PEDRO SÁNCHEZ,,STP,072180001107853210,1500,USD,17.10,,Ingreso USD,pendiente,Honorarios,',
+    '2026-05-18,salida,,CFE,,,,MXN,1,,Luz oficina,hecho,Servicios,casa-tulum',
+    '2026-05-15,salida,,ARRENDADOR,,,,MXN,1,,Renta mayo,hecho,Renta,',
   ].join('\n')
   const blob = new Blob(['﻿' + hdr + '\n' + demo], { type:'text/csv;charset=utf-8;' })
   const a    = document.createElement('a'); a.href = URL.createObjectURL(blob)
   a.download = 'nexus-movimientos-plantilla.csv'; a.click()
+  showToast('📥 Plantilla de movimientos descargada')
 }
 
 // ── Importar CSV masivo de movimientos ───────────────────────────────────────
@@ -21672,6 +21645,7 @@ window.mvImportCSV = async (input) => {
   const iF = idx('fecha'), iT = idx('tipo'), iOr = idx('ordenante'), iBe = idx('beneficiario')
   const iBa = idx('banco'), iCl = idx('clabe'), iCa = idx('cantidad'), iMo = idx('moneda')
   const iTc = idx('tc'), iCom = idx('comision'), iNo = idx('notas'), iEs = idx('estado')
+  const iCat = idx('categoria'), iProy = idx('proyecto')
 
   if (iF < 0 || iT < 0 || iCa < 0) {
     showToast('⚠ El CSV debe tener columnas: fecha, tipo, cantidad'); return
@@ -21709,6 +21683,8 @@ window.mvImportCSV = async (input) => {
       cantidad: cant, moneda, tc, comision: com,
       monto_mxn: Math.round(cant * tc * 100) / 100,
       notas: v[iNo]||null, estado,
+      categoria: iCat >= 0 && v[iCat] ? v[iCat].trim() : null,
+      proyecto:  iProy >= 0 && v[iProy] ? v[iProy].trim() : null,
     })
   }
 
