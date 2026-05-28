@@ -21716,21 +21716,19 @@ window.mvExportCSV = () => {
 }
 
 // ── Estado de Cuenta — PDF profesional via pdf-reports engine ────────────────
-window.mvExportEstadoCuenta = () => {
+window.mvExportEstadoCuenta = async () => {
   const list = _mvWithBalance(_mvFiltered())
   if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
   const orq  = _mvOrqs.find(o => o.id === _mvActiveOrqId)
   const kpis = _mvKpis(list)
   showToast('⏳ Generando PDF...')
-  setTimeout(() => {
-    try {
-      pdfEstadoCuenta(orq, list, kpis, _mvTcCache, _mvFilters, getEmisor())
-      showToast('✅ PDF descargado')
-    } catch (e) {
-      console.error('pdfEstadoCuenta:', e)
-      showToast('❌ Error al generar PDF: ' + e.message)
-    }
-  }, 50)
+  try {
+    await pdfEstadoCuenta(orq, list, kpis, _mvTcCache, _mvFilters, getEmisor())
+    showToast('✅ PDF descargado')
+  } catch (e) {
+    console.error('pdfEstadoCuenta:', e)
+    showToast('❌ Error al generar PDF: ' + e.message)
+  }
 }
 
 // ── Export PDF básico (alias) ─────────────────────────────────────────────────

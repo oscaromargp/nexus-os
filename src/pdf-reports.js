@@ -20,6 +20,7 @@
 
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import QRCode from 'qrcode'
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // NEXUS_PDF_THEME — fuente única de verdad para todos los documentos
@@ -419,97 +420,151 @@ function _signBlock(doc, x, y, w, name, role) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // 1. ESTADO DE CUENTA
 // ═══════════════════════════════════════════════════════════════════════════════
-export function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {}, emisor = {}) {
+
+/**
+ * Footer con QR code en la esquina inferior derecha (solo para Estado de Cuenta)
+ */
+function _footerWithQR(doc, pageNum, totalPages, emisor, qrDataUrl) {
+  const W      = doc.internal.pageSize.getWidth()
+  const H      = doc.internal.pageSize.getHeight()
+  const qrSize = 14
+  const qrX    = W - T.mX - qrSize
+  const qrY    = H - T.mX - qrSize - 2
+  const lineX2 = qrDataUrl ? qrX - 3 : W - T.mX
+
+  if (qrDataUrl) {
+    try { doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize) } catch { /* skip */ }
+  }
+
+  doc.setDrawColor(...T.textDim)
+  doc.setLineWidth(0.25)
+  doc.line(T.mX, H - 13, lineX2, H - 13)
+  doc.setFontSize(7)
+  doc.setFont(T.font, 'normal')
+  doc.setTextColor(...T.textMid)
+  const left = emisor?.nombre
+    ? `${T.brand} · ${T.url} · ${emisor.nombre}${emisor.rfc ? ' · RFC: ' + emisor.rfc : ''}`
+    : `${T.brand} · ${T.url}`
+  doc.text(doc.splitTextToSize(left, (W / 2) - T.mX)[0], T.mX, H - 7)
+  const ts = new Date().toLocaleDateString('es-MX', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  }) + ' · Pag. ' + pageNum + ' de ' + totalPages
+  doc.text(ts, lineX2, H - 7, { align: 'right' })
+}
+
+export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {}, emisor = {}) {
   if (!list?.length) return
 
-  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const W     = doc.internal.pageSize.getWidth()
-  const now   = new Date()
-  const folio = _folio()
-  const saldo = list[0]?._balance ?? 0
+  // Pre-generar QR
+  let qrDataUrl = ''
+  try {
+    qrDataUrl = await QRCode.toDataURL('https://' + T.url, {
+      width: 96, margin: 1,
+      color: { dark: '#0d1627', light: '#ffffff' },
+    })
+  } catch { /* sin QR */ }
+
+  const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W      = doc.internal.pageSize.getWidth()
+  const H      = doc.internal.pageSize.getHeight()
+  const now    = new Date()
+  const folio  = _folio()
+  const saldo  = list[0]?._balance ?? 0
   const tcUsdt = tcCache['USDT']?.price || 0
 
+  const _pageFooter = (pageNum, total) =>
+    _footerWithQR(doc, pageNum, total, emisor, qrDataUrl)
+
+  // ── Header ───────────────────────────────────────────────────────────────────
   let y = _headerReport(doc,
     'Estado de Cuenta',
     `${orq?.nombre || 'Orquestador'} · ${filters.dateFrom || 'Inicio'} → ${filters.dateTo || 'Hoy'}`,
     folio)
 
-  // ── Saldo principal ──
-  doc.setFillColor(...T.surface)
-  doc.roundedRect(T.mX, y, W - T.mX * 2, 30, 3, 3, 'F')
-  doc.setDrawColor(...T.cyan)
-  doc.setLineWidth(0.5)
-  doc.line(T.mX, y, T.mX + 22, y)
-  doc.setTextColor(...T.textMid)
-  doc.setFontSize(7.5)
-  doc.setFont(T.font, 'normal')
-  doc.text('SALDO ACTUAL AL ' + now.toLocaleDateString('es-MX').toUpperCase(), T.mX + 5, y + 8)
+  // ── Saldo principal ──────────────────────────────────────────────────────────
   const saldoColor = saldo >= 0 ? T.green : T.red
+  doc.setFillColor(...T.surface)
+  doc.roundedRect(T.mX, y, W - T.mX * 2, 32, 3, 3, 'F')
+  // Borde izquierdo de color según positivo/negativo
+  doc.setFillColor(...saldoColor)
+  doc.rect(T.mX, y, 3, 32, 'F')
+  doc.setTextColor(...T.textMid)
+  doc.setFontSize(7)
+  doc.setFont(T.font, 'normal')
+  doc.text(
+    'SALDO NETO AL ' + now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase(),
+    T.mX + 8, y + 8,
+  )
   doc.setTextColor(...saldoColor)
   doc.setFontSize(22)
   doc.setFont(T.font, 'bold')
-  doc.text(fmt$(saldo), T.mX + 5, y + 22)
-  // Equivalente USDT
+  doc.text(fmt$(saldo) + ' MXN', T.mX + 8, y + 22)
+  // Equivalente USDT (derecha)
   if (tcUsdt > 1) {
-    const eqUsdt = (saldo / tcUsdt).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const eqUsdt = (Math.abs(saldo) / tcUsdt).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     doc.setFontSize(9)
     doc.setFont(T.font, 'normal')
     doc.setTextColor(...T.yellow)
-    doc.text(`≈ ${eqUsdt} USDT`, W - T.mX - 5, y + 14, { align: 'right' })
+    doc.text('~' + eqUsdt + ' USDT', W - T.mX - 5, y + 15, { align: 'right' })
     doc.setFontSize(7)
     doc.setTextColor(...T.textMid)
-    doc.text(`T/C: $${tcUsdt.toFixed(2)}`, W - T.mX - 5, y + 21, { align: 'right' })
+    doc.text('T/C USDT: $' + tcUsdt.toFixed(2), W - T.mX - 5, y + 22, { align: 'right' })
   }
-  y += 35
-
-  // ── Saldo en letras ──
-  doc.setFontSize(7.5)
+  // Saldo en letras (dentro del mismo panel)
+  doc.setFontSize(7)
   doc.setFont(T.font, 'italic')
   doc.setTextColor(...T.textMid)
-  const letLines = doc.splitTextToSize(numToLetras(saldo), W - T.mX * 2)
-  doc.text(letLines, T.mX, y)
-  y += letLines.length * 4 + 6
+  const letLines = doc.splitTextToSize(numToLetras(saldo), W - T.mX * 2 - 16)
+  doc.text(letLines[0], T.mX + 8, y + 29)
+  y += 38
 
-  // ── KPIs ──
-  const kW = (W - T.mX * 2 - 9) / 4
-  _kpi(doc, T.mX,            y, kW, 22, 'Entradas',    fmt$(kpis.entradas), T.green)
-  _kpi(doc, T.mX + kW + 3,   y, kW, 22, 'Salidas',     fmt$(kpis.salidas),  T.red)
-  _kpi(doc, T.mX + (kW+3)*2, y, kW, 22, 'Neto',        fmt$(kpis.net),      kpis.net >= 0 ? T.green : T.red)
-  _kpi(doc, T.mX + (kW+3)*3, y, kW, 22, 'Movimientos', String(list.length), T.cyan)
+  // ── KPIs — 5 cajas ───────────────────────────────────────────────────────────
+  const uniqCats = new Set(list.map(m => m.categoria).filter(Boolean)).size
+  const kGap = 3
+  const kW   = (W - T.mX * 2 - kGap * 4) / 5
+  _kpi(doc, T.mX,                        y, kW, 22, 'Entradas',     fmt$(kpis.entradas),  T.green)
+  _kpi(doc, T.mX + (kW + kGap),          y, kW, 22, 'Salidas',      fmt$(kpis.salidas),   T.red)
+  _kpi(doc, T.mX + (kW + kGap) * 2,     y, kW, 22, 'Neto periodo', fmt$(kpis.net),       kpis.net >= 0 ? T.green : T.red)
+  _kpi(doc, T.mX + (kW + kGap) * 3,     y, kW, 22, 'Movimientos',  String(list.length),  T.cyan)
+  _kpi(doc, T.mX + (kW + kGap) * 4,     y, kW, 22, 'Categorias',   String(uniqCats || 0), T.violet)
   y += 28
 
-  // ── Tabla ──
+  // ── Tabla de movimientos ─────────────────────────────────────────────────────
   _autoTable(doc, {
     startY: y,
-    head: [['FECHA', 'CONCEPTO / BENEFICIARIO', 'CRIPTO', 'CARGO (−)', 'ABONO (+)', 'SALDO']],
+    head: [['FECHA', 'CONCEPTO / BENEFICIARIO', 'CATEGORIA', 'CRIPTO', 'CARGO (-)', 'ABONO (+)', 'SALDO']],
     body: list.map(m => {
-      const net = m.tipo === 'entrada' && m.comision != null
-        ? Math.round((m.monto_mxn ?? 0) * m.comision * 100) / 100
+      const net     = m.tipo === 'entrada' && m.comision != null
+        ? Math.round((m.monto_mxn ?? 0) * (1 - (m.comision || 0)) * 100) / 100
         : (m.monto_mxn ?? 0)
       const isCan    = m.estado === 'cancelado'
       const isCrypto = m.moneda !== 'MXN' && m.moneda !== 'USD'
       const concepto = m.tipo === 'entrada'
-        ? (m.ordenante || m.notas || 'Depósito')
+        ? (m.ordenante    || m.notas || 'Deposito')
         : (m.beneficiario || m.notas || 'Retiro')
       return [
         m.fecha,
         concepto + (m.banco ? '\n' + m.banco : ''),
-        isCrypto && !isCan ? m.cantidad.toLocaleString('es-MX', { maximumFractionDigits: 6 }) + ' ' + m.moneda : '',
-        !isCan && m.tipo === 'salida'  ? fmt$(net)       : '',
-        !isCan && m.tipo === 'entrada' ? fmt$(net)       : '',
+        m.categoria || '',
+        isCrypto && !isCan
+          ? (m.cantidad || 0).toLocaleString('es-MX', { maximumFractionDigits: 6 }) + ' ' + m.moneda
+          : '',
+        !isCan && m.tipo === 'salida'  ? fmt$(net) : '',
+        !isCan && m.tipo === 'entrada' ? fmt$(net) : '',
         isCan ? 'CANCELADO' : fmt$(m._balance),
       ]
     }),
     columnStyles: {
-      0: { cellWidth: 20, halign: 'center', textColor: T.textMid },
-      1: { cellWidth: 60 },
-      2: { cellWidth: 22, halign: 'right', textColor: T.orange },
-      3: { cellWidth: 26, halign: 'right', textColor: T.red },
-      4: { cellWidth: 26, halign: 'right', textColor: T.green },
-      5: { cellWidth: 28, halign: 'right', fontStyle: 'bold' },
+      0: { cellWidth: 20, halign: 'center', textColor: T.textMid,  fontSize: 7 },
+      1: { cellWidth: 44 },
+      2: { cellWidth: 21, halign: 'center', textColor: T.violet,   fontSize: 7 },
+      3: { cellWidth: 18, halign: 'right',  textColor: T.orange,   fontSize: 7 },
+      4: { cellWidth: 24, halign: 'right',  textColor: T.red },
+      5: { cellWidth: 24, halign: 'right',  textColor: T.green },
+      6: { cellWidth: 27, halign: 'right',  fontStyle: 'bold' },
     },
     didDrawCell: (data) => {
-      if (data.section === 'body' && data.column.index === 5) {
+      if (data.section === 'body' && data.column.index === 6) {
         const bal = list[data.row.index]?._balance ?? 0
         data.cell.styles.textColor = bal >= 0 ? T.greenD : T.redD
       }
@@ -517,11 +572,74 @@ export function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {}, emi
     didDrawPage: (data) => {
       _headerReport(doc, 'Estado de Cuenta',
         `${orq?.nombre || ''} · ${filters.dateFrom || ''} → ${filters.dateTo || 'Hoy'}`, folio)
-      _footer(doc, data.pageNumber, doc.internal.getNumberOfPages(), emisor)
+      _pageFooter(data.pageNumber, doc.internal.getNumberOfPages())
     },
   })
 
-  _footer(doc, 1, doc.internal.getNumberOfPages(), emisor)
+  // ── Top 5 contactos por volumen ──────────────────────────────────────────────
+  const afterY = (doc.lastAutoTable?.finalY ?? y) + 8
+  let topY = afterY
+
+  // Nueva página si no cabe (~52mm necesarios)
+  if (topY + 52 > H - 18) {
+    doc.addPage()
+    _headerReport(doc, 'Estado de Cuenta',
+      `${orq?.nombre || ''} · ${filters.dateFrom || ''} → ${filters.dateTo || 'Hoy'}`, folio)
+    topY = 42
+  }
+
+  const contactMap = {}
+  list.forEach(m => {
+    const nombre = m.tipo === 'entrada' ? (m.ordenante || '—') : (m.beneficiario || '—')
+    if (!contactMap[nombre]) contactMap[nombre] = { ent: 0, sal: 0, count: 0 }
+    if (m.tipo === 'entrada') contactMap[nombre].ent += (m.monto_mxn ?? 0)
+    else                       contactMap[nombre].sal += (m.monto_mxn ?? 0)
+    contactMap[nombre].count++
+  })
+  const top5 = Object.entries(contactMap)
+    .sort((a, b) => (b[1].ent + b[1].sal) - (a[1].ent + a[1].sal))
+    .slice(0, 5)
+
+  if (top5.length) {
+    topY = _section(doc, 'Top 5 Contactos por Volumen', topY)
+    const maxVol = (top5[0][1].ent + top5[0][1].sal) || 1
+    const barW   = W - T.mX * 2 - 60
+
+    top5.forEach(([nombre, data], i) => {
+      const rowY = topY + i * 13
+      // Posición
+      doc.setFontSize(7.5)
+      doc.setFont(T.font, 'bold')
+      doc.setTextColor(...T.textInk)
+      doc.text(String(i + 1) + '.', T.mX, rowY + 5)
+      // Nombre
+      const nm = doc.splitTextToSize(nombre, 52)[0]
+      doc.text(nm, T.mX + 6, rowY + 5)
+      // Conteo
+      doc.setFontSize(7)
+      doc.setFont(T.font, 'normal')
+      doc.setTextColor(...T.textMid)
+      doc.text(data.count + ' mov.', T.mX + 61, rowY + 5)
+      // Entradas
+      doc.setTextColor(...T.greenD)
+      doc.text('+ ' + fmt$(data.ent), T.mX + 80, rowY + 5)
+      // Salidas
+      doc.setTextColor(...T.redD)
+      doc.text('- ' + fmt$(data.sal), T.mX + 117, rowY + 5)
+      // Barra de progreso relativa al máximo
+      const vol  = data.ent + data.sal
+      const pct  = vol / maxVol
+      doc.setFillColor(220, 228, 240)
+      doc.roundedRect(T.mX + 6, rowY + 7, barW, 3, 1, 1, 'F')
+      if (pct > 0) {
+        doc.setFillColor(...T.cyan)
+        doc.roundedRect(T.mX + 6, rowY + 7, barW * pct, 3, 1, 1, 'F')
+      }
+    })
+  }
+
+  // ── Footer última página ─────────────────────────────────────────────────────
+  _pageFooter(doc.internal.getNumberOfPages(), doc.internal.getNumberOfPages())
   doc.save(`estado-cuenta-${(orq?.nombre || 'orq').replace(/\s+/g, '-').toLowerCase()}-${now.toISOString().slice(0, 10)}.pdf`)
 }
 
