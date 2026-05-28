@@ -2015,68 +2015,89 @@ export function pdfPresupuestoPro(data, emisor = {}) {
     if (hasDescLine) _totRow('Descuento:', -descTotal, false, T.red)
     if (data.conIva)  _totRow('IVA (16%):', iva)
     _totRow(`TOTAL ${mon}:`, total, true, T.cyan)
+
+    // Equivalente en MXN cuando la moneda es extranjera
+    const tc = parseFloat(data.tipoCambio || 0)
+    if (mon !== 'MXN' && tc > 0) {
+      const mxnTotal = total * tc
+      doc.setFontSize(7); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
+      doc.text(`≈ MXN ${mxnTotal.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (TC ${tc})`,
+        totX + 60, ty, { align: 'right' })
+      ty += 7
+    }
     y = Math.max(y + totH + 6, ty + 4)
 
-    // Monto en letras (solo MXN)
-    if (mon === 'MXN') {
+    // Monto en letras (MXN nativo o equivalente)
+    const mxnForLetras = (mon === 'MXN') ? total : (tc > 0 ? total * tc : 0)
+    if (mxnForLetras > 0) {
       doc.setFontSize(7); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
-      const letrasLines = doc.splitTextToSize(numToLetras(total), W - T.mX * 2)
+      const letrasLines = doc.splitTextToSize(numToLetras(mxnForLetras), W - T.mX * 2)
       doc.text(letrasLines, T.mX, y)
       y += letrasLines.length * 4 + 3
     }
   }
 
+  const _H = doc.internal.pageSize.getHeight()
+  const _safePageBreak = (neededH) => {
+    if (y + neededH > _H - 20) { doc.addPage(); _headerCotizacion(doc, 'Presupuesto', folio, data.titulo, COT_OPTS); y = 38 }
+  }
+
   // ── Observaciones / Plan de trabajo ─────────────────────────────────────────
   if (data.notas) {
-    y += 3
-    const obsLines = doc.splitTextToSize(data.notas, W - T.mX * 2 - 8)
-    const obsH = obsLines.length * 4.5 + 12
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal')
+    const obsLines = doc.splitTextToSize(data.notas, W - T.mX * 2 - 10)
+    const obsH     = obsLines.length * 4.8 + 14
+    _safePageBreak(obsH + 8)
+    y += 4
     doc.setFillColor(248, 250, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
     doc.roundedRect(T.mX, y, W - T.mX * 2, obsH, 2, 2, 'FD')
     doc.setFontSize(6.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
-    doc.text('OBSERVACIONES / PLAN DE TRABAJO', T.mX + 4, y + 6)
+    doc.text('OBSERVACIONES / PLAN DE TRABAJO', T.mX + 5, y + 7)
     doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    doc.text(obsLines, T.mX + 4, y + 11)
-    y += obsH + 4
+    doc.text(obsLines, T.mX + 5, y + 13)
+    y += obsH + 5
   }
 
   // ── Datos de pago — caja destacada ───────────────────────────────────────────
   if (data.metodoPago || data.bancoPago || data.clabePago) {
-    y += 3
-    const _pagoW   = W - T.mX * 2 - 8
-    const _pagoTxt = (s) => doc.splitTextToSize(s, _pagoW)
-    const metLines  = data.metodoPago ? _pagoTxt(`Método:  ${data.metodoPago}`) : []
-    const banLines  = data.bancoPago  ? _pagoTxt(`Banco:   ${data.bancoPago}`)   : []
-    const claLines  = data.clabePago  ? _pagoTxt(`CLABE / Wallet:  ${data.clabePago}`) : []
-    const allPagoLines = metLines.length + banLines.length + claLines.length
-    const pagoH     = allPagoLines * 5.5 + 16
-    doc.setFillColor(0, 240, 255, 0.04); doc.setDrawColor(...T.cyan); doc.setLineWidth(0.4)
+    const _pagoW    = W - T.mX * 2 - 10
+    const _pagoTxt  = (s) => doc.splitTextToSize(s, _pagoW)
+    const metLines  = data.metodoPago ? _pagoTxt(`Método de Pago:  ${data.metodoPago}`) : []
+    const banLines  = data.bancoPago  ? _pagoTxt(`Banco / Institución:  ${data.bancoPago}`) : []
+    const claLines  = data.clabePago  ? _pagoTxt(`CLABE / Cuenta / Wallet:  ${data.clabePago}`) : []
+    const pagoH     = (metLines.length + banLines.length + claLines.length) * 5.5 + 18
+    _safePageBreak(pagoH + 8)
+    y += 4
+    // Fondo sutil cyan
+    doc.setFillColor(0, 240, 255); doc.setGState(doc.GState({ opacity: 0.04 }))
+    doc.roundedRect(T.mX, y, W - T.mX * 2, pagoH, 2, 2, 'F')
+    doc.setGState(doc.GState({ opacity: 1 }))
+    doc.setDrawColor(...T.cyan); doc.setLineWidth(0.4)
     doc.roundedRect(T.mX, y, W - T.mX * 2, pagoH, 2, 2, 'D')
+
     doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
-    doc.text('DATOS DE PAGO', T.mX + 4, y + 7)
-    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    let py = y + 14
-    if (metLines.length) { doc.text(metLines, T.mX + 4, py); py += metLines.length * 5.5 }
-    if (banLines.length) { doc.text(banLines, T.mX + 4, py); py += banLines.length * 5.5 }
+    doc.text('💳  DATOS DE PAGO', T.mX + 5, y + 8)
+    let py = y + 15
+    doc.setFontSize(8); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    if (metLines.length) { doc.text(metLines, T.mX + 5, py); py += metLines.length * 5.5 }
+    if (banLines.length) { doc.text(banLines, T.mX + 5, py); py += banLines.length * 5.5 }
     if (claLines.length) {
-      doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
-      doc.text(claLines, T.mX + 4, py)
-      doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+      doc.setFont(T.font, 'bold'); doc.setFontSize(8.5); doc.setTextColor(...T.textInk)
+      doc.text(claLines, T.mX + 5, py)
     }
-    y += pagoH + 4
+    y += pagoH + 5
   }
 
   // ── Líneas de firma ──────────────────────────────────────────────────────────
-  const H = doc.internal.pageSize.getHeight()
-  y = Math.max(y + 8, H - 40)
-  if (y < H - 24) {
+  const sigY = Math.max(y + 8, _H - 38)
+  if (sigY < _H - 20) {
     const midX = W / 2
     doc.setDrawColor(...T.textDim); doc.setLineWidth(0.3)
-    doc.line(T.mX,     y, T.mX + 58,     y)
-    doc.line(midX + 4, y, midX + 62, y)
+    doc.line(T.mX,     sigY, T.mX + 62,     sigY)
+    doc.line(midX + 4, sigY, midX + 66, sigY)
     doc.setFontSize(7); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    doc.text(emisorNombre || 'Emisor / Prestador', T.mX, y + 5)
-    doc.text('Cliente / Aceptante', midX + 4, y + 5)
+    doc.text(emisorNombre || 'Emisor / Prestador de Servicios', T.mX, sigY + 5)
+    doc.text('Cliente / Receptor / Aceptante', midX + 4, sigY + 5)
   }
 
   _footerCotizacion(doc, 1, doc.internal.getNumberOfPages(), emisor)
@@ -2200,54 +2221,74 @@ export function pdfNotaVentaPro(data, emisor = {}) {
     if (hasDescLine) _totRow2('Descuento:', -descTotal, false, T.red)
     if (data.conIva)  _totRow2('IVA (16%):', iva)
     _totRow2(`TOTAL ${mon}:`, total, true, T.cyan)
+
+    // Equivalente MXN para monedas extranjeras
+    const tcNV = parseFloat(data.tipoCambio || 0)
+    if (mon !== 'MXN' && tcNV > 0) {
+      const mxnTotalNV = total * tcNV
+      doc.setFontSize(7); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
+      doc.text(`≈ MXN ${mxnTotalNV.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (TC ${tcNV})`,
+        totX + 60, ty, { align: 'right' })
+      ty += 7
+    }
     y = Math.max(y + totH + 6, ty + 4)
 
-    if (mon === 'MXN') {
+    const mxnForLetrasNV = (mon === 'MXN') ? total : (tcNV > 0 ? total * tcNV : 0)
+    if (mxnForLetrasNV > 0) {
       doc.setFontSize(7); doc.setFont(T.font, 'italic'); doc.setTextColor(...T.textMid)
-      const letrasLinesNV = doc.splitTextToSize(numToLetras(total), W - T.mX * 2)
+      const letrasLinesNV = doc.splitTextToSize(numToLetras(mxnForLetrasNV), W - T.mX * 2)
       doc.text(letrasLinesNV, T.mX, y)
       y += letrasLinesNV.length * 4 + 3
     }
   }
 
+  const _HNV = doc.internal.pageSize.getHeight()
+  const _safeBreakNV = (neededH) => {
+    if (y + neededH > _HNV - 20) { doc.addPage(); _headerCotizacion(doc, 'Nota de Venta', folio, data.titulo, COT_OPTS); y = 38 }
+  }
+
   // ── Observaciones / Plan de trabajo ─────────────────────────────────────────
   if (data.notas) {
-    y += 3
-    const obsLines = doc.splitTextToSize(data.notas, W - T.mX * 2 - 8)
-    const obsH = obsLines.length * 4.5 + 12
+    doc.setFontSize(7.5); doc.setFont(T.font, 'normal')
+    const obsLines = doc.splitTextToSize(data.notas, W - T.mX * 2 - 10)
+    const obsH     = obsLines.length * 4.8 + 14
+    _safeBreakNV(obsH + 8)
+    y += 4
     doc.setFillColor(248, 250, 252); doc.setDrawColor(...T.textDim); doc.setLineWidth(0.2)
     doc.roundedRect(T.mX, y, W - T.mX * 2, obsH, 2, 2, 'FD')
     doc.setFontSize(6.5); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
-    doc.text('OBSERVACIONES / PLAN DE TRABAJO', T.mX + 4, y + 6)
+    doc.text('OBSERVACIONES / PLAN DE TRABAJO', T.mX + 5, y + 7)
     doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    doc.text(obsLines, T.mX + 4, y + 11)
-    y += obsH + 4
+    doc.text(obsLines, T.mX + 5, y + 13)
+    y += obsH + 5
   }
 
   // ── Datos de pago — caja destacada ───────────────────────────────────────────
   if (data.metodoPago || data.bancoPago || data.clabePago) {
-    y += 3
-    const _pagoWnv   = W - T.mX * 2 - 8
-    const _pagoTxtNV = (s) => doc.splitTextToSize(s, _pagoWnv)
-    const metLinesNV = data.metodoPago ? _pagoTxtNV(`Método:  ${data.metodoPago}`) : []
-    const banLinesNV = data.bancoPago  ? _pagoTxtNV(`Banco:   ${data.bancoPago}`)   : []
-    const claLinesNV = data.clabePago  ? _pagoTxtNV(`CLABE / Wallet:  ${data.clabePago}`) : []
-    const allPagoLinesNV = metLinesNV.length + banLinesNV.length + claLinesNV.length
-    const pagoH     = allPagoLinesNV * 5.5 + 16
-    doc.setFillColor(0, 240, 255, 0.04); doc.setDrawColor(...T.cyan); doc.setLineWidth(0.4)
+    const _pagoWnv  = W - T.mX * 2 - 10
+    const _pagoTxtN = (s) => doc.splitTextToSize(s, _pagoWnv)
+    const metLinesNV = data.metodoPago ? _pagoTxtN(`Método de Pago:  ${data.metodoPago}`) : []
+    const banLinesNV = data.bancoPago  ? _pagoTxtN(`Banco / Institución:  ${data.bancoPago}`) : []
+    const claLinesNV = data.clabePago  ? _pagoTxtN(`CLABE / Cuenta / Wallet:  ${data.clabePago}`) : []
+    const pagoH      = (metLinesNV.length + banLinesNV.length + claLinesNV.length) * 5.5 + 18
+    _safeBreakNV(pagoH + 8)
+    y += 4
+    doc.setFillColor(0, 240, 255); doc.setGState(doc.GState({ opacity: 0.04 }))
+    doc.roundedRect(T.mX, y, W - T.mX * 2, pagoH, 2, 2, 'F')
+    doc.setGState(doc.GState({ opacity: 1 }))
+    doc.setDrawColor(...T.cyan); doc.setLineWidth(0.4)
     doc.roundedRect(T.mX, y, W - T.mX * 2, pagoH, 2, 2, 'D')
     doc.setFontSize(7); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.cyan)
-    doc.text('DATOS DE PAGO', T.mX + 4, y + 7)
-    doc.setFontSize(7.5); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
-    let py = y + 14
-    if (metLinesNV.length) { doc.text(metLinesNV, T.mX + 4, py); py += metLinesNV.length * 5.5 }
-    if (banLinesNV.length) { doc.text(banLinesNV, T.mX + 4, py); py += banLinesNV.length * 5.5 }
+    doc.text('💳  DATOS DE PAGO', T.mX + 5, y + 8)
+    let py = y + 15
+    doc.setFontSize(8); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    if (metLinesNV.length) { doc.text(metLinesNV, T.mX + 5, py); py += metLinesNV.length * 5.5 }
+    if (banLinesNV.length) { doc.text(banLinesNV, T.mX + 5, py); py += banLinesNV.length * 5.5 }
     if (claLinesNV.length) {
-      doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textInk)
-      doc.text(claLinesNV, T.mX + 4, py)
-      doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+      doc.setFont(T.font, 'bold'); doc.setFontSize(8.5); doc.setTextColor(...T.textInk)
+      doc.text(claLinesNV, T.mX + 5, py)
     }
-    y += pagoH + 4
+    y += pagoH + 5
   }
 
   _footerCotizacion(doc, 1, doc.internal.getNumberOfPages(), emisor)

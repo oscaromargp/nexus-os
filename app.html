@@ -5342,27 +5342,46 @@
   </div>
 </div>
 
-<!-- ════ MODAL COTIZACIONES (Presupuestos / Notas de Venta) ════ -->
-<div id="cot-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;">
-  <div style="background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:18px;width:100%;max-width:860px;box-shadow:0 24px 60px rgba(0,0,0,0.6);">
-    <!-- Header -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid rgba(255,255,255,0.07);">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span id="cot-modal-icon" style="font-size:22px;">📋</span>
-        <h2 id="cot-modal-title" style="font-size:17px;font-weight:800;color:#fff;margin:0;">Nuevo Presupuesto</h2>
-      </div>
-      <button onclick="closeCotModal()" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;font-size:18px;line-height:1;">✕</button>
+<!-- ════ MODAL COTIZACIONES — Split-Screen Full Takeover ════ -->
+<div id="cot-modal" class="hidden" style="position:fixed;inset:0;background:rgba(4,8,20,0.97);backdrop-filter:blur(12px);z-index:9000;display:flex;flex-direction:column;">
+
+  <!-- ── Top Bar ──────────────────────────────────────────────────────────── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px 12px 24px;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0;background:rgba(10,15,30,0.95);">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span id="cot-modal-icon" style="font-size:20px;">📋</span>
+      <h2 id="cot-modal-title" style="font-size:16px;font-weight:800;color:#fff;margin:0;"></h2>
+      <span id="cot-modal-estado-badge" style="font-size:10px;font-weight:700;padding:2px 10px;border-radius:20px;"></span>
     </div>
-    <!-- Body dinámico -->
-    <div id="cot-modal-body" style="padding:24px;"></div>
-    <!-- Footer -->
-    <div style="display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid rgba(255,255,255,0.07);flex-wrap:wrap;">
-      <button onclick="closeCotModal()" style="padding:10px 20px;border-radius:10px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#94a3b8;cursor:pointer;font-size:13px;font-weight:600;">Cancelar</button>
-      <button onclick="saveCot()" style="padding:10px 22px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#e2e8f0;cursor:pointer;font-size:13px;font-weight:700;">💾 Guardar borrador</button>
-      <button onclick="saveCotAndExport()" style="padding:10px 22px;border-radius:10px;border:1px solid rgba(34,211,238,0.35);background:rgba(34,211,238,0.12);color:#22d3ee;cursor:pointer;font-size:13px;font-weight:700;">📥 Guardar y exportar PDF</button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button onclick="saveCot()" style="display:flex;align-items:center;gap:5px;padding:8px 16px;border-radius:9px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#e2e8f0;cursor:pointer;font-size:12px;font-weight:700;">💾 Guardar borrador</button>
+      <button onclick="saveCotAndExport()" style="display:flex;align-items:center;gap:5px;padding:8px 16px;border-radius:9px;border:1px solid rgba(34,211,238,0.35);background:rgba(34,211,238,0.12);color:#22d3ee;cursor:pointer;font-size:12px;font-weight:700;">📥 Guardar y PDF</button>
+      <button onclick="closeCotModal()" title="Cerrar (Esc)" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#6b7280;cursor:pointer;font-size:18px;display:grid;place-items:center;">✕</button>
     </div>
   </div>
+
+  <!-- ── Split Body ────────────────────────────────────────────────────────── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;flex:1;min-height:0;overflow:hidden;">
+
+    <!-- LEFT: Formulario -->
+    <div id="cot-modal-body" style="overflow-y:auto;padding:24px 26px;border-right:1px solid rgba(255,255,255,0.06);"></div>
+
+    <!-- RIGHT: Vista Previa en Vivo -->
+    <div style="display:flex;flex-direction:column;overflow:hidden;background:rgba(8,13,28,0.6);">
+      <!-- Preview Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <div style="width:8px;height:8px;border-radius:50%;background:#22d3ee;animation:cot-pulse 2s infinite;"></div>
+          <span style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:.06em;">VISTA PREVIA EN VIVO</span>
+        </div>
+        <span style="font-size:9px;color:#374151;">Se actualiza automáticamente</span>
+      </div>
+      <!-- Preview Scroll Area -->
+      <div id="cot-preview-panel" style="flex:1;overflow-y:auto;padding:20px;display:flex;justify-content:center;align-items:flex-start;"></div>
+    </div>
+
+  </div>
 </div>
+<style>@keyframes cot-pulse{0%,100%{opacity:1}50%{opacity:.3}}</style>
 
 <!-- ════ MODAL CATÁLOGO (cot_catalogo items) ════ -->
 <div id="cat-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:9100;display:flex;align-items:center;justify-content:center;padding:24px 16px;">

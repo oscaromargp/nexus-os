@@ -22012,54 +22012,92 @@ function _renderCatCard(n) {
 }
 
 function _renderCotCard(d) {
-  const m       = d.metadata || {}
-  const estado  = m.estado || 'borrador'
-  const scfg    = _COT_STATUS[estado] || _COT_STATUS.borrador
-  const isP     = d.type === 'cot_presupuesto'
-  const mon     = m.moneda || 'MXN'
+  const m        = d.metadata || {}
+  const estado   = m.estado || 'borrador'
+  const scfg     = _COT_STATUS[estado] || _COT_STATUS.borrador
+  const isP      = d.type === 'cot_presupuesto'
+  const mon      = m.moneda || 'MXN'
   const fechaStr = m.fecha
     ? new Date(m.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' })
     : '—'
   const itemCount = (m.items || []).length
 
-  return `
-  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;transition:border-color .2s;" onmouseover="this.style.borderColor='rgba(34,211,238,0.22)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
-    <div style="font-size:26px;flex-shrink:0;">${isP ? '📋' : '🧾'}</div>
-    <div style="flex:1;min-width:0;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px;">
-        <span style="font-size:12px;font-weight:800;color:#fff;font-family:monospace;">${esc(m.folio || '—')}</span>
-        <span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:10px;background:${scfg.bg};border:1px solid ${scfg.border};color:${scfg.color};">${scfg.label}</span>
-        ${mon !== 'MXN' ? `<span style="font-size:10px;color:#fbbf24;font-weight:600;">${mon}</span>` : ''}
+  // ── Pagos para Notas de Venta ──────────────────────────────────────────────
+  const pagos    = m.pagos || []
+  const pagado   = pagos.reduce((s, p) => s + (p.monto || 0), 0)
+  const total    = m.total || 0
+  const saldo    = Math.max(0, total - pagado)
+  const pct      = total > 0 ? Math.min(100, Math.round(pagado / total * 100)) : 0
+  const barColor = pct >= 100 ? '#4ade80' : pct >= 50 ? '#fbbf24' : '#f87171'
+
+  const pagosList = !isP && pagos.length > 0 ? `
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;">
+      ${pagos.map(p => `
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:10px;color:#94a3b8;padding:3px 6px;background:rgba(255,255,255,0.03);border-radius:6px;">
+          <span>${p.fecha || '—'} · ${p.metodo || 'Transferencia'}${p.referencia ? ` · <span style="font-family:monospace;">${esc(p.referencia)}</span>` : ''}</span>
+          <span style="font-weight:700;color:#4ade80;">${_cotFmt(p.monto || 0, p.moneda || mon)}</span>
+        </div>`).join('')}
+    </div>` : ''
+
+  const paymentsBlock = !isP ? `
+    <div style="width:100%;padding:10px 18px 0;border-top:1px solid rgba(255,255,255,0.05);margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+        <span style="font-size:10px;color:#6b7280;">Cobrado: <strong style="color:#4ade80;">${_cotFmt(pagado, mon)}</strong></span>
+        <span style="font-size:10px;color:#6b7280;">Saldo: <strong style="color:${saldo > 0 ? '#f87171' : '#4ade80'};">${_cotFmt(saldo, mon)}</strong></span>
+        <span style="font-size:10px;font-weight:700;color:${barColor};">${pct}%</span>
       </div>
-      ${m.titulo ? `<div style="font-size:12px;color:#a78bfa;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.titulo)}</div>` : ''}
-      <div style="font-size:13px;color:#e2e8f0;font-weight:600;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.clienteName || 'Sin cliente')}</div>
-      ${m.proyectoNombre ? `<div style="font-size:10px;color:#60a5fa;">Proyecto: ${esc(m.proyectoNombre)}</div>` : ''}
-      <div style="font-size:10px;color:#6b7280;margin-top:3px;">${fechaStr}${isP && m.validezDias ? ` · Válido ${m.validezDias} días` : ''} · ${itemCount} concepto${itemCount !== 1 ? 's' : ''}</div>
-    </div>
-    <div style="text-align:right;flex-shrink:0;margin-right:6px;">
-      <div style="font-size:18px;font-weight:900;color:#22d3ee;font-family:monospace;">${_cotFmt(m.total || 0, mon)}</div>
-      ${m.conIva ? '<div style="font-size:10px;color:#94a3b8;">incl. IVA 16%</div>' : ''}
-    </div>
-    <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
-      <button onclick="exportCotPDF('${d.id}')" title="Exportar PDF" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(34,211,238,0.22);background:rgba(34,211,238,0.07);color:#22d3ee;cursor:pointer;font-size:15px;">📥</button>
-      <button onclick="openCotModal('${d.type}','${d.id}')" title="Editar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#94a3b8;cursor:pointer;font-size:14px;">✏️</button>
-      ${isP && estado === 'aprobado'
-        ? `<button onclick="convertirPresupuestoNota('${d.id}')" title="Convertir a Nota de Venta"
-            style="height:32px;padding:0 10px;border-radius:8px;border:1px solid rgba(167,139,250,0.5);background:rgba(167,139,250,0.15);color:#a78bfa;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap;">🧾 → Nota</button>`
-        : isP
+      <div style="height:5px;border-radius:99px;background:rgba(255,255,255,0.07);overflow:hidden;margin-bottom:${pagos.length ? '0' : '10px'};">
+        <div style="height:100%;width:${pct}%;background:${barColor};border-radius:99px;transition:width .4s;"></div>
+      </div>
+      ${pagosList}
+      ${saldo > 0.009 ? `
+      <button onclick="registrarPagoCot('${d.id}')"
+        style="width:100%;margin-top:8px;padding:7px;border-radius:9px;border:1px solid rgba(74,222,128,0.35);background:rgba(74,222,128,0.08);color:#4ade80;cursor:pointer;font-size:11px;font-weight:700;">
+        + Registrar Pago
+      </button>` : ''}
+      <div id="pago-panel-${d.id.slice(0,8)}" style="display:none;"></div>
+    </div>` : ''
+
+  return `
+  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:14px;overflow:hidden;transition:border-color .2s;" onmouseover="this.style.borderColor='rgba(34,211,238,0.22)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
+    <div style="padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <div style="font-size:26px;flex-shrink:0;">${isP ? '📋' : '🧾'}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px;">
+          <span style="font-size:12px;font-weight:800;color:#fff;font-family:monospace;">${esc(m.folio || '—')}</span>
+          <span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:10px;background:${scfg.bg};border:1px solid ${scfg.border};color:${scfg.color};">${scfg.label}</span>
+          ${mon !== 'MXN' ? `<span style="font-size:10px;color:#fbbf24;font-weight:600;">${mon}</span>` : ''}
+        </div>
+        ${m.titulo ? `<div style="font-size:12px;color:#a78bfa;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.titulo)}</div>` : ''}
+        <div style="font-size:13px;color:#e2e8f0;font-weight:600;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(m.clienteName || 'Sin cliente')}</div>
+        ${m.proyectoNombre ? `<div style="font-size:10px;color:#60a5fa;">Proyecto: ${esc(m.proyectoNombre)}</div>` : ''}
+        <div style="font-size:10px;color:#6b7280;margin-top:3px;">${fechaStr}${isP && m.validezDias ? ` · Válido ${m.validezDias} días` : ''} · ${itemCount} concepto${itemCount !== 1 ? 's' : ''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-right:6px;">
+        <div style="font-size:18px;font-weight:900;color:#22d3ee;font-family:monospace;">${_cotFmt(total || 0, mon)}</div>
+        ${m.conIva ? '<div style="font-size:10px;color:#94a3b8;">incl. IVA 16%</div>' : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0;">
+        <button onclick="exportCotPDF('${d.id}')" title="Exportar PDF" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(34,211,238,0.22);background:rgba(34,211,238,0.07);color:#22d3ee;cursor:pointer;font-size:15px;">📥</button>
+        <button onclick="openCotModal('${d.type}','${d.id}')" title="Editar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.03);color:#94a3b8;cursor:pointer;font-size:14px;">✏️</button>
+        ${isP && estado === 'aprobado'
           ? `<button onclick="convertirPresupuestoNota('${d.id}')" title="Convertir a Nota de Venta"
-              style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(167,139,250,0.22);background:rgba(167,139,250,0.04);color:#a78bfa;cursor:pointer;font-size:13px;">🧾</button>`
-          : ''}
-      ${!isP ? `<button onclick="generarMovimientoCot('${d.id}')" title="Generar Movimiento" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(74,222,128,0.22);background:rgba(74,222,128,0.04);color:#4ade80;cursor:pointer;font-size:13px;">💰</button>` : ''}
-      <button onclick="deleteCot('${d.id}')" title="Eliminar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(248,113,113,0.22);background:rgba(248,113,113,0.04);color:#f87171;cursor:pointer;font-size:14px;">🗑</button>
+              style="height:32px;padding:0 10px;border-radius:8px;border:1px solid rgba(167,139,250,0.5);background:rgba(167,139,250,0.15);color:#a78bfa;cursor:pointer;font-size:11px;font-weight:700;white-space:nowrap;">🧾 → Nota</button>`
+          : isP
+            ? `<button onclick="convertirPresupuestoNota('${d.id}')" title="Convertir a Nota de Venta"
+                style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(167,139,250,0.22);background:rgba(167,139,250,0.04);color:#a78bfa;cursor:pointer;font-size:13px;">🧾</button>`
+            : ''}
+        <button onclick="deleteCot('${d.id}')" title="Eliminar" style="width:32px;height:32px;border-radius:8px;border:1px solid rgba(248,113,113,0.22);background:rgba(248,113,113,0.04);color:#f87171;cursor:pointer;font-size:14px;">🗑</button>
+      </div>
+      ${isP ? `
+      <div style="flex-shrink:0;">
+        <select onchange="changeCotStatus('${d.id}',this.value)"
+          style="font-size:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:5px 8px;color:#94a3b8;cursor:pointer;outline:none;">
+          ${Object.entries(_COT_STATUS).map(([k,v]) => `<option value="${k}" ${estado===k?'selected':''}>${v.label}</option>`).join('')}
+        </select>
+      </div>` : ''}
     </div>
-    ${isP ? `
-    <div style="flex-shrink:0;">
-      <select onchange="changeCotStatus('${d.id}',this.value)"
-        style="font-size:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:5px 8px;color:#94a3b8;cursor:pointer;outline:none;">
-        ${Object.entries(_COT_STATUS).map(([k,v]) => `<option value="${k}" ${estado===k?'selected':''}>${v.label}</option>`).join('')}
-      </select>
-    </div>` : ''}
+    ${paymentsBlock}
   </div>`
 }
 
@@ -22089,22 +22127,21 @@ window.openCotModal = function(type, id = null) {
   const emisorNode     = existing.emisorId ? allNodes.find(n => n.id === existing.emisorId) : null
   const emisorAccounts = emisorNode?.metadata?.contact_accounts || emisorNode?.metadata?.cuentas || []
 
-  // Contactos
-  const contactOpts = allNodes
-    .filter(n => n.type === 'contact')
+  // Contactos — incluye tanto type:'contact' como type:'persona'
+  const _allContacts = getContacts()
     .sort((a, b) => (a.metadata?.name || a.content || '').localeCompare(b.metadata?.name || b.content || ''))
-    .map(c => {
-      const name = esc(c.metadata?.name || c.content || c.id)
-      return `<option value="${c.id}" ${existing.clienteId === c.id ? 'selected' : ''}>${name}</option>`
-    }).join('')
 
-  const emisorContactOpts = allNodes
-    .filter(n => n.type === 'contact')
-    .sort((a, b) => (a.metadata?.name || a.content || '').localeCompare(b.metadata?.name || b.content || ''))
-    .map(c => {
-      const name = esc(c.metadata?.name || c.content || c.id)
-      return `<option value="${c.id}" ${existing.emisorId === c.id ? 'selected' : ''}>${name}</option>`
-    }).join('')
+  const contactOpts = _allContacts.map(c => {
+    const name = esc(c.metadata?.name || c.content || c.id)
+    const badge = c.metadata?.empresa ? ` — ${esc(c.metadata.empresa)}` : ''
+    return `<option value="${c.id}" ${existing.clienteId === c.id ? 'selected' : ''}>${name}${badge}</option>`
+  }).join('')
+
+  const emisorContactOpts = _allContacts.map(c => {
+    const name = esc(c.metadata?.name || c.content || c.id)
+    const badge = c.metadata?.empresa ? ` — ${esc(c.metadata.empresa)}` : ''
+    return `<option value="${c.id}" ${existing.emisorId === c.id ? 'selected' : ''}>${name}${badge}</option>`
+  }).join('')
 
   // Proyectos
   const proyOpts = allNodes
@@ -22151,19 +22188,21 @@ window.openCotModal = function(type, id = null) {
     <div style="font-size:11px;font-weight:700;color:#22d3ee;margin-bottom:10px;letter-spacing:.08em;">🏢 PARTES</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
       <div>
-        ${_lbl('Emisor (contacto)')}
+        ${_lbl('Emisor (quién emite)')}
         <select id="cot-emisor-sel" class="modal-input" style="margin-bottom:6px;" onchange="cotModalFillEmisor()">
           <option value="">— Seleccionar contacto —</option>${emisorContactOpts}
         </select>
         <input type="text" id="cot-emisor-nombre" class="modal-input" style="margin-bottom:4px;"
-          placeholder="Nombre del emisor" value="${esc(existing.emisorNombre || '')}"/>
+          placeholder="Nombre o razón social" value="${esc(existing.emisorNombre || '')}"/>
         <input type="text" id="cot-emisor-rfc" class="modal-input" style="margin-bottom:4px;"
           placeholder="RFC" value="${esc(existing.emisorRfc || '')}"/>
-        <input type="text" id="cot-emisor-dir" class="modal-input"
-          placeholder="Dirección" value="${esc(existing.emisorDireccion || '')}"/>
+        <input type="text" id="cot-emisor-dir" class="modal-input" style="margin-bottom:4px;"
+          placeholder="Dirección fiscal" value="${esc(existing.emisorDireccion || '')}"/>
+        <input type="text" id="cot-emisor-tel" class="modal-input"
+          placeholder="Teléfono del emisor" value="${esc(existing.emisorTel || '')}"/>
       </div>
       <div>
-        ${_lbl('Cliente (contacto)')}
+        ${_lbl('Cliente (destinatario)')}
         <select id="cot-cliente-sel" class="modal-input" style="margin-bottom:6px;" onchange="cotModalFillCliente()">
           <option value="">— Seleccionar contacto —</option>${contactOpts}
         </select>
@@ -22173,8 +22212,10 @@ window.openCotModal = function(type, id = null) {
           placeholder="RFC" value="${esc(existing.clienteRfc || '')}"/>
         <input type="text" id="cot-cliente-dir" class="modal-input" style="margin-bottom:4px;"
           placeholder="Dirección" value="${esc(existing.clienteDireccion || '')}"/>
-        <input type="text" id="cot-cliente-tel" class="modal-input"
+        <input type="text" id="cot-cliente-tel" class="modal-input" style="margin-bottom:4px;"
           placeholder="Teléfono" value="${esc(existing.clienteTel || '')}"/>
+        <input type="email" id="cot-cliente-email" class="modal-input"
+          placeholder="Email (opcional)" value="${esc(existing.clienteEmail || '')}"/>
       </div>
     </div>
 
@@ -22324,6 +22365,18 @@ window.openCotModal = function(type, id = null) {
 
   modal.classList.remove('hidden')
   cotCalcTotales()
+
+  // Attach live preview delegation — captura input/change en todo el panel izquierdo
+  const formPanel = document.getElementById('cot-modal-body')
+  if (formPanel) {
+    formPanel.removeEventListener('input',  _scheduleCotPreview)
+    formPanel.removeEventListener('change', _scheduleCotPreview)
+    formPanel.addEventListener('input',     _scheduleCotPreview)
+    formPanel.addEventListener('change',    _scheduleCotPreview)
+  }
+
+  // Render preview inmediata (sin debounce)
+  _updateCotPreview()
 }
 
 window.closeCotModal = function() {
@@ -22341,9 +22394,11 @@ window.cotModalFillEmisor = function() {
   const nombreEl = document.getElementById('cot-emisor-nombre')
   const rfcEl    = document.getElementById('cot-emisor-rfc')
   const dirEl    = document.getElementById('cot-emisor-dir')
-  if (nombreEl && !nombreEl.value) nombreEl.value = m.name || c.content || ''
-  if (rfcEl    && !rfcEl.value)    rfcEl.value    = m.rfc  || ''
-  if (dirEl    && !dirEl.value)    dirEl.value    = m.domicilioLegal || m.address_street || m.address || ''
+  const telEl    = document.getElementById('cot-emisor-tel')
+  nombreEl.value = m.name || c.content || ''
+  rfcEl.value    = m.rfc  || ''
+  dirEl.value    = m.domicilioLegal || m.address_street || m.address || ''
+  if (telEl) telEl.value = m.phone || m.tel || ''
 
   // Poblar selector de cuentas del emisor (para datos de cobro)
   const accounts = m.contact_accounts || m.cuentas || []
@@ -22366,21 +22421,36 @@ window.cotModalFillEmisor = function() {
   }
 }
 
-// Auto-fill cliente desde contacto
+// Auto-fill cliente desde contacto — carga todos los campos disponibles
 window.cotModalFillCliente = function() {
   const sel = document.getElementById('cot-cliente-sel')
   if (!sel?.value) return
   const c = allNodes.find(n => n.id === sel.value)
   if (!c) return
   const m = c.metadata || {}
-  const nameEl = document.getElementById('cot-cliente-name')
-  const rfcEl  = document.getElementById('cot-cliente-rfc')
-  const dirEl  = document.getElementById('cot-cliente-dir')
-  const telEl  = document.getElementById('cot-cliente-tel')
-  if (nameEl) nameEl.value = m.name  || c.content || ''
-  if (rfcEl)  rfcEl.value  = m.rfc   || ''
-  if (dirEl)  dirEl.value  = m.domicilioLegal || m.address_street || m.address || ''
-  if (telEl)  telEl.value  = m.phone || m.tel || ''
+  const nameEl  = document.getElementById('cot-cliente-name')
+  const rfcEl   = document.getElementById('cot-cliente-rfc')
+  const dirEl   = document.getElementById('cot-cliente-dir')
+  const telEl   = document.getElementById('cot-cliente-tel')
+  const emailEl = document.getElementById('cot-cliente-email')
+  const curpEl  = document.getElementById('cot-cliente-curp')
+  if (nameEl)  nameEl.value  = m.name  || c.content || ''
+  if (rfcEl)   rfcEl.value   = m.rfc   || ''
+  if (dirEl)   dirEl.value   = m.domicilioLegal || m.address_street || m.address || ''
+  if (telEl)   telEl.value   = m.phone || m.tel  || ''
+  if (emailEl) emailEl.value = m.email || ''
+  if (curpEl)  curpEl.value  = m.curp  || ''
+}
+
+// Auto-fill emisor también carga email
+window.cotModalFillEmisorExtra = function() {
+  const sel = document.getElementById('cot-emisor-sel')
+  if (!sel?.value) return
+  const c = allNodes.find(n => n.id === sel.value)
+  if (!c) return
+  const m = c.metadata || {}
+  const telEl = document.getElementById('cot-emisor-tel')
+  if (telEl) telEl.value = m.phone || m.tel || ''
 }
 
 // Seleccionar cuenta del emisor → auto-llenar banco + CLABE + método
@@ -22531,7 +22601,190 @@ window.cotCalcTotales = function() {
   if (ivaRow)  ivaRow.style.display  = conIva ? 'flex' : 'none'
   if (descRow) descRow.style.display = descTotal > 0 ? 'flex' : 'none'
   if (monEl)   monEl.textContent     = mon !== 'MXN' ? `en ${mon}` : ''
+
+  _scheduleCotPreview()
 }
+
+// ── Vista previa en vivo — debounce 400 ms ─────────────────────────────────
+let _cotPreviewTimer = null
+function _scheduleCotPreview() {
+  if (_cotPreviewTimer) clearTimeout(_cotPreviewTimer)
+  _cotPreviewTimer = setTimeout(_updateCotPreview, 400)
+}
+
+function _updateCotPreview() {
+  const panel = document.getElementById('cot-preview-panel')
+  if (!panel || document.getElementById('cot-modal')?.classList.contains('hidden')) return
+
+  const isP       = _cotEditType === 'cot_presupuesto'
+  const titulo    = document.getElementById('cot-titulo')?.value?.trim()    || ''
+  const fecha     = document.getElementById('cot-fecha')?.value             || new Date().toISOString().slice(0,10)
+  const validez   = document.getElementById('cot-validez')?.value           || ''
+  const mon       = document.getElementById('cot-moneda')?.value            || 'MXN'
+  const tc        = parseFloat(document.getElementById('cot-tc')?.value     || '0') || 0
+  const emisorNom = document.getElementById('cot-emisor-nombre')?.value?.trim() || ''
+  const emisorRfc = document.getElementById('cot-emisor-rfc')?.value?.trim()    || ''
+  const emisorDir = document.getElementById('cot-emisor-dir')?.value?.trim()    || ''
+  const emisorTel = document.getElementById('cot-emisor-tel')?.value?.trim()    || ''
+  const clienteNom = document.getElementById('cot-cliente-name')?.value?.trim() || ''
+  const clienteRfc = document.getElementById('cot-cliente-rfc')?.value?.trim()  || ''
+  const clienteDir = document.getElementById('cot-cliente-dir')?.value?.trim()  || ''
+  const clienteTel = document.getElementById('cot-cliente-tel')?.value?.trim()  || ''
+  const banco     = document.getElementById('cot-banco')?.value?.trim()         || ''
+  const clabe     = document.getElementById('cot-clabe')?.value?.trim()         || ''
+  const metodo    = document.getElementById('cot-metodo-pago')?.value           || ''
+  const notas     = document.getElementById('cot-notas')?.value?.trim()         || ''
+  const conIva    = document.getElementById('cot-con-iva')?.checked             || false
+  const proyNom   = document.getElementById('cot-proyecto-info')?.textContent?.replace('Proyecto: ','')?.trim() || ''
+  const folioLbl  = _cotEditId
+    ? (allNodes.find(n => n.id === _cotEditId)?.metadata?.folio || '—')
+    : (isP ? 'PRS-BORRADOR' : 'NV-BORRADOR')
+
+  // Collect items
+  const items = []
+  for (let i = 1; i <= 10; i++) {
+    const desc  = document.getElementById(`cot-desc-${i}`)?.value?.trim()    || ''
+    const cant  = parseFloat(document.getElementById(`cot-cant-${i}`)?.value  || '0') || 0
+    const prec  = parseFloat(document.getElementById(`cot-precio-${i}`)?.value|| '0') || 0
+    const dsc   = parseFloat(document.getElementById(`cot-desc-p-${i}`)?.value|| '0') || 0
+    if (!desc && !prec) continue
+    const sub   = cant * prec * (1 - dsc / 100)
+    items.push({ desc, cant, prec, dsc, sub })
+  }
+
+  const subtotal   = items.reduce((s, it) => s + it.cant * it.prec, 0)
+  const descTotal  = items.reduce((s, it) => s + it.cant * it.prec * (it.dsc / 100), 0)
+  const ivaAmt     = conIva ? (subtotal - descTotal) * 0.16 : 0
+  const total      = subtotal - descTotal + ivaAmt
+  const mxnTotal   = mon !== 'MXN' && tc > 0 ? total * tc : null
+
+  const _fmt = (n) => n.toLocaleString('es-MX', { style:'currency', currency:'MXN', maximumFractionDigits: 2 })
+    .replace('MXN', mon === 'MXN' ? '$' : mon + ' ')
+  const _fmtMXN = (n) => n.toLocaleString('es-MX', { style:'currency', currency:'MXN', maximumFractionDigits: 2 })
+
+  const fechaFmt = fecha
+    ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', { year:'numeric', month:'long', day:'numeric' })
+    : ''
+
+  const E = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+
+  panel.innerHTML = `
+  <div style="background:#fff;width:100%;max-width:640px;min-height:860px;padding:30px 34px 48px;box-shadow:0 12px 48px rgba(0,0,0,0.4);font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:9px;color:#1a1a2e;position:relative;border-radius:3px;">
+
+    <!-- Banda de proyecto (si hay nombre de proyecto) -->
+    ${proyNom ? `<div style="background:#0a0f1e;color:rgba(255,255,255,0.85);padding:6px 12px;margin:-30px -34px 18px;font-size:8px;font-weight:700;letter-spacing:.05em;">📁 ${E(proyNom)}</div>` : ''}
+
+    <!-- Header: Tipo + Folio + Título -->
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+      <div>
+        <div style="font-size:22px;font-weight:900;color:#0a0f1e;letter-spacing:.02em;line-height:1;">${isP ? 'PRESUPUESTO' : 'NOTA DE VENTA'}</div>
+        ${titulo ? `<div style="font-size:11px;color:#374151;margin-top:5px;max-width:320px;line-height:1.4;">${E(titulo)}</div>` : ''}
+        ${proyNom && !titulo ? `<div style="font-size:10px;color:#6b7280;margin-top:3px;font-style:italic;">Proyecto: ${E(proyNom)}</div>` : ''}
+      </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:16px;">
+        <div style="font-size:11px;font-weight:800;background:#0a0f1e;color:white;padding:6px 14px;border-radius:5px;letter-spacing:.05em;">${E(folioLbl)}</div>
+        <div style="font-size:8px;color:#6b7280;margin-top:5px;">${fechaFmt}</div>
+        ${validez ? `<div style="font-size:7.5px;color:#9ca3af;margin-top:2px;">Válido ${validez} días</div>` : ''}
+      </div>
+    </div>
+
+    <!-- Línea divisora -->
+    <div style="height:1px;background:linear-gradient(90deg,#0a0f1e,#e5e7eb);margin-bottom:14px;"></div>
+
+    <!-- Emisor + Cliente -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:9px 11px;">
+        <div style="font-size:6.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Emisor</div>
+        <div style="font-size:10px;font-weight:700;color:#0a0f1e;">${E(emisorNom || '—')}</div>
+        ${emisorRfc ? `<div style="font-size:7.5px;color:#4b5563;margin-top:2px;">RFC: ${E(emisorRfc)}</div>` : ''}
+        ${emisorDir ? `<div style="font-size:7.5px;color:#4b5563;margin-top:1px;">${E(emisorDir)}</div>` : ''}
+        ${emisorTel ? `<div style="font-size:7.5px;color:#4b5563;">Tel: ${E(emisorTel)}</div>` : ''}
+      </div>
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:9px 11px;">
+        <div style="font-size:6.5px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;">Cliente</div>
+        <div style="font-size:10px;font-weight:700;color:#0a0f1e;">${E(clienteNom || '—')}</div>
+        ${clienteRfc ? `<div style="font-size:7.5px;color:#4b5563;margin-top:2px;">RFC: ${E(clienteRfc)}</div>` : ''}
+        ${clienteDir ? `<div style="font-size:7.5px;color:#4b5563;margin-top:1px;">${E(clienteDir)}</div>` : ''}
+        ${clienteTel ? `<div style="font-size:7.5px;color:#4b5563;">Tel: ${E(clienteTel)}</div>` : ''}
+      </div>
+    </div>
+
+    <!-- Moneda indicator -->
+    ${mon !== 'MXN' ? `<div style="font-size:7.5px;color:#6b7280;margin-bottom:8px;font-style:italic;">Moneda: ${E(mon)}${tc > 0 ? ` · Tipo de cambio: ${tc}` : ''}</div>` : ''}
+
+    <!-- Tabla de conceptos -->
+    ${items.length === 0 ? `<div style="padding:20px 0;text-align:center;color:#9ca3af;font-size:9px;font-style:italic;">Sin conceptos aún — agrega productos o servicios</div>` : `
+    <table style="width:100%;border-collapse:collapse;margin-bottom:10px;font-size:8.5px;">
+      <thead>
+        <tr style="background:#0a0f1e;color:white;">
+          <th style="padding:5px 7px;text-align:center;width:22px;font-weight:700;">#</th>
+          <th style="padding:5px 7px;text-align:left;font-weight:700;">Descripción</th>
+          <th style="padding:5px 7px;text-align:center;width:36px;font-weight:700;">Cant.</th>
+          <th style="padding:5px 7px;text-align:right;width:76px;font-weight:700;">Precio</th>
+          ${items.some(it => it.dsc > 0) ? `<th style="padding:5px 7px;text-align:center;width:38px;font-weight:700;">Desc.%</th>` : ''}
+          <th style="padding:5px 7px;text-align:right;width:82px;font-weight:700;">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((it, idx) => `
+        <tr style="background:${idx%2===0?'#f8fafc':'#fff'};border-bottom:1px solid #e5e7eb;">
+          <td style="padding:5px 7px;text-align:center;color:#6b7280;">${idx+1}</td>
+          <td style="padding:5px 7px;color:#1a1a2e;white-space:pre-wrap;line-height:1.35;">${E(it.desc)}</td>
+          <td style="padding:5px 7px;text-align:center;color:#4b5563;">${it.cant.toLocaleString('es-MX',{maximumFractionDigits:2})}</td>
+          <td style="padding:5px 7px;text-align:right;color:#4b5563;">${_fmt(it.prec)}</td>
+          ${items.some(x => x.dsc > 0) ? `<td style="padding:5px 7px;text-align:center;color:#f87171;">${it.dsc > 0 ? it.dsc+'%' : '—'}</td>` : ''}
+          <td style="padding:5px 7px;text-align:right;font-weight:700;color:#0a0f1e;">${_fmt(it.sub)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`}
+
+    <!-- Totales -->
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      <div style="min-width:188px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:9px 13px;">
+        <div style="display:flex;justify-content:space-between;font-size:8.5px;color:#4b5563;margin-bottom:4px;"><span>Subtotal</span><span>${_fmt(subtotal)}</span></div>
+        ${descTotal > 0 ? `<div style="display:flex;justify-content:space-between;font-size:8.5px;color:#ef4444;margin-bottom:4px;"><span>Descuento</span><span>-${_fmt(descTotal)}</span></div>` : ''}
+        ${conIva ? `<div style="display:flex;justify-content:space-between;font-size:8.5px;color:#4b5563;margin-bottom:4px;"><span>IVA (16%)</span><span>${_fmt(ivaAmt)}</span></div>` : ''}
+        <div style="height:1px;background:#e2e8f0;margin:5px 0;"></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:900;color:#0a0f1e;">
+          <span>TOTAL ${mon}</span><span>${_fmt(total)}</span>
+        </div>
+        ${mxnTotal !== null ? `<div style="display:flex;justify-content:flex-end;font-size:8px;color:#6b7280;margin-top:3px;font-style:italic;">≈ MXN ${_fmtMXN(mxnTotal)}</div>` : ''}
+      </div>
+    </div>
+
+    <!-- Observaciones -->
+    ${notas ? `
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:3px solid #0a0f1e;border-radius:0 5px 5px 0;padding:10px 12px;margin-bottom:12px;">
+      <div style="font-size:7px;font-weight:800;color:#0a0f1e;text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;">Observaciones / Plan de trabajo</div>
+      <div style="font-size:8px;color:#374151;line-height:1.6;white-space:pre-wrap;">${E(notas)}</div>
+    </div>` : ''}
+
+    <!-- Datos de pago -->
+    ${(metodo || banco || clabe) ? `
+    <div style="border:1.5px solid #0a0f1e;border-radius:5px;padding:10px 12px;margin-bottom:12px;">
+      <div style="font-size:7px;font-weight:800;color:#0a0f1e;text-transform:uppercase;letter-spacing:.07em;margin-bottom:7px;">💳 Datos de Pago</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;">
+        ${metodo ? `<div style="font-size:8px;"><span style="color:#6b7280;font-weight:600;">Método: </span><span style="color:#1a1a2e;">${E(metodo)}</span></div>` : ''}
+        ${banco  ? `<div style="font-size:8px;"><span style="color:#6b7280;font-weight:600;">Banco: </span><span style="color:#1a1a2e;">${E(banco)}</span></div>` : ''}
+        ${clabe  ? `<div style="font-size:8px;font-weight:700;grid-column:1/-1;"><span style="color:#6b7280;font-weight:600;">CLABE / Cuenta: </span><span style="color:#1a1a2e;letter-spacing:.04em;">${E(clabe)}</span></div>` : ''}
+      </div>
+    </div>` : ''}
+
+    <!-- Footer -->
+    <div style="position:absolute;bottom:12px;left:34px;right:34px;border-top:1px solid #e5e7eb;padding-top:6px;display:flex;justify-content:space-between;">
+      <span style="font-size:7px;color:#9ca3af;">Documento generado con Nexus OS</span>
+      <span style="font-size:7px;color:#9ca3af;">${E(folioLbl)}</span>
+    </div>
+
+  </div>`
+}
+
+// Cerrar modal con Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !document.getElementById('cot-modal')?.classList.contains('hidden')) {
+    window.closeCotModal()
+  }
+})
 
 // ── Recopilar datos del modal ──────────────────────────────────────────────────
 function _collectCotData() {
@@ -22546,6 +22799,7 @@ function _collectCotData() {
   const emisorNombre    = document.getElementById('cot-emisor-nombre')?.value?.trim() || ''
   const emisorRfc       = document.getElementById('cot-emisor-rfc')?.value?.trim() || ''
   const emisorDireccion = document.getElementById('cot-emisor-dir')?.value?.trim() || ''
+  const emisorTel       = document.getElementById('cot-emisor-tel')?.value?.trim() || ''
 
   // Cliente
   const clienteSelVal   = document.getElementById('cot-cliente-sel')?.value || ''
@@ -22555,6 +22809,7 @@ function _collectCotData() {
   const clienteRfc      = document.getElementById('cot-cliente-rfc')?.value?.trim() || ''
   const clienteDireccion = document.getElementById('cot-cliente-dir')?.value?.trim() || ''
   const clienteTel      = document.getElementById('cot-cliente-tel')?.value?.trim() || ''
+  const clienteEmail    = document.getElementById('cot-cliente-email')?.value?.trim() || ''
 
   // Proyecto
   const proyectoSelVal  = document.getElementById('cot-proyecto-sel')?.value || ''
@@ -22599,8 +22854,8 @@ function _collectCotData() {
 
   return {
     folio, titulo, fecha: fechaRaw, fechaFmt, validezDias,
-    emisorId: emisorSelVal, emisorNombre, emisorRfc, emisorDireccion,
-    clienteId: clienteSelVal, clienteName, clienteRfc, clienteDireccion, clienteTel,
+    emisorId: emisorSelVal, emisorNombre, emisorRfc, emisorDireccion, emisorTel,
+    clienteId: clienteSelVal, clienteName, clienteRfc, clienteDireccion, clienteTel, clienteEmail,
     proyectoId: proyectoSelVal, proyectoNombre,
     moneda, tipoCambio, metodoPago, bancoPago, clabePago,
     items, conIva, subtotal, descuentoTotal, iva, total, notas,
@@ -22625,9 +22880,10 @@ async function _persistCot(exportPdf = false) {
     folio: data.folio, titulo: data.titulo,
     fecha: data.fecha, fechaFmt: data.fechaFmt, validezDias: data.validezDias,
     emisorId: data.emisorId, emisorNombre: data.emisorNombre, emisorRfc: data.emisorRfc,
-    emisorDireccion: data.emisorDireccion,
+    emisorDireccion: data.emisorDireccion, emisorTel: data.emisorTel,
     clienteId: data.clienteId, clienteName: data.clienteName,
-    clienteRfc: data.clienteRfc, clienteDireccion: data.clienteDireccion, clienteTel: data.clienteTel,
+    clienteRfc: data.clienteRfc, clienteDireccion: data.clienteDireccion,
+    clienteTel: data.clienteTel, clienteEmail: data.clienteEmail,
     proyectoId: data.proyectoId, proyectoNombre: data.proyectoNombre,
     moneda: data.moneda, tipoCambio: data.tipoCambio,
     metodoPago: data.metodoPago, bancoPago: data.bancoPago, clabePago: data.clabePago,
@@ -22735,18 +22991,22 @@ window.convertirPresupuestoNota = async function(id) {
   const m      = src.metadata || {}
   const label  = m.titulo || m.folio || 'Sin título'
   const cliente = m.clienteName || 'Sin cliente'
-  if (!confirm(`¿Convertir "${label}" en Nota de Venta?\n\nEsto creará:\n• Una Nota de Venta nueva con todos los datos del presupuesto\n• Un Movimiento de ingreso por ${_cotFmt(m.total || 0, m.moneda)}`)) return
 
-  // Crear Nota de Venta
-  const folio   = _cotFolio('NV')
+  // Confirmar conversión
+  if (!confirm(`¿Convertir "${label}" en Nota de Venta?\n\nSe creará una Nota de Venta con todos los datos del presupuesto.\nPodrás registrar pagos parciales y la nota comenzará como "Pendiente".`)) return
+
+  const folio    = _cotFolio('NV')
   const notaMeta = {
     ...m,
-    folio, estado: 'pagado',
+    folio,
+    estado: 'pendiente',  // comienza pendiente, no pagado
     validezDias: 0,
+    pagos: [],            // historial de pagos parciales
     createdFromPresupuesto: id,
+    createdAt: new Date().toISOString(),
   }
   const notaContent = `Nota de Venta ${folio} — ${cliente} — ${_cotFmt(m.total || 0, m.moneda)}`
-  const notaNode    = {
+  const notaNode = {
     id: crypto.randomUUID(),
     content: notaContent, type: 'cot_nota', metadata: notaMeta,
     created_at: new Date().toISOString(),
@@ -22756,67 +23016,131 @@ window.convertirPresupuestoNota = async function(id) {
     await supabase.from('nodes').insert([{ id: notaNode.id, owner_id: currentUser?.id, content: notaContent, type: 'cot_nota', metadata: notaMeta }])
   }
 
-  // Marcar presupuesto como cerrado
-  src.metadata = { ...src.metadata, estado: 'cerrado' }
+  // Marcar presupuesto como convertido/cerrado
+  src.metadata = { ...src.metadata, estado: 'cerrado', notaVentaId: notaNode.id }
   if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
     await supabase.from('nodes').update({ metadata: src.metadata }).eq('id', id)
   }
 
-  // Generar Movimiento de ingreso automáticamente
-  const fecha      = m.fecha || new Date().toISOString().slice(0, 10)
-  const movContent = `Ingreso — ${label} — ${cliente}`
-  const movMeta    = {
-    amount: m.total || 0, moneda: m.moneda || 'MXN', type: 'income',
-    description: movContent, date: fecha,
-    cotizacion_ref: notaNode.id, folio_ref: folio,
-    cliente, autoGenerado: true,
-  }
-  const movNode = {
-    id: 'mv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-    content: movContent, type: 'income', metadata: movMeta,
-    created_at: new Date().toISOString(),
-  }
-  allNodes.push(movNode)
-  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
-    await supabase.from('nodes').insert([{ id: movNode.id, owner_id: currentUser?.id, content: movContent, type: 'income', metadata: movMeta }])
-  }
-
-  showToast(`🧾 Nota de Venta ${folio} creada · 💰 Ingreso ${_cotFmt(m.total || 0, m.moneda)} registrado`)
+  showToast(`🧾 Nota de Venta ${folio} creada — Registra los pagos en la pestaña Notas de Venta`)
+  _cotTab = 'notas'
   renderCotizaciones()
 }
 
-// ── Generar Movimiento desde Nota de Venta ─────────────────────────────────────
+// ── Registrar pago parcial en Nota de Venta ────────────────────────────────────
+window.registrarPagoCot = function(notaId) {
+  const nota = allNodes.find(n => n.id === notaId)
+  if (!nota) return
+  const m         = nota.metadata || {}
+  const pagados   = (m.pagos || []).reduce((s, p) => s + (p.monto || 0), 0)
+  const saldo     = Math.max(0, (m.total || 0) - pagados)
+  const panelId   = `pago-panel-${notaId.slice(0, 8)}`
+  const panel     = document.getElementById(panelId)
+  if (!panel) return
+
+  // Toggle
+  if (panel.style.display !== 'none') { panel.style.display = 'none'; return }
+  panel.style.display = ''
+
+  const mon = m.moneda || 'MXN'
+  panel.innerHTML = `
+    <div style="padding:14px;border-top:1px solid rgba(255,255,255,0.07);">
+      <div style="font-size:11px;font-weight:700;color:#4ade80;margin-bottom:10px;">💰 Registrar Pago</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+        <div>
+          <label style="font-size:10px;color:#6b7280;display:block;margin-bottom:3px;">Monto *</label>
+          <input type="number" id="pago-monto-${notaId.slice(0,8)}" class="modal-input" style="font-size:12px;"
+            placeholder="${saldo.toFixed(2)}" min="0.01" step="0.01" max="${saldo}"/>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#6b7280;display:block;margin-bottom:3px;">Moneda</label>
+          <select id="pago-mon-${notaId.slice(0,8)}" class="modal-input" style="font-size:12px;">
+            <option value="MXN" ${mon==='MXN'?'selected':''}>MXN</option>
+            <option value="USD" ${mon==='USD'?'selected':''}>USD</option>
+            <option value="USDT" ${mon==='USDT'?'selected':''}>USDT</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#6b7280;display:block;margin-bottom:3px;">Fecha</label>
+          <input type="date" id="pago-fecha-${notaId.slice(0,8)}" class="modal-input" style="font-size:12px;"
+            value="${new Date().toISOString().slice(0,10)}"/>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+        <div>
+          <label style="font-size:10px;color:#6b7280;display:block;margin-bottom:3px;">Método</label>
+          <select id="pago-met-${notaId.slice(0,8)}" class="modal-input" style="font-size:12px;">
+            ${['SPEI','Transferencia','Efectivo','Cripto','Otro'].map(x => `<option value="${x}">${x}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:10px;color:#6b7280;display:block;margin-bottom:3px;">Referencia / Folio</label>
+          <input type="text" id="pago-ref-${notaId.slice(0,8)}" class="modal-input" style="font-size:12px;" placeholder="Opcional"/>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="saveRegistroPago('${notaId}')"
+          style="flex:1;padding:9px;border-radius:9px;border:1px solid rgba(74,222,128,0.4);background:rgba(74,222,128,0.12);color:#4ade80;cursor:pointer;font-size:12px;font-weight:700;">
+          ✅ Confirmar pago
+        </button>
+        <button onclick="document.getElementById('${panelId}').style.display='none'"
+          style="padding:9px 16px;border-radius:9px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#6b7280;cursor:pointer;font-size:12px;">
+          Cancelar
+        </button>
+      </div>
+    </div>`
+}
+
+window.saveRegistroPago = async function(notaId) {
+  const nota = allNodes.find(n => n.id === notaId)
+  if (!nota) return
+  const m    = nota.metadata || {}
+  const sfx  = notaId.slice(0, 8)
+  const monto  = parseFloat(document.getElementById(`pago-monto-${sfx}`)?.value || '0')
+  const moneda = document.getElementById(`pago-mon-${sfx}`)?.value   || 'MXN'
+  const fecha  = document.getElementById(`pago-fecha-${sfx}`)?.value || new Date().toISOString().slice(0,10)
+  const metodo = document.getElementById(`pago-met-${sfx}`)?.value   || 'Transferencia'
+  const ref    = document.getElementById(`pago-ref-${sfx}`)?.value?.trim() || ''
+
+  if (!monto || monto <= 0) { showToast('⚠️ Ingresa un monto válido'); return }
+
+  // Crear income movimiento
+  const movContent = `${m.titulo || m.folio} — ${m.clienteName || 'Sin cliente'} — Pago ${ref || fecha}`
+  const movMeta    = {
+    amount: monto, moneda, type: 'income', date: fecha,
+    description: movContent,
+    cotizacion_ref: notaId, folio_ref: m.folio,
+    cliente: m.clienteName || '', metodo, referencia: ref,
+    source: 'nota_venta', autoGenerado: true,
+  }
+  const movId = 'mv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)
+  const movNode = { id: movId, content: movContent, type: 'income', metadata: movMeta, created_at: new Date().toISOString() }
+  allNodes.push(movNode)
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').insert([{ id: movId, owner_id: currentUser?.id, content: movContent, type: 'income', metadata: movMeta }])
+  }
+
+  // Actualizar nota con el nuevo pago
+  const pagos   = [...(m.pagos || []), { id: movId, monto, moneda, fecha, metodo, referencia: ref }]
+  const pagado  = pagos.reduce((s, p) => s + (p.monto || 0), 0)
+  const nuevoEstado = pagado >= (m.total || 0) - 0.01 ? 'pagado' : 'pendiente'
+  nota.metadata = { ...m, pagos, estado: nuevoEstado }
+  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    await supabase.from('nodes').update({ metadata: nota.metadata }).eq('id', notaId)
+  }
+
+  showToast(`✅ Pago de ${_cotFmt(monto, moneda)} registrado · Movimiento de ingreso creado`)
+  renderCotizaciones()
+}
+
+// ── Generar Movimiento desde Nota de Venta (legado — para notas sin pagos) ────
 window.generarMovimientoCot = async function(id) {
   const src = allNodes.find(n => n.id === id)
   if (!src) { showToast('Nota no encontrada'); return }
-  const m   = src.metadata || {}
+  const m = src.metadata || {}
   if (!m.total) { showToast('⚠️ La nota no tiene total'); return }
-
-  const fecha   = m.fecha || new Date().toISOString().slice(0, 10)
-  const content = `Ingreso — ${m.titulo || m.folio || id} — ${m.clienteName || 'Sin cliente'}`
-  const meta    = {
-    amount: m.total, moneda: m.moneda || 'MXN', type: 'income',
-    description: content, date: fecha,
-    cotizacion_ref: id, folio_ref: m.folio,
-    cliente: m.clienteName || '',
-    autoGenerado: true,
-  }
-  const node = {
-    id: 'mv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-    content, type: 'income', metadata: meta,
-    created_at: new Date().toISOString(),
-  }
-  allNodes.push(node)
-  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
-    await supabase.from('nodes').insert([{ id: node.id, owner_id: currentUser?.id, content, type: 'income', metadata: meta }])
-  }
-  // Marcar nota como pagada
-  src.metadata = { ...src.metadata, estado: 'pagado' }
-  if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
-    await supabase.from('nodes').update({ metadata: src.metadata }).eq('id', id)
-  }
-  showToast(`💰 Movimiento de ingreso generado — ${_cotFmt(m.total, m.moneda || 'MXN')}`)
-  renderCotizaciones()
+  // Redirigir al flujo de pagos parciales
+  window.registrarPagoCot(id)
 }
 
 // ── Modal Catálogo — abrir ─────────────────────────────────────────────────────
