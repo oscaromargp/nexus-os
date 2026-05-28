@@ -23,7 +23,7 @@ import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensua
          pdfPresupuestoPro, pdfNotaVentaPro,
          pdfReconocimientoAdeudo, pdfNDA, pdfConvenioPago,
          pdfOrdenServicio, pdfCartaResponsiva,
-         pdfBitacora, preloadCover } from './src/pdf-reports.js'
+         pdfBitacora, preloadCover, numToLetras } from './src/pdf-reports.js'
 
 // ── Lucide Icons ──────────────────────────────────────────────────────────────
 import {
@@ -7364,9 +7364,9 @@ window.openDocGen = function(type) {
     contrato:   '🤝 Contrato de Servicios',
   }
   if (title) title.textContent = titles[type] || 'Documento'
-  // Mostrar botón DOC solo para contrato y carta poder
+  // Mostrar botón DOC para todos los tipos
   const docBtn = document.getElementById('docgen-btn-doc')
-  if (docBtn) docBtn.style.display = (type === 'contrato' || type === 'cartapoder') ? '' : 'none'
+  if (docBtn) docBtn.style.display = ''
 
   const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
   const mesOpts = meses.map(m => '<option value="' + m + '">' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>').join('')
@@ -8626,7 +8626,7 @@ window.docGenExport = async function() {
 
   // Capture all form field values for later re-edit
   const _snap = {}
-  const _modalBody = document.getElementById('docgen-modal-body')
+  const _modalBody = document.getElementById('docgen-body')
   if (_modalBody) {
     _modalBody.querySelectorAll('input, textarea, select').forEach(el => {
       if (el.id) _snap[el.id] = (el.type === 'checkbox') ? el.checked : el.value
@@ -8660,22 +8660,26 @@ window.docGenExport = async function() {
   }
   allNodes.push(docNode)
   if (typeof supabase !== 'undefined' && localStorage.getItem('nexus_admin_bypass') !== 'true') {
-    supabase.from('nodes').insert([{
-      id: docNode.id, owner_id: currentUser?.id,
-      content: docNode.content, type: docNode.type, metadata: docNode.metadata
-    }])
+    try {
+      const { error } = await supabase.from('nodes').insert([{
+        id: docNode.id, owner_id: currentUser?.id,
+        content: docNode.content, type: docNode.type, metadata: docNode.metadata
+      }])
+      if (error) console.error('[docGenExport] Supabase insert error:', error)
+    } catch (e) { console.error('[docGenExport] Insert exception:', e) }
   }
   showToast('✅ PDF generado y guardado en histórico')
   renderDocHistory()
   closeDocGen()
 }
 
-/** Exporta el documento actual como .doc (Word-compatible) para Contrato y Carta Poder */
+/** Exporta el documento actual como .doc (Word-compatible) — todos los tipos */
 window.docGenExportDoc = function() {
   const type  = _docGenType
   const blank = '________________________'
   const esc   = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   const folio = `DOC-${new Date().getFullYear()}-${String(Math.floor(Math.random()*9000)+1000)}`
+  const toFmtL = raw => raw ? new Date(raw+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}) : blank
 
   // Encabezado de proyecto (si hay uno vinculado)
   const _dgProjSelDoc  = document.getElementById('dg-proyecto')?.value || ''
@@ -8690,10 +8694,308 @@ window.docGenExportDoc = function() {
       `<div style="margin-left:auto;font-size:6pt;font-weight:700;color:#22d3ee;">NEXUS OS</div></div>`
     : ''
 
-  const _idRow = (label, val) => val && val !== blank
-    ? `<p><strong>${label}:</strong> ${esc(val)}</p>` : ''
+  const _idRow = (label, val) => val && val !== blank ? `<p><strong>${label}:</strong> ${esc(val)}</p>` : ''
+  const _fmtMonto = (m, mon, tc) => {
+    const mxn = (mon !== 'MXN' && tc > 0) ? m * tc : null
+    const base = `$${m.toLocaleString('es-MX',{minimumFractionDigits:2})} ${mon}`
+    const letra = numToLetras(mxn || m) + ' MONEDA NACIONAL'
+    return mxn ? `${base} (= $${mxn.toLocaleString('es-MX',{minimumFractionDigits:2})} MXN — ${letra})` : `${base} (${letra})`
+  }
 
-  if (type === 'contrato') {
+  let html = '', filename = ''
+
+  if (type === 'prorroga') {
+    const arrendadorName  = esc(document.getElementById('dg-arrendador-name')?.value  || blank)
+    const arrendadorCargo = esc(document.getElementById('dg-arrendador-cargo')?.value || 'Arrendador del inmueble')
+    const arrName  = esc(document.getElementById('dg-arrendatario-name')?.value || blank)
+    const arrDom   = esc(document.getElementById('dg-arrendatario-dom')?.value  || blank)
+    const arrCurp  = esc(document.getElementById('dg-arrendatario-curp')?.value || '')
+    const dia      = esc(document.getElementById('dg-dia')?.value     || '__')
+    const mes      = esc(document.getElementById('dg-mes')?.value     || '______')
+    const anio     = esc(document.getElementById('dg-anio')?.value    || '20__')
+    const mesRenta = esc(document.getElementById('dg-mes-renta')?.value || '[mes]')
+    const motivo   = esc(document.getElementById('dg-motivo')?.value  || '')
+    const diaPago  = esc(document.getElementById('dg-dia-pago')?.value  || '__')
+    const mesPago  = esc(document.getElementById('dg-mes-pago')?.value  || '[mes]')
+    const anioPago = esc(document.getElementById('dg-anio-pago')?.value || '20__')
+    const mtoRenta = esc(document.getElementById('dg-monto-renta')?.value || '')
+    html = `
+      ${_proyHeaderDoc}
+      <h1>PRÓRROGA DE PAGO DE RENTA</h1>
+      <p style="text-align:center;color:#666;">${folio} &nbsp;·&nbsp; ${dia} de ${mes} de ${anio}</p>
+      <p>Para: <strong>${arrendadorName}</strong> — ${arrendadorCargo}</p>
+      <p>Presente.</p>
+      <p>Por medio de la presente, yo, <strong>${arrName}</strong>${arrCurp ? ', CURP: <strong>' + arrCurp + '</strong>' : ''}${arrDom !== blank ? ', con domicilio en ' + arrDom : ''}, me dirijo a usted respetuosamente para <strong>solicitar una prórroga para el pago de la renta correspondiente al mes de ${mesRenta}</strong>${mtoRenta ? ' por la cantidad de <strong>$' + mtoRenta + '</strong>' : ''}.</p>
+      ${motivo ? `<h2>MOTIVO DE LA SOLICITUD</h2><p>${motivo}</p>` : ''}
+      <p>Me comprometo a realizar el pago íntegro a más tardar el día <strong>${diaPago} de ${mesPago} de ${anioPago}</strong>.</p>
+      <p>Sin más por el momento, en espera de su favorable respuesta, quedo a sus órdenes.</p>
+      <p style="margin-top:20pt;">Atentamente,</p>
+      <div class="firma-row">
+        <div class="firma">${arrName}<br>ARRENDATARIO</div>
+        <div class="firma">${arrendadorName}<br>${arrendadorCargo}</div>
+      </div>
+      <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Folio: ${folio}</div>`
+    filename = `prorroga-renta-${folio}`
+
+  } else if (type === 'pagare') {
+    const benefName  = esc(document.getElementById('dg-benef-name')?.value  || blank)
+    const deudorName = esc(document.getElementById('dg-deudor-name')?.value || blank)
+    const lugar      = esc(document.getElementById('dg-lugar')?.value   || blank)
+    const monto      = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const moneda     = document.getElementById('dg-moneda')?.value || 'MXN'
+    const tc         = parseFloat(document.getElementById('dg-tc')?.value || '0')
+    const fechaRaw   = document.getElementById('dg-fecha-pago')?.value || ''
+    const fechaPago  = fechaRaw ? new Date(fechaRaw+'T12:00:00').toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'}) : blank
+    const concepto   = esc(document.getElementById('dg-concepto')?.value   || blank)
+    const metodo     = esc(document.getElementById('dg-metodo')?.value     || '')
+    const referencia = esc(document.getElementById('dg-referencia')?.value || '')
+    const interes    = esc(document.getElementById('dg-interes-moratorio')?.value || '2.5')
+    const bRfc = esc(document.getElementById('dg-benef-rfc')?.value  || '')
+    const bCurp= esc(document.getElementById('dg-benef-curp')?.value || '')
+    const bDir = esc(document.getElementById('dg-benef-dir')?.value  || '')
+    const bBanco = esc(document.getElementById('dg-benef-banco')?.value || '')
+    const bClabe = esc(document.getElementById('dg-benef-clabe')?.value || '')
+    const dRfc = esc(document.getElementById('dg-deudor-rfc')?.value  || '')
+    const dCurp= esc(document.getElementById('dg-deudor-curp')?.value || '')
+    const dDir = esc(document.getElementById('dg-deudor-dir')?.value  || '')
+    html = `
+      ${_proyHeaderDoc}
+      <h1>P A G A R É</h1>
+      <p style="text-align:center;color:#666;">${folio} &nbsp;·&nbsp; ${lugar}</p>
+      <p>Por este PAGARÉ me comprometo incondicionalmente a pagar a la orden de <strong>${benefName}</strong>${bRfc ? ' (RFC: ' + bRfc + ')' : ''} la cantidad de <strong>${_fmtMonto(monto, moneda, tc)}</strong>.</p>
+      <p><strong>Fecha de vencimiento:</strong> ${fechaPago}</p>
+      <p><strong>Concepto:</strong> ${concepto}</p>
+      ${metodo ? `<p><strong>Forma de pago:</strong> ${metodo}${referencia ? ' &nbsp;·&nbsp; Ref: ' + referencia : ''}</p>` : ''}
+      ${bBanco ? `<p><strong>Cuenta del beneficiario:</strong> ${bBanco}${bClabe ? ' / CLABE: ' + bClabe : ''}</p>` : ''}
+      <p>En caso de mora, se causarán intereses moratorios del <strong>${interes}% mensual</strong> sobre el saldo insoluto.</p>
+      <h2>BENEFICIARIO</h2>
+      ${_idRow('Nombre', benefName)}${_idRow('RFC', bRfc)}${_idRow('CURP', bCurp)}${_idRow('Domicilio', bDir)}
+      <h2>DEUDOR</h2>
+      ${_idRow('Nombre', deudorName)}${_idRow('RFC', dRfc)}${_idRow('CURP', dCurp)}${_idRow('Domicilio', dDir)}
+      <p style="margin-top:20pt;">Leído y firmado de conformidad en todas sus hojas.</p>
+      <div class="firma-row">
+        <div class="firma">${deudorName}<br>DEUDOR — FIRMA Y HUELLA</div>
+        <div class="firma">${benefName}<br>BENEFICIARIO</div>
+      </div>
+      <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Folio: ${folio}</div>`
+    filename = `pagare-${folio}`
+
+  } else if (type === 'recibo') {
+    const receptorName   = esc(document.getElementById('dg-receptor-name')?.value   || blank)
+    const entreganteName = esc(document.getElementById('dg-entregante-name')?.value || blank)
+    const receptorRfc    = esc(document.getElementById('dg-receptor-rfc')?.value    || '')
+    const entreganteRfc  = esc(document.getElementById('dg-entregante-rfc')?.value  || '')
+    const monto   = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const moneda  = document.getElementById('dg-moneda')?.value || 'MXN'
+    const tc      = parseFloat(document.getElementById('dg-tc')?.value || '0')
+    const lugar   = esc(document.getElementById('dg-lugar')?.value || blank)
+    const fechaRaw = document.getElementById('dg-fecha')?.value || ''
+    const fecha   = fechaRaw ? new Date(fechaRaw+'T12:00:00').toLocaleDateString('es-MX',{year:'numeric',month:'long',day:'numeric'}) : blank
+    const concepto = esc(document.getElementById('dg-concepto')?.value || blank)
+    html = `
+      ${_proyHeaderDoc}
+      <h1>RECIBO DE DINERO</h1>
+      <p style="text-align:center;color:#666;">${folio} &nbsp;·&nbsp; ${lugar}, ${fecha}</p>
+      <p>Yo, <strong>${receptorName}</strong>${receptorRfc ? ' (RFC: ' + receptorRfc + ')' : ''}, declaro haber recibido de <strong>${entreganteName}</strong>${entreganteRfc ? ' (RFC: ' + entreganteRfc + ')' : ''} la cantidad de <strong>${_fmtMonto(monto, moneda, tc)}</strong>, por concepto de: <strong>${concepto}</strong>.</p>
+      <p>Se expide el presente recibo en <strong>${lugar}</strong>, el día <strong>${fecha}</strong>, para constancia y plena validez legal.</p>
+      <div class="firma-row">
+        <div class="firma">${entreganteName}${entreganteRfc ? '<br>RFC: ' + entreganteRfc : ''}<br>QUIEN ENTREGA</div>
+        <div class="firma">${receptorName}${receptorRfc ? '<br>RFC: ' + receptorRfc : ''}<br>QUIEN RECIBE</div>
+      </div>
+      <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Folio: ${folio}</div>`
+    filename = `recibo-dinero-${folio}`
+
+  } else if (type === 'adeudo') {
+    const deudorName   = esc(document.getElementById('dg-deudor-name')?.value   || blank)
+    const acreedorName = esc(document.getElementById('dg-acreedor-name')?.value || blank)
+    const deudorRfc    = esc(document.getElementById('dg-deudor-rfc')?.value    || '')
+    const deudorCurp   = esc(document.getElementById('dg-deudor-curp')?.value   || '')
+    const deudorDom    = esc(document.getElementById('dg-deudor-dom')?.value    || '')
+    const acreedorRfc  = esc(document.getElementById('dg-acreedor-rfc')?.value  || '')
+    const acreedorDom  = esc(document.getElementById('dg-acreedor-dom')?.value  || '')
+    const lugar    = esc(document.getElementById('dg-lugar')?.value    || blank)
+    const concepto = esc(document.getElementById('dg-concepto')?.value || blank)
+    const formaPago= esc(document.getElementById('dg-forma-pago')?.value || '')
+    const intereses= esc(document.getElementById('dg-intereses')?.value || '')
+    const notas    = esc(document.getElementById('dg-notas')?.value    || '')
+    const monto    = parseFloat(document.getElementById('dg-monto')?.value || '0')
+    const moneda   = document.getElementById('dg-moneda')?.value   || 'MXN'
+    const tc       = parseFloat(document.getElementById('dg-tc')?.value || '0')
+    const fecha    = toFmtL(document.getElementById('dg-fecha')?.value || '')
+    const fechaPago= toFmtL(document.getElementById('dg-fecha-pago')?.value || '')
+    html = `
+      ${_proyHeaderDoc}
+      <h1>RECONOCIMIENTO DE ADEUDO</h1>
+      <p style="text-align:center;color:#666;">${folio} &nbsp;·&nbsp; ${lugar}, ${fecha}</p>
+      <h2>PARTES</h2>
+      <p><strong>DEUDOR:</strong> ${deudorName}${_idRow('RFC', deudorRfc)}${_idRow('CURP', deudorCurp)}${_idRow('Domicilio', deudorDom)}</p>
+      <p><strong>ACREEDOR:</strong> ${acreedorName}${_idRow('RFC', acreedorRfc)}${_idRow('Domicilio', acreedorDom)}</p>
+      <h2>PRIMERA — RECONOCIMIENTO</h2>
+      <p>El DEUDOR reconoce adeudar al ACREEDOR la cantidad de <strong>${_fmtMonto(monto, moneda, tc)}</strong>, por concepto de: <strong>${concepto}</strong>.</p>
+      <h2>SEGUNDA — FORMA Y FECHA DE PAGO</h2>
+      <p>${formaPago ? 'Forma de pago: <strong>' + formaPago + '</strong>. ' : ''}${fechaPago !== blank ? 'Fecha compromiso de pago: <strong>' + fechaPago + '</strong>.' : ''}</p>
+      ${intereses ? `<h2>TERCERA — INTERESES</h2><p>${intereses}</p>` : ''}
+      ${notas ? `<h2>NOTAS ADICIONALES</h2><p>${notas}</p>` : ''}
+      <p style="margin-top:20pt;">Leído y firmado de conformidad.</p>
+      <div class="firma-row">
+        <div class="firma">${deudorName}<br>DEUDOR</div>
+        <div class="firma">${acreedorName}<br>ACREEDOR</div>
+      </div>
+      <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Folio: ${folio}</div>`
+    filename = `reconocimiento-adeudo-${folio}`
+
+  } else if (type === 'nda') {
+    const parte1Name = esc(document.getElementById('dg-parte1-name')?.value || blank)
+    const parte2Name = esc(document.getElementById('dg-parte2-name')?.value || blank)
+    const parte1Rfc  = esc(document.getElementById('dg-parte1-rfc')?.value  || '')
+    const parte2Rfc  = esc(document.getElementById('dg-parte2-rfc')?.value  || '')
+    const parte1Dom  = esc(document.getElementById('dg-parte1-dom')?.value  || '')
+    const parte2Dom  = esc(document.getElementById('dg-parte2-dom')?.value  || '')
+    const lugar      = esc(document.getElementById('dg-lugar')?.value       || blank)
+    const fecha      = toFmtL(document.getElementById('dg-fecha')?.value || '')
+    const objeto     = esc(document.getElementById('dg-objeto')?.value      || blank)
+    const vigencia   = esc(document.getElementById('dg-vigencia')?.value    || '2 años')
+    const jurisdiccion = esc(document.getElementById('dg-jurisdiccion')?.value || lugar)
+    const clausulasExtra = esc(document.getElementById('dg-clausulas-extra')?.value || '')
+    html = `
+      ${_proyHeaderDoc}
+      <h1>ACUERDO DE CONFIDENCIALIDAD (NDA)</h1>
+      <p style="text-align:center;color:#666;">${folio} &nbsp;·&nbsp; ${lugar}, ${fecha}</p>
+      <h2>PARTES</h2>
+      <p><strong>PARTE 1:</strong> ${parte1Name}${_idRow('RFC', parte1Rfc)}${_idRow('Domicilio', parte1Dom)}</p>
+      <p><strong>PARTE 2:</strong> ${parte2Name}${_idRow('RFC', parte2Rfc)}${_idRow('Domicilio', parte2Dom)}</p>
+      <h2>PRIMERA — OBJETO</h2>
+      <p>Las partes acuerdan mantener estricta confidencialidad respecto a: <strong>${objeto}</strong>.</p>
+      <h2>SEGUNDA — INFORMACIÓN CONFIDENCIAL</h2>
+      <p>Se considerará información confidencial toda aquella que sea marcada como tal o que por su naturaleza deba entenderse como confidencial.</p>
+      <h2>TERCERA — VIGENCIA</h2>
+      <p>Este acuerdo tendrá una vigencia de <strong>${vigencia}</strong> a partir de la fecha de firma.</p>
+      <h2>CUARTA — INCUMPLIMIENTO</h2>
+      <p>El incumplimiento de este acuerdo dará lugar a las acciones legales y daños y perjuicios correspondientes.</p>
+      <h2>QUINTA — JURISDICCIÓN</h2>
+      <p>Las partes se someten a los tribunales de <strong>${jurisdiccion}</strong>.</p>
+      ${clausulasExtra ? `<h2>DISPOSICIONES ADICIONALES</h2><p>${clausulasExtra}</p>` : ''}
+      <p style="margin-top:20pt;">Leído y firmado de conformidad.</p>
+      <div class="firma-row">
+        <div class="firma">${parte1Name}<br>PARTE 1</div>
+        <div class="firma">${parte2Name}<br>PARTE 2</div>
+      </div>
+      <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Folio: ${folio}</div>`
+    filename = `nda-confidencialidad-${folio}`
+
+  } else if (type === 'convenio') {
+    const acreedorName = esc(document.getElementById('dg-acreedor-name')?.value || blank)
+    const deudorName   = esc(document.getElementById('dg-deudor-name')?.value   || blank)
+    const acreedorRfc  = esc(document.getElementById('dg-acreedor-rfc')?.value  || '')
+    const deudorRfc    = esc(document.getElementById('dg-deudor-rfc')?.value    || '')
+    const lugar        = esc(document.getElementById('dg-lugar')?.value         || blank)
+    const fecha        = toFmtL(document.getElementById('dg-fecha')?.value || '')
+    const concepto     = esc(document.getElementById('dg-concepto')?.value      || blank)
+    const montoTotal   = parseFloat(document.getElementById('dg-monto-total')?.value || '0')
+    const nPagos       = parseInt(document.getElementById('dg-n-pagos')?.value || '1')
+    const frecuencia   = esc(document.getElementById('dg-frecuencia')?.value    || 'mensual')
+    const diaPago      = esc(document.getElementById('dg-dia-pago')?.value      || '')
+    const fechaPPRaw   = document.getElementById('dg-fecha-primer-pago')?.value || ''
+    const fechaPP      = toFmtL(fechaPPRaw)
+    const intereses    = esc(document.getElementById('dg-intereses')?.value     || '')
+    const jurisdiccion = esc(document.getElementById('dg-jurisdiccion')?.value  || lugar)
+    const montoPago    = nPagos > 0 ? (montoTotal / nPagos).toFixed(2) : montoTotal.toFixed(2)
+    html = `
+      ${_proyHeaderDoc}
+      <h1>CONVENIO DE PAGO EN PARCIALIDADES</h1>
+      <p style="text-align:center;color:#666;">${folio} &nbsp;·&nbsp; ${lugar}, ${fecha}</p>
+      <h2>PARTES</h2>
+      <p><strong>ACREEDOR:</strong> ${acreedorName}${_idRow('RFC', acreedorRfc)}</p>
+      <p><strong>DEUDOR:</strong> ${deudorName}${_idRow('RFC', deudorRfc)}</p>
+      <h2>PRIMERA — CONCEPTO Y MONTO</h2>
+      <p>El DEUDOR reconoce adeudar al ACREEDOR la cantidad de <strong>$${montoTotal.toLocaleString('es-MX',{minimumFractionDigits:2})} (${numToLetras(montoTotal)} MONEDA NACIONAL)</strong>, por concepto de: <strong>${concepto}</strong>.</p>
+      <h2>SEGUNDA — PLAN DE PAGOS</h2>
+      <p>El DEUDOR se compromete a liquidar el adeudo en <strong>${nPagos} parcialidades ${frecuencia}es</strong> de <strong>$${parseFloat(montoPago).toLocaleString('es-MX',{minimumFractionDigits:2})}</strong> cada una${diaPago ? ', los días <strong>' + diaPago + '</strong> de cada período' : ''}, iniciando el <strong>${fechaPP}</strong>.</p>
+      ${intereses ? `<h2>TERCERA — INTERESES</h2><p>${intereses}</p>` : ''}
+      <h2>${intereses ? 'CUARTA' : 'TERCERA'} — JURISDICCIÓN</h2>
+      <p>Las partes se someten a los tribunales de <strong>${jurisdiccion}</strong>.</p>
+      <p style="margin-top:20pt;">Leído y firmado de conformidad.</p>
+      <div class="firma-row">
+        <div class="firma">${deudorName}<br>DEUDOR</div>
+        <div class="firma">${acreedorName}<br>ACREEDOR</div>
+      </div>
+      <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Folio: ${folio}</div>`
+    filename = `convenio-pago-${folio}`
+
+  } else if (type === 'ordenservicio') {
+    const clienteName   = esc(document.getElementById('dg-cliente-name')?.value   || blank)
+    const prestadorName = esc(document.getElementById('dg-prestador-name')?.value || blank)
+    const clienteRfc    = esc(document.getElementById('dg-cliente-rfc')?.value    || '')
+    const prestadorRfc  = esc(document.getElementById('dg-prestador-rfc')?.value  || '')
+    const clienteTel    = esc(document.getElementById('dg-cliente-tel')?.value    || '')
+    const prestadorTel  = esc(document.getElementById('dg-prestador-tel')?.value  || '')
+    const lugar       = esc(document.getElementById('dg-lugar')?.value          || blank)
+    const fecha       = toFmtL(document.getElementById('dg-fecha')?.value || '')
+    const descripcion = esc(document.getElementById('dg-descripcion')?.value    || blank)
+    const materiales  = esc(document.getElementById('dg-materiales')?.value     || '')
+    const monto       = parseFloat(document.getElementById('dg-monto')?.value   || '0')
+    const moneda      = document.getElementById('dg-moneda')?.value             || 'MXN'
+    const tc          = parseFloat(document.getElementById('dg-tc')?.value      || '0')
+    const formaPago   = esc(document.getElementById('dg-forma-pago')?.value     || '')
+    const notasTec    = esc(document.getElementById('dg-notas-tecnicas')?.value || '')
+    html = `
+      ${_proyHeaderDoc}
+      <h1>ORDEN DE SERVICIO</h1>
+      <p style="text-align:center;color:#666;">Folio: ${folio} &nbsp;·&nbsp; ${lugar}, ${fecha}</p>
+      <h2>DATOS DEL CLIENTE</h2>
+      ${_idRow('Nombre', clienteName)}${_idRow('RFC', clienteRfc)}${_idRow('Teléfono', clienteTel)}
+      <h2>DATOS DEL PRESTADOR</h2>
+      ${_idRow('Nombre', prestadorName)}${_idRow('RFC', prestadorRfc)}${_idRow('Teléfono', prestadorTel)}
+      <h2>DESCRIPCIÓN DEL SERVICIO</h2>
+      <p>${descripcion}</p>
+      ${materiales ? `<h2>MATERIALES / EQUIPO</h2><p>${materiales}</p>` : ''}
+      <h2>COSTO TOTAL</h2>
+      <p><strong>${_fmtMonto(monto, moneda, tc)}</strong>${formaPago ? ' — Forma de pago: ' + formaPago : ''}</p>
+      ${notasTec ? `<h2>NOTAS TÉCNICAS</h2><p>${notasTec}</p>` : ''}
+      <p style="margin-top:20pt;">Autorizado y firmado de conformidad.</p>
+      <div class="firma-row">
+        <div class="firma">${clienteName}<br>CLIENTE</div>
+        <div class="firma">${prestadorName}<br>PRESTADOR DEL SERVICIO</div>
+      </div>
+      <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Folio: ${folio}</div>`
+    filename = `orden-servicio-${folio}`
+
+  } else if (type === 'responsiva') {
+    const responsableName = esc(document.getElementById('dg-responsable-name')?.value || blank)
+    const responsableRfc  = esc(document.getElementById('dg-responsable-rfc')?.value  || '')
+    const responsableDom  = esc(document.getElementById('dg-responsable-dom')?.value  || '')
+    const propietarioName = esc(document.getElementById('dg-propietario-name')?.value || blank)
+    const propietarioRfc  = esc(document.getElementById('dg-propietario-rfc')?.value  || '')
+    const bienDesc = esc(document.getElementById('dg-bien-descripcion')?.value || blank)
+    const bienSerie= esc(document.getElementById('dg-bien-serie')?.value       || '')
+    const uso      = esc(document.getElementById('dg-uso')?.value              || blank)
+    const lugar    = esc(document.getElementById('dg-lugar')?.value            || blank)
+    const fecha    = toFmtL(document.getElementById('dg-fecha')?.value || '')
+    const vigencia = esc(document.getElementById('dg-vigencia')?.value         || 'indefinida')
+    const compromisos = esc(document.getElementById('dg-compromisos-extra')?.value || '')
+    html = `
+      ${_proyHeaderDoc}
+      <h1>CARTA RESPONSIVA</h1>
+      <p style="text-align:center;color:#666;">Folio: ${folio} &nbsp;·&nbsp; ${lugar}, ${fecha}</p>
+      <h2>BIEN ASIGNADO</h2>
+      <p><strong>Descripción:</strong> ${bienDesc}${bienSerie ? '<br/><strong>Número de serie / modelo:</strong> ' + bienSerie : ''}</p>
+      <p><strong>Uso autorizado:</strong> ${uso}</p>
+      <h2>DATOS DEL RESPONSABLE</h2>
+      ${_idRow('Nombre', responsableName)}${_idRow('RFC', responsableRfc)}${_idRow('Domicilio', responsableDom)}
+      <h2>DATOS DEL PROPIETARIO</h2>
+      ${_idRow('Nombre', propietarioName)}${_idRow('RFC', propietarioRfc)}
+      <h2>COMPROMISOS</h2>
+      <p>El RESPONSABLE se compromete a: custodiar el bien, darle el uso autorizado, conservarlo en buen estado y devolverlo en las mismas condiciones en que lo recibió. Vigencia: <strong>${vigencia}</strong>.</p>
+      ${compromisos ? `<p>${compromisos}</p>` : ''}
+      <p style="margin-top:20pt;">Leído y firmado de conformidad.</p>
+      <div class="firma-row">
+        <div class="firma">${responsableName}<br>RESPONSABLE</div>
+        <div class="firma">${propietarioName}<br>PROPIETARIO</div>
+      </div>
+      <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Folio: ${folio}</div>`
+    filename = `carta-responsiva-${folio}`
+
+  } else if (type === 'contrato') {
     const prestName = esc(document.getElementById('dg-prestador-name')?.value || blank)
     const clientName = esc(document.getElementById('dg-cliente-name')?.value || blank)
     const servicios  = esc(document.getElementById('dg-servicios')?.value || blank)
@@ -8712,8 +9014,7 @@ window.docGenExportDoc = function() {
     const clausulasExtra = esc(document.getElementById('dg-clausulas-extra')?.value || '')
     const clausulasCat = Array.from(document.querySelectorAll('.dg-clausula-check:checked'))
       .map(el => `<li><strong>${esc(el.dataset.titulo)}</strong> — ${esc(el.dataset.texto)}</li>`).join('')
-
-    const html = `
+    html = `
       ${_proyHeaderDoc}
       <h1>CONTRATO DE PRESTACIÓN DE SERVICIOS</h1>
       <p style="text-align:center;color:#666;">Folio: ${folio} &nbsp;·&nbsp; ${lugar}, a ${fecha}</p>
@@ -8740,24 +9041,20 @@ window.docGenExportDoc = function() {
         <div class="firma">${prestName}<br>EL PRESTADOR</div>
       </div>
       <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Original para el Cliente — Copia para el Prestador</div>`
-    _downloadAsDoc(html, `contrato-servicios-${folio}`)
-    showToast('📄 Documento Word descargado')
+    filename = `contrato-servicios-${folio}`
 
   } else if (type === 'cartapoder') {
-    const otorgName = esc(document.getElementById('dg-otorgante-idnum')?.value || blank)
-    const apodName  = esc(document.getElementById('dg-apoderado-idnum')?.value  || blank)
-    const otorgN    = esc(document.querySelector('#dg-otorgante-info')?.textContent || document.getElementById('dg-otorgante-name')?.value || blank)
-    const apodN     = esc(document.querySelector('#dg-apoderado-info')?.textContent  || document.getElementById('dg-apoderado-name')?.value  || blank)
-    const lugar     = esc(document.getElementById('dg-lugar')?.value || blank)
-    const fecha     = esc(document.getElementById('dg-fecha')?.value || blank)
-    const dest      = esc(document.getElementById('dg-destinatario')?.value || 'A QUIEN CORRESPONDA')
+    const otorgN = esc(document.querySelector('#dg-otorgante-info')?.textContent || document.getElementById('dg-otorgante-name')?.value || blank)
+    const apodN  = esc(document.querySelector('#dg-apoderado-info')?.textContent  || document.getElementById('dg-apoderado-name')?.value  || blank)
+    const lugar  = esc(document.getElementById('dg-lugar')?.value || blank)
+    const fecha  = esc(document.getElementById('dg-fecha')?.value || blank)
+    const dest   = esc(document.getElementById('dg-destinatario')?.value || 'A QUIEN CORRESPONDA')
     const facultades = Array.from(document.querySelectorAll('.dg-facultad-check:checked'))
       .map(el => `<li>${esc(el.getAttribute('data-label'))}</li>`).join('')
-    const razon     = esc(document.getElementById('dg-razon')?.value || '')
-    const t1        = esc(document.getElementById('dg-testigo1-name')?.value || '')
-    const t2        = esc(document.getElementById('dg-testigo2-name')?.value || '')
-
-    const html = `
+    const razon  = esc(document.getElementById('dg-razon')?.value || '')
+    const t1     = esc(document.getElementById('dg-testigo1-name')?.value || '')
+    const t2     = esc(document.getElementById('dg-testigo2-name')?.value || '')
+    html = `
       ${_proyHeaderDoc}
       <h1>CARTA PODER</h1>
       <p style="text-align:center;color:#666;">Para: ${dest}</p>
@@ -8776,11 +9073,12 @@ window.docGenExportDoc = function() {
       </div>
       ${t1 || t2 ? `<div class="testigos">${t1 ? '<div class="testigo">'+t1+'<br>TESTIGO 1</div>' : ''}${t2 ? '<div class="testigo">'+t2+'<br>TESTIGO 2</div>' : ''}</div>` : ''}
       <div class="footer">Documento generado en Nexus OS · nexus-os.vercel.app · Original para el apoderado — Copia para el otorgante</div>`
-    _downloadAsDoc(html, `carta-poder-${folio}`)
-    showToast('📄 Documento Word descargado')
-  } else {
-    showToast('⚠️ Exportación DOC disponible solo para Contrato y Carta Poder')
+    filename = `carta-poder-${folio}`
   }
+
+  if (!html) { showToast('⚠️ No se pudo generar el documento'); return }
+  _downloadAsDoc(html, filename)
+  showToast('📄 Documento Word descargado')
 }
 
 /** Auto-fill contrato form from linked cotización */
@@ -8819,7 +9117,7 @@ window.editDoc = function(id) {
   openDocGen(m.doc_type)
   // Restore all field values synchronously (innerHTML already set)
   const snap = m.form_snapshot || {}
-  const body = document.getElementById('docgen-modal-body')
+  const body = document.getElementById('docgen-body')
   if (!body) return
   Object.entries(snap).forEach(([key, val]) => {
     if (key.startsWith('__')) return
