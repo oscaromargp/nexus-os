@@ -22262,8 +22262,10 @@ window.openCotModal = function(type, id = null) {
         style="${emisorAccounts.length ? '' : 'display:none;'}">
         <option value="">— Seleccionar cuenta —</option>
         ${emisorAccounts.map((a, i) => {
-          const matched = existing.bancoPago === (a.banco||'') && existing.clabePago === (a.clabe||a.wallet||'')
-          return `<option value="${i}" ${matched?'selected':''}>${esc(a.label || a.banco || 'Cuenta '+(i+1))} · ${esc(a.tipo||'')} ${esc(a.clabe||a.wallet||'').slice(0,10)}${(a.clabe||a.wallet||'').length>10?'…':''}</option>`
+          const aBanco  = a.banco || a.bank || a.bank_name || ''
+          const matched = existing.bancoPago === aBanco && existing.clabePago === (a.clabe||a.wallet||'')
+          const lbl     = a.label || aBanco || 'Cuenta '+(i+1)
+          return `<option value="${i}" ${matched?'selected':''}>${esc(lbl)}${aBanco && lbl !== aBanco ? ' · '+esc(aBanco) : ''} ${esc(a.clabe||a.wallet||'').slice(0,10)}${(a.clabe||a.wallet||'').length>10?'…':''}</option>`
         }).join('')}
       </select>
     </div>
@@ -22407,8 +22409,10 @@ window.cotModalFillEmisor = function() {
     if (accounts.length) {
       ctaSel.innerHTML = '<option value="">— Seleccionar cuenta de cobro —</option>' +
         accounts.map((a, i) => {
+          const aBanco  = a.banco || a.bank || a.bank_name || ''
+          const lbl     = a.label || aBanco || 'Cuenta ' + (i+1)
           const preview = (a.clabe || a.wallet || '').slice(0, 12) + ((a.clabe || a.wallet || '').length > 12 ? '…' : '')
-          return `<option value="${i}">${esc(a.label || a.banco || 'Cuenta ' + (i+1))} · ${esc(a.tipo || '')} ${preview}</option>`
+          return `<option value="${i}">${esc(lbl)}${aBanco && lbl !== aBanco ? ' · '+esc(aBanco) : ''} · ${esc(a.tipo || '')} ${preview}</option>`
         }).join('')
       // Store for cotSelectPagoCta
       ctaSel.dataset.accounts = JSON.stringify(accounts)
@@ -22463,12 +22467,13 @@ window.cotSelectPagoCta = function() {
   const bancoEl = document.getElementById('cot-banco')
   const clabeEl = document.getElementById('cot-clabe')
   const metodEl = document.getElementById('cot-metodo-pago')
-  if (bancoEl) bancoEl.value = acct.banco || ''
+  const aBanco = acct.banco || acct.bank || acct.bank_name || ''
+  if (bancoEl) bancoEl.value = aBanco
   if (clabeEl) clabeEl.value = acct.clabe || acct.wallet || ''
   // Detectar método de pago por tipo de cuenta
   if (metodEl) {
-    const tipo = (acct.tipo || '').toLowerCase()
-    if (tipo.includes('cripto') || tipo.includes('wallet') || tipo.includes('usdt') || tipo.includes('btc')) {
+    const tipo = (acct.tipo || acct.type || '').toLowerCase()
+    if (tipo.includes('cripto') || tipo.includes('wallet') || tipo.includes('crypto') || tipo.includes('usdt') || tipo.includes('btc')) {
       metodEl.value = 'Cripto'
     } else if ((acct.clabe || '').length === 18) {
       metodEl.value = 'SPEI'
