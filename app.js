@@ -23,7 +23,8 @@ import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensua
          pdfPresupuestoPro, pdfNotaVentaPro,
          pdfReconocimientoAdeudo, pdfNDA, pdfConvenioPago,
          pdfOrdenServicio, pdfCartaResponsiva,
-         pdfBitacora, preloadCover, numToLetras } from './src/pdf-reports.js'
+         pdfBitacora, pdfAgendaFinanciera,
+         preloadCover, numToLetras } from './src/pdf-reports.js'
 
 // ── Lucide Icons ──────────────────────────────────────────────────────────────
 import {
@@ -4950,230 +4951,529 @@ let agendaColor    = '#60a5fa'
 let editingAgendaId = null
 let agendaPlanAccounts = new Set() // empty = all accounts
 
-function renderAgenda(nodes) {
-  const cards  = nodes.filter(n => n.type === 'card')
-  const subs   = nodes.filter(n => n.type === 'subscription')
-  const bills  = nodes.filter(n => n.type === 'bill')
-  const today  = new Date()
-  const todayN = today.getDate()
+// ── Agenda Financiera v2 — estado ────────────────────────────────────────────
+let agendaPeriod      = '7d'   // '7d' | 'week' | '4w' | 'month' | 'custom'
+let agendaRangeStart  = ''     // ISO date para rango personalizado inicio
+let agendaRangeEnd    = ''     // ISO date para rango personalizado fin
+let agendaShowAll     = false  // true = mostrar más de 12 items
+let _agendaSections   = { plan: false, cards: false, subs: false, bills: false }
 
-  // ── Filtrar por cuentas seleccionadas ────────────────────────
-  const accFilter = (n) => agendaPlanAccounts.size === 0 || agendaPlanAccounts.has(n.metadata?.account_id)
-  const subsF  = subs.filter(accFilter)
-  const billsF = bills.filter(accFilter)
-  const cardsF = cards.filter(accFilter)
-  const accLabel = agendaPlanAccounts.size === 0
-    ? 'todas las cuentas'
-    : `${agendaPlanAccounts.size} cuenta${agendaPlanAccounts.size!==1?'s':''}`
+// ─────────────────────────────────────────────────────────────────────────────
+// AGENDA FINANCIERA v2 — helpers de período y renderizado
+// ─────────────────────────────────────────────────────────────────────────────
 
-  // ── KPIs ─────────────────────────────────────────────────────
-  const totalSubs  = subsF.reduce((s, n) => s + (n.metadata?.amount || 0), 0)
-  const totalBills = billsF.filter(b => !b.metadata?.paid).reduce((s, n) => s + (n.metadata?.amount || 0), 0)
-  const totalFixed = totalSubs + totalBills
-  const kpis = [
-    { label:`Gasto fijo (${accLabel})`, value:fmt$(totalFixed), color:'#fb923c' },
-    { label:'Suscripciones activas', value: subsF.length, color:'#a78bfa' },
-    { label:'Tarjetas registradas', value: cardsF.length, color:'#60a5fa' },
-    { label:'Pagos pendientes', value: billsF.filter(b => !b.metadata?.paid).length, color:'#f87171' },
-  ]
+/** Calcula start/end del período seleccionado */
+function _agendaPeriodRange() {
+  const today = new Date(); today.setHours(0,0,0,0)
+  let start = new Date(today), end = new Date(today)
+  switch (agendaPeriod) {
+    case '7d':
+      end.setDate(today.getDate() + 7); break
+    case 'week': {
+      const dow = today.getDay()
+      start.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1))
+      end = new Date(start); end.setDate(start.getDate() + 6); break
+    }
+    case '4w':
+      end.setDate(today.getDate() + 28); break
+    case 'month':
+      start = new Date(today.getFullYear(), today.getMonth(), 1)
+      end   = new Date(today.getFullYear(), today.getMonth() + 1, 0); break
+    case 'custom':
+      if (agendaRangeStart) start = new Date(agendaRangeStart + 'T00:00:00')
+      if (agendaRangeEnd)   end   = new Date(agendaRangeEnd   + 'T00:00:00')
+      break
+  }
+  return { start, end }
+}
+
+/** Etiqueta legible del período */
+function _agendaPeriodLabel(start, end) {
+  const fmt = d => d.toLocaleDateString('es-MX', { day:'numeric', month:'short' })
+  if (agendaPeriod === '7d')    return `Próximos 7 días (${fmt(start)} – ${fmt(end)})`
+  if (agendaPeriod === 'week')  return `Esta semana (${fmt(start)} – ${fmt(end)})`
+  if (agendaPeriod === '4w')    return `Próximas 4 semanas (${fmt(start)} – ${fmt(end)})`
+  if (agendaPeriod === 'month') return start.toLocaleDateString('es-MX', { month:'long', year:'numeric' }).toUpperCase()
+  return `${fmt(start)} – ${fmt(end)}`
+}
+
+/** Construye lista unificada de obligaciones para el período dado */
+function _agendaBuildObligations(nodes, start, end) {
+  const today = new Date(); today.setHours(0,0,0,0)
+  const list = []
+
+  // ── Bills ──────────────────────────────────────────────────────────────────
+  nodes.filter(n => n.type === 'bill').forEach(b => {
+    const m = b.metadata || {}
+    if (!m.dueDate) return
+    const d = new Date(m.dueDate + 'T00:00:00')
+    if (d < start || d > end) return
+    const diffDays = Math.round((d - today) / 86400000)
+    list.push({
+      id: b.id, nodeType: 'bill',
+      label:   m.label || b.content || '(sin nombre)',
+      date: d, diffDays,
+      amount:  m.amount ?? null,
+      currency: m.currency || 'MXN',
+      paid:    m.paid || false,
+      type:    m.frequency ? (m.frequency.charAt(0).toUpperCase() + m.frequency.slice(1)) : 'Pago fijo',
+      typeIcon: '📋',
+      color:   m.color || '#fb923c',
+      notes:   m.billNotes || m.notes || '',
+      proofUrl: m.proof_url || '',
+      linkedMovId: m.linked_movimiento_id || '',
+    })
+  })
+
+  // ── Subscriptions ──────────────────────────────────────────────────────────
+  nodes.filter(n => n.type === 'subscription').forEach(s => {
+    const m = s.metadata || {}
+    if (!m.dayOfMonth) return
+    const day = parseInt(m.dayOfMonth)
+    // Iterate months within range
+    let cur = new Date(start.getFullYear(), start.getMonth(), day)
+    if (cur < start) cur = new Date(start.getFullYear(), start.getMonth() + 1, day)
+    while (cur <= end) {
+      const diffDays = Math.round((cur - today) / 86400000)
+      // Check if marked paid this month (metadata.paid_months = ['YYYY-MM', ...])
+      const monthKey = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}`
+      const paid     = (m.paid_months || []).includes(monthKey)
+      list.push({
+        id: s.id + '_' + monthKey, nodeType: 'subscription', nodeId: s.id,
+        label:    m.label || s.content || '(suscripción)',
+        date: new Date(cur), diffDays,
+        amount:   m.amount ?? null,
+        currency: m.currency || 'MXN',
+        paid,
+        type:     'Suscripción',
+        typeIcon: '🔄',
+        color:    m.color || '#a78bfa',
+        notes:    m.notes || '',
+        proofUrl: m.proof_url || '',
+        linkedMovId: m.linked_movimiento_id || '',
+        monthKey,
+      })
+      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, day)
+    }
+  })
+
+  // ── Cards: corte + pago ────────────────────────────────────────────────────
+  nodes.filter(n => n.type === 'card').forEach(c => {
+    const m = c.metadata || {}
+    const clr = m.color || '#60a5fa'
+    ;[
+      [m.cutDay,  '✂️', 'Corte tarjeta'],
+      [m.payDay,  '💳', 'Pago tarjeta'],
+    ].forEach(([dayN, icon, typStr]) => {
+      if (!dayN) return
+      const day = parseInt(dayN)
+      let cur = new Date(start.getFullYear(), start.getMonth(), day)
+      if (cur < start) cur = new Date(cur.getFullYear(), cur.getMonth() + 1, day)
+      while (cur <= end) {
+        const diffDays = Math.round((cur - today) / 86400000)
+        list.push({
+          id: c.id + '_' + typStr.replace(/\s/g,'_') + '_' + cur.toISOString().slice(0,7),
+          nodeId: c.id, nodeType: 'card',
+          label:    `${icon} ${m.label || c.content}`,
+          date: new Date(cur), diffDays,
+          amount:   typStr === 'Pago tarjeta' ? (m.estimatedPayment || null) : null,
+          currency: m.currency || 'MXN',
+          paid:     false,
+          type:     typStr,
+          typeIcon: typStr === 'Corte tarjeta' ? '✂️' : '💳',
+          color:    clr,
+          notes:    '',
+          proofUrl: '',
+          linkedMovId: '',
+        })
+        cur = new Date(cur.getFullYear(), cur.getMonth() + 1, day)
+      }
+    })
+  })
+
+  list.sort((a, b) => a.date - b.date)
+  return list
+}
+
+/** Renderiza la lista unificada de próximos vencimientos */
+function _renderAgendaUpcoming(obligations) {
+  const upEl      = document.getElementById('agenda-upcoming')
+  const cntEl     = document.getElementById('agenda-upcoming-count')
+  const moreEl    = document.getElementById('agenda-show-more')
+  const subtitleEl= document.getElementById('agenda-upcoming-subtitle')
+  if (!upEl) return
+
+  const visible = agendaShowAll ? obligations : obligations.slice(0, 12)
+  const hidden  = obligations.length - visible.length
+
+  if (cntEl) {
+    if (obligations.length > 0) {
+      cntEl.style.display = 'inline'
+      cntEl.textContent   = obligations.length + ' compromiso' + (obligations.length !== 1 ? 's' : '')
+    } else {
+      cntEl.style.display = 'none'
+    }
+  }
+  if (subtitleEl) {
+    const urgentes = obligations.filter(o => !o.paid && o.diffDays <= 3 && o.diffDays >= 0).length
+    const vencidos = obligations.filter(o => !o.paid && o.diffDays < 0).length
+    const parts = []
+    if (vencidos > 0) parts.push(`<span style="color:#f87171;font-weight:700;">${vencidos} vencido${vencidos!==1?'s':''}</span>`)
+    if (urgentes > 0) parts.push(`<span style="color:#fb923c;font-weight:700;">${urgentes} urgente${urgentes!==1?'s':''}</span>`)
+    subtitleEl.innerHTML = parts.length > 0 ? '⚠️ ' + parts.join(' · ') : ''
+  }
+
+  if (visible.length === 0) {
+    upEl.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:28px;font-size:13px;">
+      🎉 Sin vencimientos en este período — todo al día!
+    </div>`
+    if (moreEl) moreEl.innerHTML = ''
+    return
+  }
+
+  upEl.innerHTML = visible.map(ob => _renderObItem(ob)).join('')
+
+  if (moreEl) {
+    if (hidden > 0) {
+      moreEl.innerHTML = `<button onclick="agendaShowAll=true;renderAgenda(allNodes)"
+        style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);border-radius:10px;padding:8px 20px;cursor:pointer;font-size:12px;font-weight:600;width:100%;">
+        Mostrar ${hidden} más →
+      </button>`
+    } else if (obligations.length > 12) {
+      moreEl.innerHTML = `<button onclick="agendaShowAll=false;renderAgenda(allNodes)"
+        style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);border-radius:10px;padding:8px 20px;cursor:pointer;font-size:12px;font-weight:600;width:100%;">
+        Mostrar menos ↑
+      </button>`
+    } else {
+      moreEl.innerHTML = ''
+    }
+  }
+}
+
+/** Renderiza un ítem de obligación con acciones inline */
+function _renderObItem(ob) {
+  const safeId = ob.id.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const urgColor = ob.paid ? '#4ade80' :
+    ob.diffDays < 0      ? '#f87171' :
+    ob.diffDays === 0    ? '#f87171' :
+    ob.diffDays <= 3     ? '#fb923c' :
+    ob.diffDays <= 7     ? '#fbbf24' : '#4ade80'
+  const urgBg = urgColor + '18'
+  const badgeText = ob.paid ? '✓ PAGADO' :
+    ob.diffDays < 0      ? `VENCIDO ${Math.abs(ob.diffDays)}d` :
+    ob.diffDays === 0    ? 'HOY' :
+    ob.diffDays === 1    ? 'MAÑANA' : `${ob.diffDays}d`
+  const amountStr = ob.amount ? fmt$(ob.amount) : ''
+  const dateStr   = ob.date.toLocaleDateString('es-MX', { weekday:'short', day:'numeric', month:'short' })
+  const labelDecor = ob.paid ? 'text-decoration:line-through;color:var(--text-muted);' : 'color:#fff;'
+  const noteExcerpt = ob.notes ? `<span style="font-style:italic;color:var(--text-muted);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ob.notes.slice(0,50))}${ob.notes.length>50?'…':''}</span>` : ''
+  const proofBadge  = ob.proofUrl  ? `<span style="color:#4ade80;font-size:10px;">📎</span>` : ''
+  const linkedBadge = ob.linkedMovId ? `<span style="color:#60a5fa;font-size:10px;">🔗</span>` : ''
+
+  return `<div class="ag-ob-item" data-ob-id="${safeId}" style="border-radius:12px;border:1px solid ${urgColor}28;background:${urgBg};margin-bottom:8px;overflow:hidden;transition:all 0.15s;">
+    <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;">
+      <div style="background:${urgColor};color:#000;border-radius:7px;padding:3px 8px;font-size:9.5px;font-weight:900;font-family:'JetBrains Mono',monospace;flex-shrink:0;min-width:58px;text-align:center;white-space:nowrap;">${badgeText}</div>
+      <span style="font-size:17px;flex-shrink:0;">${ob.typeIcon}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;${labelDecor}white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(ob.label)}</div>
+        <div style="font-size:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:2px;">
+          <span style="color:var(--text-muted);">${dateStr}</span>
+          <span style="background:${ob.color}22;color:${ob.color};border-radius:20px;padding:1px 7px;font-size:9px;font-weight:700;">${ob.type}</span>
+          ${noteExcerpt}${proofBadge}${linkedBadge}
+        </div>
+      </div>
+      ${amountStr ? `<div style="font-size:14px;font-weight:900;color:${urgColor};font-family:'JetBrains Mono',monospace;flex-shrink:0;">${amountStr}</div>` : ''}
+      <div style="display:flex;gap:3px;flex-shrink:0;">
+        ${ob.nodeType !== 'card' ? `<button onclick="agendaQA('${safeId}','paid','${ob.nodeType}')" title="${ob.paid?'Reabrir':'Marcar pagado'}"
+          style="width:28px;height:28px;border-radius:7px;border:2px solid ${ob.paid?'#4ade80':'rgba(255,255,255,0.15)'};background:${ob.paid?'rgba(74,222,128,0.15)':'transparent'};color:${ob.paid?'#4ade80':'var(--text-muted)'};cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;">✓</button>` : ''}
+        <button onclick="agendaQA('${safeId}','reschedule','${ob.nodeType}')" title="Reprogramar"
+          style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">📅</button>
+        <button onclick="agendaQA('${safeId}','link','${ob.nodeType}')" title="Vincular movimiento"
+          style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">🔗</button>
+        <button onclick="agendaQA('${safeId}','note','${ob.nodeType}')" title="Nota"
+          style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">💬</button>
+        <button onclick="agendaQA('${safeId}','proof','${ob.nodeType}')" title="Comprobante"
+          style="width:28px;height:28px;border-radius:7px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:var(--text-muted);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;">📎</button>
+      </div>
+    </div>
+    <div class="ag-detail-panel" id="ag-detail-${safeId}" style="display:none;padding:0 14px 13px;border-top:1px solid rgba(255,255,255,0.05);"></div>
+  </div>`
+}
+
+/** Renderiza KPIs de la Agenda Financiera */
+function _renderAgendaKPIs(nodes, start, end) {
   const kpiEl = document.getElementById('agenda-kpis')
-  if (kpiEl) kpiEl.innerHTML = kpis.map(k => `
-    <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px 20px;">
-      <div style="font-size:22px;font-weight:800;color:${k.color};font-family:'JetBrains Mono',monospace;">${k.value}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${k.label}</div>
+  if (!kpiEl) return
+  const today   = new Date(); today.setHours(0,0,0,0)
+
+  // Saldo disponible (balance mes actual)
+  const period  = currentPeriod()
+  const txs     = getTransactions(nodes, 'all', period)
+  const totalInc= txs.filter(n => n.type === 'income').reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const totalExp= txs.filter(n => n.type === 'expense').reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const saldo   = totalInc - totalExp
+
+  // Obligaciones en el período
+  const obs       = _agendaBuildObligations(nodes, start, end)
+  const pendientes= obs.filter(o => !o.paid)
+  const proxPagos = pendientes.reduce((s, o) => s + (o.amount || 0), 0)
+  const alertas   = pendientes.filter(o => o.diffDays <= 3 && o.diffDays >= 0).length
+  const vencidos  = pendientes.filter(o => o.diffDays < 0).length
+
+  // Ingresos esperados (income nodes con fecha en el período)
+  const ingEsperados = nodes
+    .filter(n => n.type === 'income')
+    .filter(n => { const d = n.metadata?.date || n.created_at || ''; if (!d) return false; const dt = new Date(d); dt.setHours(0,0,0,0); return dt >= start && dt <= end })
+    .reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+
+  const cashFlow = ingEsperados - proxPagos
+
+  const kpis = [
+    { label:'Saldo Disponible', value: fmt$(saldo),         color: saldo >= 0 ? '#4ade80' : '#f87171',   icon:'💰', sub: 'Balance del mes' },
+    { label:'Próximos Pagos',   value: fmt$(proxPagos),     color:'#f87171',                              icon:'⬇️', sub: pendientes.length + ' compromisos' },
+    { label:'Ingresos Esperados',value: fmt$(ingEsperados), color:'#4ade80',                              icon:'⬆️', sub: 'En el período' },
+    { label:'Cash Flow Neto',   value: (cashFlow >= 0 ? '+' : '') + fmt$(cashFlow), color: cashFlow >= 0 ? '#4ade80' : '#f87171', icon:'📊', sub: 'Entradas − Salidas' },
+    { label:'Alertas Urgentes', value: alertas + vencidos,  color: alertas + vencidos > 0 ? '#f87171' : '#4ade80', icon: alertas + vencidos > 0 ? '🚨' : '✅', sub: alertas + vencidos > 0 ? `${vencidos} vencido${vencidos!==1?'s':''} · ${alertas} urgente${alertas!==1?'s':''}` : 'Todo al día' },
+  ]
+
+  kpiEl.innerHTML = kpis.map(k => `
+    <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px 18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:18px;">${k.icon}</span>
+        <span style="font-size:9.5px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em;">${k.label}</span>
+      </div>
+      <div style="font-size:20px;font-weight:900;color:${k.color};font-family:'JetBrains Mono',monospace;line-height:1.1;">${k.value}</div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${k.sub}</div>
     </div>`).join('')
 
-  // ── PLAN DEL MES (tabla doble entrada/salida) ─────────────────
-  const planMonth = document.getElementById('agenda-plan-month')
-  if (planMonth) planMonth.textContent = today.toLocaleDateString('es-ES',{month:'long',year:'numeric'}).toUpperCase()
+  return { alertas, vencidos, proxPagos, ingEsperados, cashFlow, saldo }
+}
 
-  // ── Account selector checkboxes ───────────────────────────────
+/** Renderiza banner de alertas */
+function _renderAgendaAlertBanner(obs) {
+  const bannerEl = document.getElementById('agenda-alert-banner')
+  if (!bannerEl) return
+  const vencidos = obs.filter(o => !o.paid && o.diffDays < 0)
+  const urgentes = obs.filter(o => !o.paid && o.diffDays >= 0 && o.diffDays <= 3)
+  const total    = vencidos.length + urgentes.length
+  if (total === 0) { bannerEl.innerHTML = ''; return }
+
+  const msgs = []
+  if (vencidos.length > 0) msgs.push(`<b>${vencidos.length} pago${vencidos.length!==1?'s':''} vencido${vencidos.length!==1?'s':''}</b>`)
+  if (urgentes.length > 0) msgs.push(`<b>${urgentes.length} vence${urgentes.length===1?'':'n'} en ≤ 3 días</b>`)
+  bannerEl.innerHTML = `
+    <div style="background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.3);border-radius:12px;padding:11px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+      <span style="font-size:20px;flex-shrink:0;">🚨</span>
+      <div style="flex:1;">
+        <span style="font-size:13px;color:#f87171;font-weight:700;">Atención financiera requerida — </span>
+        <span style="font-size:12px;color:#fca5a5;">${msgs.join(' y ')}</span>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px;">${vencidos.concat(urgentes).slice(0,3).map(o => esc(o.label)).join(' · ')}</div>
+      </div>
+      <button onclick="setAgendaPeriod('7d')" style="background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.3);color:#f87171;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:11px;font-weight:700;flex-shrink:0;">Ver ahora</button>
+    </div>`
+}
+
+/** Actualiza los tabs de período resaltando el activo */
+function _updateAgendaPeriodTabs() {
+  document.querySelectorAll('.ag-period-btn').forEach(btn => {
+    const isActive = btn.dataset.period === agendaPeriod
+    btn.style.background  = isActive ? 'rgba(34,211,238,0.15)' : 'transparent'
+    btn.style.color       = isActive ? '#22d3ee'                : 'var(--text-muted)'
+    btn.style.border      = isActive ? '1px solid rgba(34,211,238,0.3)' : 'none'
+  })
+  const customEl = document.getElementById('agenda-custom-range')
+  if (customEl) customEl.style.display = agendaPeriod === 'custom' ? 'flex' : 'none'
+}
+
+/** Plan del Mes — igual que antes */
+function _renderAgendaPlan(nodes) {
+  const today = new Date()
+  const planMonth = document.getElementById('agenda-plan-month')
+  if (planMonth) planMonth.textContent = today.toLocaleDateString('es-ES', { month:'long', year:'numeric' }).toUpperCase()
+
+  // Account selector (mismo lógica que antes, ahora en agenda-plan-accounts)
   const accountNodes = allNodes.filter(n => n.type === 'account')
   const planAccountsEl = document.getElementById('agenda-plan-accounts')
   if (planAccountsEl) {
     if (accountNodes.length > 0) {
       planAccountsEl.innerHTML = `<span style="font-size:10px;color:var(--text-muted);font-weight:600;align-self:center;white-space:nowrap;">CUENTAS:</span>` +
         accountNodes.map(acc => {
-          const label = acc.metadata?.label || acc.content
+          const label   = acc.metadata?.label || acc.content
           const checked = agendaPlanAccounts.size === 0 || agendaPlanAccounts.has(acc.id)
-          const clr = acc.metadata?.color || '#60a5fa'
+          const clr     = acc.metadata?.color || '#60a5fa'
           return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;background:${clr}15;border:1px solid ${clr}33;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:${checked?clr:'var(--text-muted)'};">
             <input type="checkbox" ${checked?'checked':''} onchange="toggleAgendaAccount('${acc.id}',this)" style="display:none;" />
             ${esc(label)}
           </label>`
         }).join('')
-    } else {
-      planAccountsEl.innerHTML = ''
-    }
+    } else { planAccountsEl.innerHTML = '' }
   }
 
-  // Filter incomes and expenses by CURRENT MONTH and selected accounts
-  const curY = today.getFullYear(), curM = today.getMonth() // 0-indexed
-  const isCurrentMonth = (n) => {
-    const d = n.metadata?.date || n.created_at || ''
-    if (!d) return true // no date → always include
-    const dt = new Date(d)
-    return dt.getFullYear() === curY && dt.getMonth() === curM
-  }
-  // Unified FinancialEngine — same source of truth as Bio-Finanzas
-  const period = currentPeriod() // 'YYYY-MM'
+  // Finance engine
+  const period = currentPeriod()
   let incomeNodes = [], expenseNodes = []
   if (agendaPlanAccounts.size === 0) {
     const txs = getTransactions(nodes, 'all', period)
-    incomeNodes = txs.filter(n => n.type === 'income')
+    incomeNodes  = txs.filter(n => n.type === 'income')
     expenseNodes = txs.filter(n => n.type === 'expense')
   } else {
     const seen = new Set()
     for (const accId of agendaPlanAccounts) {
       const txs = getTransactions(nodes, accId, period)
-      for (const t of txs) {
-        if (seen.has(t.id)) continue
-        seen.add(t.id)
-        if (t.type === 'income') incomeNodes.push(t)
-        else if (t.type === 'expense') expenseNodes.push(t)
-      }
+      txs.forEach(t => { if (!seen.has(t.id)) { seen.add(t.id); if (t.type==='income') incomeNodes.push(t); else if (t.type==='expense') expenseNodes.push(t) } })
     }
-    // También incluir transacciones sin cuenta asignada (@cuenta no especificada)
-    const unassigned = getTransactions(nodes, 'all', period)
-      .filter(t => !t.metadata?.account_id)
-    for (const t of unassigned) {
-      if (seen.has(t.id)) continue
-      seen.add(t.id)
-      if (t.type === 'income') incomeNodes.push(t)
-      else if (t.type === 'expense') expenseNodes.push(t)
-    }
+    getTransactions(nodes,'all',period).filter(t=>!t.metadata?.account_id).forEach(t => {
+      if (!seen.has(t.id)) { seen.add(t.id); if (t.type==='income') incomeNodes.push(t); else if (t.type==='expense') expenseNodes.push(t) }
+    })
   }
-  const totalIn  = incomeNodes.reduce((s, n) => s + (n.metadata?.amount || 0), 0)
-  const totalOut = expenseNodes.reduce((s, n) => s + (n.metadata?.amount || 0), 0) + totalFixed
+  const subs     = nodes.filter(n => n.type === 'subscription').filter(n => agendaPlanAccounts.size === 0 || agendaPlanAccounts.has(n.metadata?.account_id))
+  const bills    = nodes.filter(n => n.type === 'bill').filter(n => agendaPlanAccounts.size === 0 || agendaPlanAccounts.has(n.metadata?.account_id))
+  const totalFixed = subs.reduce((s,n) => s+(n.metadata?.amount||0), 0) + bills.filter(b=>!b.metadata?.paid).reduce((s,n) => s+(n.metadata?.amount||0),0)
+  const totalIn  = incomeNodes.reduce((s,n) => s+(n.metadata?.amount||0), 0)
+  const totalOut = expenseNodes.reduce((s,n) => s+(n.metadata?.amount||0), 0) + totalFixed
+  const saldo    = totalIn - totalOut
+  const saldoClr = saldo >= 0 ? '#4ade80' : '#f87171'
 
   const planBody = document.getElementById('agenda-plan-body')
-  const planFoot = document.getElementById('agenda-plan-foot')
   if (planBody) {
     const rows = []
-    // Ingresos como filas de entrada
-    incomeNodes.slice(0,5).forEach(n => {
-      rows.push(`<tr>
-        <td style="padding:5px 4px;color:#fff;">${esc(n.metadata?.label||n.content)}</td>
-        <td style="text-align:right;padding:5px 4px;color:#4ade80;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
-        <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
-        <td style="text-align:right;padding:5px 4px;"></td>
-      </tr>`)
-    })
-    // Suscripciones como salidas fijas (filtradas por cuenta)
-    subsF.forEach(n => {
-      rows.push(`<tr>
-        <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)} <span style="font-size:9px;opacity:0.5;">(día ${n.metadata?.dayOfMonth||1})</span></td>
-        <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
-        <td style="text-align:right;padding:5px 4px;color:#f87171;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
-        <td style="text-align:right;padding:5px 4px;"></td>
-      </tr>`)
-    })
-    // Pagos fijos pendientes (filtrados por cuenta)
-    billsF.filter(b => !b.metadata?.paid).forEach(n => {
-      rows.push(`<tr>
-        <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)}</td>
-        <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
-        <td style="text-align:right;padding:5px 4px;color:#fb923c;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
-        <td style="text-align:right;padding:5px 4px;"></td>
-      </tr>`)
-    })
-    // Gastos variables del mes (filtrados por mes y cuenta)
-    expenseNodes.slice(0, 5).forEach(n => {
-      rows.push(`<tr>
-        <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)} <span style="font-size:9px;opacity:0.4;">gasto</span></td>
-        <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
-        <td style="text-align:right;padding:5px 4px;color:#fbbf24;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
-        <td style="text-align:right;padding:5px 4px;"></td>
-      </tr>`)
-    })
-    if (expenseNodes.length > 5) {
-      rows.push(`<tr><td colspan="4" style="padding:3px 4px;font-size:10px;color:var(--text-muted);text-align:center;">… y ${expenseNodes.length - 5} gastos más este mes</td></tr>`)
-    }
-    planBody.innerHTML = rows.join('') || '<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--text-muted);font-size:12px;">Agrega ingresos y compromisos para ver el plan</td></tr>'
+    incomeNodes.slice(0,5).forEach(n => rows.push(`<tr>
+      <td style="padding:5px 4px;color:#fff;">${esc(n.metadata?.label||n.content)}</td>
+      <td style="text-align:right;padding:5px 4px;color:#4ade80;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
+      <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
+      <td style="text-align:right;padding:5px 4px;"></td></tr>`))
+    subs.forEach(n => rows.push(`<tr>
+      <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)} <span style="font-size:9px;opacity:.5;">(día ${n.metadata?.dayOfMonth||1})</span></td>
+      <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
+      <td style="text-align:right;padding:5px 4px;color:#f87171;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
+      <td></td></tr>`))
+    bills.filter(b=>!b.metadata?.paid).forEach(n => rows.push(`<tr>
+      <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)}</td>
+      <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
+      <td style="text-align:right;padding:5px 4px;color:#fb923c;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
+      <td></td></tr>`))
+    expenseNodes.slice(0,5).forEach(n => rows.push(`<tr>
+      <td style="padding:5px 4px;color:var(--text-muted);">${esc(n.metadata?.label||n.content)} <span style="font-size:9px;opacity:.4;">gasto</span></td>
+      <td style="text-align:right;padding:5px 4px;color:var(--text-dim);">—</td>
+      <td style="text-align:right;padding:5px 4px;color:#fbbf24;font-family:'JetBrains Mono',monospace;">${fmt$(n.metadata?.amount||0)}</td>
+      <td></td></tr>`))
+    if (expenseNodes.length > 5) rows.push(`<tr><td colspan="4" style="padding:3px 4px;font-size:10px;color:var(--text-muted);text-align:center;">… y ${expenseNodes.length-5} gastos más</td></tr>`)
+    planBody.innerHTML = rows.join('') || `<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--text-muted);font-size:12px;">Sin datos este mes</td></tr>`
   }
-  const saldo = totalIn - totalOut
-  const saldoClr = saldo >= 0 ? '#4ade80' : '#f87171'
-  const selectedLabel = agendaPlanAccounts.size > 0
-    ? ` <span style="font-size:9px;opacity:0.6;">(${agendaPlanAccounts.size} cta${agendaPlanAccounts.size!==1?'s':''})</span>`
-    : ''
+  const planFoot = document.getElementById('agenda-plan-foot')
   if (planFoot) planFoot.innerHTML = `
     <tr style="border-top:1px solid var(--glass-border);">
-      <td style="padding:8px 4px;font-weight:800;color:#fff;">TOTAL${selectedLabel}</td>
+      <td style="padding:8px 4px;font-weight:800;color:#fff;">TOTAL</td>
       <td style="text-align:right;padding:8px 4px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">${fmt$(totalIn)}</td>
       <td style="text-align:right;padding:8px 4px;font-weight:800;color:#f87171;font-family:'JetBrains Mono',monospace;">${fmt$(totalOut)}</td>
       <td style="text-align:right;padding:8px 4px;font-weight:800;color:${saldoClr};font-family:'JetBrains Mono',monospace;">${fmt$(saldo)}</td>
-    </tr>
-    <tr>
-      <td colspan="4" style="padding:6px 4px;font-size:11px;color:var(--text-muted);">
-        💰 <b style="color:${saldoClr};">Disponible real: ${fmt$(saldo)}</b> = entradas (${fmt$(totalIn)}) − compromisos (${fmt$(totalOut)})
-      </td>
     </tr>`
+}
 
-  // ── PRÓXIMOS 7 DÍAS ───────────────────────────────────────────
-  const upcomingEl = document.getElementById('agenda-upcoming')
-  if (upcomingEl) {
-    const upcoming = []
-    const in7 = new Date(today); in7.setDate(today.getDate() + 7)
-    // Cards: días de corte y pago
-    cards.forEach(c => {
-      const m = c.metadata || {}
-      ;[[m.cutDay,'✂️ Corte','#60a5fa'],[m.payDay,'💳 Pago','#f87171']].forEach(([day,label,color]) => {
-        if (!day) return
-        const d = new Date(today.getFullYear(), today.getMonth(), day)
-        if (d < today) d.setMonth(d.getMonth() + 1)
-        if (d <= in7) upcoming.push({ date:d, label:`${label} ${esc(m.label||c.content)}`, color })
-      })
-    })
-    // Subs
-    subs.forEach(s => {
-      const day = s.metadata?.dayOfMonth
-      if (!day) return
-      const d = new Date(today.getFullYear(), today.getMonth(), day)
-      if (d < today) d.setMonth(d.getMonth() + 1)
-      if (d <= in7) upcoming.push({ date:d, label:`🔄 ${esc(s.metadata?.label||s.content)}`, color:'#a78bfa', amount: s.metadata?.amount })
-    })
-    // Bills
-    bills.filter(b => !b.metadata?.paid && b.metadata?.dueDate).forEach(b => {
-      const d = new Date(b.metadata.dueDate)
-      if (d >= today && d <= in7) upcoming.push({ date:d, label:`📋 ${esc(b.metadata?.label||b.content)}`, color:'#fb923c', amount: b.metadata?.amount })
-    })
-    upcoming.sort((a,b) => a.date - b.date)
+/** Catálogo (tarjetas, suscripciones, pagos fijos) */
+function _renderAgendaCatalog(nodes) {
+  const today  = new Date()
+  const cards  = nodes.filter(n => n.type === 'card')
+  const subs   = nodes.filter(n => n.type === 'subscription')
+  const bills  = nodes.filter(n => n.type === 'bill')
 
-    const diffDays = d => Math.ceil((d - today) / 86400000)
-    upcomingEl.innerHTML = upcoming.length === 0
-      ? `<div style="text-align:center;color:var(--text-muted);padding:20px;font-size:12px;">Sin vencimientos próximos esta semana 🎉</div>`
-      : upcoming.map(u => {
-          const days = diffDays(u.date)
-          const urgency = days <= 1 ? '#f87171' : days <= 3 ? '#fb923c' : u.color
-          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:${urgency}14;border:1px solid ${urgency}33;border-radius:10px;margin-bottom:8px;">
-            <div style="background:${urgency};color:#000;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:800;font-family:'JetBrains Mono',monospace;flex-shrink:0;">
-              ${days === 0 ? 'HOY' : days === 1 ? 'MAÑANA' : `${days}d`}
+  // ── Tarjetas ──────────────────────────────────────────────────────────────
+  const cardsEl = document.getElementById('agenda-cards')
+  if (cardsEl) cardsEl.innerHTML = cards.length === 0
+    ? `<div style="color:var(--text-muted);font-size:12px;">Sin tarjetas.</div>`
+    : cards.map(c => {
+        const m = c.metadata || {}
+        const clr = m.color || '#60a5fa'
+        const dtp = (() => { if (!m.payDay) return null; const d = new Date(today.getFullYear(),today.getMonth(),m.payDay); if (d<today) d.setMonth(d.getMonth()+1); return Math.ceil((d-today)/86400000) })()
+        const cardNumDisplay = m.cardNumber ? m.cardNumber.replace(/(\d{4})(?=\d)/g,'$1 ') : (m.lastFour ? `•••• •••• •••• ${m.lastFour}` : '•••• •••• •••• ????')
+        return `<div style="background:linear-gradient(135deg,${clr}22,${clr}08);border:1px solid ${clr}44;border-radius:16px;padding:18px;position:relative;overflow:hidden;">
+          <div style="position:absolute;right:10px;top:10px;opacity:0.07;font-size:55px;pointer-events:none;">💳</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-size:11px;color:${clr};font-weight:700;letter-spacing:1px;">${esc(m.label||c.content)}</span>
+            ${m.bank?`<span style="font-size:10px;color:var(--text-dim);background:${clr}18;border-radius:5px;padding:1px 6px;">${esc(m.bank)}</span>`:''}
+          </div>
+          ${m.holder?`<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">👤 ${esc(m.holder)}</div>`:''}
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#fff;margin-bottom:8px;letter-spacing:1px;">${cardNumDisplay}</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px;">
+            <div><div style="font-size:9px;color:var(--text-muted);">CORTE</div><div style="font-size:12px;font-weight:700;color:#fff;">Día ${m.cutDay||'—'}</div></div>
+            <div><div style="font-size:9px;color:var(--text-muted);">PAGO</div><div style="font-size:12px;font-weight:700;color:${dtp!==null&&dtp<=3?'#f87171':'#fff'};">Día ${m.payDay||'—'}${dtp!==null?` <span style="font-size:10px;opacity:.7;">(${dtp}d)</span>`:''}</div></div>
+            ${m.limit?`<div><div style="font-size:9px;color:var(--text-muted);">LÍMITE</div><div style="font-size:12px;font-weight:700;color:#fff;">${fmt$(m.limit)}</div></div>`:''}
+          </div>
+          <button onclick="deleteAgendaItem('${c.id}')" style="position:absolute;bottom:10px;right:10px;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;" title="Eliminar">✕</button>
+        </div>`
+      }).join('')
+
+  // ── Suscripciones ──────────────────────────────────────────────────────────
+  const subsEl = document.getElementById('agenda-subs')
+  if (subsEl) subsEl.innerHTML = subs.length === 0
+    ? `<div style="color:var(--text-muted);font-size:12px;">Sin suscripciones.</div>`
+    : subs.map(s => {
+        const m   = s.metadata || {}
+        const clr = m.color || '#a78bfa'
+        return `<div style="background:${clr}18;border:1px solid ${clr}33;border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:10px;">
+          <div style="font-size:22px;">${m.category?.split(' ')[0]||'🔄'}</div>
+          <div style="flex:1;">
+            <div style="font-size:12px;font-weight:700;color:#fff;">${esc(m.label||s.content)}</div>
+            <div style="font-size:10px;color:var(--text-muted);">Día ${m.dayOfMonth||'—'} · ${m.currency||'MXN'}</div>
+          </div>
+          <div style="font-size:13px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${fmt$(m.amount||0)}</div>
+          <button onclick="deleteAgendaItem('${s.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;">✕</button>
+        </div>`
+      }).join('')
+
+  // ── Bills ─────────────────────────────────────────────────────────────────
+  const billsEl = document.getElementById('agenda-bills')
+  if (billsEl) billsEl.innerHTML = bills.length === 0
+    ? `<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Sin pagos fijos.</div>`
+    : bills.map(b => {
+        const m    = b.metadata || {}
+        const clr  = m.color || '#fb923c'
+        const paid = m.paid || false
+        const freqLabel = { diario:'Diario', semanal:'Semanal', quincenal:'Quincenal', mensual:'Mensual', bimestral:'Bimestral', trimestral:'Trimestral', semestral:'Semestral', anual:'Anual' }
+        const freqStr   = freqLabel[m.frequency] || m.frequency || 'Mensual'
+        const due       = m.dueDate
+        const dueIsClose= due && (new Date(due) - new Date()) / 86400000 <= 5
+        return `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:${paid?'rgba(74,222,128,0.04)':clr+'12'};border:1px solid ${paid?'#4ade8030':clr+'30'};border-radius:12px;opacity:${paid?0.55:1};">
+          <button onclick="toggleBillPaid('${b.id}')" title="${paid?'Reabrir':'Pagar'}"
+            style="width:22px;height:22px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;background:${paid?'#4ade80':'transparent'};border:2px solid ${paid?'#4ade80':clr};color:${paid?'#000':'transparent'};">✓</button>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12px;font-weight:700;color:${paid?'var(--text-muted)':'#f0f6fc'};${paid?'text-decoration:line-through;':''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.label||b.content)}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:3px;align-items:center;">
+              <span style="font-size:10px;font-weight:700;color:${clr};background:${clr}18;padding:1px 7px;border-radius:10px;">🔁 ${freqStr}</span>
+              ${due?`<span style="font-size:10px;color:${dueIsClose?'#f87171':'var(--text-muted)'};font-weight:${dueIsClose?700:400};">📅 ${due}</span>`:''}
+              ${m.billNotes?`<span style="font-size:10px;color:var(--text-muted);font-style:italic;">${esc(m.billNotes.slice(0,40))}</span>`:''}
             </div>
-            <div style="flex:1;">
-              <div style="font-size:12px;font-weight:600;color:#fff;">${u.label}</div>
-              <div style="font-size:10px;color:var(--text-muted);">${u.date.toLocaleDateString('es-MX',{weekday:'short',day:'numeric',month:'short'})}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;">
+            <div style="font-size:14px;font-weight:900;color:${clr};font-family:'JetBrains Mono',monospace;">${m.amount!=null?fmt$(m.amount):'Variable'}</div>
+            <div style="display:flex;gap:3px;">
+              <button onclick="editAgendaItem('${b.id}')" title="Editar" style="width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;">✏️</button>
+              <button onclick="deleteAgendaItem('${b.id}')" title="Eliminar" style="width:24px;height:24px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;">✕</button>
             </div>
-            ${u.amount ? `<div style="font-size:11px;font-weight:700;color:${urgency};font-family:'JetBrains Mono',monospace;">${fmt$(u.amount)}</div>` : ''}
-          </div>`
-        }).join('')
-  }
+          </div>
+        </div>`
+      }).join('')
+}
 
-  // ── BADGE en nav ──────────────────────────────────────────────
+/** Badge de urgencia en el nav */
+function _renderAgendaBadge(nodes) {
   const navAgenda = document.querySelector('[data-view="agenda"]')
-  const urgentCount = (() => {
-    const in2 = new Date(today); in2.setDate(today.getDate() + 2)
-    let cnt = 0
-    ;[...cards,...subs,...bills].forEach(n => {
-      const m = n.metadata || {}
-      const days = [m.cutDay, m.payDay, m.dayOfMonth].filter(Boolean)
-      days.forEach(d => {
-        const dt = new Date(today.getFullYear(), today.getMonth(), d)
-        if (dt < today) dt.setMonth(dt.getMonth() + 1)
-        if (dt <= in2) cnt++
-      })
+  const today     = new Date()
+  const in2       = new Date(today); in2.setDate(today.getDate() + 2)
+  let cnt = 0
+  nodes.filter(n => ['card','subscription','bill'].includes(n.type)).forEach(n => {
+    const m = n.metadata || {}
+    const days = [m.cutDay, m.payDay, m.dayOfMonth].filter(Boolean)
+    days.forEach(d => {
+      const dt = new Date(today.getFullYear(), today.getMonth(), d)
+      if (dt < today) dt.setMonth(dt.getMonth() + 1)
+      if (dt <= in2) cnt++
     })
-    return cnt
-  })()
+    if (n.type === 'bill' && !m.paid && m.dueDate) {
+      const dt = new Date(m.dueDate)
+      if (dt <= in2) cnt++
+    }
+  })
   if (navAgenda) {
     const badge = navAgenda.querySelector('.agenda-badge') || (() => {
       const b = document.createElement('span')
@@ -5181,132 +5481,271 @@ function renderAgenda(nodes) {
       b.style.cssText = 'background:#f87171;color:#000;border-radius:50%;font-size:9px;font-weight:800;padding:1px 5px;margin-left:4px;'
       navAgenda.appendChild(b); return b
     })()
-    if (urgentCount > 0) { badge.textContent = urgentCount; badge.style.display = 'inline' }
-    else badge.style.display = 'none'
+    badge.style.display = cnt > 0 ? 'inline' : 'none'
+    if (cnt > 0) badge.textContent = cnt
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// renderAgenda — función principal
+// ─────────────────────────────────────────────────────────────────────────────
+function renderAgenda(nodes) {
+  try {
+    const { start, end } = _agendaPeriodRange()
+    _updateAgendaPeriodTabs()
+    const obligations = _agendaBuildObligations(nodes, start, end)
+    _renderAgendaAlertBanner(obligations)
+    _renderAgendaKPIs(nodes, start, end)
+    _renderAgendaUpcoming(obligations)
+    _renderAgendaPlan(nodes)
+    _renderAgendaCatalog(nodes)
+    _renderAgendaBadge(nodes)
+  } catch (e) {
+    console.error('[renderAgenda]', e)
+  }
+}
+
+// ── Agenda Financiera — Funciones interactivas ──────────────────────────────
+
+window.setAgendaPeriod = function(p) {
+  agendaPeriod  = p
+  agendaShowAll = false
+  renderAgenda(allNodes)
+}
+
+window.applyAgendaRange = function() {
+  const s = document.getElementById('agenda-range-start')?.value
+  const e = document.getElementById('agenda-range-end')?.value
+  if (!s || !e) return
+  agendaRangeStart = s
+  agendaRangeEnd   = e
+  agendaPeriod     = 'custom'
+  agendaShowAll    = false
+  renderAgenda(allNodes)
+}
+
+window.toggleAgendaSection = function(section) {
+  const isOpen  = _agendaSections[section]
+  _agendaSections[section] = !isOpen
+  const wrap    = document.getElementById(`agenda-${section}-wrap`)
+  const chevron = document.getElementById(`agenda-${section}-chevron`)
+  if (wrap)    wrap.style.display      = !isOpen ? '' : 'none'
+  if (chevron) chevron.style.transform = !isOpen ? 'rotate(0deg)' : 'rotate(-90deg)'
+}
+
+window.agendaExportPDF = function() {
+  const { start, end } = _agendaPeriodRange()
+  const obligations    = _agendaBuildObligations(allNodes, start, end)
+  const periodLabel    = _agendaPeriodLabel(start, end)
+
+  // Compute KPIs without DOM side-effects
+  const period      = currentPeriod()
+  const txs         = getTransactions(allNodes, 'all', period)
+  const totalInc    = txs.filter(n => n.type === 'income').reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const totalExp    = txs.filter(n => n.type === 'expense').reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const saldo       = totalInc - totalExp
+  const pendientes  = obligations.filter(o => !o.paid)
+  const proximosPagos = pendientes.reduce((s, o) => s + (o.amount || 0), 0)
+  const alertas     = pendientes.filter(o => o.diffDays >= 0 && o.diffDays <= 3).length
+  const vencidos    = pendientes.filter(o => o.diffDays < 0).length
+  const ingresosEsperados = allNodes
+    .filter(n => n.type === 'income')
+    .filter(n => { const d = n.metadata?.date || n.created_at || ''; if (!d) return false; const dt = new Date(d); dt.setHours(0,0,0,0); return dt >= start && dt <= end })
+    .reduce((s, n) => s + (n.metadata?.amount || 0), 0)
+  const cashFlow = ingresosEsperados - proximosPagos
+
+  pdfAgendaFinanciera({
+    periodLabel,
+    kpis: { saldo, proximosPagos, ingresosEsperados, cashFlow, alertasCount: alertas + vencidos },
+    items: obligations,
+  }, currentUser?.email || '')
+}
+
+// ── agendaQA — dispatcher de acciones inline ────────────────────────────────
+window.agendaQA = function(safeId, action, nodeType) {
+  const panel = document.getElementById(`ag-detail-${safeId}`)
+  if (!panel) return
+
+  // Find the obligation in the current period to get realId and current values
+  const { start, end } = _agendaPeriodRange()
+  const obs    = _agendaBuildObligations(allNodes, start, end)
+  const ob     = obs.find(o => o.id.replace(/[^a-zA-Z0-9_-]/g, '_') === safeId)
+  if (!ob) return
+  const realId = ob.nodeId || ob.id   // nodeId for subs/cards, id for bills
+
+  // Paid: toggle immediately, no panel
+  if (action === 'paid') {
+    _agendaTogglePaid(realId, ob)
+    return
   }
 
-  // ── TARJETAS ──────────────────────────────────────────────────
-  const cardsEl = document.getElementById('agenda-cards')
-  if (cardsEl) cardsEl.innerHTML = cards.length === 0
-    ? `<div style="color:var(--text-muted);font-size:12px;">Sin tarjetas. Agrega una con el botón "+" de arriba.</div>`
-    : cards.map(c => {
-        const m = c.metadata || {}
-        const clr = m.color || '#60a5fa'
-        const daysToPayment = (() => {
-          if (!m.payDay) return null
-          const d = new Date(today.getFullYear(), today.getMonth(), m.payDay)
-          if (d < today) d.setMonth(d.getMonth() + 1)
-          return Math.ceil((d - today) / 86400000)
-        })()
-        const cardNumDisplay = m.cardNumber
-          ? m.cardNumber.replace(/(\d{4})(?=\d)/g,'$1 ')
-          : (m.lastFour ? `•••• •••• •••• ${m.lastFour}` : '•••• •••• •••• ????')
-        return `<div style="background:linear-gradient(135deg,${clr}22,${clr}08);border:1px solid ${clr}44;border-radius:16px;padding:20px;position:relative;overflow:hidden;">
-          <div style="position:absolute;right:12px;top:12px;opacity:0.07;font-size:60px;pointer-events:none;">💳</div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-            <span style="font-size:11px;color:${clr};font-weight:700;letter-spacing:1px;">${esc(m.label||c.content)}</span>
-            ${m.bank ? `<span style="font-size:10px;color:var(--text-dim);background:${clr}18;border-radius:5px;padding:1px 6px;">${esc(m.bank)}</span>` : ''}
-            ${m.cardType ? `<span style="font-size:9px;color:var(--text-dim);opacity:0.7;">${m.cardType}</span>` : ''}
-          </div>
-          ${m.holder ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;">👤 ${esc(m.holder)}</div>` : ''}
-          <div style="font-family:'JetBrains Mono',monospace;font-size:15px;color:#fff;margin-bottom:8px;letter-spacing:1px;">${cardNumDisplay}</div>
-          ${m.clabe ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;font-family:'JetBrains Mono',monospace;">CLABE: ${esc(m.clabe)}</div>` : ''}
-          ${m.accountNum ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:4px;font-family:'JetBrains Mono',monospace;">Cta: ${esc(m.accountNum)}</div>` : ''}
-          ${m.branch ? `<div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">🏢 ${esc(m.branch)}</div>` : ''}
-          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;">
-            <div><div style="font-size:9px;color:var(--text-muted);">CORTE</div><div style="font-size:13px;font-weight:700;color:#fff;">Día ${m.cutDay||'—'}</div></div>
-            <div><div style="font-size:9px;color:var(--text-muted);">PAGO</div><div style="font-size:13px;font-weight:700;color:${daysToPayment!==null&&daysToPayment<=3?'#f87171':'#fff'};">Día ${m.payDay||'—'}${daysToPayment!==null?` <span style="font-size:10px;opacity:0.7;">(${daysToPayment}d)</span>`:''}</div></div>
-            ${m.limit ? `<div><div style="font-size:9px;color:var(--text-muted);">LÍMITE</div><div style="font-size:13px;font-weight:700;color:#fff;">${fmt$(m.limit)}</div></div>` : ''}
-            <div><div style="font-size:9px;color:var(--text-muted);">MONEDA</div><div style="font-size:12px;font-weight:700;color:${clr};">${m.currency||'MXN'}</div></div>
-          </div>
-          <button onclick="deleteAgendaItem('${c.id}')" style="position:absolute;bottom:10px;right:10px;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;" title="Eliminar">✕</button>
-        </div>`
-      }).join('')
+  // Other actions: close sibling panels, then toggle
+  document.querySelectorAll('.ag-detail-panel').forEach(p => {
+    if (p.id !== `ag-detail-${safeId}`) { p.style.display = 'none'; delete p.dataset.action }
+  })
 
-  // ── SUSCRIPCIONES ─────────────────────────────────────────────
-  const subsEl = document.getElementById('agenda-subs')
-  if (subsEl) subsEl.innerHTML = subs.length === 0
-    ? `<div style="color:var(--text-muted);font-size:12px;">Sin suscripciones registradas.</div>`
-    : subs.map(s => {
-        const m = s.metadata || {}
-        const clr = m.color || '#a78bfa'
-        return `<div style="background:${clr}18;border:1px solid ${clr}33;border-radius:12px;padding:14px 16px;display:flex;align-items:center;gap:12px;">
-          <div style="font-size:24px;">${m.category?.split(' ')[0] || '🔄'}</div>
-          <div style="flex:1;">
-            <div style="font-size:12px;font-weight:700;color:#fff;">${esc(m.label||s.content)}</div>
-            <div style="font-size:10px;color:var(--text-muted);">Día ${m.dayOfMonth||'—'} · ${m.currency||'MXN'}</div>
-          </div>
-          <div style="font-size:13px;font-weight:800;color:${clr};font-family:'JetBrains Mono',monospace;">${fmt$(m.amount||0)}</div>
-          <button onclick="deleteAgendaItem('${s.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px;" title="Eliminar">✕</button>
-        </div>`
-      }).join('')
+  if (panel.style.display !== 'none' && panel.dataset.action === action) {
+    panel.style.display = 'none'
+    delete panel.dataset.action
+    return
+  }
+  panel.dataset.action = action
+  panel.style.display  = ''
 
-  // ── PAGOS FIJOS ───────────────────────────────────────────────
-  const billsEl = document.getElementById('agenda-bills')
-  if (billsEl) billsEl.innerHTML = bills.length === 0
-    ? `<div style="color:var(--text-muted);font-size:12px;padding:8px 0;">Sin pagos fijos registrados.</div>`
-    : bills.map(b => {
-        const m = b.metadata || {}
-        const clr  = m.color || '#fb923c'
-        const paid = m.paid || false
-        const billContact     = m.contactId ? allNodes.find(n => n.id === m.contactId) : null
-        const billContactName = billContact ? (billContact.metadata?.name || billContact.content) : ''
-        const methodLabel = { transferencia:'🏦 Transf.', tarjeta:'💳 Tarjeta', efectivo:'💵 Efectivo', cripto:'₿ Cripto', domiciliado:'🔄 Domiciliado', oxxo:'🏪 OXXO', spei:'⚡ SPEI' }
-        const freqLabel   = { diario:'Diario', semanal:'Semanal', quincenal:'Quincenal', mensual:'Mensual', bimestral:'Bimestral', trimestral:'Trimestral', semestral:'Semestral', anual:'Anual', personalizado:`Cada ${m.customDays||'?'} días` }
-        const freqStr     = m.frequency ? (freqLabel[m.frequency] || m.frequency) : 'Mensual'
-        const weekdays    = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
-        const weekdayStr  = m.frequency === 'semanal' && m.weekday != null ? ` (${weekdays[parseInt(m.weekday)]})` : ''
-        const amountStr   = m.amount != null ? fmt$(m.amount) : '<span style="font-size:10px;font-style:italic;color:var(--text-muted);">Variable</span>'
-        // Cuenta destino formateada
-        const tAcc = m.targetAccount
-        const targetAccStr = tAcc ? (() => {
-          const last4 = tAcc.clabe ? `····${tAcc.clabe.slice(-4)}` : tAcc.account ? `····${String(tAcc.account).slice(-4)}` : ''
-          return [tAcc.bank || tAcc.bank_name, last4].filter(Boolean).join(' ')
-        })() : ''
-        // Días vencimiento
-        const due = m.dueDate
-        const dueIsClose = due && (new Date(due) - new Date()) / 86400000 <= 5
-        return `
-        <div style="display:flex;flex-direction:column;gap:0;padding:14px 16px;background:${paid?'rgba(74,222,128,0.04)':clr+'12'};border:1px solid ${paid?'#4ade8030':clr+'30'};border-radius:12px;opacity:${paid?0.55:1};transition:opacity 0.2s;">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <button onclick="toggleBillPaid('${b.id}')" title="${paid?'Marcar pendiente':'Marcar pagado'}"
-              style="width:22px;height:22px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;font-weight:800;
-                     background:${paid?'#4ade80':'transparent'};border:2px solid ${paid?'#4ade80':clr};color:${paid?'#000':'transparent'};">✓</button>
-            <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:700;color:${paid?'var(--text-muted)':'#f0f6fc'};${paid?'text-decoration:line-through;':''};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.label||b.content)}</div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;align-items:center;">
-                <span style="font-size:10px;font-weight:700;color:${clr};background:${clr}18;padding:1px 7px;border-radius:10px;">🔁 ${freqStr}${weekdayStr}</span>
-                ${due?`<span style="font-size:10px;color:${dueIsClose?'#f87171':'var(--text-muted)'};font-weight:${dueIsClose?700:400};">📅 ${due}${dueIsClose?' ⚠️':''}</span>`:''}
-                ${billContactName?`<span style="font-size:10px;color:var(--text-muted);">→ ${esc(billContactName)}</span>`:''}
-                ${targetAccStr?`<span style="font-size:10px;color:#60a5fa;background:rgba(96,165,250,0.1);padding:1px 6px;border-radius:8px;">🏦 ${esc(targetAccStr)}</span>`:''}
-                ${m.method?`<span style="font-size:10px;color:var(--text-muted);">${methodLabel[m.method]||m.method}</span>`:''}
-              </div>
-              ${(m.contractNum||m.payRef||m.billNotes)?`
-              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.04);">
-                ${m.contractNum?`<span style="font-size:10px;color:var(--text-muted);">📋 Contrato: <b style="color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${esc(m.contractNum)}</b></span>`:''}
-                ${m.payRef?`<span style="font-size:10px;color:var(--text-muted);">🔑 Ref: <b style="color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${esc(m.payRef)}</b></span>`:''}
-                ${m.billNotes?`<span style="font-size:10px;color:var(--text-muted);font-style:italic;">${esc(m.billNotes)}</span>`:''}
-              </div>`:''}
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
-              <div style="font-size:15px;font-weight:900;color:${clr};font-family:'JetBrains Mono',monospace;">${amountStr}</div>
-              <div style="display:flex;gap:4px;">
-                <button onclick="editAgendaItem('${b.id}')" title="Editar"
-                  style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);cursor:pointer;font-size:11px;">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </button>
-                <button onclick="deleteAgendaItem('${b.id}')" title="Eliminar"
-                  style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--text-muted);cursor:pointer;font-size:11px;">
-                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>`
-      }).join('')
+  const closeBtn = `<button onclick="document.getElementById('ag-detail-${safeId}').style.display='none'"
+    style="background:transparent;border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;">✕</button>`
 
-  // Crypto portfolio
-  renderCryptoPortfolio()
+  if (action === 'reschedule') {
+    const cur = ob.date.toISOString().split('T')[0]
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;padding-top:4px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-muted);">Nueva fecha:</span>
+        <input type="date" id="ag-res-${safeId}" value="${cur}"
+          style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;padding:5px 10px;font-size:12px;">
+        <button onclick="agendaSaveReschedule('${realId}','${safeId}','${nodeType}')"
+          style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);color:#60a5fa;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700;">Guardar</button>
+        ${closeBtn}
+      </div>`
+  } else if (action === 'note') {
+    const cur = esc(ob.notes || '')
+    panel.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px;">
+        <textarea id="ag-note-${safeId}" placeholder="Nota o recordatorio..." rows="3"
+          style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;padding:8px 10px;font-size:12px;resize:vertical;font-family:inherit;">${cur}</textarea>
+        <div style="display:flex;gap:8px;">
+          <button onclick="agendaSaveNote('${realId}','${safeId}','${nodeType}')"
+            style="background:rgba(96,165,250,0.15);border:1px solid rgba(96,165,250,0.4);color:#60a5fa;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700;">Guardar nota</button>
+          ${closeBtn}
+        </div>
+      </div>`
+  } else if (action === 'proof') {
+    const cur = esc(ob.proofUrl || '')
+    panel.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;padding-top:4px;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-muted);flex-shrink:0;">URL comprobante:</span>
+        <input type="text" id="ag-proof-${safeId}" value="${cur}" placeholder="https://..."
+          style="flex:1;min-width:180px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;padding:5px 10px;font-size:12px;">
+        <button onclick="agendaSaveProof('${realId}','${safeId}','${nodeType}')"
+          style="background:rgba(74,222,128,0.15);border:1px solid rgba(74,222,128,0.4);color:#4ade80;border-radius:8px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:700;">Guardar</button>
+        ${closeBtn}
+      </div>`
+  } else if (action === 'link') {
+    panel.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px;">
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="ag-link-q-${safeId}" placeholder="Buscar movimiento por concepto o monto..."
+            oninput="agendaSearchMovimientos('${safeId}',this.value)"
+            style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;padding:5px 10px;font-size:12px;">
+          ${closeBtn}
+        </div>
+        <div id="ag-link-res-${safeId}" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+      </div>`
+    agendaSearchMovimientos(safeId, '')
+  }
+}
+
+async function _agendaTogglePaid(realId, ob) {
+  const node = allNodes.find(n => n.id === realId)
+  if (!node) return
+  let upd = { ...node.metadata }
+
+  if (ob.nodeType === 'subscription') {
+    const paid = [...(upd.paid_months || [])]
+    const idx  = paid.indexOf(ob.monthKey)
+    if (idx >= 0) paid.splice(idx, 1); else paid.push(ob.monthKey)
+    upd.paid_months = paid
+  } else {
+    upd.paid = !ob.paid
+  }
+
+  const { error } = await supabase.from('nodes').update({ metadata: upd }).eq('id', realId)
+  if (error) { console.error('[agendaTogglePaid]', error); return }
+  const i = allNodes.findIndex(n => n.id === realId)
+  if (i >= 0) allNodes[i] = { ...allNodes[i], metadata: upd }
+  renderAgenda(allNodes)
+}
+
+window.agendaSaveReschedule = async function(realId, safeId, nodeType) {
+  const input = document.getElementById(`ag-res-${safeId}`)
+  if (!input?.value) return
+  const node = allNodes.find(n => n.id === realId)
+  if (!node) return
+  const upd = { ...node.metadata, dueDate: input.value }
+  const { error } = await supabase.from('nodes').update({ metadata: upd }).eq('id', realId)
+  if (error) { console.error('[agendaSaveReschedule]', error); return }
+  const i = allNodes.findIndex(n => n.id === realId)
+  if (i >= 0) allNodes[i] = { ...allNodes[i], metadata: upd }
+  renderAgenda(allNodes)
+}
+
+window.agendaSaveNote = async function(realId, safeId, nodeType) {
+  const ta   = document.getElementById(`ag-note-${safeId}`)
+  if (!ta) return
+  const node = allNodes.find(n => n.id === realId)
+  if (!node) return
+  const field = nodeType === 'bill' ? 'billNotes' : 'notes'
+  const upd   = { ...node.metadata, [field]: ta.value.trim() }
+  const { error } = await supabase.from('nodes').update({ metadata: upd }).eq('id', realId)
+  if (error) { console.error('[agendaSaveNote]', error); return }
+  const i = allNodes.findIndex(n => n.id === realId)
+  if (i >= 0) allNodes[i] = { ...allNodes[i], metadata: upd }
+  renderAgenda(allNodes)
+}
+
+window.agendaSaveProof = async function(realId, safeId, nodeType) {
+  const input = document.getElementById(`ag-proof-${safeId}`)
+  if (!input) return
+  const node = allNodes.find(n => n.id === realId)
+  if (!node) return
+  const upd = { ...node.metadata, proof_url: input.value.trim() }
+  const { error } = await supabase.from('nodes').update({ metadata: upd }).eq('id', realId)
+  if (error) { console.error('[agendaSaveProof]', error); return }
+  const i = allNodes.findIndex(n => n.id === realId)
+  if (i >= 0) allNodes[i] = { ...allNodes[i], metadata: upd }
+  renderAgenda(allNodes)
+}
+
+window.agendaSearchMovimientos = function(safeId, query) {
+  const resultsEl = document.getElementById(`ag-link-res-${safeId}`)
+  if (!resultsEl) return
+  const q    = (query || '').toLowerCase().trim()
+  const movs = allNodes
+    .filter(n => ['expense', 'income', 'payment'].includes(n.type))
+    .filter(n => !q || (n.content || '').toLowerCase().includes(q) || String(n.metadata?.amount || '').includes(q))
+    .slice(0, 10)
+  if (movs.length === 0) {
+    resultsEl.innerHTML = `<div style="color:var(--text-muted);font-size:11px;padding:8px 4px;">Sin resultados</div>`
+    return
+  }
+  resultsEl.innerHTML = movs.map(n => {
+    const amt = n.metadata?.amount ? fmt$(n.metadata.amount) : ''
+    const dt  = (n.metadata?.date || n.created_at || '').slice(0, 10)
+    return `<div onclick="agendaConfirmLink('${n.id}','${safeId}')"
+      style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;border-radius:8px;cursor:pointer;background:rgba(255,255,255,0.04);"
+      onmouseover="this.style.background='rgba(96,165,250,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">
+      <span style="font-size:12px;color:#fff;">${esc(n.content || '(sin descripción)')}</span>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+        ${amt ? `<span style="font-size:12px;font-family:'JetBrains Mono',monospace;color:#4ade80;">${amt}</span>` : ''}
+        <span style="font-size:10px;color:var(--text-muted);">${dt}</span>
+      </div>
+    </div>`
+  }).join('')
+}
+
+window.agendaConfirmLink = async function(movId, safeId) {
+  const { start, end } = _agendaPeriodRange()
+  const obs    = _agendaBuildObligations(allNodes, start, end)
+  const ob     = obs.find(o => o.id.replace(/[^a-zA-Z0-9_-]/g, '_') === safeId)
+  if (!ob) return
+  const realId = ob.nodeId || ob.id
+  const node   = allNodes.find(n => n.id === realId)
+  if (!node) return
+  const upd = { ...node.metadata, linked_movimiento_id: movId }
+  const { error } = await supabase.from('nodes').update({ metadata: upd }).eq('id', realId)
+  if (error) { console.error('[agendaConfirmLink]', error); return }
+  const i = allNodes.findIndex(n => n.id === realId)
+  if (i >= 0) allNodes[i] = { ...allNodes[i], metadata: upd }
+  renderAgenda(allNodes)
 }
 
 function fmt$(n) {

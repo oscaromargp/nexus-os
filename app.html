@@ -1502,30 +1502,69 @@
 
     <!-- ════ AGENDA FINANCIERA ════ -->
     <div id="view-agenda" class="view-section">
-      <div class="view-header">
+      <!-- ALERT BANNER -->
+      <div id="agenda-alert-banner" style="margin-bottom:0;"></div>
+
+      <!-- HEADER -->
+      <div class="view-header" style="flex-wrap:wrap;gap:10px;margin-top:0;">
         <h1 class="view-title">💳 Agenda Financiera</h1>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button onclick="openAgendaModal('card')"         style="background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid #60a5fa44;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Tarjeta</button>
-          <button onclick="openAgendaModal('subscription')" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid #a78bfa44;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Suscripción</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button onclick="agendaExportPDF()" style="background:rgba(34,211,238,0.12);color:#22d3ee;border:1px solid rgba(34,211,238,0.3);border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">📤 Exportar PDF</button>
           <button onclick="openAgendaModal('bill')"         style="background:rgba(251,146,60,0.15);color:#fb923c;border:1px solid #fb923c44;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Pago Fijo</button>
+          <button onclick="openAgendaModal('subscription')" style="background:rgba(167,139,250,0.15);color:#a78bfa;border:1px solid #a78bfa44;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Suscripción</button>
+          <button onclick="openAgendaModal('card')"         style="background:rgba(96,165,250,0.15);color:#60a5fa;border:1px solid #60a5fa44;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">+ Tarjeta</button>
         </div>
       </div>
 
-      <!-- KPI summary -->
-      <div id="agenda-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:28px;"></div>
+      <!-- PERIOD SELECTOR + ACCOUNT FILTER -->
+      <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin-bottom:20px;">
+        <!-- Period tabs -->
+        <div id="agenda-period-tabs" style="display:flex;gap:3px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:4px;flex-shrink:0;">
+          <button class="ag-period-btn" data-period="7d"    onclick="setAgendaPeriod('7d')"    style="background:rgba(34,211,238,0.15);color:#22d3ee;border:1px solid rgba(34,211,238,0.3);border-radius:8px;padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;">7 Días</button>
+          <button class="ag-period-btn" data-period="week"  onclick="setAgendaPeriod('week')"  style="background:transparent;color:var(--text-muted);border:none;border-radius:8px;padding:6px 13px;font-size:11px;font-weight:600;cursor:pointer;">Esta Semana</button>
+          <button class="ag-period-btn" data-period="4w"    onclick="setAgendaPeriod('4w')"    style="background:transparent;color:var(--text-muted);border:none;border-radius:8px;padding:6px 13px;font-size:11px;font-weight:600;cursor:pointer;">4 Semanas</button>
+          <button class="ag-period-btn" data-period="month" onclick="setAgendaPeriod('month')" style="background:transparent;color:var(--text-muted);border:none;border-radius:8px;padding:6px 13px;font-size:11px;font-weight:600;cursor:pointer;">Este Mes</button>
+          <button class="ag-period-btn" data-period="custom" onclick="setAgendaPeriod('custom')" style="background:transparent;color:var(--text-muted);border:none;border-radius:8px;padding:6px 13px;font-size:11px;font-weight:600;cursor:pointer;">📆 Rango</button>
+        </div>
+        <!-- Custom range (hidden by default) -->
+        <div id="agenda-custom-range" style="display:none;gap:6px;align-items:center;flex-wrap:wrap;">
+          <input type="date" id="agenda-range-start" class="modal-input" style="width:145px;padding:6px 10px;font-size:11px;"/>
+          <span style="color:var(--text-muted);font-size:11px;">→</span>
+          <input type="date" id="agenda-range-end" class="modal-input" style="width:145px;padding:6px 10px;font-size:11px;"/>
+          <button onclick="applyAgendaRange()" style="background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:8px;padding:6px 13px;cursor:pointer;font-size:11px;font-weight:700;">Aplicar</button>
+        </div>
+        <!-- Account filter chips -->
+        <div id="agenda-plan-accounts" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;"></div>
+      </div>
 
-      <!-- PLAN DEL MES -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px;align-items:start;">
+      <!-- KPI GRID -->
+      <div id="agenda-kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:14px;margin-bottom:22px;"></div>
 
-        <!-- Compromisos del mes -->
-        <div class="settings-card" style="padding:20px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-            <h3 style="font-size:15px;font-weight:800;color:#a78bfa;">📆 Plan del Mes</h3>
-            <span id="agenda-plan-month" style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;"></span>
+      <!-- UPCOMING OBLIGATIONS -->
+      <div class="settings-card" style="padding:20px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <h3 style="font-size:15px;font-weight:800;color:#fff;margin:0;" id="agenda-upcoming-title">⏰ Próximos Vencimientos</h3>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:3px;" id="agenda-upcoming-subtitle"></div>
           </div>
-          <!-- Selector de cuentas -->
-          <div id="agenda-plan-accounts" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
-          <table style="width:100%;border-collapse:collapse;font-size:12px;" id="agenda-plan-table">
+          <span id="agenda-upcoming-count" style="display:none;background:rgba(251,146,60,0.15);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:20px;padding:3px 12px;font-size:11px;font-weight:700;"></span>
+        </div>
+        <div id="agenda-upcoming"></div>
+        <div id="agenda-show-more" style="margin-top:12px;text-align:center;"></div>
+      </div>
+
+      <!-- PLAN DEL MES (collapsible) -->
+      <div style="margin-bottom:16px;" class="settings-card" style="padding:0;overflow:hidden;">
+        <div onclick="toggleAgendaSection('plan')" style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;cursor:pointer;user-select:none;border-radius:14px;" id="agenda-plan-header">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <h3 style="font-size:14px;font-weight:800;color:#a78bfa;margin:0;">📆 Plan del Mes</h3>
+            <span id="agenda-plan-month" style="font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace;"></span>
+          </div>
+          <span id="agenda-plan-chevron" style="color:var(--text-muted);font-size:11px;transition:transform 0.2s;">▼</span>
+        </div>
+        <div id="agenda-plan-wrap" style="padding:0 20px 20px;display:none;">
+          <div id="agenda-plan-accounts-inner" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;"></div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
               <tr>
                 <th style="text-align:left;padding:6px 4px;color:var(--text-muted);font-weight:600;border-bottom:1px solid var(--glass-border);">Concepto</th>
@@ -1538,68 +1577,41 @@
             <tfoot id="agenda-plan-foot"></tfoot>
           </table>
         </div>
-
-        <!-- Próximos 7 días -->
-        <div class="settings-card" style="padding:20px;">
-          <h3 style="font-size:15px;font-weight:800;color:#fb923c;margin-bottom:16px;">⏰ Próximos 7 días</h3>
-          <div id="agenda-upcoming"></div>
-        </div>
       </div>
 
-      <!-- Tarjetas de crédito -->
-      <div style="margin-bottom:28px;">
-        <h3 style="font-size:14px;font-weight:800;color:#60a5fa;margin-bottom:12px;">💳 Tarjetas de Crédito</h3>
-        <div id="agenda-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;"></div>
-      </div>
-
-      <!-- Suscripciones -->
-      <div style="margin-bottom:28px;">
-        <h3 style="font-size:14px;font-weight:800;color:#a78bfa;margin-bottom:12px;">🔄 Suscripciones & Servicios</h3>
-        <div id="agenda-subs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;"></div>
-      </div>
-
-      <!-- Pagos fijos / Bills -->
-      <div style="margin-bottom:28px;">
-        <h3 style="font-size:14px;font-weight:800;color:#fb923c;margin-bottom:12px;">📋 Pagos Fijos del Mes</h3>
-        <div id="agenda-bills" style="display:flex;flex-direction:column;gap:8px;"></div>
-      </div>
-
-      <!-- ══════ PORTAFOLIO CRYPTO ══════ -->
-      <div id="crypto-portfolio-section">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-          <h3 style="font-size:14px;font-weight:800;color:#a78bfa;">💎 Portafolio Crypto</h3>
-          <div style="display:flex;gap:8px;">
-            <button onclick="openCryptoPurchaseModal()" style="background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.3);border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;color:#a78bfa;cursor:pointer;font-family:inherit;">+ Registrar compra</button>
+      <!-- CATALOG SECTIONS (collapsible) -->
+      <div style="display:grid;gap:14px;">
+        <!-- Tarjetas -->
+        <div class="settings-card" style="padding:0;overflow:hidden;">
+          <div onclick="toggleAgendaSection('cards')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;user-select:none;">
+            <h3 style="font-size:13px;font-weight:800;color:#60a5fa;margin:0;">💳 Tarjetas de Crédito / Débito</h3>
+            <span id="agenda-cards-chevron" style="color:var(--text-muted);font-size:11px;">▼</span>
+          </div>
+          <div id="agenda-cards-wrap" style="padding:0 20px 20px;display:none;">
+            <div id="agenda-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;"></div>
           </div>
         </div>
-
-        <!-- KPI summary row -->
-        <div id="crypto-kpi-row" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px;"></div>
-
-        <!-- Per-coin table -->
-        <div class="settings-card" style="padding:0;overflow:hidden;">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;" id="crypto-coins-table">
-            <thead>
-              <tr style="background:rgba(255,255,255,0.03);">
-                <th style="text-align:left;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;letter-spacing:.06em;">MONEDA</th>
-                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;">HOLDINGS</th>
-                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;">INVERTIDO</th>
-                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;">VALOR ACTUAL</th>
-                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;">GANANCIA/PÉRD.</th>
-                <th style="text-align:right;padding:12px 16px;color:var(--text-muted);font-weight:700;font-size:11px;width:40px;"></th>
-              </tr>
-            </thead>
-            <tbody id="crypto-coins-body">
-              <tr><td colspan="6" style="padding:32px;text-align:center;color:var(--text-muted);font-size:13px;">Sin compras registradas — haz clic en <strong style="color:#a78bfa;">+ Registrar compra</strong> para comenzar</td></tr>
-            </tbody>
-          </table>
+        <!-- Suscripciones + Pagos Fijos side-by-side -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+          <div class="settings-card" style="padding:0;overflow:hidden;">
+            <div onclick="toggleAgendaSection('subs')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;user-select:none;">
+              <h3 style="font-size:13px;font-weight:800;color:#a78bfa;margin:0;">🔄 Suscripciones & Servicios</h3>
+              <span id="agenda-subs-chevron" style="color:var(--text-muted);font-size:11px;">▼</span>
+            </div>
+            <div id="agenda-subs-wrap" style="padding:0 20px 20px;display:none;">
+              <div id="agenda-subs" style="display:flex;flex-direction:column;gap:8px;"></div>
+            </div>
+          </div>
+          <div class="settings-card" style="padding:0;overflow:hidden;">
+            <div onclick="toggleAgendaSection('bills')" style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;cursor:pointer;user-select:none;">
+              <h3 style="font-size:13px;font-weight:800;color:#fb923c;margin:0;">📋 Pagos Fijos del Mes</h3>
+              <span id="agenda-bills-chevron" style="color:var(--text-muted);font-size:11px;">▼</span>
+            </div>
+            <div id="agenda-bills-wrap" style="padding:0 20px 20px;display:none;">
+              <div id="agenda-bills" style="display:flex;flex-direction:column;gap:8px;"></div>
+            </div>
+          </div>
         </div>
-
-        <!-- Historial de compras (colapsable) -->
-        <details style="margin-top:16px;">
-          <summary style="font-size:13px;font-weight:700;color:var(--text-muted);cursor:pointer;padding:8px 0;user-select:none;">📋 Historial de compras</summary>
-          <div id="crypto-history" style="margin-top:12px;display:flex;flex-direction:column;gap:6px;"></div>
-        </details>
       </div>
     </div>
 

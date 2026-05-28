@@ -2932,3 +2932,113 @@ export function pdfBitacora(entries = [], proyecto = {}, emisor = {}) {
   _footerTramite(doc, emisor, 'Original para el solicitante — Copia para archivo del proyecto')
   doc.save(`bitacora-${folio}.pdf`)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AGENDA FINANCIERA — Reporte de obligaciones y flujo de caja
+// ═══════════════════════════════════════════════════════════════════════════════
+/**
+ * Genera PDF del reporte Agenda Financiera.
+ * @param {{ periodLabel:string, items:Array, kpis:Object }} data
+ * @param {Object} emisor
+ */
+export function pdfAgendaFinanciera(data = {}, emisor = {}) {
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W     = doc.internal.pageSize.getWidth()
+  const H     = doc.internal.pageSize.getHeight()
+  const folio = _folio()
+
+  let y = _headerReport(doc, 'Agenda Financiera', (data.periodLabel || '').toUpperCase(), folio)
+
+  // ── KPI row ────────────────────────────────────────────────────────────────
+  const kpis = data.kpis || {}
+  const kpiDefs = [
+    { label:'Saldo Disponible',   value: kpis.saldo ?? 0,             clr: (kpis.saldo ?? 0) >= 0 ? T.green    : T.red    },
+    { label:'Próximos Pagos',     value: kpis.proximosPagos ?? 0,     clr: T.red    },
+    { label:'Ingresos Esperados', value: kpis.ingresosEsperados ?? 0, clr: T.green  },
+    { label:'Cash Flow Neto',     value: kpis.cashFlow ?? 0,          clr: (kpis.cashFlow ?? 0) >= 0 ? T.green : T.red },
+  ]
+  const kW = (W - T.mX * 2 - 9) / 4
+  kpiDefs.forEach((k, i) => {
+    const x = T.mX + i * (kW + 3)
+    doc.setFillColor(...T.surface)
+    doc.roundedRect(x, y, kW, 18, 2, 2, 'F')
+    doc.setTextColor(...k.clr)
+    doc.setFontSize(10); doc.setFont(T.font, 'bold')
+    const sign = k.label === 'Cash Flow Neto' && k.value > 0 ? '+' : ''
+    doc.text(sign + fmt$(k.value), x + kW / 2, y + 11, { align: 'center' })
+    doc.setTextColor(...T.textMid)
+    doc.setFontSize(6); doc.setFont(T.font, 'normal')
+    doc.text(k.label.toUpperCase(), x + kW / 2, y + 16.5, { align: 'center' })
+  })
+  y += 24
+
+  // ── Alerta banner ───────────────────────────────────────────────────────────
+  const alerts = kpis.alertasCount || 0
+  if (alerts > 0) {
+    doc.setFillColor(...T.redD)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, 9, 2, 2, 'F')
+    doc.setTextColor(...T.white); doc.setFontSize(7.5); doc.setFont(T.font, 'bold')
+    doc.text(`⚠  ${alerts} obligación${alerts !== 1 ? 'es' : ''} urgente${alerts !== 1 ? 's' : ''} — vencen en ≤ 3 días`,
+      W / 2, y + 6, { align: 'center' })
+    y += 14
+  } else { y += 4 }
+
+  // ── Tabla de obligaciones ───────────────────────────────────────────────────
+  const items = data.items || []
+  if (items.length === 0) {
+    doc.setTextColor(...T.textMid); doc.setFontSize(9); doc.setFont(T.font, 'normal')
+    doc.text('Sin vencimientos en el período seleccionado.', W / 2, y + 12, { align: 'center' })
+  } else {
+    doc.setFontSize(8); doc.setFont(T.font, 'bold'); doc.setTextColor(...T.textMain)
+    doc.text('OBLIGACIONES DEL PERÍODO', T.mX, y + 6); y += 10
+
+    autoTable(doc, {
+      startY:  y,
+      margin:  { left: T.mX, right: T.mX, top: 36, bottom: 18 },
+      theme:   'plain',
+      styles:  { font: T.font, fontSize: 8.5, cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 }, textColor: T.textInk },
+      headStyles: { fillColor: T.ink, textColor: T.textMain, fontStyle: 'bold', fontSize: 7.5, cellPadding: 4 },
+      columnStyles: {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 24 },
+        3: { cellWidth: 24 },
+        4: { cellWidth: 24, halign: 'right' },
+      },
+      head: [['Estado', 'Concepto', 'Tipo', 'Fecha', 'Monto']],
+      body: items.map(it => {
+        const badge = it.paid ? 'PAGADO' : it.diffDays < 0 ? `VENCIDO (${Math.abs(it.diffDays)}d)` : it.diffDays === 0 ? 'HOY' : it.diffDays === 1 ? 'MAÑANA' : `${it.diffDays} días`
+        const dateStr = it.date instanceof Date
+          ? it.date.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })
+          : String(it.date || '')
+        return [badge, it.label || '', it.type || '', dateStr, it.amount ? fmt$(it.amount) : '—']
+      }),
+      bodyStyles:          { fillColor: [248, 250, 253] },
+      alternateRowStyles:  { fillColor: [255, 255, 255] },
+      willDrawCell: ({ section, column, row, cell }) => {
+        if (section !== 'body' || column.index !== 0) return
+        const it = items[row.index]
+        if (!it) return
+        if (it.paid) { cell.styles.textColor = T.textMid; return }
+        cell.styles.fontStyle = 'bold'
+        cell.styles.textColor = it.diffDays < 0 ? T.redD : it.diffDays <= 3 ? [185,90,20] : it.diffDays <= 7 ? [160,120,0] : T.greenD
+      },
+      didDrawPage: () => _headerReport(doc, 'Agenda Financiera', (data.periodLabel || '').toUpperCase(), folio),
+    })
+  }
+
+  // ── Footer en cada página ───────────────────────────────────────────────────
+  const pages = doc.getNumberOfPages()
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p)
+    const fY = H - 12
+    doc.setDrawColor(...T.textDim); doc.setLineWidth(0.3)
+    doc.line(T.mX, fY - 4, W - T.mX, fY - 4)
+    doc.setFontSize(7); doc.setFont(T.font, 'normal'); doc.setTextColor(...T.textMid)
+    doc.text(`${T.brand} · ${T.url}`, T.mX, fY)
+    doc.text(`Pág. ${p} / ${pages}`, W - T.mX, fY, { align: 'right' })
+    if (emisor?.name) doc.text(emisor.name, W / 2, fY, { align: 'center' })
+  }
+
+  doc.save(`agenda-financiera-${folio}.pdf`)
+}
