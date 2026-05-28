@@ -226,12 +226,23 @@ let tagTypeFilter    = 'all'      // node type filter for tags view
 let _mvOrqs        = []
 let _mvMovs        = []
 let _mvActiveOrqId = null
-let _mvFilters     = { tipo:'', moneda:'', estado:'', search:'', dateFrom:'', dateTo:'' }
+let _mvFilters     = { tipo:'', moneda:'', estado:'', search:'', dateFrom:'', dateTo:'', categoria:'', banco:'' }
+let _mvView        = localStorage.getItem('nexus_mv_view') || 'tabla'   // 'tabla' | 'cards'
 let _mvPage        = 1
 const _MV_PER_PAGE = 30
 let _mvTcCache     = {}     // { USDT: {price, ts}, BTC: {...}, ... }
 let _mvEditingId   = null
 let _mvPendingFile = null
+
+// Categorías base de movimientos (con autosugerencia)
+const _MV_CATS = ['Operaciones','Proveedores','Nómina','Servicios','Impuestos',
+  'Inversiones','Retiro','Honorarios','Comisiones','Renta','Transferencia','Otro']
+const _MV_CAT_COLORS = {
+  Operaciones:'#00f0ff', Proveedores:'#a78bfa', 'Nómina':'#fb923c',
+  Servicios:'#facc15',   Impuestos:'#f87171',   Inversiones:'#34d399',
+  Retiro:'#60a5fa',      Honorarios:'#e879f9',  Comisiones:'#fbbf24',
+  Renta:'#94a3b8',       Transferencia:'#38bdf8', Otro:'#64748b',
+}
 
 // Kanban board state — must be before the boot IIFE
 let boardLists = [
@@ -20717,11 +20728,13 @@ async function _mvFetchTc() { return _mvFetchCryptoTc('USDT') }
 function _mvFiltered() {
   let list = [..._mvMovs]
   const f  = _mvFilters
-  if (f.tipo)     list = list.filter(m => m.tipo    === f.tipo)
-  if (f.moneda)   list = list.filter(m => m.moneda  === f.moneda)
-  if (f.estado)   list = list.filter(m => m.estado  === f.estado)
-  if (f.dateFrom) list = list.filter(m => m.fecha   >= f.dateFrom)
-  if (f.dateTo)   list = list.filter(m => m.fecha   <= f.dateTo)
+  if (f.tipo)      list = list.filter(m => m.tipo      === f.tipo)
+  if (f.moneda)    list = list.filter(m => m.moneda    === f.moneda)
+  if (f.estado)    list = list.filter(m => m.estado    === f.estado)
+  if (f.categoria) list = list.filter(m => (m.categoria||'') === f.categoria)
+  if (f.banco)     list = list.filter(m => (m.banco||'').toLowerCase().includes(f.banco.toLowerCase()))
+  if (f.dateFrom)  list = list.filter(m => m.fecha >= f.dateFrom)
+  if (f.dateTo)    list = list.filter(m => m.fecha <= f.dateTo)
   if (f.search) {
     const q = f.search.toLowerCase()
     list = list.filter(m =>
@@ -20729,7 +20742,8 @@ function _mvFiltered() {
       (m.beneficiario||'').toLowerCase().includes(q) ||
       (m.banco||'').toLowerCase().includes(q) ||
       (m.notas||'').toLowerCase().includes(q) ||
-      (m.clabe||'').toLowerCase().includes(q)
+      (m.clabe||'').toLowerCase().includes(q) ||
+      (m.categoria||'').toLowerCase().includes(q)
     )
   }
   return list
@@ -20794,6 +20808,82 @@ function _mvMonedaBadge(moneda) {
   return nxBadge(moneda, { color:c.color, bg:c.bg })
 }
 
+// ── Helpers de UI para movimientos ────────────────────────────────────────────
+
+// Categorías usadas en los movimientos actuales (para autosugerencia)
+function _mvCatsUsed() {
+  const cats = new Set(_MV_CATS)
+  _mvMovs.forEach(m => { if (m.categoria) cats.add(m.categoria) })
+  return [...cats].sort((a, b) => a.localeCompare(b, 'es'))
+}
+
+// Badge de categoría coloreado
+function _mvCatBadge(cat) {
+  if (!cat) return ''
+  const c = _MV_CAT_COLORS[cat] || '#64748b'
+  return `<span style="font-size:9px;font-weight:700;padding:2px 9px;border-radius:8px;background:${c}18;border:1px solid ${c}40;color:${c};text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">${_mvEsc(cat)}</span>`
+}
+
+// Avatar con iniciales (nombre, color de tipo)
+function _mvAvatar(name, isEnt, size = 40) {
+  const n = (name || '?').trim()
+  const parts = n.split(/\s+/).filter(Boolean)
+  const initials = parts.length >= 2
+    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    : n.slice(0, 2).toUpperCase()
+  const bg    = isEnt ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)'
+  const color = isEnt ? '#4ade80'                : '#f87171'
+  const bord  = isEnt ? 'rgba(74,222,128,0.35)' : 'rgba(248,113,113,0.35)'
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${bg};border:2px solid ${bord};display:flex;align-items:center;justify-content:center;font-size:${Math.round(size*0.33)}px;font-weight:800;color:${color};flex-shrink:0;letter-spacing:-0.5px;font-family:'JetBrains Mono',monospace;">${initials}</div>`
+}
+
+// Vista cards de movimientos
+function _mvRenderCards(paged, emptyState) {
+  if (!paged.length) return emptyState
+  return `<div style="display:flex;flex-direction:column;gap:7px;">
+    ${paged.map(m => {
+      const isEnt    = m.tipo === 'entrada'
+      const isCan    = m.estado === 'cancelado'
+      const amtColor = isCan ? '#64748b' : isEnt ? '#4ade80' : '#f87171'
+      const quien    = isEnt ? (m.ordenante || '—') : (m.beneficiario || '—')
+      const quien2   = isEnt ? (m.beneficiario || '') : (m.ordenante || '')
+      const cla      = m.clabe ? '···' + m.clabe.slice(-4) : ''
+      const balColor = m._balance >= 0 ? '#4ade80' : '#f87171'
+      const arrowIcon = isEnt ? 'ArrowDownLeft' : 'ArrowUpRight'
+      const signPfx   = isEnt ? '+' : '−'
+      return `<div onclick="mvOpenModal('${m.id}')"
+        style="cursor:pointer;background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.08);border-radius:13px;padding:13px 16px;display:flex;align-items:center;gap:13px;transition:all 0.15s;"
+        onmouseover="this.style.borderColor='rgba(0,246,255,0.22)';this.style.background='rgba(255,255,255,0.04)'"
+        onmouseout="this.style.borderColor='rgba(255,255,255,0.08)';this.style.background='rgba(255,255,255,0.025)'">
+        ${_mvAvatar(quien, isEnt)}
+        <div style="width:26px;height:26px;border-radius:50%;background:${amtColor}18;border:1px solid ${amtColor}33;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          ${lx(arrowIcon,13,'',{color:amtColor})}
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
+            <span style="font-size:13px;font-weight:700;color:${isCan?'#64748b':'#f0f6fc'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_mvEsc(quien)}</span>
+            ${quien2 ? `<span style="font-size:10px;color:#475569;white-space:nowrap;">→ ${_mvEsc(quien2)}</span>` : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+            <span style="font-size:10px;color:#475569;">${_mvFmtD(m.fecha)}</span>
+            ${m.banco ? `<span style="font-size:10px;color:#334155;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);padding:1px 7px;border-radius:5px;">🏦 ${_mvEsc(m.banco)}${cla ? ' ' + cla : ''}</span>` : ''}
+            ${_mvCatBadge(m.categoria)}
+            ${m.estado === 'pendiente' ? `<span style="font-size:9px;font-weight:700;color:#fbbf24;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.2);padding:1px 7px;border-radius:5px;">PENDIENTE</span>` : ''}
+            ${m.estado === 'cancelado' ? `<span style="font-size:9px;font-weight:700;color:#64748b;background:rgba(100,116,139,0.1);border:1px solid rgba(100,116,139,0.2);padding:1px 7px;border-radius:5px;">CANCELADO</span>` : ''}
+            ${m.comprobante_url ? `<span title="Tiene comprobante" style="font-size:10px;color:#00f0ff;">${lx('Paperclip',10)}</span>` : ''}
+          </div>
+          ${m.notas ? `<div style="font-size:11px;color:#334155;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${_mvEsc(m.notas)}">${_mvEsc(m.notas)}</div>` : ''}
+        </div>
+        <div style="text-align:right;flex-shrink:0;min-width:110px;">
+          <div style="font-size:16px;font-weight:900;color:${amtColor};font-family:'JetBrains Mono',monospace;white-space:nowrap;">${signPfx}${_mvFmt$(m.cantidad)}&thinsp;${_mvMonedaBadge(m.moneda)}</div>
+          ${m.moneda !== 'MXN' && m.monto_mxn ? `<div style="font-size:10px;color:#475569;">≈ $${_mvFmt$(m.monto_mxn)}</div>` : ''}
+          <div style="font-size:10px;color:${balColor};margin-top:2px;font-family:'JetBrains Mono',monospace;">$${_mvFmt$(m._balance)}</div>
+        </div>
+      </div>`
+    }).join('')}
+  </div>`
+}
+
 // ── Vista principal ────────────────────────────────────────────────────────────
 async function renderMovimientos() {
   const root = document.getElementById('view-movimientos')
@@ -20812,7 +20902,10 @@ async function renderMovimientos() {
   const paged       = withBal.slice(pageStart, pageStart + _MV_PER_PAGE)
   const totalPages  = Math.max(1, Math.ceil(total / _MV_PER_PAGE))
   const f           = _mvFilters
-  const hasFilters  = f.tipo || f.moneda || f.estado || f.search || f.dateFrom || f.dateTo
+  const hasFilters  = f.tipo || f.moneda || f.estado || f.search || f.dateFrom || f.dateTo || f.categoria || f.banco
+
+  // Bancos únicos en movimientos actuales para el filtro
+  const _mvBancosUsed = [...new Set(_mvMovs.map(m => m.banco).filter(Boolean))].sort()
 
   // ── Orquestador tabs ──
   const orqTabs = _mvOrqs.length
@@ -20854,6 +20947,11 @@ async function renderMovimientos() {
       <button onclick="mvDownloadTemplate()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'" title="Descargar plantilla CSV para importación masiva">${lx('FileDown',14)} Plantilla</button>
       ${gBtn('T/C Bitso','RefreshCw','mvFetchTcAndRender()')}
       ${gBtn('Orquestadores','Settings','mvOpenOrqModal()')}
+      <!-- Toggle vista Cards / Tabla -->
+      <div style="display:flex;gap:2px;padding:3px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-left:auto;">
+        <button onclick="mvSetView('tabla')"  style="padding:6px 13px;border-radius:8px;border:none;background:${_mvView==='tabla'?'rgba(0,246,255,0.15)':'transparent'};color:${_mvView==='tabla'?'#00f0ff':'var(--text-dim)'};font-size:12px;font-weight:${_mvView==='tabla'?700:400};cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:5px;">${lx('AlignJustify',12)} Tabla</button>
+        <button onclick="mvSetView('cards')" style="padding:6px 13px;border-radius:8px;border:none;background:${_mvView==='cards'?'rgba(0,246,255,0.15)':'transparent'};color:${_mvView==='cards'?'#00f0ff':'var(--text-dim)'};font-size:12px;font-weight:${_mvView==='cards'?700:400};cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:5px;">${lx('LayoutList',12)} Cards</button>
+      </div>
     </div>`
 
   // ── Filter bar ──
@@ -20865,17 +20963,19 @@ async function renderMovimientos() {
 
   const filterHtml = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px;padding:12px 16px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
-      <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:160px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:6px 10px;">
+      <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:180px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:6px 10px;">
         ${lx('Search',13,'',{color:'#64748b'})}
-        <input id="mv-search" type="text" value="${_mvEsc(f.search)}" placeholder="Ordenante, banco, notas..." oninput="mvSetFilter('search',this.value)" style="background:none;border:none;outline:none;color:var(--text-primary);font-size:12px;width:100%;" />
+        <input id="mv-search" type="text" value="${_mvEsc(f.search)}" placeholder="Ordenante, banco, categoría..." oninput="mvSetFilter('search',this.value)" style="background:none;border:none;outline:none;color:var(--text-primary);font-size:12px;width:100%;" />
       </div>
       ${sel('tipo',f.tipo,[['entrada','🟢 Entrada'],['salida','🔴 Salida']],'Tipo')}
       ${sel('moneda',f.moneda,[['MXN','MXN'],['USD','USD'],['USDT','USDT'],['BTC','BTC'],['ETH','ETH'],['XRP','XRP'],['SOL','SOL'],['LTC','LTC']],'Moneda')}
       ${sel('estado',f.estado,[['hecho','✅ Hecho'],['pendiente','⏳ Pendiente'],['cancelado','❌ Cancelado']],'Estado')}
+      ${sel('categoria',f.categoria, _mvCatsUsed().map(c=>[c,c]), '🏷 Categoría')}
+      ${_mvBancosUsed.length ? sel('banco',f.banco, _mvBancosUsed.map(b=>[b,b]), '🏦 Banco') : ''}
       <input type="date" value="${f.dateFrom}" onchange="mvSetFilter('dateFrom',this.value)" style="padding:6px 10px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text-muted);font-size:12px;outline:none;" title="Desde" />
       <input type="date" value="${f.dateTo}" onchange="mvSetFilter('dateTo',this.value)" style="padding:6px 10px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:var(--text-muted);font-size:12px;outline:none;" title="Hasta" />
       ${hasFilters ? `<button onclick="mvClearFilters()" style="padding:6px 12px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.2);color:#f87171;border-radius:8px;font-size:11px;cursor:pointer;">✕ Limpiar</button>` : ''}
-      <span style="margin-left:auto;font-size:11px;color:var(--text-dim);">${total} mov.</span>
+      <span style="font-size:11px;color:var(--text-dim);">${total} mov.</span>
     </div>`
 
   // ── Tabla ──
@@ -20895,8 +20995,9 @@ async function renderMovimientos() {
             <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Tipo</th>
             <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Concepto</th>
             <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Banco · CLABE</th>
+            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Categoría</th>
             <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Cantidad</th>
-            <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">MXN</th>
+            <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">MXN Neto</th>
             <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Balance</th>
             <th style="padding:10px 12px;text-align:center;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Estado</th>
             <th style="padding:10px 12px;text-align:center;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;">Comp.</th>
@@ -20925,6 +21026,7 @@ async function renderMovimientos() {
                 ${m.banco ? `<div style="font-size:11px;color:var(--text-muted);">${_mvEsc(m.banco)}</div>` : ''}
                 ${m.clabe ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);">${_mvEsc(cla)}</div>` : ''}
               </td>
+              <td style="padding:10px 12px;">${_mvCatBadge(m.categoria)}</td>
               <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:700;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${isEnt?'+':'-'}${_mvFmt$(m.cantidad)} ${_mvEsc(m.moneda)}</td>
               <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:600;font-family:'JetBrains Mono',monospace;white-space:nowrap;" title="${m.comision!=null?'Bruto: $'+_mvFmt$(m.monto_mxn):''}">
                 ${isCan?'<span style="color:#64748b">—</span>':(isEnt?'+':'-')+'$'+_mvFmt$(_mvNetAmount(m))}
@@ -20983,7 +21085,9 @@ async function renderMovimientos() {
       </div>
     ` : ''}
     ${_mvActiveOrqId ? filterHtml : ''}
-    ${_mvActiveOrqId ? `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:20px;">${tableHtml}</div>` : ''}
+    ${_mvActiveOrqId ? `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:20px;">
+      ${_mvView === 'cards' ? _mvRenderCards(paged, emptyTable) : tableHtml}
+    </div>` : ''}
   `
   requestAnimationFrame(refreshIcons)
 
@@ -21125,7 +21229,8 @@ function _mvRenderCharts(withBal) {
 // ── Controladores ──────────────────────────────────────────────────────────────
 window.mvSetOrq = async (id) => { _mvActiveOrqId = id; _mvMovs = []; _mvPage = 1; await _mvLoadMovs(); renderMovimientos() }
 window.mvSetFilter = (k, v) => { _mvFilters[k] = v; _mvPage = 1; renderMovimientos() }
-window.mvClearFilters = () => { _mvFilters = { tipo:'',moneda:'',estado:'',search:'',dateFrom:'',dateTo:'' }; _mvPage = 1; renderMovimientos() }
+window.mvClearFilters = () => { _mvFilters = { tipo:'',moneda:'',estado:'',search:'',dateFrom:'',dateTo:'',categoria:'',banco:'' }; _mvPage = 1; renderMovimientos() }
+window.mvSetView = (v) => { _mvView = v; localStorage.setItem('nexus_mv_view', v); renderMovimientos() }
 window.mvSetPage = (p) => { _mvPage = p; renderMovimientos() }
 window.mvFetchTcAndRender = async () => {
   _mvTcCache = {}  // flush all cached prices
@@ -21220,6 +21325,23 @@ window.mvOpenModal = async (id = null) => {
               `<button type="button" onclick="mvSelEstado('${v}')" id="mv-est-${v}" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:${(mov?.estado||'hecho')===v?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.02)'};color:${(mov?.estado||'hecho')===v?c:'var(--text-dim)'};font-size:12px;font-weight:${(mov?.estado||'hecho')===v?700:400};cursor:pointer;transition:all 0.2s;">${l}</button>`
             ).join('')}
           </div><input type="hidden" id="mv-estado" value="${mov?.estado||'hecho'}" />`)}
+        </div>
+
+        <!-- Categoría + Proyecto -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          ${fld('Categoría', `<div style="position:relative;">
+            <input type="text" id="mv-categoria" list="mv-cat-datalist" value="${_mvEsc(mov?.categoria||'')}"
+              placeholder="Operaciones, Nómina, Renta..."
+              style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;"
+              onfocus="this.style.borderColor='rgba(0,246,255,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'" />
+            <datalist id="mv-cat-datalist">
+              ${_mvCatsUsed().map(c => `<option value="${_mvEsc(c)}">`).join('')}
+            </datalist>
+          </div>`)}
+          ${fld('Proyecto (tag)', `<input type="text" id="mv-proyecto" value="${_mvEsc(mov?.proyecto||'')}"
+            placeholder="casa-tulum, oficina..."
+            style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;"
+            onfocus="this.style.borderColor='rgba(167,139,250,0.5)'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'" />`)}
         </div>
 
         <!-- Notas -->
@@ -21443,8 +21565,10 @@ window.mvSaveMov = async () => {
     monto_mxn: Math.round(cant * tc * 100) / 100,
     comision,
     comprobante_url: manualUrl,   // se sobreescribe con Storage URL si hay archivo
-    estado: g('mv-estado')?.value || 'hecho',
-    notas:  g('mv-notas')?.value.trim() || null,
+    estado:    g('mv-estado')?.value    || 'hecho',
+    notas:     g('mv-notas')?.value.trim()    || null,
+    categoria: g('mv-categoria')?.value.trim() || null,
+    proyecto:  g('mv-proyecto')?.value.trim()  || null,
     updated_at: new Date().toISOString()
   }
 
@@ -21577,11 +21701,12 @@ window.mvDeleteOrq = async (id) => {
 window.mvExportCSV = () => {
   const list = _mvWithBalance(_mvFiltered())
   if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
-  const hdr  = ['Fecha','Tipo','Ordenante','Beneficiario','Banco','CLABE','Cantidad','Moneda','T/C','Bruto MXN','Neto MXN','Balance MXN','Comision','Estado','Notas']
+  const hdr  = ['Fecha','Tipo','Ordenante','Beneficiario','Banco','CLABE','Cantidad','Moneda','T/C','Bruto MXN','Neto MXN','Balance MXN','Comision','Estado','Categoria','Proyecto','Notas']
   const rows = list.map(m => [
     m.fecha, m.tipo, m.ordenante||'', m.beneficiario||'',
     m.banco||'', m.clabe||'', m.cantidad, m.moneda, m.tc,
-    m.monto_mxn, _mvNetAmount(m), m._balance, m.comision??'', m.estado, (m.notas||'').replace(/"/g,'""')
+    m.monto_mxn, _mvNetAmount(m), m._balance, m.comision??'',
+    m.estado, m.categoria||'', m.proyecto||'', (m.notas||'').replace(/"/g,'""')
   ].map(v => `"${v}"`).join(','))
   const blob = new Blob(['﻿' + [hdr.join(','),...rows].join('\n')], { type:'text/csv;charset=utf-8;' })
   const a    = document.createElement('a')
