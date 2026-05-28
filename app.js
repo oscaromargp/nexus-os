@@ -492,13 +492,14 @@ function setupRealtimeSubscription() {
 }
 
 // ── Cache localStorage — offline fallback ────────────────────────────────────
-const NODES_CACHE_KEY = 'nexus_nodes_cache'
 const NODES_CACHE_MAX = 500   // máximo de nodos a cachear (los más recientes)
+// Clave específica por usuario — evita que un usuario vea caché de otro en el mismo dispositivo
+function _cacheKey() { return `nexus_nodes_cache_${currentUser?.id || 'anon'}` }
 
 function saveNodesToCache(nodes) {
   try {
     const slice = nodes.slice(0, NODES_CACHE_MAX)
-    localStorage.setItem(NODES_CACHE_KEY, JSON.stringify(slice))
+    localStorage.setItem(_cacheKey(), JSON.stringify(slice))
   } catch (e) {
     // QuotaExceededError — no bloquea la app
     console.warn('[cache] no se pudo guardar en localStorage:', e.message)
@@ -507,9 +508,20 @@ function saveNodesToCache(nodes) {
 
 function loadNodesFromCache() {
   try {
-    const raw = localStorage.getItem(NODES_CACHE_KEY)
-    return raw ? JSON.parse(raw) : null
+    const raw = localStorage.getItem(_cacheKey())
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    // Defensa extra: solo nodos del usuario actual (o sin owner_id si es modo offline)
+    const uid = currentUser?.id
+    return uid ? parsed.filter(n => !n.owner_id || n.owner_id === uid) : parsed
   } catch { return null }
+}
+
+/** Elimina todo caché de nodos del localStorage para el usuario actual */
+function clearNodesCache() {
+  try { localStorage.removeItem(_cacheKey()) } catch {}
+  // Limpia también la clave genérica vieja por si quedó de versiones anteriores
+  try { localStorage.removeItem('nexus_nodes_cache') } catch {}
 }
 
 // Genera HTML de skeleton cards para el estado de carga inicial
@@ -5800,6 +5812,7 @@ window.seedDemoData = async () => {
 // Logout
 document.getElementById('btn-logout')?.addEventListener('click', async (e) => {
   e.stopPropagation()
+  clearNodesCache()
   localStorage.removeItem('nexus_admin_bypass')
   await supabase.auth.signOut()
   window.location.href = '/'
@@ -9494,6 +9507,7 @@ document.getElementById('btn-delete-account')?.addEventListener('click', async (
     return
   }
   await supabase.from('nodes').delete().eq('owner_id', currentUser.id)
+  clearNodesCache()
   await supabase.auth.signOut()
   window.location.href = '/'
 })
