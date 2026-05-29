@@ -839,50 +839,70 @@ export function openPropModal(id = null) {
           </div>
         </div>
 
-        <!-- ── Sección: Archivos ── -->
+        <!-- ── Sección: Fotos y multimedia ── -->
         <div style="margin-bottom:22px;">
           <div style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">
-            Archivos y fotos
+            📸 Fotos y multimedia
           </div>
-          <!-- Subida de fotos -->
-          <div style="border:2px dashed rgba(34,211,238,0.2);border-radius:10px;padding:16px;text-align:center;margin-bottom:12px;cursor:pointer;"
-            onclick="document.getElementById('prop-foto-input').click()"
-            ondragover="event.preventDefault()" ondrop="propHandleDrop(event)">
-            <input type="file" id="prop-foto-input" multiple accept="image/*" style="display:none;"
-              onchange="propHandleFiles(this.files,'${prop?.id||''}')"/>
-            <div style="font-size:28px;margin-bottom:6px;opacity:0.5;">📷</div>
-            <div style="font-size:13px;color:#7a8899;">Arrastra fotos aquí o haz clic para seleccionar</div>
-            <div style="font-size:11px;color:#4b5563;margin-top:4px;">JPEG, PNG, WEBP · máx 5MB por imagen</div>
+
+          <!-- Google Fotos: álbum compartido -->
+          <div style="margin-bottom:10px;">
+            ${_field('prop-album-fotos','📷 Álbum Google Fotos (link compartido)','url',val('album_fotos_url'),'https://photos.app.goo.gl/...')}
+            <div style="font-size:11px;color:#475569;margin-top:5px;">Crea un álbum en Google Fotos → Comparte el link aquí. Las fotos son visibles para clientes.</div>
           </div>
-          <!-- Fotos existentes -->
-          <div id="prop-fotos-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-            ${(prop?.fotos||[]).map((f,i)=>`
-              <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);">
-                <img src="${_esc(f.thumb_url||f.url||'')}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.opacity=0.3"/>
-                ${i===0?'<div style="position:absolute;top:2px;left:2px;background:rgba(34,211,238,0.85);color:#0d0f1f;font-size:7px;font-weight:800;padding:1px 4px;border-radius:3px;">PORTADA</div>':''}
-                <button onclick="propRemoveFoto(${i})"
-                  style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;
-                  background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:10px;line-height:1;">✕</button>
-              </div>`).join('')}
+
+          <!-- Video YouTube / Drive -->
+          <div style="margin-bottom:10px;">
+            ${_field('prop-video-url','🎥 Video (YouTube o Google Drive)','url',val('video_url'),'https://youtube.com/watch?v=... o link de descarga Drive')}
+            <div style="font-size:11px;color:#475569;margin-top:5px;">YouTube: se incrusta automáticamente. Drive: se muestra como botón de descarga.</div>
           </div>
-          <!-- URL de imagen (alternativa al upload) -->
-          <div style="display:flex;gap:8px;margin-bottom:8px;">
-            <input type="url" id="prop-foto-url" placeholder="Pegar URL de imagen (https://...)"
-              style="flex:1;padding:8px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
-              border-radius:8px;color:#e8f0f9;font-size:13px;outline:none;"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();propAddPhotoUrl('${prop?.id||''}');}"/>
-            <button type="button" onclick="propAddPhotoUrl('${prop?.id||''}')"
-              style="padding:8px 14px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
-              color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">+ Agregar</button>
-          </div>
-          <div style="font-size:11px;color:#4b5563;margin-bottom:12px;">💡 Pega link de Google Drive, Dropbox, Imgur, etc. — o sube desde dispositivo arriba</div>
-          <!-- Links multimedia -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
-            ${_field('prop-video-url','🎥 Video (YouTube / link)','url',val('video_url'),'https://youtube.com/watch?v=...')}
+
+          <!-- Tour virtual -->
+          <div style="margin-bottom:10px;">
             ${_field('prop-tour-url','🌐 Tour virtual 360°','url',val('tour_url'),'https://...')}
           </div>
-          <!-- Link Google Drive -->
-          ${_field('prop-drive','📁 Carpeta Google Drive (link)','url',val('drive_folder_url'),'https://drive.google.com/drive/folders/...')}
+
+          <!-- Carpeta Google Drive documentos -->
+          <div style="margin-bottom:14px;">
+            ${_field('prop-drive','📁 Carpeta Google Drive (documentos)','url',val('drive_folder_url'),'https://drive.google.com/drive/folders/...')}
+            <div style="font-size:11px;color:#475569;margin-top:5px;">Sugerencia: nombra la carpeta como el folio interno (${val('folio_interno','Ej: LP-2026-001')}) para encontrarla fácil.</div>
+          </div>
+
+          <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;margin-top:4px;">
+            <div style="font-size:11px;font-weight:600;color:#64748b;margin-bottom:10px;">Fotos individuales (portada y galería interna)</div>
+            <!-- URL de imagen directa -->
+            <div style="display:flex;gap:8px;margin-bottom:8px;">
+              <input type="url" id="prop-foto-url" placeholder="Pegar URL directa de imagen (https://lh3.googleusercontent.com/...)"
+                style="flex:1;padding:8px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+                border-radius:8px;color:#e8f0f9;font-size:13px;outline:none;"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();propAddPhotoUrl('${prop?.id||''}');}"/>
+              <button type="button" onclick="propAddPhotoUrl('${prop?.id||''}')"
+                style="padding:8px 14px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
+                color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">+ Agregar</button>
+            </div>
+            <div style="font-size:11px;color:#475569;margin-bottom:10px;">💡 En Google Fotos: abre una foto → clic derecho → "Copiar dirección de imagen" → pega aquí. También funciona con Imgur, Cloudinary, etc.</div>
+            <!-- Subida de archivo -->
+            <div style="border:2px dashed rgba(34,211,238,0.15);border-radius:10px;padding:14px;text-align:center;margin-bottom:10px;cursor:pointer;"
+              onclick="document.getElementById('prop-foto-input').click()"
+              ondragover="event.preventDefault()" ondrop="propHandleDrop(event)">
+              <input type="file" id="prop-foto-input" multiple accept="image/*" style="display:none;"
+                onchange="propHandleFiles(this.files,'${prop?.id||''}')"/>
+              <div style="font-size:22px;margin-bottom:4px;opacity:0.4;">📷</div>
+              <div style="font-size:12px;color:#7a8899;">Arrastra o haz clic para subir desde dispositivo</div>
+              <div style="font-size:10px;color:#4b5563;margin-top:3px;">JPEG, PNG, WEBP · máx 5MB</div>
+            </div>
+            <!-- Fotos existentes -->
+            <div id="prop-fotos-preview" style="display:flex;flex-wrap:wrap;gap:8px;">
+              ${(prop?.fotos||[]).map((f,i)=>`
+                <div style="position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);">
+                  <img src="${_esc(f.thumb_url||f.url||'')}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.opacity=0.3"/>
+                  ${i===0?'<div style="position:absolute;top:2px;left:2px;background:rgba(34,211,238,0.85);color:#0d0f1f;font-size:7px;font-weight:800;padding:1px 4px;border-radius:3px;">PORTADA</div>':''}
+                  <button onclick="propRemoveFoto(${i})"
+                    style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;
+                    background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:10px;line-height:1;">✕</button>
+                </div>`).join('')}
+            </div>
+          </div>
         </div>
 
         <!-- ── Sección: Status ── -->
@@ -932,6 +952,31 @@ function _field(id, label, type, value = '', placeholder = '', disabled = false)
         style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
         border-radius:8px;color:#e8f0f9;font-size:13px;outline:none;box-sizing:border-box;${disabled?'opacity:0.5;':''}"/>
     </div>`
+}
+
+// ─── Íconos SVG ──────────────────────────────────────────────────────────────
+const _SVG = {
+  bed:    `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9V4h20v5"/><rect x="1" y="9" width="22" height="9" rx="2"/><path d="M1 14h22M4 20v2M20 20v2"/></svg>`,
+  bath:   `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16v4a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4v-4z"/><path d="M6 12V6a2 2 0 0 1 4 0v.5"/></svg>`,
+  car:    `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3a2 2 0 0 1-2-2V9l3-4h14l3 4v6a2 2 0 0 1-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg>`,
+  area:   `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>`,
+  land:   `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18l4-8 4 4 3-5 4 9H3z"/><path d="M3 21h18"/></svg>`,
+  floors: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="1"/><rect x="2" y="14" width="20" height="8" rx="1"/><path d="M6 10v4M12 10v4M18 10v4"/></svg>`,
+  age:    `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>`,
+  map:    `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`,
+  video:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`,
+  globe:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+  link:   `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
+  folder: `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
+  album:  `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`,
+  img:    `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`,
+}
+
+// Extrae el ID de un URL de YouTube (youtu.be o youtube.com)
+function _ytId(url) {
+  if (!url) return null
+  const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/)
+  return m?.[1] || null
 }
 
 // ─── Modal de detalle ─────────────────────────────────────────────────────────
@@ -1058,6 +1103,23 @@ export async function openPropDetail(id) {
           <div style="font-size:13px;">Sin fotos · <span style="color:#22d3ee;cursor:pointer;text-decoration:underline;" onclick="openPropModal('${p.id}')">Agregar imágenes</span></div>
         </div>`}
 
+      ${(() => {
+        const ytId = _ytId(p.video_url)
+        if (!ytId) return ''
+        return `
+        <!-- ── YouTube embed ─────────────────────────────────────────────── -->
+        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;background:#000;">
+          <iframe
+            src="https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1"
+            title="Video de la propiedad"
+            frameborder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+            style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;">
+          </iframe>
+        </div>`
+      })()}
+
       <div style="padding:20px;">
 
         <!-- ── PRECIO + SPECS ─────────────────────────────────────────────── -->
@@ -1096,12 +1158,18 @@ export async function openPropDetail(id) {
               background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;
               border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">
               ${_SVG.map} Ver mapa</a>` : ''}
+          ${p.album_fotos_url ? `
+            <a href="${_esc(p.album_fotos_url)}" target="_blank" rel="noopener"
+              style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+              background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.25);color:#fbbf24;
+              border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">
+              ${_SVG.album} Álbum fotos</a>` : ''}
           ${p.video_url ? `
             <a href="${_esc(p.video_url)}" target="_blank" rel="noopener"
               style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
               background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.25);color:#f87171;
               border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">
-              ${_SVG.video} Video</a>` : ''}
+              ${_SVG.video} ${_ytId(p.video_url) ? 'Ver en YouTube' : 'Ver video'}</a>` : ''}
           ${p.tour_url ? `
             <a href="${_esc(p.tour_url)}" target="_blank" rel="noopener"
               style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
@@ -1113,7 +1181,7 @@ export async function openPropDetail(id) {
               style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
               background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;
               border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">
-              ${_SVG.folder} Drive</a>` : ''}
+              ${_SVG.folder} Documentos</a>` : ''}
           <button onclick="propCopyLink('${p.id}','${_esc(p.slug||p.id)}')"
             style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
             background:rgba(34,211,238,0.07);border:1px solid rgba(34,211,238,0.2);color:#22d3ee;
@@ -1355,6 +1423,7 @@ export async function saveProp(id) {
     drive_folder_url:  gv('prop-drive'),
     video_url:         gv('prop-video-url'),
     tour_url:          gv('prop-tour-url'),
+    album_fotos_url:   gv('prop-album-fotos'),
 
     exclusiva:         gb('prop-exclusiva'),
     exclusiva_inicio:  gv('prop-excl-inicio'),
