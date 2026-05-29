@@ -12,6 +12,7 @@
 import { createClient } from '@supabase/supabase-js'
 import Sortable from 'sortablejs'
 import { pdfFichaCaptacion } from './pdf-inmuebles.js'
+import { renderDocumentos, loadPropertyDocs } from './docs-inmuebles.js'
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL  || '',
@@ -925,7 +926,14 @@ export async function openPropDetail(id) {
   const tipo  = _tipoInfo(p.tipo)
   const fotos = p.fotos || []
 
-  // Carga historial en paralelo
+  // Exponer _props al módulo de documentos
+  window._nexusProps = _props
+
+  // Carga historial + docs en paralelo
+  loadPropertyDocs(id).then(() => {
+    const docsEl = document.getElementById(`dpanel-docs`)
+    if (docsEl && docsEl.dataset.propId === id) docsEl.innerHTML = renderDocumentos(id)
+  })
   loadInteractions(id).then(() => {
     const el = document.getElementById(`inter-list-${id}`)
     if (el) el.outerHTML = _renderHistorial(id).match(/id="inter-list-[^"]+">[\s\S]*?<\/div>/)?.[0] || ''
@@ -996,7 +1004,7 @@ export async function openPropDetail(id) {
 
       <!-- ── Tabs ── -->
       <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 20px;">
-        ${[['info','Ficha'],['galeria','Galería ('+fotos.length+')'],['crm','Historial']].map(([tab,label])=>`
+        ${[['info','Ficha'],['galeria','Galería ('+fotos.length+')'],['crm','Historial'],['docs','📄 Docs']].map(([tab,label])=>`
           <button onclick="propDetailTab('${tab}','${p.id}')" id="dtab-${tab}"
             style="padding:10px 16px;border:none;background:transparent;cursor:pointer;font-size:13px;font-weight:600;
             color:${tab==='info'?'#22d3ee':'#7a8899'};border-bottom:2px solid ${tab==='info'?'#22d3ee':'transparent'};
@@ -1157,6 +1165,13 @@ export async function openPropDetail(id) {
         <!-- ══ TAB: HISTORIAL CRM ══ -->
         <div id="dpanel-crm" style="display:none;">
           ${_renderHistorial(p.id)}
+        </div>
+
+        <!-- ══ TAB: DOCUMENTOS ══ -->
+        <div id="dpanel-docs" data-prop-id="${p.id}" style="display:none;">
+          <div style="text-align:center;padding:20px;color:#4b5563;font-size:13px;">
+            Cargando documentos…
+          </div>
         </div>
 
       </div>
@@ -1487,7 +1502,7 @@ window.propWhatsApp = (id) => {
 // ─── Handlers modal de detalle ────────────────────────────────────────────────
 
 window.propDetailTab = (tab, propId) => {
-  ;['info', 'galeria', 'crm'].forEach(p => {
+  ;['info', 'galeria', 'crm', 'docs'].forEach(p => {
     const panel = document.getElementById('dpanel-' + p)
     const btn   = document.getElementById('dtab-' + p)
     const active = p === tab
