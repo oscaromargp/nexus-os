@@ -1,490 +1,539 @@
 /**
- * Nexus OS — PDF Inmobiliario v1.0
+ * Nexus OS — PDF Inmobiliario v2.0  (Light Theme)
  * src/pdf-inmuebles.js
  *
+ * Ficha técnica limpia, imprimible, para compartir con clientes.
+ * Sin tema dark. Folio en rojo. Agente configurable por ficha.
+ *
  * Exports:
- *   pdfFichaCaptacion(prop, emisor?)   — Ficha técnica para cliente
- *   pdfContratoExclusiva(prop, emisor?) — Contrato exclusiva (Fase 4)
+ *   pdfFichaCaptacion(prop, emisor?)
  */
 
 import { jsPDF } from 'jspdf'
-import autoTable from 'jspdf-autotable'
 import QRCode from 'qrcode'
-import { NEXUS_PDF_THEME, fmt$ } from './pdf-reports.js'
 
-const T = NEXUS_PDF_THEME
-
-// ─── Catálogos ────────────────────────────────────────────────────────────────
-const TIPO_LABELS = {
-  casa:'Casa',depto:'Departamento',terreno:'Terreno',
-  lote:'Lote',bodega:'Bodega',local:'Local Comercial',nave:'Nave Industrial',
+// ── Paleta light ──────────────────────────────────────────────────────────────
+const C = {
+  sky:   [14,  165, 233],   // sky-500 — accent titulos, labels
+  red:   [220, 38,  38],    // red-600 — folio identifier
+  green: [22,  163, 74],    // green-600 — precio negociable
+  amber: [217, 119, 6],     // amber-600 — exclusiva
+  t900:  [15,  23,  42],    // slate-900 — texto principal
+  t700:  [51,  65,  85],    // slate-700 — texto secundario
+  t500:  [100, 116, 139],   // slate-500 — texto muted
+  t400:  [148, 163, 184],   // slate-400 — texto dim
+  s200:  [226, 232, 240],   // slate-200 — separadores
+  s100:  [241, 245, 249],   // slate-100 — fondo sutil
+  s50:   [248, 250, 252],   // slate-50  — fondo muy sutil
+  white: [255, 255, 255],
 }
-const OP_LABELS = { venta:'Venta',renta:'Renta',traspaso:'Traspaso' }
 
-// ─── Helpers internos ─────────────────────────────────────────────────────────
-function _esc(s) { return String(s ?? '') }
+const FONT  = 'helvetica'
+const MX    = 12   // margen horizontal
 
-function _fmtM2(n) {
-  if (!n) return null
-  return Number(n).toLocaleString('es-MX', { maximumFractionDigits: 1 }) + ' m²'
+// ── Catálogos ─────────────────────────────────────────────────────────────────
+const TIPO_LBL = {
+  casa: 'Casa', depto: 'Departamento', terreno: 'Terreno',
+  lote: 'Lote', bodega: 'Bodega', local: 'Local Comercial', nave: 'Nave Industrial',
 }
+const OP_LBL = { venta: 'Venta', renta: 'Renta', traspaso: 'Traspaso' }
+
+// ── Helpers internos ──────────────────────────────────────────────────────────
+const _s = s => String(s ?? '')
 
 function _fmtPrice(p) {
   if (!p.precio_venta && !p.precio_renta) return 'Precio a consultar'
+  const fmt = n => '$' + Number(n).toLocaleString('es-MX', { maximumFractionDigits: 0 })
   const parts = []
-  if (p.precio_venta) parts.push(fmt$(p.precio_venta) + (p.moneda === 'USD' ? ' USD' : ' MXN'))
-  if (p.precio_renta) parts.push(fmt$(p.precio_renta) + '/mes')
-  return parts.join('  ·  ')
+  if (p.precio_venta) parts.push(fmt(p.precio_venta) + (p.moneda === 'USD' ? ' USD' : ' MXN'))
+  if (p.precio_renta) parts.push(fmt(p.precio_renta) + '/mes')
+  return parts.join('  /  ')
+}
+
+function _fmtM2(n) {
+  if (!n) return null
+  return Number(n).toLocaleString('es-MX', { maximumFractionDigits: 1 }) + ' m2'
 }
 
 function _ubicacion(p) {
-  const linea1 = [p.calle, p.numero].filter(Boolean).join(' ')
-  const linea2 = [p.colonia, p.municipio, p.estado_rep].filter(Boolean).join(', ')
-  return [linea1, linea2].filter(Boolean).join('\n')
+  return [p.calle, p.numero, p.colonia, p.municipio, p.estado_rep]
+    .filter(Boolean).join(', ')
 }
 
-/** Carga imagen desde URL como data URL */
+function _mapsUrl(p) {
+  if (p.lat && p.lng)
+    return `https://www.google.com/maps?q=${p.lat},${p.lng}`
+  const addr = [p.calle, p.numero, p.colonia, p.municipio, p.estado_rep].filter(Boolean).join(' ')
+  return addr ? `https://www.google.com/maps/search/${encodeURIComponent(addr)}` : null
+}
+
 async function _loadImg(url) {
   if (!url) return ''
   try {
     const res = await fetch(url)
     if (!res.ok) return ''
     const blob = await res.blob()
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const reader = new FileReader()
-      reader.onload = () => resolve(reader.result)
+      reader.onload  = () => resolve(reader.result)
       reader.onerror = () => resolve('')
       reader.readAsDataURL(blob)
     })
   } catch { return '' }
 }
 
-function _imgFormat(dataUrl) {
+function _imgFmt(dataUrl) {
   if (dataUrl.startsWith('data:image/png'))  return 'PNG'
   if (dataUrl.startsWith('data:image/webp')) return 'WEBP'
   return 'JPEG'
 }
 
-/** Línea cyan decorativa */
-function _accentLine(doc, x, y, w) {
-  doc.setFillColor(...T.cyan)
-  doc.rect(x, y, w, 0.8, 'F')
-}
+// ── Primitivas de dibujo ──────────────────────────────────────────────────────
 
-/** Rectángulo con borde redondeado y relleno */
-function _panel(doc, x, y, w, h, fill = T.surface) {
-  doc.setFillColor(...fill)
-  doc.roundedRect(x, y, w, h, 2, 2, 'F')
-}
-
-/** Texto con sombra (para precio hero) */
-function _heroText(doc, text, x, y, size, color) {
+/** Texto — devuelve número de líneas renderizadas */
+function _t(doc, text, x, y, { size = 9, w = 'normal', color = C.t900, align = 'left', wrap } = {}) {
   doc.setFontSize(size)
-  doc.setFont(T.font, 'bold')
+  doc.setFont(FONT, w)
   doc.setTextColor(...color)
-  doc.text(text, x, y)
+  if (Array.isArray(text)) {
+    doc.text(text, x, y, { align })
+    return text.length
+  }
+  const str = _s(text)
+  if (wrap) {
+    const lines = doc.splitTextToSize(str, wrap)
+    doc.text(lines, x, y, { align })
+    return lines.length
+  }
+  doc.text(str, x, y, { align })
+  return 1
+}
+
+/** Línea horizontal */
+function _hline(doc, x, y, x2, color = C.s200, lw = 0.2) {
+  doc.setDrawColor(...color)
+  doc.setLineWidth(lw)
+  doc.line(x, y, x2, y)
+}
+
+/** Línea vertical */
+function _vline(doc, x, y1, y2, color = C.s200, lw = 0.2) {
+  doc.setDrawColor(...color)
+  doc.setLineWidth(lw)
+  doc.line(x, y1, x, y2)
+}
+
+/** Rect redondeado */
+function _box(doc, x, y, w, h, fill = null, stroke = null, lw = 0.25, r = 1.5) {
+  const mode = fill && stroke ? 'FD' : fill ? 'F' : stroke ? 'S' : null
+  if (!mode) return
+  if (fill)   doc.setFillColor(...fill)
+  if (stroke) { doc.setDrawColor(...stroke); doc.setLineWidth(lw) }
+  doc.roundedRect(x, y, w, h, r, r, mode)
+}
+
+/** Pill badge */
+function _pill(doc, text, x, y, fill = C.sky, textColor = C.white) {
+  doc.setFontSize(6.5)
+  doc.setFont(FONT, 'bold')
+  const tw = doc.getStringUnitWidth(text) * 6.5 / doc.internal.scaleFactor + 8
+  _box(doc, x, y - 4, tw, 6, fill, null, 0, 2)
+  _t(doc, text, x + 4, y, { size: 6.5, w: 'bold', color: textColor })
+  return tw
+}
+
+/**
+ * Botón CTA con hipervínculo real.
+ * En el PDF se puede hacer clic y abre la URL.
+ */
+function _cta(doc, label, url, x, y, bw, bh = 8.5) {
+  const fill   = url ? C.s50   : [238, 238, 238]
+  const stroke = url ? C.s200  : [210, 210, 210]
+  const tColor = url ? C.sky   : C.t400
+  _box(doc, x, y, bw, bh, fill, stroke, 0.3, 2)
+  _t(doc, label, x + bw / 2, y + bh / 2 + 1.5, { size: 7, w: 'bold', color: tColor, align: 'center' })
+  if (url) doc.link(x, y, bw, bh, { url })
+}
+
+/** Footer estándar (igual en todas las páginas) */
+function _renderFooter(doc, emisor, pageNum, totalPages, W, H) {
+  const fy = H - 10
+  _hline(doc, MX, fy, W - MX, C.s200, 0.25)
+  // Agente — izquierda
+  const agLine = [emisor?.nombre, emisor?.tel, emisor?.email].filter(Boolean).join('  ·  ')
+  if (agLine) _t(doc, agLine, MX, fy + 5, { size: 7, color: C.t500 })
+  _t(doc, 'Generado con Nexus OS', MX, fy + 9, { size: 5.5, color: C.t400 })
+  // Paginación — derecha
+  _t(doc, `Pag. ${pageNum} / ${totalPages}`, W - MX, fy + 5, { size: 7, color: C.t400, align: 'right' })
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// FICHA DE CAPTACIÓN
+// FICHA DE CAPTACIÓN v2 — Light, compacta, imprimible
 // ═══════════════════════════════════════════════════════════════════════════════
 export async function pdfFichaCaptacion(prop, emisor = {}) {
   if (!prop) return
 
-  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const W     = doc.internal.pageSize.getWidth()   // 210
-  const H     = doc.internal.pageSize.getHeight()  // 297
-  const mX    = T.mX   // 16
-  const now   = new Date()
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W   = doc.internal.pageSize.getWidth()    // 210
+  const H   = doc.internal.pageSize.getHeight()   // 297
+  const now = new Date()
 
-  // ── Pre-cargar recursos async ─────────────────────────────────────────────
-  const fotos = prop.fotos || []
-  const [mainImgData, qrDataUrl] = await Promise.all([
-    fotos[0] ? _loadImg(fotos[0].url || fotos[0].thumb_url) : Promise.resolve(''),
+  // Campos derivados
+  const tipo   = TIPO_LBL[prop.tipo] || prop.tipo || 'Propiedad'
+  const ops    = (prop.operacion || []).map(o => OP_LBL[o] || o).join(' / ')
+  const precio = _fmtPrice(prop)
+  const ubic   = _ubicacion(prop)
+  const titulo = prop.titulo || `${tipo}${prop.colonia ? ' en ' + prop.colonia : ''}`
+  const folio  = prop.folio_interno || ('FP-' + now.toISOString().slice(0, 10).replace(/-/g, ''))
+  const mapUrl = _mapsUrl(prop)
+
+  // ── Pre-cargar imágenes ───────────────────────────────────────────────────
+  const fotos  = prop.fotos || []
+  const [img0, img1, img2, qrUrl] = await Promise.all([
+    _loadImg(fotos[0]?.url || fotos[0]?.thumb_url),
+    _loadImg(fotos[1]?.url || fotos[1]?.thumb_url),
+    _loadImg(fotos[2]?.url || fotos[2]?.thumb_url),
     QRCode.toDataURL(
       `${location?.origin || 'https://nexus-os-chi.vercel.app'}/propiedad.html?id=${prop.id}`,
-      { width: 80, margin: 1, color: { dark: '#0d1627', light: '#ffffff' } }
+      { width: 80, margin: 1, color: { dark: '#0f172a', light: '#ffffff' } }
     ).catch(() => ''),
   ])
 
-  const tipo     = TIPO_LABELS[prop.tipo] || prop.tipo || 'Propiedad'
-  const ops      = (prop.operacion || []).map(o => OP_LABELS[o] || o).join(' / ')
-  const precio   = _fmtPrice(prop)
-  const ubic     = _ubicacion(prop)
-  const titulo   = prop.titulo || `${tipo}${prop.colonia ? ' en ' + prop.colonia : ''}`
+  const extraFotos = fotos.slice(1)
+  const totalPages = extraFotos.length >= 2 ? 2 : 1
 
-  // ══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // PÁGINA 1
-  // ══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Header brand ─────────────────────────────────────────────────────────
-  doc.setFillColor(...T.ink)
-  doc.rect(0, 0, W, 18, 'F')
-  _accentLine(doc, 0, 18, W)
+  // ── Franja accent (2mm) ───────────────────────────────────────────────────
+  doc.setFillColor(...C.sky)
+  doc.rect(0, 0, W, 2, 'F')
 
-  doc.setFontSize(11)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.cyan)
-  doc.text('NEXUS OS', mX, 12)
+  // ── Header: folio (rojo) + fecha — sin branding ───────────────────────────
+  // Tipo + operación — sutil, izquierda
+  if (ops || tipo) {
+    _t(doc, [tipo.toUpperCase(), ops.toUpperCase()].filter(Boolean).join('  ·  '),
+      MX, 8.5, { size: 7, w: 'normal', color: C.t400 })
+  }
+  // Folio en rojo — esquina derecha, prominente
+  _t(doc, folio, W - MX, 8, { size: 12, w: 'bold', color: C.red, align: 'right' })
+  _t(doc,
+    now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }),
+    W - MX, 12.5, { size: 7, color: C.t400, align: 'right' })
 
-  doc.setFontSize(7.5)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textMid)
-  doc.text('FICHA TÉCNICA DE PROPIEDAD', mX + 28, 12)
+  let y = 15  // cursor Y
 
-  // Folio + fecha
-  const folio   = prop.folio_interno || ('FP-' + now.toISOString().slice(0, 10).replace(/-/g, ''))
-  doc.setFontSize(7)
-  doc.text(folio, W - mX, 8, { align: 'right' })
-  doc.text(now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }), W - mX, 14, { align: 'right' })
+  // ── Sección fotos ─────────────────────────────────────────────────────────
+  const hasThumbs = !!(img1 || img2)
+  const thumbColW = hasThumbs ? 52 : 0
+  const heroW     = W - MX * 2 - (hasThumbs ? thumbColW + 3 : 0)
+  const heroH     = 66
 
-  let y = 24
-
-  // ── Foto principal ────────────────────────────────────────────────────────
-  const imgH = 82
-  if (mainImgData) {
-    try {
-      doc.addImage(mainImgData, _imgFormat(mainImgData), 0, y, W, imgH, '', 'FAST')
-    } catch { /* sin imagen */ }
-    // Gradiente oscuro inferior sobre la foto
-    doc.setFillColor(13, 15, 31)
-    doc.setGState(doc.GState({ opacity: 0.55 }))
-    doc.rect(0, y + imgH - 22, W, 22, 'F')
-    doc.setGState(doc.GState({ opacity: 1 }))
+  // Foto principal
+  if (img0) {
+    try { doc.addImage(img0, _imgFmt(img0), MX, y, heroW, heroH, '', 'FAST') }
+    catch { _box(doc, MX, y, heroW, heroH, C.s100, C.s200) }
   } else {
-    // Placeholder sin imagen
-    _panel(doc, 0, y, W, imgH, [14, 20, 34])
-    doc.setFontSize(32)
-    doc.setTextColor(...T.textDim)
-    doc.text('🏠', W / 2, y + imgH / 2 + 8, { align: 'center' })
+    _box(doc, MX, y, heroW, heroH, C.s100, C.s200)
+    _t(doc, 'Sin foto principal', MX + heroW / 2, y + heroH / 2 + 3,
+      { size: 9, color: C.t400, align: 'center' })
   }
 
-  // Badge operación sobre la foto
-  if (ops) {
-    doc.setFillColor(...T.cyan)
-    doc.roundedRect(mX, y + 5, ops.length * 2.5 + 10, 7, 1.5, 1.5, 'F')
-    doc.setFontSize(7)
-    doc.setFont(T.font, 'bold')
-    doc.setTextColor(...T.ink)
-    doc.text(ops.toUpperCase(), mX + 5, y + 10.5)
-  }
+  // Badge VENTA / RENTA sobre la foto — esquina superior izquierda
+  if (ops) _pill(doc, ops.toUpperCase(), MX + 4, y + 9, C.sky, C.white)
 
-  // Miniaturas (máx 4) a la derecha si hay más fotos
-  if (fotos.length > 1) {
-    // Se cargan de forma no bloqueante — las thumbnails extras son opcionales
-    const thumbW = 18
-    const thumbH = 14
-    const thumbsToShow = fotos.slice(1, 5)
-    for (let i = 0; i < thumbsToShow.length; i++) {
-      try {
-        const td = await _loadImg(thumbsToShow[i].thumb_url || thumbsToShow[i].url)
-        if (td) {
-          doc.addImage(td, _imgFormat(td), W - mX - thumbW, y + 5 + i * (thumbH + 2), thumbW, thumbH, '', 'FAST')
-        }
-      } catch { /* skip */ }
+  // Columna de thumbnails
+  if (hasThumbs) {
+    const tx  = MX + heroW + 3
+    const th1 = img1 && img2 ? Math.floor((heroH - 3) / 2) : heroH
+    const th2 = heroH - th1 - 3
+
+    if (img1) {
+      try { doc.addImage(img1, _imgFmt(img1), tx, y, thumbColW, th1, '', 'FAST') }
+      catch { _box(doc, tx, y, thumbColW, th1, C.s100, C.s200) }
+    } else {
+      _box(doc, tx, y, thumbColW, th1, C.s100, C.s200)
     }
-    // Indicador de total de fotos
-    doc.setFillColor(...T.ink)
-    doc.roundedRect(W - mX - thumbW, y + imgH - 10, thumbW, 8, 1, 1, 'F')
-    doc.setFontSize(7)
-    doc.setFont(T.font, 'bold')
-    doc.setTextColor(...T.cyan)
-    doc.text(`+${fotos.length} fotos`, W - mX - thumbW / 2, y + imgH - 5, { align: 'center' })
+
+    if (img2) {
+      try { doc.addImage(img2, _imgFmt(img2), tx, y + th1 + 3, thumbColW, th2, '', 'FAST') }
+      catch { _box(doc, tx, y + th1 + 3, thumbColW, th2, C.s100, C.s200) }
+    }
+
+    // Indicador "+N fotos" si hay más de 3
+    if (fotos.length > 3) {
+      doc.setFillColor(0, 0, 0)
+      doc.setGState(doc.GState({ opacity: 0.45 }))
+      doc.rect(tx, y + heroH - 9, thumbColW, 9, 'F')
+      doc.setGState(doc.GState({ opacity: 1 }))
+      _t(doc, `+${fotos.length - 3} fotos`, tx + thumbColW / 2, y + heroH - 3,
+        { size: 6.5, w: 'bold', color: C.white, align: 'center' })
+    }
   }
 
-  y += imgH + 6
+  y += heroH + 6
+
+  // ── Separador sutil ───────────────────────────────────────────────────────
+  _hline(doc, MX, y, W - MX, C.s200, 0.3)
+  y += 5
 
   // ── Título + precio ───────────────────────────────────────────────────────
-  _panel(doc, mX, y, W - mX * 2, 28, T.surface)
-  _accentLine(doc, mX, y, 18)
+  // Nombre de propiedad — bold, grande
+  const titleMaxW = W - MX * 2 - 72
+  const titleLines = doc.splitTextToSize(_s(titulo), titleMaxW)
+  _t(doc, titleLines[0], MX, y + 7, { size: 15, w: 'bold', color: C.t900 })
 
-  doc.setFontSize(8)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textMid)
-  doc.text(tipo.toUpperCase() + (prop.status ? '  ·  ' + prop.status.toUpperCase() : ''), mX + 4, y + 7)
-
-  const titleLines = doc.splitTextToSize(titulo, W - mX * 2 - 8)
-  doc.setFontSize(12.5)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.textMain)
-  doc.text(titleLines[0], mX + 4, y + 15)
-
-  // Precio — derecha
-  _heroText(doc, precio, W - mX - 4, y + 15, 13, T.cyan)
+  // Precio — derecha, destacado
+  _t(doc, precio, W - MX, y + 7, { size: 13, w: 'bold', color: C.t900, align: 'right' })
   if (prop.precio_negociable) {
-    doc.setFontSize(7)
-    doc.setFont(T.font, 'normal')
-    doc.setTextColor(...T.green)
-    doc.text('Precio negociable', W - mX - 4, y + 21, { align: 'right' })
+    _t(doc, 'Precio negociable', W - MX, y + 12.5,
+      { size: 7, color: C.green, align: 'right' })
   }
 
-  // Ubicación
-  doc.setFontSize(8)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textMid)
-  const ubicLine = ubic.replace('\n', '  ·  ')
-  doc.text('📍  ' + doc.splitTextToSize(ubicLine, W - mX * 2 - 8)[0], mX + 4, y + 24)
+  y += 11
 
-  y += 34
+  // Tipo · Status
+  const statusLbl = prop.status
+    ? prop.status.charAt(0).toUpperCase() + prop.status.slice(1).replace(/_/g, ' ')
+    : ''
+  _t(doc, [tipo, statusLbl].filter(Boolean).join('  ·  '), MX, y + 4,
+    { size: 8, color: C.t500 })
 
-  // ── KPIs (specs) ─────────────────────────────────────────────────────────
+  y += 7
+
+  // Dirección — sin emojis, limpia
+  if (ubic) {
+    const ubicStr = 'Ubicacion: ' + ubic
+    const ubicLines = doc.splitTextToSize(ubicStr, W - MX * 2)
+    _t(doc, ubicLines[0], MX, y + 3.5, { size: 8.5, color: C.t500 })
+    y += 7
+  }
+
+  _hline(doc, MX, y + 1, W - MX, C.s200, 0.2)
+  y += 6
+
+  // ── Especificaciones — tira horizontal compacta ────────────────────────────
   const specs = [
-    prop.recamaras        ? { label: 'Recámaras',   val: String(prop.recamaras) }        : null,
-    prop.banos            ? { label: 'Baños',        val: String(prop.banos) }            : null,
-    prop.medios_banos     ? { label: 'Medios b.',    val: String(prop.medios_banos) }     : null,
-    prop.estacionamientos ? { label: 'Estac.',       val: String(prop.estacionamientos) } : null,
-    prop.pisos            ? { label: 'Pisos',        val: String(prop.pisos) }            : null,
-    prop.sup_construida   ? { label: 'Construida',   val: _fmtM2(prop.sup_construida) }   : null,
-    prop.sup_terreno      ? { label: 'Terreno',      val: _fmtM2(prop.sup_terreno) }      : null,
-    prop.frente           ? { label: 'Frente',       val: prop.frente + ' m' }           : null,
-    prop.antiguedad_anios ? { label: 'Antigüedad',   val: prop.antiguedad_anios + ' años'} : null,
-    prop.amueblado        ? { label: 'Amueblado',    val: 'Sí' }                          : null,
+    prop.recamaras        && { lbl: 'Recamaras',    val: String(prop.recamaras) },
+    prop.banos            && { lbl: 'Banos',         val: String(prop.banos) },
+    prop.medios_banos     && { lbl: 'Med. Bano',     val: String(prop.medios_banos) },
+    prop.estacionamientos && { lbl: 'Estac.',        val: String(prop.estacionamientos) },
+    prop.pisos            && { lbl: 'Pisos',         val: String(prop.pisos) },
+    prop.sup_construida   && { lbl: 'Construida',    val: _fmtM2(prop.sup_construida) },
+    prop.sup_terreno      && { lbl: 'Terreno',       val: _fmtM2(prop.sup_terreno) },
+    prop.frente           && { lbl: 'Frente',        val: prop.frente + ' m' },
+    prop.antiguedad_anios && { lbl: 'Antiguedad',    val: prop.antiguedad_anios + ' anos' },
+    prop.amueblado        && { lbl: 'Amueblado',     val: 'Si' },
   ].filter(Boolean)
 
   if (specs.length) {
-    const cols = Math.min(specs.length, 5)
-    const kW   = (W - mX * 2 - (cols - 1) * 3) / cols
-    specs.slice(0, cols).forEach((s, i) => {
-      const kx = mX + i * (kW + 3)
-      _panel(doc, kx, y, kW, 18, T.surface)
-      doc.setFillColor(...T.cyan)
-      doc.rect(kx, y, 6, 0.6, 'F')
-      doc.setFontSize(6.5)
-      doc.setFont(T.font, 'normal')
-      doc.setTextColor(...T.textMid)
-      doc.text(_esc(s.label).toUpperCase(), kx + 3, y + 7)
-      doc.setFontSize(10)
-      doc.setFont(T.font, 'bold')
-      doc.setTextColor(...T.textMain)
-      doc.text(_esc(s.val), kx + 3, y + 15)
-    })
-    // Segunda fila si hay más de 5 specs
-    if (specs.length > 5) {
-      const y2   = y + 22
-      const rem  = specs.slice(5)
-      const cols2 = Math.min(rem.length, 5)
-      const kW2  = (W - mX * 2 - (cols2 - 1) * 3) / cols2
-      rem.slice(0, cols2).forEach((s, i) => {
-        const kx = mX + i * (kW2 + 3)
-        _panel(doc, kx, y2, kW2, 18, T.surface)
-        doc.setFillColor(...T.cyan)
-        doc.rect(kx, y2, 6, 0.6, 'F')
-        doc.setFontSize(6.5)
-        doc.setFont(T.font, 'normal')
-        doc.setTextColor(...T.textMid)
-        doc.text(_esc(s.label).toUpperCase(), kx + 3, y2 + 7)
-        doc.setFontSize(10)
-        doc.setFont(T.font, 'bold')
-        doc.setTextColor(...T.textMain)
-        doc.text(_esc(s.val), kx + 3, y2 + 15)
+    const ROW_H   = 13
+    const ROWS    = [specs.slice(0, 5), specs.slice(5, 10)].filter(r => r.length)
+    const rowsUsed = ROWS.length
+
+    ROWS.forEach((row, ri) => {
+      const colW = (W - MX * 2) / row.length
+      const ry   = y + ri * (ROW_H + 1)
+
+      row.forEach((s, ci) => {
+        const cx = MX + ci * colW
+        // Fondo alterno muy sutil
+        if (ci % 2 === 0) {
+          doc.setFillColor(...C.s50)
+          doc.rect(cx, ry, colW, ROW_H, 'F')
+        }
+        // Accent line top cyan
+        doc.setFillColor(...C.sky)
+        doc.rect(cx, ry, colW * 0.3, 0.7, 'F')
+        // Label
+        _t(doc, _s(s.lbl), cx + 3, ry + 5, { size: 6, color: C.t400 })
+        // Valor
+        _t(doc, _s(s.val), cx + 3, ry + 11, { size: 10, w: 'bold', color: C.t900 })
+        // Separador vertical (excepto último de la fila)
+        if (ci < row.length - 1) _vline(doc, cx + colW, ry + 1, ry + ROW_H - 1, C.s200, 0.15)
       })
-      y += 22
-    }
-    y += 24
+    })
+
+    y += rowsUsed * (ROW_H + 1) + 2
+    _hline(doc, MX, y, W - MX, C.s200, 0.2)
+    y += 5
   }
 
-  // ── Servicios + Amenidades ────────────────────────────────────────────────
+  // ── Servicios + Amenidades — inline, sin cajas ────────────────────────────
   const servList = [
-    prop.agua          && 'Agua potable',
-    prop.luz           && 'Luz eléctrica',
-    prop.drenaje       && 'Drenaje',
-    prop.gas           && 'Gas LP',
-    prop.gas_natural   && 'Gas natural',
-    prop.gas_tanque    && 'Gas estacionario',
-    prop.internet      && 'Internet',
-    prop.internet_fibra && 'Fibra óptica',
-    prop.cable_tv      && 'Cable TV',
-    prop.seguridad_24h && 'Seguridad 24 h',
+    prop.agua            && 'Agua potable',
+    prop.luz             && 'Luz electrica',
+    prop.drenaje         && 'Drenaje',
+    prop.gas             && 'Gas LP',
+    prop.gas_natural     && 'Gas natural',
+    prop.gas_tanque      && 'Gas estacionario',
+    prop.internet        && 'Internet',
+    prop.internet_fibra  && 'Fibra optica',
+    prop.cable_tv        && 'Cable TV',
+    prop.seguridad_24h   && 'Seguridad 24h',
   ].filter(Boolean)
 
   const amenList = [
-    prop.alberca         && 'Alberca',
-    prop.jardin          && 'Jardín',
-    prop.roof_garden     && 'Roof garden',
-    prop.terraza         && 'Terraza',
-    prop.asador_bbq      && 'Asador BBQ',
-    prop.bodega_ext      && 'Bodega',
-    prop.cuarto_servicio && 'Cuarto de servicio',
-    prop.vigilancia      && 'Vigilancia',
-    prop.cctv            && 'CCTV',
-    prop.porton_electrico && 'Portón eléctrico',
-    prop.cisterna        && 'Cisterna',
-    prop.panel_solar     && 'Panel solar',
-    prop.jacuzzi         && 'Jacuzzi',
-    prop.gym             && 'Gimnasio',
-    prop.elevador        && 'Elevador',
-    prop.salon_eventos   && 'Salón de eventos',
-    prop.area_juegos     && 'Área de juegos',
-    prop.cine_privado    && 'Cine privado',
-    prop.lobby           && 'Lobby',
-    prop.concierge       && 'Concierge',
-    prop.amueblado       && 'Amueblado',
+    prop.alberca          && 'Alberca',
+    prop.jardin           && 'Jardin',
+    prop.roof_garden      && 'Roof garden',
+    prop.terraza          && 'Terraza',
+    prop.asador_bbq       && 'Asador/BBQ',
+    prop.bodega_ext       && 'Bodega',
+    prop.cuarto_servicio  && 'Cuarto de servicio',
+    prop.vigilancia       && 'Vigilancia',
+    prop.cctv             && 'CCTV',
+    prop.porton_electrico && 'Porton electrico',
+    prop.cisterna         && 'Cisterna',
+    prop.panel_solar      && 'Panel solar',
+    prop.jacuzzi          && 'Jacuzzi',
+    prop.gym              && 'Gimnasio',
+    prop.elevador         && 'Elevador',
+    prop.salon_eventos    && 'Salon de eventos',
+    prop.amueblado        && 'Amueblado',
   ].filter(Boolean)
 
+  if (servList.length) {
+    const labelW = 22
+    _t(doc, 'Servicios', MX, y + 4.5, { size: 7, w: 'bold', color: C.sky })
+    const sl = doc.splitTextToSize(servList.join(' · '), W - MX * 2 - labelW)[0]
+    _t(doc, sl, MX + labelW, y + 4.5, { size: 7.5, color: C.t700 })
+    y += 8
+  }
+
+  if (amenList.length) {
+    const labelW = 22
+    _t(doc, 'Amenidades', MX, y + 4.5, { size: 7, w: 'bold', color: C.sky })
+    const al = doc.splitTextToSize(amenList.join(' · '), W - MX * 2 - labelW)[0]
+    _t(doc, al, MX + labelW, y + 4.5, { size: 7.5, color: C.t700 })
+    y += 8
+  }
+
   if (servList.length || amenList.length) {
-    // Dos bloques separados para mayor legibilidad en el PDF
-    const blockH = 16
-    if (servList.length) {
-      _panel(doc, mX, y, W - mX * 2, blockH, T.surface)
-      doc.setFontSize(6.5)
-      doc.setFont(T.font, 'bold')
-      doc.setTextColor(...T.cyan)
-      doc.text('SERVICIOS', mX + 4, y + 6)
-      doc.setFont(T.font, 'normal')
-      doc.setTextColor(...T.textMid)
-      const sLines = doc.splitTextToSize(servList.join('  ·  '), W - mX * 2 - 8)
-      doc.text(sLines[0], mX + 4, y + 12)
-      y += blockH + 4
-    }
-    if (amenList.length) {
-      // Puede ocupar hasta 2 líneas cuando hay muchas amenidades
-      const aText  = amenList.join('  ·  ')
-      const aLines = doc.splitTextToSize(aText, W - mX * 2 - 8)
-      const aH     = aLines.length > 1 ? blockH + 5 : blockH
-      _panel(doc, mX, y, W - mX * 2, aH, T.surface)
-      doc.setFontSize(6.5)
-      doc.setFont(T.font, 'bold')
-      doc.setTextColor(...T.cyan)
-      doc.text('AMENIDADES', mX + 4, y + 6)
-      doc.setFont(T.font, 'normal')
-      doc.setTextColor(...T.textMid)
-      doc.text(aLines.slice(0, 2), mX + 4, y + 12)
-      y += aH + 4
-    }
+    _hline(doc, MX, y, W - MX, C.s200, 0.2)
+    y += 5
   }
 
   // ── Descripción ───────────────────────────────────────────────────────────
   if (prop.descripcion) {
-    doc.setFontSize(8.5)
-    doc.setFont(T.font, 'bold')
-    doc.setTextColor(...T.cyan)
-    doc.text('DESCRIPCIÓN', mX, y + 5)
-    _accentLine(doc, mX, y + 6, 22)
-    doc.setLineWidth(0.15)
-    doc.setDrawColor(...T.textDim)
-    doc.line(mX + 24, y + 6.4, W - mX, y + 6.4)
+    _t(doc, 'DESCRIPCION', MX, y + 5, { size: 7.5, w: 'bold', color: C.sky })
+    doc.setFillColor(...C.sky)
+    doc.rect(MX, y + 6.2, 22, 0.6, 'F')
     y += 10
-
-    doc.setFontSize(8.5)
-    doc.setFont(T.font, 'normal')
-    doc.setTextColor(...T.textInk)
-    const descLines = doc.splitTextToSize(_esc(prop.descripcion), W - mX * 2)
-    const maxLines  = 6
-    doc.text(descLines.slice(0, maxLines), mX, y)
-    y += Math.min(descLines.length, maxLines) * 4.5 + 6
+    const descLines = doc.splitTextToSize(_s(prop.descripcion), W - MX * 2)
+    const show = descLines.slice(0, 7)
+    _t(doc, show, MX, y, { size: 8.5, color: C.t700 })
+    y += show.length * 4.8 + 4
   }
 
-  // ── Referencias ───────────────────────────────────────────────────────────
+  // Referencia
   if (prop.referencias) {
-    doc.setFontSize(7.5)
-    doc.setFont(T.font, 'italic')
-    doc.setTextColor(...T.textMid)
-    doc.text('Referencia: ' + _esc(prop.referencias), mX, y)
+    _t(doc, 'Ref: ' + _s(prop.referencias), MX, y + 3,
+      { size: 7.5, color: C.t400 })
     y += 8
   }
 
-  // ── Exclusiva badge ───────────────────────────────────────────────────────
+  // ── CTAs con hipervínculos reales ─────────────────────────────────────────
+  const ctas = [
+    mapUrl                && { lbl: 'Ver en mapa',      url: mapUrl },
+    prop.video_url        && { lbl: 'Ver video',         url: prop.video_url },
+    prop.tour_url         && { lbl: 'Tour virtual 360',  url: prop.tour_url },
+    prop.album_fotos_url  && { lbl: 'Galeria de fotos',  url: prop.album_fotos_url },
+    prop.drive_folder_url && { lbl: 'Ver carpeta',       url: prop.drive_folder_url },
+  ].filter(Boolean)
+
+  if (ctas.length) {
+    const gap  = 4
+    const ctaW = Math.min(48, (W - MX * 2 - gap * (ctas.length - 1)) / ctas.length)
+    ctas.forEach((c, i) => {
+      _cta(doc, c.lbl, c.url, MX + i * (ctaW + gap), y, ctaW)
+    })
+    y += 14
+  }
+
+  // ── Exclusiva ─────────────────────────────────────────────────────────────
   if (prop.exclusiva && prop.exclusiva_fin) {
-    _panel(doc, mX, y, W - mX * 2, 12, [24, 32, 50])
-    doc.setFillColor(...T.cyan)
-    doc.rect(mX, y, 3, 12, 'F')
-    doc.setFontSize(7)
-    doc.setFont(T.font, 'bold')
-    doc.setTextColor(...T.cyan)
-    doc.text('EXCLUSIVA', mX + 6, y + 5)
-    doc.setFont(T.font, 'normal')
-    doc.setTextColor(...T.textMid)
-    doc.text(
-      `Vigencia: ${_esc(prop.exclusiva_inicio || '')} → ${_esc(prop.exclusiva_fin)}  ·  Comisión: ${prop.comision_pct || 5}%`,
-      mX + 30, y + 5,
-    )
-    y += 18
+    _box(doc, MX, y, W - MX * 2, 10, [255, 251, 235], [252, 211, 77], 0.25, 1.5)
+    doc.setFillColor(...C.amber)
+    doc.rect(MX, y, 3, 10, 'F')
+    _t(doc, 'EXCLUSIVA', MX + 6, y + 7, { size: 7, w: 'bold', color: C.amber })
+    _t(doc,
+      'Vigencia: ' + _s(prop.exclusiva_inicio || '') + ' - ' + _s(prop.exclusiva_fin) +
+      '   Comision: ' + (prop.comision_pct || 5) + '%',
+      MX + 30, y + 7, { size: 7.5, color: C.t500 })
+    y += 15
   }
 
-  // ── Footer pág 1 ─────────────────────────────────────────────────────────
-  const footerY = H - 22
-  doc.setDrawColor(...T.textDim)
-  doc.setLineWidth(0.2)
-  doc.line(mX, footerY, W - mX, footerY)
+  // ── Footer página 1 ───────────────────────────────────────────────────────
+  _renderFooter(doc, emisor, 1, totalPages, W, H)
 
-  // QR
-  if (qrDataUrl) {
-    try { doc.addImage(qrDataUrl, 'PNG', W - mX - 18, footerY + 2, 16, 16) } catch { /* skip */ }
-    doc.setFontSize(6)
-    doc.setFont(T.font, 'normal')
-    doc.setTextColor(...T.textMid)
-    doc.text('Ver ficha online', W - mX - 10, footerY + 20, { align: 'center' })
-  }
-
-  // Datos agente
-  doc.setFontSize(7.5)
-  doc.setFont(T.font, 'bold')
-  doc.setTextColor(...T.cyan)
-  doc.text(emisor?.nombre || 'Agente Nexus OS', mX, footerY + 7)
-  doc.setFont(T.font, 'normal')
-  doc.setTextColor(...T.textMid)
-  const emisorLine = [emisor?.telefono, emisor?.email].filter(Boolean).join('  ·  ')
-  if (emisorLine) doc.text(emisorLine, mX, footerY + 13)
-  doc.text('NEXUS OS  ·  nexus-os-chi.vercel.app  ·  ' + folio, mX, footerY + 19)
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // PÁGINA 2 — Galería completa (si hay fotos adicionales)
-  // ══════════════════════════════════════════════════════════════════════════
-  const extraFotos = fotos.slice(1)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PÁGINA 2 — Galería completa (si hay 2+ fotos adicionales)
+  // ═══════════════════════════════════════════════════════════════════════════
   if (extraFotos.length >= 2) {
     doc.addPage()
 
+    // Franja accent
+    doc.setFillColor(...C.sky)
+    doc.rect(0, 0, W, 2, 'F')
+
     // Mini-header
-    doc.setFillColor(...T.ink)
-    doc.rect(0, 0, W, 12, 'F')
-    doc.setFontSize(7.5)
-    doc.setFont(T.font, 'bold')
-    doc.setTextColor(...T.cyan)
-    doc.text('NEXUS OS', mX, 8.5)
-    doc.setTextColor(...T.textMid)
-    doc.setFont(T.font, 'normal')
-    doc.text('GALERÍA DE FOTOS  ·  ' + _esc(titulo), mX + 22, 8.5)
-    doc.text(folio, W - mX, 8.5, { align: 'right' })
-    _accentLine(doc, 0, 12, W)
+    _t(doc, 'GALERIA DE FOTOS  ·  ' + _s(titulo), MX, 9, { size: 7.5, color: C.t500 })
+    _t(doc, folio, W - MX, 9, { size: 9, w: 'bold', color: C.red, align: 'right' })
+    _hline(doc, MX, 12, W - MX, C.s200, 0.2)
 
-    let gy = 18
-    const gW = (W - mX * 2 - 4) / 2  // 2 columnas
-    const gH = 52
+    let gy   = 16
+    const COLS = 3
+    const GAP  = 4
+    const gW   = (W - MX * 2 - GAP * (COLS - 1)) / COLS
+    const gH   = 52
 
-    for (let i = 0; i < extraFotos.length && gy + gH < H - 16; i++) {
+    for (let i = 0; i < extraFotos.length; i++) {
+      if (gy + gH > H - 22) break   // respetar zona de footer
+
+      const col = i % COLS
+      const gx  = MX + col * (gW + GAP)
+
+      let imgData = ''
+      try { imgData = await _loadImg(extraFotos[i].url || extraFotos[i].thumb_url) } catch { /* skip */ }
+
+      if (imgData) {
+        try { doc.addImage(imgData, _imgFmt(imgData), gx, gy, gW, gH, '', 'FAST') }
+        catch { _box(doc, gx, gy, gW, gH, C.s100, C.s200) }
+      } else {
+        _box(doc, gx, gy, gW, gH, C.s100, C.s200)
+      }
+
+      // Label categoría sobre la foto
+      if (extraFotos[i].categoria) {
+        doc.setFillColor(0, 0, 0)
+        doc.setGState(doc.GState({ opacity: 0.4 }))
+        doc.rect(gx, gy + gH - 8, gW, 8, 'F')
+        doc.setGState(doc.GState({ opacity: 1 }))
+        _t(doc, _s(extraFotos[i].categoria).toUpperCase(),
+          gx + gW / 2, gy + gH - 3, { size: 6, w: 'bold', color: C.white, align: 'center' })
+      }
+
+      // Avanzar fila al terminar la última columna
+      if (col === COLS - 1) gy += gH + GAP
+    }
+
+    // QR esquina inferior derecha
+    if (qrUrl) {
       try {
-        const td = await _loadImg(extraFotos[i].url || extraFotos[i].thumb_url)
-        if (!td) continue
-        const col = i % 2
-        const gx  = mX + col * (gW + 4)
-        doc.addImage(td, _imgFormat(td), gx, gy, gW, gH, '', 'FAST')
-        // Categoría
-        if (extraFotos[i].categoria) {
-          doc.setFillColor(...T.ink)
-          doc.setFillColor(0, 0, 0)
-          doc.setGState(doc.GState({ opacity: 0.55 }))
-          doc.rect(gx, gy + gH - 8, gW, 8, 'F')
-          doc.setGState(doc.GState({ opacity: 1 }))
-          doc.setFontSize(6.5)
-          doc.setFont(T.font, 'normal')
-          doc.setTextColor(255, 255, 255)
-          doc.text(_esc(extraFotos[i].categoria).toUpperCase(), gx + gW / 2, gy + gH - 3, { align: 'center' })
-        }
-        if (col === 1) gy += gH + 5
+        const qS = 18
+        doc.addImage(qrUrl, 'PNG', W - MX - qS, H - 26, qS, qS)
+        _t(doc, 'Ficha online', W - MX - qS / 2, H - 6.5,
+          { size: 5.5, color: C.t400, align: 'center' })
       } catch { /* skip */ }
     }
 
-    // Footer pág 2
-    doc.setDrawColor(...T.textDim)
-    doc.setLineWidth(0.2)
-    doc.line(mX, H - 10, W - mX, H - 10)
-    doc.setFontSize(6.5)
-    doc.setFont(T.font, 'normal')
-    doc.setTextColor(...T.textMid)
-    doc.text(`${T.brand} · nexus-os-chi.vercel.app · ${folio} · Pág. 2`, W / 2, H - 5, { align: 'center' })
+    // Footer página 2
+    _renderFooter(doc, emisor, 2, totalPages, W, H)
   }
 
-  // ── Guardar ──────────────────────────────────────────────────────────────
-  const filename = `ficha-${(prop.folio_interno || prop.id).toLowerCase().replace(/\s+/g, '-')}-${now.toISOString().slice(0, 10)}.pdf`
-  doc.save(filename)
+  // ── Guardar ───────────────────────────────────────────────────────────────
+  const fname = `ficha-${_s(prop.folio_interno || prop.id).toLowerCase().replace(/\s+/g, '-')}-${now.toISOString().slice(0, 10)}.pdf`
+  doc.save(fname)
 }

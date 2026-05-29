@@ -1979,16 +1979,14 @@ window.propLogInter = async (propId) => {
 window.propExportPDF = async (propId) => {
   const p = _props.find(x => x.id === propId)
   if (!p) return
+
+  // Mostrar modal de agente — pre-llena desde localStorage
+  const emisor = await _promptAgentModal()
+  if (!emisor) return   // usuario canceló
+
   const btn = document.querySelector(`button[onclick*="propExportPDF('${propId}')"]`)
   if (btn) { btn.textContent = '⏳ Generando...'; btn.disabled = true }
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    const emisor = {
-      nombre:  localStorage.getItem('nexus_agent_name')   || user?.user_metadata?.full_name || 'Agente',
-      tel:     localStorage.getItem('nexus_agent_tel')    || '',
-      email:   localStorage.getItem('nexus_agent_email')  || user?.email || '',
-      agencia: localStorage.getItem('nexus_agent_agency') || 'Nexus OS Inmobiliario',
-    }
     await pdfFichaCaptacion(p, emisor)
   } catch (err) {
     console.error('[inmuebles] propExportPDF:', err)
@@ -1996,6 +1994,148 @@ window.propExportPDF = async (propId) => {
   } finally {
     if (btn) { btn.textContent = '📄 PDF Ficha'; btn.disabled = false }
   }
+}
+
+/**
+ * Modal de confirmación de agente antes de generar PDF.
+ * Pre-llena desde localStorage. Guarda al aceptar.
+ * Devuelve { nombre, tel, email } o null si el usuario cancela.
+ */
+function _promptAgentModal() {
+  return new Promise(resolve => {
+    const saved = {
+      nombre: localStorage.getItem('nexus_agent_name')  || '',
+      tel:    localStorage.getItem('nexus_agent_tel')   || '',
+      email:  localStorage.getItem('nexus_agent_email') || '',
+    }
+
+    const overlay = document.createElement('div')
+    overlay.style.cssText = [
+      'position:fixed;inset:0;z-index:99999;',
+      'display:flex;align-items:center;justify-content:center;',
+      'background:rgba(15,23,42,0.55);backdrop-filter:blur(5px);',
+    ].join('')
+
+    overlay.innerHTML = `
+      <div style="
+        background:#fff;border-radius:16px;padding:28px 28px 24px;
+        width:100%;max-width:360px;margin:16px;
+        box-shadow:0 20px 60px rgba(0,0,0,0.2),0 0 0 1px rgba(0,0,0,0.06);
+        font-family:system-ui,-apple-system,sans-serif;
+      ">
+        <!-- Header -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+          <div style="width:36px;height:36px;border-radius:10px;background:#eff6ff;display:grid;place-items:center;flex-shrink:0;font-size:18px;">👤</div>
+          <div>
+            <div style="font-size:15px;font-weight:700;color:#0f172a;line-height:1.2;">Datos del agente</div>
+            <div style="font-size:11px;color:#64748b;">Aparecerán en el pie de la ficha PDF</div>
+          </div>
+        </div>
+
+        <!-- Nombre -->
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:11px;font-weight:600;color:#475569;margin-bottom:4px;">
+            Nombre completo <span style="color:#ef4444;">*</span>
+          </label>
+          <input id="_ag-nombre" type="text" value="${saved.nombre}"
+            placeholder="Oscar Omar Gómez Peña"
+            style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;
+                   font-size:13px;color:#0f172a;outline:none;box-sizing:border-box;
+                   transition:border-color .15s;"
+            onfocus="this.style.borderColor='#0ea5e9'"
+            onblur="this.style.borderColor='#e2e8f0'" />
+        </div>
+
+        <!-- Teléfono -->
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:11px;font-weight:600;color:#475569;margin-bottom:4px;">Teléfono</label>
+          <input id="_ag-tel" type="tel" value="${saved.tel}"
+            placeholder="612 100 2000"
+            style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;
+                   font-size:13px;color:#0f172a;outline:none;box-sizing:border-box;
+                   transition:border-color .15s;"
+            onfocus="this.style.borderColor='#0ea5e9'"
+            onblur="this.style.borderColor='#e2e8f0'" />
+        </div>
+
+        <!-- Email -->
+        <div style="margin-bottom:22px;">
+          <label style="display:block;font-size:11px;font-weight:600;color:#475569;margin-bottom:4px;">Email</label>
+          <input id="_ag-email" type="email" value="${saved.email}"
+            placeholder="agente@mail.com"
+            style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;
+                   font-size:13px;color:#0f172a;outline:none;box-sizing:border-box;
+                   transition:border-color .15s;"
+            onfocus="this.style.borderColor='#0ea5e9'"
+            onblur="this.style.borderColor='#e2e8f0'" />
+        </div>
+
+        <!-- Nota guardar -->
+        <div style="font-size:10px;color:#94a3b8;margin-bottom:16px;">
+          💾 Se recordarán para la próxima ficha
+        </div>
+
+        <!-- Botones -->
+        <div style="display:flex;gap:10px;">
+          <button id="_ag-cancel"
+            style="flex:1;padding:10px;border:1.5px solid #e2e8f0;border-radius:9px;
+                   background:#f8fafc;color:#475569;font-size:13px;font-weight:600;
+                   cursor:pointer;transition:background .15s;"
+            onmouseover="this.style.background='#f1f5f9'"
+            onmouseout="this.style.background='#f8fafc'">
+            Cancelar
+          </button>
+          <button id="_ag-ok"
+            style="flex:2;padding:10px;border:none;border-radius:9px;
+                   background:#0ea5e9;color:#fff;font-size:13px;font-weight:700;
+                   cursor:pointer;transition:background .15s;"
+            onmouseover="this.style.background='#0284c7'"
+            onmouseout="this.style.background='#0ea5e9'">
+            Generar PDF
+          </button>
+        </div>
+      </div>
+    `
+
+    document.body.appendChild(overlay)
+
+    const cleanup = () => document.body.removeChild(overlay)
+
+    // Cancelar
+    document.getElementById('_ag-cancel').onclick = () => { cleanup(); resolve(null) }
+    overlay.onclick = e => { if (e.target === overlay) { cleanup(); resolve(null) } }
+
+    // Aceptar
+    document.getElementById('_ag-ok').onclick = () => {
+      const nombre = document.getElementById('_ag-nombre').value.trim()
+      const tel    = document.getElementById('_ag-tel').value.trim()
+      const email  = document.getElementById('_ag-email').value.trim()
+
+      if (!nombre) {
+        const inp = document.getElementById('_ag-nombre')
+        inp.style.borderColor = '#ef4444'
+        inp.placeholder = 'El nombre es requerido'
+        inp.focus()
+        return
+      }
+
+      // Guardar en localStorage para reutilizar
+      localStorage.setItem('nexus_agent_name',  nombre)
+      localStorage.setItem('nexus_agent_tel',   tel)
+      localStorage.setItem('nexus_agent_email', email)
+
+      cleanup()
+      resolve({ nombre, tel, email })
+    }
+
+    // Enter confirma
+    overlay.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { cleanup(); resolve(null) }
+      if (e.key === 'Enter')  document.getElementById('_ag-ok')?.click()
+    })
+
+    setTimeout(() => document.getElementById('_ag-nombre')?.focus(), 60)
+  })
 }
 
 // ─── Gallery navigation handlers ─────────────────────────────────────────────
