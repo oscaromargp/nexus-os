@@ -513,7 +513,7 @@
         <div class="hero-label" style="display:flex; gap:12px; flex-wrap:wrap;">
           <span class="label-chip">🔒 Tus datos son tuyos, siempre</span>
           <span class="label-chip" style="background:rgba(34,197,94,0.1); border-color:rgba(34,197,94,0.3); color:#22c55e;">✓ 100% Gratis · Open Source</span>
-          <span class="label-chip" style="background:rgba(0,240,255,0.1); border-color:rgba(0,240,255,0.3); color:#00f0ff;">🚀 v2.4.0 — 10 Plantillas Legales · Form Persistence · Amortización Auto</span>
+          <span class="label-chip" style="background:rgba(0,240,255,0.1); border-color:rgba(0,240,255,0.3); color:#00f0ff;">🚀 v2.5.0 — Módulo Inmuebles · 14 Plantillas PROFECO · Contratos Verbatim</span>
         </div>
         <h1 class="hero-title">
           <span>Todo lo que piensas,</span>
@@ -706,7 +706,7 @@
     <div class="section-header reveal">
       <span class="label-chip">Features</span>
       <h2>Todo es un <span class="gradient-text">Nodo</span></h2>
-      <p>Una arquitectura unificada. 9 vistas. Parser semántico bilingüe, Kanban drag &amp; drop real, Wiki por proyecto, motor financiero unificado, <strong>10 plantillas legales PDF/DOC</strong> y más — v2.4.0.</p>
+      <p>Una arquitectura unificada. 9 vistas + módulo Inmuebles. Parser semántico bilingüe, Kanban drag &amp; drop real, Wiki por proyecto, motor financiero unificado, <strong>14 plantillas PROFECO verbatim para bienes raíces + 10 plantillas legales PDF/DOC</strong> y más — v2.5.0.</p>
     </div>
 
     <div class="features-grid">
@@ -936,8 +936,33 @@
         </div>
       </div>
 
-      <!-- PWA Offline -->
+      <!-- Módulo Inmuebles -->
       <div class="service-card-flip reveal" style="transition-delay:.9s">
+        <div class="service-card-inner">
+          <div class="service-card-front">
+            <div class="service-card-visual">
+              <div class="service-bg" style="background:linear-gradient(135deg,#001a0a 0%,#003318 50%,#001a0a 100%)"></div>
+              <div class="service-icon-big" style="animation-delay:9s">🏡</div>
+            </div>
+            <div class="service-overlay">
+              <h3 style="color:#fff;font-size:20px;">Módulo Inmuebles</h3>
+              <p style="font-size:13px;color:rgba(255,255,255,0.5);margin-top:4px;">Hover para ver más →</p>
+            </div>
+          </div>
+          <div class="service-card-back">
+            <h3>Módulo Inmuebles</h3>
+            <p>14 plantillas legales para bienes raíces: captación (7), negociación (4) y contratos PROFECO verbatim (3). CV Terreno y CV Vivienda con 21 cláusulas, 8 anexos y ~100 campos de formulario. Historial de documentos por propiedad en Supabase.</p>
+            <div class="feature-tags">
+              <span class="feature-tag">📜 PROFECO Verbatim</span>
+              <span class="feature-tag">🏗️ 14 Plantillas</span>
+              <span class="feature-tag">📤 PDF + DOC</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PWA Offline -->
+      <div class="service-card-flip reveal" style="transition-delay:1s">
         <div class="service-card-inner">
           <div class="service-card-front">
             <div class="service-card-visual">
@@ -969,8 +994,8 @@
   <div class="container">
     <div class="section-header reveal" style="margin-bottom:40px;">
       <span class="label-chip">Vista real de la app</span>
-      <h2>9 vistas. <span class="gradient-text">Un solo sistema.</span></h2>
-      <p>Explora cada módulo — así se ve Nexus OS v2.4.0 en acción.</p>
+      <h2>9 vistas + Inmuebles. <span class="gradient-text">Un solo sistema.</span></h2>
+      <p>Explora cada módulo — así se ve Nexus OS v2.5.0 en acción.</p>
     </div>
     <div class="ss-tabs reveal">
       <button class="ss-tab active" data-ss="01-panel-comandos">📊 Panel</button>
@@ -982,6 +1007,7 @@
       <button class="ss-tab" data-ss="07-contactos">👥 Contactos</button>
       <button class="ss-tab" data-ss="09-configuracion">🏗️ Proyectos</button>
       <button class="ss-tab" data-ss="11-tramites">📄 Trámites</button>
+      <button class="ss-tab" data-ss="12-inmuebles-docs">🏡 Inmuebles</button>
     </div>
     <div class="ss-frame reveal">
       <img src="assets/screenshots/01-panel-comandos.png"  alt="Panel de Comandos"  class="active" id="ss-img-01-panel-comandos"/>
@@ -993,6 +1019,116 @@
       <img src="assets/screenshots/07-contactos.png"       alt="Contactos & CRM"    id="ss-img-07-contactos"/>
       <img src="assets/screenshots/09-configuracion.png"   alt="Proyectos"          id="ss-img-09-configuracion"/>
       <img src="assets/screenshots/11-tramites.png"        alt="Centro de Trámites" id="ss-img-11-tramites"/>
+      <img src="assets/screenshots/12-inmuebles-docs.png" alt="Módulo Inmuebles — 14 Plantillas PROFECO" id="ss-img-12-inmuebles-docs"/>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ INMUEBLES MODULE ═══════════════════════ -->
+<section class="section-pad" style="background:linear-gradient(180deg, var(--bg-primary) 0%, rgba(0,60,20,0.08) 50%, var(--bg-primary) 100%);">
+  <div class="container">
+    <div class="section-header reveal">
+      <span class="label-chip" style="background:rgba(34,197,94,0.1); border-color:rgba(34,197,94,0.3); color:#22c55e;">🏡 Nuevo en v2.5.0</span>
+      <h2>Módulo Inmuebles — <span class="gradient-text">14 Plantillas PROFECO</span></h2>
+      <p>Motor documental completo para bienes raíces. Cada propiedad tiene su expediente digital con documentos generados, guardados y re-editables en cualquier momento.</p>
+    </div>
+
+    <!-- 3 columnas: captación / negociación / PROFECO -->
+    <div class="reveal" style="display:grid; grid-template-columns: repeat(3,1fr); gap:20px; margin-top:48px;">
+
+      <!-- Captación -->
+      <div class="glass-card" style="padding:28px; border-color:rgba(34,211,238,0.2);">
+        <div style="font-size:11px; font-weight:800; color:#22d3ee; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:16px;">📋 Captación · 7 Plantillas</div>
+        <ul style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px;">
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#22d3ee; flex-shrink:0;">→</span> Registro de Captación
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#22d3ee; flex-shrink:0;">→</span> Levantamiento del Inmueble
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#22d3ee; flex-shrink:0;">→</span> Ficha Técnica
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#22d3ee; flex-shrink:0;">→</span> Perfilamiento del Comprador
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#22d3ee; flex-shrink:0;">→</span> Aviso de Privacidad
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#22d3ee; flex-shrink:0;">→</span> Carta de Derechos
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#22d3ee; flex-shrink:0;">→</span> Propuesta de Exclusiva
+          </li>
+        </ul>
+      </div>
+
+      <!-- Negociación -->
+      <div class="glass-card" style="padding:28px; border-color:rgba(251,146,60,0.3);">
+        <div style="font-size:11px; font-weight:800; color:#fb923c; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:16px;">🤝 Negociación · 4 Plantillas</div>
+        <ul style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px;">
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#fb923c; flex-shrink:0;">→</span> Contraoferta
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#22c55e; flex-shrink:0;">✓</span> Resolución A — Acepta la oferta
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#fb923c; flex-shrink:0;">~</span> Resolución B — Modifica condiciones
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#f87171; flex-shrink:0;">✕</span> Resolución C — No es posible aceptar
+          </li>
+        </ul>
+        <div style="margin-top:20px; padding-top:16px; border-top:1px solid rgba(255,255,255,0.06);">
+          <div style="font-size:12px; color:var(--text-quaternary);">Auto-fill desde contacto comprador y datos de la propiedad activa.</div>
+        </div>
+      </div>
+
+      <!-- PROFECO -->
+      <div class="glass-card" style="padding:28px; border-color:rgba(167,139,250,0.3);">
+        <div style="font-size:11px; font-weight:800; color:#a78bfa; text-transform:uppercase; letter-spacing:1.5px; margin-bottom:16px;">📜 Contratos PROFECO · 3 Plantillas</div>
+        <ul style="list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:10px;">
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#a78bfa; flex-shrink:0;">→</span> CV Vivienda — Compraventa terreno
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#a78bfa; flex-shrink:0;">→</span> CV Terreno — Adhesión PROFECO
+          </li>
+          <li style="font-size:13px; color:var(--text-secondary); display:flex; gap:8px; align-items:flex-start;">
+            <span style="color:#a78bfa; flex-shrink:0;">→</span> CV Preventa / En Planos
+          </li>
+        </ul>
+        <div style="margin-top:20px; padding:12px; background:rgba(167,139,250,0.06); border-radius:10px; border:1px solid rgba(167,139,250,0.15);">
+          <div style="font-size:11px; font-weight:700; color:#a78bfa; margin-bottom:4px;">📋 Verbatim oficial</div>
+          <div style="font-size:12px; color:var(--text-tertiary); line-height:1.6;">21 cláusulas · 8 Anexos (A–H) · ~100 campos de formulario · Texto PROFECO letra por letra</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feature highlights row -->
+    <div class="reveal" style="display:grid; grid-template-columns: repeat(4,1fr); gap:16px; margin-top:24px;">
+      <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:20px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:8px;">🔄</div>
+        <div style="font-size:13px; font-weight:700; color:var(--text-primary);">Auto-fill Inteligente</div>
+        <div style="font-size:12px; color:var(--text-quaternary); margin-top:4px;">Desde propiedad, agente y contactos</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:20px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:8px;">💾</div>
+        <div style="font-size:13px; font-weight:700; color:var(--text-primary);">Historial en Supabase</div>
+        <div style="font-size:12px; color:var(--text-quaternary); margin-top:4px;">Busca, edita y re-exporta cuando quieras</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:20px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:8px;">📤</div>
+        <div style="font-size:13px; font-weight:700; color:var(--text-primary);">Export PDF + DOC</div>
+        <div style="font-size:12px; color:var(--text-quaternary); margin-top:4px;">Listo para imprimir o editar en Word</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:14px; padding:20px; text-align:center;">
+        <div style="font-size:28px; margin-bottom:8px;">⚖️</div>
+        <div style="font-size:13px; font-weight:700; color:var(--text-primary);">Texto Legal Oficial</div>
+        <div style="font-size:12px; color:var(--text-quaternary); margin-top:4px;">Modelos PROFECO sin adaptaciones</div>
+      </div>
     </div>
   </div>
 </section>
@@ -1238,7 +1374,7 @@
           </li>
           <li style="display:flex;align-items:flex-start;gap:10px;font-size:14px;color:var(--text-secondary);">
             <span style="color:var(--p400);font-size:16px;flex-shrink:0;">🏡</span>
-            <span><strong style="color:var(--text-primary);">Administradores de propiedades</strong> — control de rentas, gastos, inquilinos y mantenimiento en un dashboard propio.</span>
+            <span><strong style="color:var(--text-primary);">Agentes y desarrolladoras inmobiliarias</strong> — 14 plantillas PROFECO verbatim para captación, negociación y contratos de compraventa. Expediente digital por propiedad.</span>
           </li>
         </ul>
       </div>

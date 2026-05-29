@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.4.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.5.0-green?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
@@ -30,6 +30,58 @@
   <a href="#-deploy">Deploy</a> •
   <a href="#-contacto">Contacto</a>
 </p>
+
+---
+
+## 🆕 Novedades v2.5.0
+
+### Módulo Inmuebles — 14 Plantillas PROFECO para Bienes Raíces
+
+Nexus OS integra ahora un **motor documental inmobiliario completo** vinculado al gestor de propiedades. Cada propiedad tiene su propio historial de documentos guardado en Supabase y disponible para re-editar, re-exportar o eliminar en cualquier momento.
+
+<p align="center">
+  <img src="assets/screenshots/12-inmuebles-docs.png" alt="Módulo Inmuebles — 14 Plantillas PROFECO" width="800"/>
+</p>
+
+#### 🏡 Captación (7 plantillas)
+
+| # | Plantilla | Campos auto-fill | Descripción |
+|---|---|:---:|---|
+| 1 | 📋 **Registro de Captación** | ✅ | Datos del inmueble, propietario y condiciones de captación |
+| 2 | 📐 **Levantamiento de Inmueble** | ✅ | Medidas, colindancias, servicios, estado general |
+| 3 | 🏠 **Ficha Técnica** | ✅ | Especificaciones completas para difusión |
+| 4 | 👤 **Perfilamiento del Comprador** | ✅ | Necesidades, capacidad económica, plazos |
+| 5 | 🔒 **Aviso de Privacidad** | ✅ | Formato oficial LFPDPPP para captación de datos |
+| 6 | ⚖️ **Carta de Derechos** | ✅ | Derechos del consumidor inmobiliario (PROFECO) |
+| 7 | ✍️ **Propuesta para Promoción Exclusiva** | ✅ | Plan de marketing 360° para exclusiva |
+
+#### 🤝 Negociación (4 plantillas)
+
+| # | Plantilla | Campos auto-fill | Descripción |
+|---|---|:---:|---|
+| 8 | 📝 **Contraoferta** | ✅ | Propuesta de contraprecio con condiciones |
+| 9 | ✅ **Resolución A — Acepta** | ✅ | El comprador acepta la oferta en todos sus términos |
+| 10 | 🔄 **Resolución B — Modifica** | ✅ | Acepta el principio de la oferta con modificaciones |
+| 11 | ❌ **Resolución C — Rechaza** | ✅ | No es posible aceptar la contraoferta |
+
+#### 📜 Contratos PROFECO (3 plantillas verbatim)
+
+> **Texto oficial letra por letra** — sin adaptaciones, sin resúmenes. Cada `<<campo>>` del modelo PROFECO es un campo de formulario con auto-fill.
+
+| # | Plantilla | Cláusulas | Anexos | Campos |
+|---|---|:---:|:---:|:---:|
+| 12 | 🏡 **CV Vivienda** — Compraventa de terreno | 21 | 8 (A–H) | ~100 |
+| 13 | 🌱 **CV Terreno** — Contrato de adhesión PROFECO | 21 | 8 (A–H) | ~100 |
+| 14 | 🏗️ **CV Preventa / En Planos** | 9+ | 4+ | ~40 |
+
+**Características del motor documental inmobiliario:**
+- **Auto-fill desde propiedad**: dirección, municipio, precio, nombre del propietario, datos del agente
+- **Auto-fill desde agente**: nombre, teléfono, agencia, domicilio (desde localStorage)
+- **Historial por propiedad** — guardado en `property_documents` en Supabase
+- **Export PDF** — diseño listo para impresión con `jsPDF`
+- **Export DOC** — descarga Word editable vía `Blob` HTML
+- **Re-edición** — abre el documento guardado con todos los campos precargados
+- **Enlace Par de Santos** — acceso directo a los originales desde el tab de documentos
 
 ---
 
@@ -118,6 +170,9 @@ Todo en Nexus OS es un **Nodo** (`{type, content, metadata}`). Esto permite que 
 | 🤙 **Amortización automática** | Convenio de Pago genera tabla de cuotas por fecha y monto automáticamente |
 | 🪙 **Bitso real-time** | Precio de venta USDT/BTC/ETH/XRP/SOL desde API Bitso en el OTC |
 | 📋 **Histórico legal** | Documentos generados se guardan como nodos — busca, edita, reimprime o elimina |
+| 🏡 **Módulo Inmuebles** | 14 plantillas legales para bienes raíces: captación, negociación y contratos PROFECO verbatim |
+| 📜 **PROFECO Verbatim** | Contratos de adhesión PROFECO copiados letra por letra con ~100 campos de formulario |
+| 🔗 **Documentos por Propiedad** | Historial de documentos vinculado a cada propiedad en Supabase con re-edición |
 
 ---
 
@@ -136,6 +191,7 @@ Nexus OS tiene **9 vistas** accesibles desde la barra lateral:
 | 7 | 👥 **Contactos** | Directorio con ficha completa: foto, teléfonos, documentos, WhatsApp, historial de pagos |
 | 8 | 🧮 **Herramientas** | Orquestador OTC, Centro de Trámites (10 plantillas), Utilidades |
 | 9 | ❓ **Ayuda** | Guía interactiva completa de la sintaxis del parser y todas las funciones |
+| — | 🏡 **Inmuebles** | Motor documental por propiedad — 14 plantillas PROFECO (accesible desde ficha de propiedad) |
 
 ---
 
@@ -431,8 +487,12 @@ nexus-os/
 │   ├── parser.js           # Parser semántico v2 — detecta tipos, fechas, montos
 │   ├── finance-engine.js   # Motor financiero — balances, running balance, periodos
 │   ├── pdf-reports.js      # Motor de PDFs (jsPDF) — reportes + 10 plantillas legales
+│   ├── docs-inmuebles.js   # Motor documental inmobiliario — 14 plantillas PROFECO
+│   ├── supabase.js         # Singleton Supabase — evita múltiples GoTrueClient
 │   ├── logic.js            # Lógica auxiliar compartida
 │   └── __tests__/          # Tests unitarios (Vitest)
+├── api/
+│   └── bitso.js            # Proxy serverless Vercel — evita CORS con Bitso API
 ├── vite.config.js          # Config Vite (multi-page)
 ├── tailwind.config.js      # Config Tailwind + DaisyUI + tailwindcss-animate
 ├── vercel.json             # Config deploy Vercel (SPA routing)
@@ -466,6 +526,57 @@ nexus-os/
 | `pdfCartaResponsiva()` | PDF: Carta Responsiva de bien entregado |
 | `otcRecalc()` | Motor de cálculo OTC con truncamiento a 2 decimales |
 | `otcFetchBitso()` | Consulta precio Bitso real-time |
+
+### Funciones Inmuebles en `src/docs-inmuebles.js`
+
+| Función / Export | Descripción |
+|---|---|
+| `TEMPLATES` | Array de 14 plantillas — cada una con `id`, `name`, `cat`, `desc`, `fields[]` |
+| `CAT_META` | Metadatos de categorías: `captacion` (cyan) · `negociacion` (naranja) · `profeco` (morado) |
+| `renderDocumentos(propId)` | Renderiza el tab de documentos para una propiedad — lista + botones de nueva plantilla |
+| `loadPropertyDocs(propId)` | Carga documentos guardados desde `property_documents` en Supabase |
+| `window.docOpenNew(propId, tplId)` | Abre el modal de formulario para un nuevo documento |
+| `window.docOpenEdit(propId, docId)` | Abre el formulario con datos del documento guardado |
+| `window.docSave(propId, tplId, docId)` | Guarda/actualiza el documento en Supabase |
+| `window.docExportPDF(propId, docId)` | Genera y descarga el PDF del documento |
+| `window.docExportDOC(propId, docId)` | Genera y descarga el Word editable (.doc) |
+| `window.docDelete(propId, docId)` | Elimina el documento (con confirmación) |
+| `_buildDocHTML(tplId, data)` | Construye el HTML verbatim con `{{campos}}` sin rellenar |
+| `_fill(html, data)` | Reemplaza `{{campo}}` con valor o placeholder amarillo |
+| `_autoFill(prop)` | Pre-rellena campos desde datos de propiedad y agente (localStorage) |
+| `_exportPDF(html, filename)` | Imprime HTML como PDF usando `window.print()` |
+| `_exportDOC(html, filename)` | Descarga HTML como `.doc` (Word editable) via Blob |
+
+### Esquema Supabase — tabla `property_documents`
+
+```sql
+-- Migración adicional para el módulo Inmuebles
+CREATE TABLE IF NOT EXISTS public.property_documents (
+  id           UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  property_id  UUID        NOT NULL REFERENCES public.nodes(id) ON DELETE CASCADE,
+  user_id      UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  template_id  TEXT        NOT NULL,  -- ej. 'cv_terreno', 'propuesta_exclusiva'
+  template_name TEXT       NOT NULL,
+  data         JSONB       NOT NULL DEFAULT '{}'::jsonb,  -- todos los campos del formulario
+  status       TEXT        NOT NULL DEFAULT 'borrador',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_prop_docs_property ON public.property_documents (property_id);
+CREATE INDEX IF NOT EXISTS idx_prop_docs_user     ON public.property_documents (user_id);
+
+ALTER TABLE public.property_documents ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "prop_docs_select_own" ON public.property_documents
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "prop_docs_insert_own" ON public.property_documents
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "prop_docs_update_own" ON public.property_documents
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "prop_docs_delete_own" ON public.property_documents
+  FOR DELETE USING (auth.uid() = user_id);
+```
 
 ### Funciones PDF en `src/pdf-reports.js`
 
