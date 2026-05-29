@@ -643,7 +643,7 @@ export function openPropModal(id = null) {
         color:#94a3b8;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
       </div>
 
-      <form id="prop-form" onsubmit="return false" style="padding:24px;">
+      <form id="prop-form" data-prop-id="${prop?.id||''}" onsubmit="return false" style="padding:24px;">
 
         <!-- ── Sección: Tipo y Operación ── -->
         <div style="margin-bottom:22px;">
@@ -855,17 +855,34 @@ export function openPropModal(id = null) {
             <div style="font-size:11px;color:#4b5563;margin-top:4px;">JPEG, PNG, WEBP · máx 5MB por imagen</div>
           </div>
           <!-- Fotos existentes -->
-          <div id="prop-fotos-preview" style="display:flex;flex-wrap:wrap;gap:8px;">
+          <div id="prop-fotos-preview" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
             ${(prop?.fotos||[]).map((f,i)=>`
               <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.1);">
-                <img src="${_esc(f.thumb_url||f.url)}" style="width:100%;height:100%;object-fit:cover;"/>
+                <img src="${_esc(f.thumb_url||f.url||'')}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.opacity=0.3"/>
+                ${i===0?'<div style="position:absolute;top:2px;left:2px;background:rgba(34,211,238,0.85);color:#0d0f1f;font-size:7px;font-weight:800;padding:1px 4px;border-radius:3px;">PORTADA</div>':''}
                 <button onclick="propRemoveFoto(${i})"
                   style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;
                   background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:10px;line-height:1;">✕</button>
               </div>`).join('')}
           </div>
+          <!-- URL de imagen (alternativa al upload) -->
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <input type="url" id="prop-foto-url" placeholder="Pegar URL de imagen (https://...)"
+              style="flex:1;padding:8px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+              border-radius:8px;color:#e8f0f9;font-size:13px;outline:none;"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();propAddPhotoUrl('${prop?.id||''}');}"/>
+            <button type="button" onclick="propAddPhotoUrl('${prop?.id||''}')"
+              style="padding:8px 14px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
+              color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">+ Agregar</button>
+          </div>
+          <div style="font-size:11px;color:#4b5563;margin-bottom:12px;">💡 Pega link de Google Drive, Dropbox, Imgur, etc. — o sube desde dispositivo arriba</div>
+          <!-- Links multimedia -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+            ${_field('prop-video-url','🎥 Video (YouTube / link)','url',val('video_url'),'https://youtube.com/watch?v=...')}
+            ${_field('prop-tour-url','🌐 Tour virtual 360°','url',val('tour_url'),'https://...')}
+          </div>
           <!-- Link Google Drive -->
-          ${_field('prop-drive','Carpeta Google Drive (link)','url',val('drive_folder_url'),'https://drive.google.com/drive/folders/...')}
+          ${_field('prop-drive','📁 Carpeta Google Drive (link)','url',val('drive_folder_url'),'https://drive.google.com/drive/folders/...')}
         </div>
 
         <!-- ── Sección: Status ── -->
@@ -926,12 +943,10 @@ export async function openPropDetail(id) {
   const tipo  = _tipoInfo(p.tipo)
   const fotos = p.fotos || []
 
-  // Exponer _props al módulo de documentos
   window._nexusProps = _props
 
-  // Carga historial + docs en paralelo
   loadPropertyDocs(id).then(() => {
-    const docsEl = document.getElementById(`dpanel-docs`)
+    const docsEl = document.getElementById('dpanel-docs')
     if (docsEl && docsEl.dataset.propId === id) docsEl.innerHTML = renderDocumentos(id)
   })
   loadInteractions(id).then(() => {
@@ -939,239 +954,319 @@ export async function openPropDetail(id) {
     if (el) el.outerHTML = _renderHistorial(id).match(/id="inter-list-[^"]+">[\s\S]*?<\/div>/)?.[0] || ''
   })
 
-  const specs = [
-    p.recamaras        ? { icon:'🛏', label:'Recámaras',   val: p.recamaras }              : null,
-    p.banos            ? { icon:'🚿', label:'Baños',        val: p.banos }                  : null,
-    p.medios_banos     ? { icon:'🚽', label:'Medios baños', val: p.medios_banos }            : null,
-    p.estacionamientos ? { icon:'🚗', label:'Estacionam.',  val: p.estacionamientos }        : null,
-    p.pisos            ? { icon:'🏗', label:'Pisos',         val: p.pisos }                  : null,
-    p.sup_construida   ? { icon:'📐', label:'Construida',   val: _fmtM2(p.sup_construida) }  : null,
-    p.sup_terreno      ? { icon:'🌿', label:'Terreno',      val: _fmtM2(p.sup_terreno) }     : null,
-    p.frente           ? { icon:'↔', label:'Frente',        val: p.frente + ' m' }           : null,
-    p.fondo            ? { icon:'↕', label:'Fondo',         val: p.fondo + ' m' }            : null,
-    p.antiguedad_anios ? { icon:'📅', label:'Antigüedad',   val: p.antiguedad_anios + ' años'}: null,
-  ].filter(Boolean)
-
-  const servicios  = ['agua','luz','drenaje','gas','internet'].filter(k => p[k])
-  const amenidades = ['alberca','jardin','roof_garden','bodega_ext','cuarto_servicio','vigilancia'].filter(k => p[k])
   const SERV_ICONS  = { agua:'💧',luz:'⚡',drenaje:'🚿',gas:'🔥',internet:'📶' }
   const SERV_LABELS = { agua:'Agua',luz:'Luz',drenaje:'Drenaje',gas:'Gas',internet:'Internet' }
   const AMEN_ICONS  = { alberca:'🏊',jardin:'🌿',roof_garden:'🌇',bodega_ext:'📦',cuarto_servicio:'🧹',vigilancia:'🔒' }
   const AMEN_LABELS = { alberca:'Alberca',jardin:'Jardín',roof_garden:'Roof garden',bodega_ext:'Bodega',cuarto_servicio:'C. servicio',vigilancia:'Vigilancia' }
 
-  // Tab activa
-  let _detailTab = 'info'
+  const servicios  = ['agua','luz','drenaje','gas','internet'].filter(k => p[k])
+  const amenidades = ['alberca','jardin','roof_garden','bodega_ext','cuarto_servicio','vigilancia'].filter(k => p[k])
+
+  // Specs con SVG icons
+  const specs = [
+    p.recamaras        ? { svg: _SVG.bed,    label: p.recamaras + ' rec.' }                           : null,
+    p.banos            ? { svg: _SVG.bath,   label: p.banos + (p.banos===1?' baño':' baños') }        : null,
+    p.estacionamientos ? { svg: _SVG.car,    label: p.estacionamientos + ' auto' }                    : null,
+    p.sup_construida   ? { svg: _SVG.area,   label: _fmtM2(p.sup_construida) + ' const.' }            : null,
+    p.sup_terreno      ? { svg: _SVG.land,   label: _fmtM2(p.sup_terreno) + ' terreno' }              : null,
+    p.pisos            ? { svg: _SVG.floors, label: p.pisos + ' nivel' + (p.pisos>1?'es':'') }        : null,
+    p.antiguedad_anios ? { svg: _SVG.age,    label: p.antiguedad_anios + ' años' }                    : null,
+  ].filter(Boolean)
 
   const overlay = document.createElement('div')
   overlay.id = 'prop-detail-overlay'
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);'
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:9000;display:flex;align-items:center;justify-content:center;padding:12px;backdrop-filter:blur(6px);'
   overlay.onclick = e => { if (e.target === overlay) overlay.remove() }
 
-  overlay.innerHTML = `
-    <div style="background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:16px;
-    width:100%;max-width:860px;max-height:93vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.6);">
+  // Store fotos for gallery nav
+  window._nexusGallery = window._nexusGallery || {}
+  window._nexusGallery[p.id] = fotos
 
-      <!-- ── Header sticky ── -->
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;
-      border-bottom:1px solid rgba(255,255,255,0.07);position:sticky;top:0;background:#0e1422;z-index:2;flex-wrap:wrap;gap:8px;">
-        <div>
-          <div style="font-size:10px;color:#7a8899;margin-bottom:2px;">
-            ${_esc(p.folio_interno||'')} · ${tipo.icon} ${tipo.label}
-            <span style="color:${st.color};font-weight:700;"> · ${st.label}</span>
+  overlay.innerHTML = `
+    <div style="background:#0d1222;border:1px solid rgba(34,211,238,0.18);border-radius:18px;
+    width:100%;max-width:920px;max-height:95vh;overflow-y:auto;box-shadow:0 32px 100px rgba(0,0,0,0.8);">
+
+      <!-- ── HEADER ────────────────────────────────────────────────────────── -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 12px;
+      border-bottom:1px solid rgba(255,255,255,0.06);position:sticky;top:0;background:#0d1222;z-index:2;flex-wrap:wrap;gap:8px;">
+        <div style="min-width:0;">
+          <div style="font-size:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
+            <span style="background:${st.color}22;color:${st.color};padding:2px 8px;border-radius:4px;font-weight:800;font-size:9px;text-transform:uppercase;">${st.label}</span>
+            <span style="color:#64748b;">${tipo.icon} ${tipo.label}</span>
+            ${p.folio_interno ? `<span style="color:#475569;">· ${_esc(p.folio_interno)}</span>` : ''}
+            ${p.exclusiva ? `<span style="color:#fb923c;font-weight:700;">· ⭐ Exclusiva</span>` : ''}
           </div>
-          <h3 style="margin:0;font-size:15px;font-weight:800;color:#e8f0f9;line-height:1.2;">
-            ${_esc(p.titulo || tipo.label + ' en ' + (p.colonia || ''))}
-          </h3>
+          <h3 style="margin:0;font-size:16px;font-weight:800;color:#f1f5f9;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            ${_esc(p.titulo || tipo.label + ' en ' + (p.colonia||p.municipio||''))}</h3>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;flex-shrink:0;">
           <button onclick="propExportPDF('${p.id}')"
-            style="padding:6px 13px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);
-            color:#a78bfa;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">📄 PDF Ficha</button>
+            style="padding:6px 12px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);
+            color:#a78bfa;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">📄 PDF</button>
           <button onclick="propWhatsApp('${p.id}')"
-            style="padding:6px 13px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);
-            color:#4ade80;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">📲 WhatsApp</button>
-          <button onclick="propCopyLink('${p.id}','${_esc(p.slug||p.id)}')"
-            style="padding:6px 13px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.25);
-            color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🔗 Link</button>
+            style="padding:6px 12px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);
+            color:#4ade80;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">📲 WA</button>
           <button onclick="openPropModal('${p.id}')"
-            style="padding:6px 13px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+            style="padding:6px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
             color:#94a3b8;border-radius:8px;cursor:pointer;font-size:12px;">✏️ Editar</button>
           <button onclick="document.getElementById('prop-detail-overlay').remove()"
             style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
-            color:#94a3b8;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
+            color:#94a3b8;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:18px;line-height:1;">✕</button>
         </div>
       </div>
 
-      <!-- ── Tabs ── -->
-      <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 20px;">
-        ${[['info','Ficha'],['galeria','Galería ('+fotos.length+')'],['crm','Historial'],['docs','📄 Docs']].map(([tab,label])=>`
-          <button onclick="propDetailTab('${tab}','${p.id}')" id="dtab-${tab}"
-            style="padding:10px 16px;border:none;background:transparent;cursor:pointer;font-size:13px;font-weight:600;
-            color:${tab==='info'?'#22d3ee':'#7a8899'};border-bottom:2px solid ${tab==='info'?'#22d3ee':'transparent'};
-            transition:all 0.15s;">${label}</button>`).join('')}
-      </div>
+      <!-- ── HERO GALLERY ───────────────────────────────────────────────────── -->
+      ${fotos.length ? `
+        <div style="position:relative;background:#000;overflow:hidden;">
+          <img id="hero-img-${p.id}" src="${_esc(fotos[0].url||fotos[0].thumb_url||'')}"
+            style="width:100%;height:310px;object-fit:cover;display:block;cursor:zoom-in;transition:opacity 0.2s;"
+            onclick="propOpenLightbox('${p.id}',0)"/>
+          <!-- Badge foto count -->
+          <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.72);color:#fff;
+          font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;backdrop-filter:blur(4px);display:flex;align-items:center;gap:5px;">
+            ${_SVG.img.replace('width="40" height="40"','width="13" height="13"').replace('stroke-width="1.2"','stroke-width="2"')}
+            <span id="hero-idx-${p.id}">1</span>/${fotos.length}
+          </div>
+          <!-- Video overlay -->
+          ${p.video_url ? `
+            <a href="${_esc(p.video_url)}" target="_blank" rel="noopener"
+              style="position:absolute;bottom:12px;left:12px;background:rgba(220,38,38,0.88);color:#fff;
+              font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;text-decoration:none;
+              display:inline-flex;align-items:center;gap:6px;backdrop-filter:blur(4px);">
+              ${_SVG.video} Ver video
+            </a>` : ''}
+          <!-- Nav arrows -->
+          ${fotos.length>1 ? `
+            <button onclick="propGalleryNav('${p.id}',-1)"
+              style="position:absolute;left:10px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.6);
+              border:none;color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:20px;line-height:1;backdrop-filter:blur(4px);">‹</button>
+            <button onclick="propGalleryNav('${p.id}',1)"
+              style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.6);
+              border:none;color:#fff;width:38px;height:38px;border-radius:50%;cursor:pointer;font-size:20px;line-height:1;backdrop-filter:blur(4px);">›</button>` : ''}
+        </div>
+        <!-- Thumbnail strip -->
+        <div id="thumb-strip-${p.id}" style="display:flex;gap:4px;padding:6px 12px;background:rgba(0,0,0,0.5);overflow-x:auto;scrollbar-width:none;">
+          ${fotos.map((f,i) => `
+            <img src="${_esc(f.thumb_url||f.url||'')}" id="thumb-${p.id}-${i}"
+              onclick="propGalleryJump('${p.id}',${i})"
+              style="width:54px;height:40px;object-fit:cover;border-radius:4px;cursor:pointer;flex-shrink:0;
+              border:2px solid ${i===0?'#22d3ee':'transparent'};opacity:${i===0?1:0.55};transition:all 0.15s;"/>`).join('')}
+        </div>`
+      : `
+        <div style="background:linear-gradient(135deg,#0d1222,#161e35);height:200px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:#334155;">
+          ${_SVG.img.replace('stroke="currentColor"','stroke="#334155"')}
+          <div style="font-size:13px;">Sin fotos · <span style="color:#22d3ee;cursor:pointer;text-decoration:underline;" onclick="openPropModal('${p.id}')">Agregar imágenes</span></div>
+        </div>`}
 
       <div style="padding:20px;">
 
-        <!-- ══ TAB: INFO ══ -->
-        <div id="dpanel-info">
-
-          <!-- Galería preview -->
-          ${fotos.length ? `
-            <div id="detail-gallery" style="display:grid;grid-template-columns:${fotos.length>1?'2fr 1fr':'1fr'};gap:5px;margin-bottom:18px;border-radius:10px;overflow:hidden;max-height:280px;">
-              <img id="detail-main-img" src="${_esc(fotos[0].url||fotos[0].thumb_url||'')}"
-                style="width:100%;height:100%;max-height:280px;object-fit:cover;cursor:zoom-in;"
-                onclick="propDetailTab('galeria','${p.id}')"/>
-              ${fotos.length > 1 ? `
-                <div style="display:grid;grid-template-rows:repeat(${Math.min(fotos.length-1,3)},1fr);gap:5px;">
-                  ${fotos.slice(1,4).map((f,i)=>`
-                    <div style="position:relative;overflow:hidden;">
-                      <img src="${_esc(f.thumb_url||f.url||'')}"
-                        style="width:100%;height:${Math.floor(280/Math.min(fotos.length-1,3))}px;object-fit:cover;cursor:zoom-in;"
-                        onclick="propDetailTab('galeria','${p.id}')"/>
-                      ${i === 2 && fotos.length > 4 ? `
-                        <div style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;cursor:pointer;"
-                          onclick="propDetailTab('galeria','${p.id}')">
-                          <span style="font-size:16px;font-weight:800;color:#fff;">+${fotos.length-4} fotos</span>
-                        </div>` : ''}
-                    </div>`).join('')}
-                </div>` : ''}
-            </div>` : ''}
-
-          <!-- Precio + ops -->
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+        <!-- ── PRECIO + SPECS ─────────────────────────────────────────────── -->
+        <div style="margin-bottom:16px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
             <div>
-              <div style="font-size:24px;font-weight:900;color:#22d3ee;">${_esc(_precioLabel(p))}</div>
-              ${p.precio_negociable ? `<div style="font-size:12px;color:#4ade80;margin-top:2px;">Precio negociable</div>` : ''}
-              <div style="font-size:13px;color:#7a8899;margin-top:6px;">
-                📍 ${_esc([p.calle,p.numero].filter(Boolean).join(' '))}
-                <br>${_esc([p.colonia,p.municipio,p.estado_rep].filter(Boolean).join(', '))}
-                ${p.referencias ? `<br><span style="color:#4b5563;">${_esc(p.referencias)}</span>` : ''}
-              </div>
+              <div style="font-size:30px;font-weight:900;color:#22d3ee;line-height:1;letter-spacing:-1px;">${_esc(_precioLabel(p))}</div>
+              ${p.sup_construida && p.precio_venta ? `
+                <div style="font-size:12px;color:#64748b;margin-top:3px;">
+                  $${Math.round(p.precio_venta/p.sup_construida).toLocaleString('es-MX')}/m² construido</div>` : ''}
+              ${p.precio_negociable ? `<span style="font-size:11px;color:#4ade80;font-weight:700;margin-top:3px;display:inline-flex;align-items:center;gap:4px;">✓ Precio negociable</span>` : ''}
             </div>
-            <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
               ${(p.operacion||[]).map(op=>`
                 <span style="padding:5px 14px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
                 color:#22d3ee;border-radius:8px;font-size:12px;font-weight:700;text-transform:uppercase;">${op}</span>`).join('')}
-              ${p.lat && p.lng ? `
-                <a href="https://www.google.com/maps?q=${p.lat},${p.lng}" target="_blank" rel="noopener"
-                  style="font-size:11px;color:#60a5fa;text-decoration:none;">🗺 Ver en Google Maps</a>` : ''}
+            </div>
+          </div>
+          <!-- Specs pills con SVG -->
+          ${specs.length ? `
+            <div style="display:flex;flex-wrap:wrap;gap:7px;">
+              ${specs.map(s=>`
+                <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 13px;
+                background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:9px;color:#e2e8f0;">
+                  <span style="color:#22d3ee;display:flex;">${s.svg}</span>
+                  <span style="font-size:13px;font-weight:600;">${s.label}</span>
+                </div>`).join('')}
+            </div>` : ''}
+        </div>
+
+        <!-- ── QUICK ACTIONS ──────────────────────────────────────────────── -->
+        <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,0.06);">
+          ${p.lat && p.lng ? `
+            <a href="https://www.google.com/maps?q=${p.lat},${p.lng}" target="_blank" rel="noopener"
+              style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+              background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;
+              border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">
+              ${_SVG.map} Ver mapa</a>` : ''}
+          ${p.video_url ? `
+            <a href="${_esc(p.video_url)}" target="_blank" rel="noopener"
+              style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+              background:rgba(220,38,38,0.1);border:1px solid rgba(220,38,38,0.25);color:#f87171;
+              border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">
+              ${_SVG.video} Video</a>` : ''}
+          ${p.tour_url ? `
+            <a href="${_esc(p.tour_url)}" target="_blank" rel="noopener"
+              style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+              background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;
+              border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">
+              ${_SVG.globe} Tour 360°</a>` : ''}
+          ${p.drive_folder_url ? `
+            <a href="${_esc(p.drive_folder_url)}" target="_blank" rel="noopener"
+              style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+              background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;
+              border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">
+              ${_SVG.folder} Drive</a>` : ''}
+          <button onclick="propCopyLink('${p.id}','${_esc(p.slug||p.id)}')"
+            style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+            background:rgba(34,211,238,0.07);border:1px solid rgba(34,211,238,0.2);color:#22d3ee;
+            border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">
+            ${_SVG.link} Compartir</button>
+        </div>
+
+        <!-- ── TABS ──────────────────────────────────────────────────────── -->
+        <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:18px;overflow-x:auto;scrollbar-width:none;">
+          ${[['info','📋 Info'],['galeria','🖼 Galería'+(fotos.length?` (${fotos.length})`:'')],['crm','📞 CRM'],['docs','📄 Docs']].map(([tab,label])=>`
+            <button onclick="propDetailTab('${tab}','${p.id}')" id="dtab-${tab}"
+              style="padding:10px 14px;border:none;background:transparent;cursor:pointer;font-size:12px;font-weight:600;
+              color:${tab==='info'?'#22d3ee':'#64748b'};border-bottom:2px solid ${tab==='info'?'#22d3ee':'transparent'};
+              white-space:nowrap;transition:all 0.15s;">${label}</button>`).join('')}
+        </div>
+
+        <!-- ── TAB INFO ───────────────────────────────────────────────────── -->
+        <div id="dpanel-info">
+
+          <!-- Dirección -->
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;margin-bottom:16px;
+          background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.14);border-radius:10px;">
+            <span style="color:#60a5fa;display:flex;flex-shrink:0;margin-top:1px;">${_SVG.map}</span>
+            <div style="font-size:13px;color:#94a3b8;line-height:1.7;">
+              ${_esc([p.calle,p.numero].filter(Boolean).join(' '))}
+              ${p.calle ? `<br>` : ''}${_esc([p.colonia,p.municipio,p.estado_rep,p.cp?'C.P.'+p.cp:''].filter(Boolean).join(', '))}
+              ${p.referencias ? `<br><span style="font-size:12px;color:#475569;font-style:italic;">${_esc(p.referencias)}</span>` : ''}
             </div>
           </div>
 
-          <!-- Specs -->
-          ${specs.length ? `
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:16px;">
-              ${specs.map(s=>`
-                <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
-                border-radius:8px;padding:10px;text-align:center;">
-                  <div style="font-size:18px;margin-bottom:3px;">${s.icon}</div>
-                  <div style="font-size:10px;color:#7a8899;">${s.label}</div>
-                  <div style="font-size:13px;font-weight:700;color:#e8f0f9;">${_esc(String(s.val))}</div>
-                </div>`).join('')}
-            </div>` : ''}
-
-          <!-- Servicios + Amenidades -->
-          ${servicios.length || amenidades.length ? `
-            <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;">
-              ${servicios.map(k=>`<span style="font-size:12px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);color:#4ade80;padding:4px 10px;border-radius:6px;">${SERV_ICONS[k]} ${SERV_LABELS[k]}</span>`).join('')}
-              ${amenidades.map(k=>`<span style="font-size:12px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);color:#22d3ee;padding:4px 10px;border-radius:6px;">${AMEN_ICONS[k]} ${AMEN_LABELS[k]}</span>`).join('')}
-            </div>` : ''}
-
           <!-- Descripción -->
           ${p.descripcion ? `
-            <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;margin-bottom:16px;">
-              <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Descripción</div>
-              <p style="font-size:13px;color:#94a3b8;line-height:1.7;margin:0;white-space:pre-wrap;">${_esc(p.descripcion)}</p>
+            <div style="margin-bottom:16px;">
+              <div style="font-size:10px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Descripción</div>
+              <p id="desc-text-${p.id}" style="font-size:13px;color:#94a3b8;line-height:1.75;margin:0;white-space:pre-wrap;
+              display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;">${_esc(p.descripcion)}</p>
+              <button onclick="const el=document.getElementById('desc-text-${p.id}');const exp=el.style.webkitLineClamp==='unset';el.style.webkitLineClamp=exp?'4':'unset';this.textContent=exp?'Ver más ▾':'Ver menos ▴'"
+                style="background:none;border:none;color:#22d3ee;font-size:12px;cursor:pointer;padding:4px 0;margin-top:4px;">Ver más ▾</button>
             </div>` : ''}
 
-          <!-- Dueño + Drive -->
+          <!-- Amenidades -->
+          ${amenidades.length ? `
+            <div style="margin-bottom:14px;">
+              <div style="font-size:10px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Amenidades</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                ${amenidades.map(k=>`
+                  <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;
+                  background:rgba(34,211,238,0.07);border:1px solid rgba(34,211,238,0.2);color:#22d3ee;padding:5px 11px;border-radius:7px;">
+                    ${AMEN_ICONS[k]} ${AMEN_LABELS[k]}</span>`).join('')}
+              </div>
+            </div>` : ''}
+
+          <!-- Servicios -->
+          ${servicios.length ? `
+            <div style="margin-bottom:16px;">
+              <div style="font-size:10px;font-weight:700;color:#4ade80;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Servicios</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                ${servicios.map(k=>`
+                  <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;
+                  background:rgba(74,222,128,0.07);border:1px solid rgba(74,222,128,0.2);color:#4ade80;padding:5px 11px;border-radius:7px;">
+                    ${SERV_ICONS[k]} ${SERV_LABELS[k]}</span>`).join('')}
+              </div>
+            </div>` : ''}
+
+          <!-- Propietario -->
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
-            <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;">
-              <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:7px;">Dueño</div>
-              <div style="font-size:13px;color:#e8f0f9;font-weight:600;">${_esc(p.dueno_nombre||'—')}</div>
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:13px;">
+              <div style="font-size:10px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:1px;margin-bottom:7px;">Propietario</div>
+              <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:5px;">${_esc(p.dueno_nombre||'—')}</div>
               ${p.dueno_telefono ? `
-                <a href="tel:${_esc(p.dueno_telefono)}" style="font-size:12px;color:#4ade80;display:block;margin-top:4px;text-decoration:none;">
-                  📞 ${_esc(p.dueno_telefono)}</a>` : ''}
-              ${p.dueno_email ? `
-                <a href="mailto:${_esc(p.dueno_email)}" style="font-size:12px;color:#60a5fa;display:block;margin-top:2px;text-decoration:none;">
-                  ✉ ${_esc(p.dueno_email)}</a>` : ''}
+                <a href="https://wa.me/52${p.dueno_telefono.replace(/\D/g,'')}?text=Hola%2C+me+interesa+la+propiedad+${_esc(p.folio_interno||p.id)}" target="_blank"
+                  style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#4ade80;text-decoration:none;margin-bottom:3px;">
+                  📲 ${_esc(p.dueno_telefono)}</a><br>` : ''}
+              ${p.dueno_email ? `<a href="mailto:${_esc(p.dueno_email)}" style="font-size:12px;color:#60a5fa;text-decoration:none;">✉ ${_esc(p.dueno_email)}</a>` : ''}
             </div>
-            <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;">
-              <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:7px;">Archivos</div>
-              ${p.drive_folder_url
-                ? `<a href="${_esc(p.drive_folder_url)}" target="_blank" rel="noopener"
-                    style="font-size:13px;color:#60a5fa;text-decoration:none;display:flex;align-items:center;gap:5px;">
-                    📁 Carpeta Google Drive
-                  </a>`
-                : `<span style="font-size:12px;color:#4b5563;">Sin carpeta vinculada</span>`}
-              <div style="margin-top:8px;font-size:11px;color:#4b5563;">${fotos.length} foto${fotos.length!==1?'s':''} en Nexus</div>
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:13px;">
+              <div style="font-size:10px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:1px;margin-bottom:7px;">Más detalles</div>
+              ${p.amueblado ? `<div style="font-size:12px;color:#a78bfa;margin-bottom:3px;">🪑 Amueblado</div>` : ''}
+              ${p.medios_banos ? `<div style="font-size:12px;color:#94a3b8;margin-bottom:3px;">½ Baños: ${p.medios_banos}</div>` : ''}
+              ${p.frente ? `<div style="font-size:12px;color:#94a3b8;margin-bottom:3px;">↔ Frente: ${p.frente}m</div>` : ''}
+              ${p.fondo  ? `<div style="font-size:12px;color:#94a3b8;margin-bottom:3px;">↕ Fondo: ${p.fondo}m</div>` : ''}
+              <div style="font-size:11px;color:#475569;margin-top:4px;">${fotos.length} foto${fotos.length!==1?'s':''}</div>
             </div>
           </div>
 
           <!-- Exclusiva -->
           ${p.exclusiva && p.exclusiva_fin ? (() => {
-            const diff = (new Date(p.exclusiva_fin) - new Date()) / (1000 * 60 * 60 * 24)
-            const alertColor = diff < 0 ? '#f87171' : diff <= 7 ? '#fb923c' : '#22d3ee'
+            const diff = (new Date(p.exclusiva_fin) - new Date()) / (1000*60*60*24)
+            const ac   = diff < 0 ? '#f87171' : diff <= 7 ? '#fb923c' : '#22d3ee'
             return `
-              <div style="background:${alertColor}10;border:1px solid ${alertColor}30;border-radius:10px;padding:12px;">
-                <div style="font-size:11px;color:${alertColor};font-weight:700;text-transform:uppercase;margin-bottom:6px;">
-                  ${diff < 0 ? '⚠ Exclusiva vencida' : diff <= 7 ? `⚠ Exclusiva vence en ${Math.ceil(diff)} días` : 'Exclusiva activa'}
+              <div style="background:${ac}10;border:1px solid ${ac}30;border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px;">
+                <div style="font-size:22px;">⭐</div>
+                <div>
+                  <div style="font-size:11px;color:${ac};font-weight:700;text-transform:uppercase;">
+                    ${diff < 0 ? 'Exclusiva vencida' : diff <= 7 ? `Vence en ${Math.ceil(diff)} días` : 'Exclusiva activa'}</div>
+                  <div style="font-size:12px;color:#94a3b8;margin-top:2px;">
+                    ${_esc(p.exclusiva_inicio||'')} → ${_esc(p.exclusiva_fin)}
+                    &nbsp;·&nbsp; Comisión: <strong style="color:${ac};">${p.comision_pct||5}%</strong>
+                  </div>
                 </div>
-                <div style="font-size:13px;color:#94a3b8;">
-                  ${_esc(p.exclusiva_inicio||'')} → ${_esc(p.exclusiva_fin)}
-                  &nbsp;·&nbsp; Comisión: <strong style="color:${alertColor};">${p.comision_pct||5}%</strong>
-                </div>
-              </div>` })() : ''}
+              </div>`
+          })() : ''}
         </div>
 
-        <!-- ══ TAB: GALERÍA ══ -->
+        <!-- ── TAB GALERÍA ────────────────────────────────────────────────── -->
         <div id="dpanel-galeria" style="display:none;">
-          <div style="font-size:12px;color:#7a8899;margin-bottom:12px;">
-            Arrastra para reordenar · Las fotos se guardan automáticamente
-          </div>
-          <div id="gallery-sortable-${p.id}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
+          <div style="font-size:12px;color:#64748b;margin-bottom:12px;">Arrastra para reordenar · Clic para zoom</div>
+          <div id="gallery-sortable-${p.id}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:14px;">
             ${fotos.map((f,i)=>`
               <div data-index="${i}" data-url="${_esc(f.url||f.thumb_url||'')}"
                 style="position:relative;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);
                 cursor:grab;aspect-ratio:4/3;background:rgba(14,20,34,0.8);">
-                <img src="${_esc(f.thumb_url||f.url||'')}" style="width:100%;height:100%;object-fit:cover;pointer-events:none;"/>
+                <img src="${_esc(f.thumb_url||f.url||'')}" style="width:100%;height:100%;object-fit:cover;"
+                  onclick="propOpenLightbox('${p.id}',${i})"/>
                 ${f.categoria ? `
                   <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 6px;
-                  background:rgba(0,0,0,0.65);font-size:9px;color:#22d3ee;font-weight:700;text-transform:uppercase;">
-                    ${_esc(f.categoria)}
-                  </div>` : ''}
+                  background:rgba(0,0,0,0.7);font-size:9px;color:#22d3ee;font-weight:700;text-transform:uppercase;">${_esc(f.categoria)}</div>` : ''}
                 <button onclick="propDeleteFoto('${p.id}',${i})"
                   style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
                   background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:12px;line-height:1;">✕</button>
-                ${i===0 ? `<div style="position:absolute;top:4px;left:4px;background:rgba(34,211,238,0.85);
-                  color:#0d0f1f;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;">PORTADA</div>` : ''}
+                ${i===0?`<div style="position:absolute;top:4px;left:4px;background:rgba(34,211,238,0.9);
+                  color:#0d0f1f;font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;">PORTADA</div>`:''}
               </div>`).join('')}
           </div>
-          ${fotos.length === 0 ? `
-            <div style="text-align:center;padding:40px 20px;color:#4b5563;">
-              Sin fotos. Edita la propiedad para agregar imágenes.
-            </div>` : ''}
-
-          <!-- Subir más fotos desde este panel -->
-          <div style="margin-top:16px;border:2px dashed rgba(34,211,238,0.2);border-radius:10px;padding:14px;text-align:center;cursor:pointer;"
+          ${fotos.length===0?`<div style="text-align:center;padding:30px;color:#475569;">Sin fotos aún</div>`:''}
+          <!-- Agregar por URL -->
+          <div style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:14px;background:rgba(255,255,255,0.02);margin-bottom:10px;">
+            <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:8px;">+ Agregar foto por URL</div>
+            <div style="display:flex;gap:8px;">
+              <input type="url" id="gallery-url-input-${p.id}" placeholder="https://... URL de imagen (Drive, Dropbox, Imgur, etc.)"
+                style="flex:1;padding:8px 12px;background:rgba(14,20,34,0.8);border:1px solid rgba(255,255,255,0.1);
+                border-radius:7px;color:#e8f0f9;font-size:13px;outline:none;"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();propAddPhotoUrlFromDetail('${p.id}');}"/>
+              <button onclick="propAddPhotoUrlFromDetail('${p.id}')"
+                style="padding:8px 14px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
+                color:#22d3ee;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;">Agregar</button>
+            </div>
+          </div>
+          <!-- Subir desde dispositivo -->
+          <div style="border:2px dashed rgba(34,211,238,0.2);border-radius:10px;padding:14px;text-align:center;cursor:pointer;"
             onclick="document.getElementById('gallery-upload-${p.id}').click()">
             <input type="file" id="gallery-upload-${p.id}" multiple accept="image/*" style="display:none;"
               onchange="propHandleFiles(this.files,'${p.id}')"/>
-            <div style="font-size:12px;color:#7a8899;">+ Agregar más fotos</div>
+            <div style="font-size:12px;color:#64748b;">+ Subir fotos desde dispositivo</div>
           </div>
         </div>
 
-        <!-- ══ TAB: HISTORIAL CRM ══ -->
-        <div id="dpanel-crm" style="display:none;">
-          ${_renderHistorial(p.id)}
-        </div>
+        <!-- ── TAB CRM ────────────────────────────────────────────────────── -->
+        <div id="dpanel-crm" style="display:none;">${_renderHistorial(p.id)}</div>
 
-        <!-- ══ TAB: DOCUMENTOS ══ -->
+        <!-- ── TAB DOCS ───────────────────────────────────────────────────── -->
         <div id="dpanel-docs" data-prop-id="${p.id}" style="display:none;">
-          <div style="text-align:center;padding:20px;color:#4b5563;font-size:13px;">
-            Cargando documentos…
-          </div>
+          <div style="text-align:center;padding:20px;color:#475569;font-size:13px;">Cargando documentos…</div>
         </div>
 
       </div>
@@ -1180,7 +1275,7 @@ export async function openPropDetail(id) {
 
   document.body.appendChild(overlay)
 
-  // Inicializar drag-drop galería (SortableJS)
+  // Init SortableJS galería
   requestAnimationFrame(() => {
     const sortEl = document.getElementById(`gallery-sortable-${p.id}`)
     if (sortEl && typeof Sortable !== 'undefined') {
@@ -1258,6 +1353,8 @@ export async function saveProp(id) {
     descripcion:       g('prop-descripcion')?.value?.trim() || null,
     notas_internas:    g('prop-notas')?.value?.trim()       || null,
     drive_folder_url:  gv('prop-drive'),
+    video_url:         gv('prop-video-url'),
+    tour_url:          gv('prop-tour-url'),
 
     exclusiva:         gb('prop-exclusiva'),
     exclusiva_inicio:  gv('prop-excl-inicio'),
@@ -1639,6 +1736,151 @@ window.propExportPDF = async (propId) => {
   } finally {
     if (btn) { btn.textContent = '📄 PDF Ficha'; btn.disabled = false }
   }
+}
+
+// ─── Gallery navigation handlers ─────────────────────────────────────────────
+window.propGalleryJump = (propId, idx) => {
+  const fotos = window._nexusGallery?.[propId] || []
+  if (!fotos[idx]) return
+  const hero  = document.getElementById('hero-img-' + propId)
+  const idxEl = document.getElementById('hero-idx-' + propId)
+  if (hero) hero.src = fotos[idx].url || fotos[idx].thumb_url || ''
+  if (idxEl) idxEl.textContent = idx + 1
+  for (let i = 0; i < fotos.length; i++) {
+    const th = document.getElementById(`thumb-${propId}-${i}`)
+    if (th) { th.style.border = i===idx?'2px solid #22d3ee':'2px solid transparent'; th.style.opacity = i===idx?'1':'0.55' }
+  }
+  // update lightbox click target
+  if (hero) hero.setAttribute('onclick', `propOpenLightbox('${propId}',${idx})`)
+}
+
+window.propGalleryNav = (propId, dir) => {
+  const fotos = window._nexusGallery?.[propId] || []
+  if (!fotos.length) return
+  let cur = 0
+  for (let i = 0; i < fotos.length; i++) {
+    const th = document.getElementById(`thumb-${propId}-${i}`)
+    if (th && th.style.border.includes('#22d3ee')) { cur = i; break }
+  }
+  window.propGalleryJump(propId, (cur + dir + fotos.length) % fotos.length)
+}
+
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+window.propOpenLightbox = (propId, startIdx) => {
+  const fotos = window._nexusGallery?.[propId]
+    || (window._nexusProps||[]).find(p=>p.id===propId)?.fotos || []
+  if (!fotos.length) return
+  let cur = startIdx ?? 0
+
+  document.getElementById('prop-lightbox')?.remove()
+  const lb = document.createElement('div')
+  lb.id = 'prop-lightbox'
+  lb.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.96);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(10px);'
+
+  const render = () => {
+    lb.innerHTML = `
+      <button onclick="document.getElementById('prop-lightbox').remove()"
+        style="position:absolute;top:16px;right:16px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.2);
+        color:#fff;width:42px;height:42px;border-radius:50%;cursor:pointer;font-size:22px;line-height:1;">✕</button>
+      ${fotos.length>1?`
+        <button onclick="window._lbNav(-1)"
+          style="position:absolute;left:16px;background:rgba(255,255,255,0.1);border:none;color:#fff;
+          width:52px;height:52px;border-radius:50%;cursor:pointer;font-size:28px;line-height:1;">‹</button>` : ''}
+      <img src="${_esc(fotos[cur].url||fotos[cur].thumb_url||'')}"
+        style="max-width:92vw;max-height:88vh;object-fit:contain;border-radius:6px;user-select:none;"/>
+      ${fotos.length>1?`
+        <button onclick="window._lbNav(1)"
+          style="position:absolute;right:16px;background:rgba(255,255,255,0.1);border:none;color:#fff;
+          width:52px;height:52px;border-radius:50%;cursor:pointer;font-size:28px;line-height:1;">›</button>` : ''}
+      <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.65);
+      color:#fff;font-size:13px;padding:5px 16px;border-radius:8px;">${cur+1} / ${fotos.length}</div>`
+  }
+
+  window._lbNav = (d) => { cur = (cur + d + fotos.length) % fotos.length; render() }
+  lb.onclick = e => { if (e.target === lb) lb.remove() }
+
+  document.body.appendChild(lb)
+  render()
+
+  const onKey = (e) => {
+    if (!document.getElementById('prop-lightbox')) { document.removeEventListener('keydown', onKey); return }
+    if (e.key === 'ArrowRight') window._lbNav(1)
+    if (e.key === 'ArrowLeft')  window._lbNav(-1)
+    if (e.key === 'Escape')     { lb.remove(); document.removeEventListener('keydown', onKey) }
+  }
+  document.addEventListener('keydown', onKey)
+}
+
+// ─── Agregar foto por URL (modal de edición) ──────────────────────────────────
+window.propAddPhotoUrl = async (propId) => {
+  const input = document.getElementById('prop-foto-url')
+  const url   = input?.value?.trim()
+  if (!url || !url.startsWith('http')) { window.showToast?.('⚠ Ingresa una URL válida (https://...)'); return }
+
+  const preview = document.getElementById('prop-fotos-preview')
+  if (preview) {
+    preview.insertAdjacentHTML('beforeend', `
+      <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid rgba(34,211,238,0.35);">
+        <img src="${url}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.opacity=0.25"/>
+        <button onclick="propRemoveFotoByUrl('${url}')"
+          style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;
+          background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:10px;line-height:1;">✕</button>
+      </div>`)
+  }
+
+  if (propId) {
+    const existing = _props.find(p => p.id === propId)
+    const fotos = [...(existing?.fotos||[]), { url, thumb_url: url, categoria: 'exterior', orden: (existing?.fotos||[]).length }]
+    const { error } = await supabase.from('properties').update({ fotos }).eq('id', propId)
+    if (!error && existing) existing.fotos = fotos
+    if (error) { window.showToast?.('❌ Error al guardar: ' + error.message); return }
+  }
+
+  if (input) input.value = ''
+  window.showToast?.('✅ Imagen agregada')
+}
+
+// ─── Agregar foto por URL desde panel de galería del detalle ─────────────────
+window.propAddPhotoUrlFromDetail = async (propId) => {
+  const input = document.getElementById('gallery-url-input-' + propId)
+  const url   = input?.value?.trim()
+  if (!url || !url.startsWith('http')) { window.showToast?.('⚠ Ingresa una URL válida'); return }
+
+  const existing = _props.find(p => p.id === propId)
+  if (!existing) { window.showToast?.('❌ Propiedad no encontrada'); return }
+
+  const fotos = [...(existing.fotos||[]), { url, thumb_url: url, categoria: 'exterior', orden: (existing.fotos||[]).length }]
+  const { error } = await supabase.from('properties').update({ fotos }).eq('id', propId)
+  if (error) { window.showToast?.('❌ Error al guardar: ' + error.message); return }
+
+  existing.fotos = fotos
+  if (!window._nexusGallery) window._nexusGallery = {}
+  window._nexusGallery[propId] = fotos
+
+  if (input) input.value = ''
+
+  // Añadir a la grid
+  const sortEl = document.getElementById('gallery-sortable-' + propId)
+  if (sortEl) {
+    const i = fotos.length - 1
+    const div = document.createElement('div')
+    div.dataset.index = String(i); div.dataset.url = url
+    div.style.cssText = 'position:relative;border-radius:10px;overflow:hidden;border:1px solid rgba(34,211,238,0.3);aspect-ratio:4/3;background:rgba(14,20,34,0.8);'
+    div.innerHTML = `
+      <img src="${url}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.opacity=0.25"/>
+      <button onclick="propDeleteFoto('${propId}',${i})"
+        style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
+        background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:12px;line-height:1;">✕</button>`
+    sortEl.appendChild(div)
+  }
+
+  // Actualizar hero si es la primera foto
+  if (fotos.length === 1) {
+    const hero = document.getElementById('hero-img-' + propId)
+    if (hero) hero.src = url
+  }
+
+  window.showToast?.('✅ Imagen agregada')
 }
 
 // Exportar función de carga para app.js
