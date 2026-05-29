@@ -285,35 +285,72 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
 
   // ── Servicios + Amenidades ────────────────────────────────────────────────
   const servList = [
-    prop.agua     && 'Agua potable',
-    prop.luz      && 'Luz eléctrica',
-    prop.drenaje  && 'Drenaje',
-    prop.gas      && 'Gas',
-    prop.internet && 'Internet',
+    prop.agua          && 'Agua potable',
+    prop.luz           && 'Luz eléctrica',
+    prop.drenaje       && 'Drenaje',
+    prop.gas           && 'Gas LP',
+    prop.gas_natural   && 'Gas natural',
+    prop.gas_tanque    && 'Gas estacionario',
+    prop.internet      && 'Internet',
+    prop.internet_fibra && 'Fibra óptica',
+    prop.cable_tv      && 'Cable TV',
+    prop.seguridad_24h && 'Seguridad 24 h',
   ].filter(Boolean)
 
   const amenList = [
     prop.alberca         && 'Alberca',
     prop.jardin          && 'Jardín',
     prop.roof_garden     && 'Roof garden',
+    prop.terraza         && 'Terraza',
+    prop.asador_bbq      && 'Asador BBQ',
     prop.bodega_ext      && 'Bodega',
     prop.cuarto_servicio && 'Cuarto de servicio',
     prop.vigilancia      && 'Vigilancia',
+    prop.cctv            && 'CCTV',
+    prop.porton_electrico && 'Portón eléctrico',
+    prop.cisterna        && 'Cisterna',
+    prop.panel_solar     && 'Panel solar',
+    prop.jacuzzi         && 'Jacuzzi',
+    prop.gym             && 'Gimnasio',
+    prop.elevador        && 'Elevador',
+    prop.salon_eventos   && 'Salón de eventos',
+    prop.area_juegos     && 'Área de juegos',
+    prop.cine_privado    && 'Cine privado',
+    prop.lobby           && 'Lobby',
+    prop.concierge       && 'Concierge',
     prop.amueblado       && 'Amueblado',
   ].filter(Boolean)
 
   if (servList.length || amenList.length) {
-    _panel(doc, mX, y, W - mX * 2, 16, T.surface)
-    doc.setFontSize(6.5)
-    doc.setFont(T.font, 'bold')
-    doc.setTextColor(...T.cyan)
-    doc.text('SERVICIOS Y AMENIDADES', mX + 4, y + 6)
-    doc.setFont(T.font, 'normal')
-    doc.setTextColor(...T.textMid)
-    const combined = [...servList, ...amenList].join('  ·  ')
-    const lines = doc.splitTextToSize(combined, W - mX * 2 - 8)
-    doc.text(lines[0], mX + 4, y + 12)
-    y += 22
+    // Dos bloques separados para mayor legibilidad en el PDF
+    const blockH = 16
+    if (servList.length) {
+      _panel(doc, mX, y, W - mX * 2, blockH, T.surface)
+      doc.setFontSize(6.5)
+      doc.setFont(T.font, 'bold')
+      doc.setTextColor(...T.cyan)
+      doc.text('SERVICIOS', mX + 4, y + 6)
+      doc.setFont(T.font, 'normal')
+      doc.setTextColor(...T.textMid)
+      const sLines = doc.splitTextToSize(servList.join('  ·  '), W - mX * 2 - 8)
+      doc.text(sLines[0], mX + 4, y + 12)
+      y += blockH + 4
+    }
+    if (amenList.length) {
+      // Puede ocupar hasta 2 líneas cuando hay muchas amenidades
+      const aText  = amenList.join('  ·  ')
+      const aLines = doc.splitTextToSize(aText, W - mX * 2 - 8)
+      const aH     = aLines.length > 1 ? blockH + 5 : blockH
+      _panel(doc, mX, y, W - mX * 2, aH, T.surface)
+      doc.setFontSize(6.5)
+      doc.setFont(T.font, 'bold')
+      doc.setTextColor(...T.cyan)
+      doc.text('AMENIDADES', mX + 4, y + 6)
+      doc.setFont(T.font, 'normal')
+      doc.setTextColor(...T.textMid)
+      doc.text(aLines.slice(0, 2), mX + 4, y + 12)
+      y += aH + 4
+    }
   }
 
   // ── Descripción ───────────────────────────────────────────────────────────

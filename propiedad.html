@@ -4,7 +4,6 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Propiedad — Nexus OS</title>
-  <!-- OG básico: lo actualiza JS al cargar -->
   <meta id="og-title"       property="og:title"       content="Inmueble en venta — Nexus OS"/>
   <meta id="og-description" property="og:description" content="Ficha de propiedad"/>
   <meta id="og-image"       property="og:image"        content=""/>
@@ -13,327 +12,567 @@
   <meta name="theme-color"  content="#0d0f1f"/>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0d0f1f;
-      color: #e8f0f9;
-      min-height: 100vh;
-    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d0f1f; color: #e8f0f9; min-height: 100vh; }
     a { color: inherit; text-decoration: none; }
     img { display: block; max-width: 100%; }
-
-    /* ── Layout ── */
-    .container { max-width: 900px; margin: 0 auto; padding: 0 16px 60px; }
-
-    /* ── Header brand ── */
-    .brand-bar {
-      background: #05080f;
-      border-bottom: 1px solid rgba(34,211,238,0.15);
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
+    .brand-bar { background: #05080f; border-bottom: 1px solid rgba(34,211,238,0.15);
+      padding: 12px 20px; display: flex; align-items: center; justify-content: space-between; }
     .brand-name { font-size: 13px; font-weight: 800; color: #22d3ee; letter-spacing: 0.08em; }
     .brand-url  { font-size: 11px; color: #7a8899; }
 
-    /* ── Galería ── */
-    .gallery-main  { width: 100%; height: 320px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; }
-    .gallery-thumbs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
-    .gallery-thumbs img { width: 80px; height: 60px; object-fit: cover; border-radius: 6px; flex-shrink: 0; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s; }
-    .gallery-thumbs img.active { border-color: #22d3ee; }
-    .gallery-wrap { margin: 20px 0; }
-    .no-photo { height: 260px; background: rgba(34,211,238,0.04); border: 1px solid rgba(34,211,238,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 64px; opacity: 0.3; margin: 20px 0; }
+    /* Gallery */
+    .gallery-wrap { position: relative; background: #000; overflow: hidden; }
+    .gallery-main { width: 100%; height: 320px; object-fit: cover; display: block; cursor: zoom-in; transition: opacity 0.2s; }
+    .gallery-nav  { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.65);
+      border: none; color: #fff; width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
+      font-size: 22px; line-height: 1; backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; }
+    .gallery-nav.prev { left: 12px; }
+    .gallery-nav.next { right: 12px; }
+    .gallery-badge { position: absolute; bottom: 12px; right: 12px; background: rgba(0,0,0,0.72); color: #fff;
+      font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px; backdrop-filter: blur(4px); }
+    .gallery-thumbs { display: flex; gap: 4px; padding: 6px 12px; background: rgba(0,0,0,0.6); overflow-x: auto; scrollbar-width: none; }
+    .gallery-thumbs img { width: 58px; height: 42px; object-fit: cover; border-radius: 5px; cursor: pointer;
+      flex-shrink: 0; border: 2px solid transparent; opacity: 0.55; transition: all 0.15s; }
+    .gallery-thumbs img.active { border-color: #22d3ee; opacity: 1; }
+    .no-photo { height: 240px; background: rgba(34,211,238,0.04); border-bottom: 1px solid rgba(34,211,238,0.1);
+      display: flex; align-items: center; justify-content: center; font-size: 64px; opacity: 0.3; }
+    .yt-embed { position: relative; padding-bottom: 50%; background: #000; }
+    .yt-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
 
-    /* ── Precio ── */
-    .precio { font-size: 30px; font-weight: 900; color: #22d3ee; margin-bottom: 4px; }
-    .precio-small { font-size: 13px; color: #4ade80; margin-bottom: 12px; }
+    /* Layout */
+    .page-grid { max-width: 1100px; margin: 0 auto; padding: 20px 16px 100px;
+      display: grid; grid-template-columns: 1fr; gap: 24px; }
+    @media(min-width:760px) {
+      .gallery-main { height: 440px; }
+      .page-grid { grid-template-columns: 1fr 340px; }
+    }
 
-    /* ── Badges ── */
-    .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-    .badge { padding: 5px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+    /* Badges */
+    .badges { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+    .badge { padding: 4px 12px; border-radius: 7px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
     .badge-op   { background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.3); color: #22d3ee; }
     .badge-tipo { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #94a3b8; }
-    .badge-status-activa      { background: rgba(74,222,128,0.1);  border: 1px solid rgba(74,222,128,0.3);  color: #4ade80; }
-    .badge-status-negociacion { background: rgba(251,146,60,0.1);  border: 1px solid rgba(251,146,60,0.3);  color: #fb923c; }
-    .badge-status-vendida     { background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.3); color: #a78bfa; }
+    .badge-activa      { background: rgba(74,222,128,0.1);  border: 1px solid rgba(74,222,128,0.3);  color: #4ade80; }
+    .badge-negociacion { background: rgba(251,146,60,0.1);  border: 1px solid rgba(251,146,60,0.3);  color: #fb923c; }
+    .badge-vendida     { background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.3); color: #a78bfa; }
+    .badge-exclusiva   { background: rgba(251,191,36,0.1);  border: 1px solid rgba(251,191,36,0.3);  color: #fbbf24; }
 
-    /* ── Specs ── */
-    .specs { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin: 18px 0; }
-    .spec-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; padding: 12px; text-align: center; }
-    .spec-icon  { font-size: 22px; margin-bottom: 4px; }
-    .spec-label { font-size: 10px; color: #7a8899; }
-    .spec-value { font-size: 15px; font-weight: 700; color: #e8f0f9; margin-top: 2px; }
+    /* Price */
+    .precio { font-size: 28px; font-weight: 900; color: #22d3ee; line-height: 1.1; letter-spacing: -0.03em; }
 
-    /* ── Tags servicios ── */
-    .tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
-    .tag-green { background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); color: #4ade80; padding: 4px 12px; border-radius: 6px; font-size: 12px; }
-    .tag-cyan  { background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.2); color: #22d3ee; padding: 4px 12px; border-radius: 6px; font-size: 12px; }
+    /* Specs */
+    .specs { display: flex; flex-wrap: wrap; gap: 7px; margin: 14px 0; }
+    .spec-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+      background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09); border-radius: 9px;
+      color: #e2e8f0; font-size: 13px; font-weight: 600; }
 
-    /* ── Secciones ── */
-    .section { margin: 24px 0; }
-    .section-title { font-size: 12px; font-weight: 700; color: #22d3ee; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid rgba(34,211,238,0.15); }
-    .descripcion { font-size: 14px; color: #94a3b8; line-height: 1.7; white-space: pre-wrap; }
-    .ubicacion   { font-size: 14px; color: #94a3b8; line-height: 1.8; }
+    /* Tags */
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+    .tag-green { background: rgba(74,222,128,0.08);  border: 1px solid rgba(74,222,128,0.2);  color: #4ade80; padding: 4px 11px; border-radius: 6px; font-size: 12px; }
+    .tag-cyan  { background: rgba(34,211,238,0.08);  border: 1px solid rgba(34,211,238,0.2);  color: #22d3ee; padding: 4px 11px; border-radius: 6px; font-size: 12px; }
 
-    /* ── Botones CTA ── */
-    .cta-bar {
-      position: sticky;
-      bottom: 0;
-      background: rgba(13,15,31,0.95);
-      backdrop-filter: blur(8px);
-      border-top: 1px solid rgba(255,255,255,0.07);
-      padding: 14px 16px;
-      display: flex;
-      gap: 10px;
-    }
-    .btn-wa { flex: 1; padding: 14px; background: #25D366; color: #fff; font-weight: 700; font-size: 14px; border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .btn-link { flex: 1; padding: 14px; background: rgba(34,211,238,0.12); border: 1px solid rgba(34,211,238,0.3); color: #22d3ee; font-weight: 700; font-size: 14px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    /* Secciones */
+    .section { margin: 20px 0; }
+    .section-title { font-size: 11px; font-weight: 700; color: #22d3ee; text-transform: uppercase;
+      letter-spacing: 0.08em; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid rgba(34,211,238,0.15); }
+    .desc-text { font-size: 14px; color: #94a3b8; line-height: 1.75; white-space: pre-wrap;
+      display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+    .desc-text.expanded { -webkit-line-clamp: unset; }
 
-    /* ── Loading / Error ── */
-    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 12px; color: #7a8899; }
-    .spinner { width: 36px; height: 36px; border: 3px solid rgba(34,211,238,0.15); border-top-color: #22d3ee; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    /* Map */
+    .map-wrap { border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.07); margin-top: 10px; }
+    .map-wrap iframe { display: block; width: 100%; height: 220px; border: none; }
+
+    /* Sidebar cards */
+    .sidebar { display: flex; flex-direction: column; gap: 16px; }
+    .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px; padding: 18px; }
+    .card-title { font-size: 11px; font-weight: 700; color: #22d3ee; text-transform: uppercase;
+      letter-spacing: 0.08em; margin-bottom: 12px; }
+
+    /* Agent card */
+    .agent-avatar { width: 52px; height: 52px; border-radius: 50%; background: rgba(34,211,238,0.15);
+      display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0;
+      border: 2px solid rgba(34,211,238,0.3); overflow: hidden; }
+    .agent-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .btn-wa { width: 100%; padding: 12px; background: #25D366; color: #fff; font-weight: 700; font-size: 14px;
+      border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-secondary { width: 100%; padding: 10px; background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.3);
+      color: #22d3ee; font-weight: 600; font-size: 13px; border-radius: 10px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 8px; }
+
+    /* Mortgage calc */
+    .calc-input { width: 100%; padding: 8px 10px; background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #e8f0f9;
+      font-size: 13px; outline: none; margin-bottom: 8px; }
+    .calc-result { background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.2);
+      border-radius: 10px; padding: 12px 14px; text-align: center; margin-top: 6px; }
+    .calc-value { font-size: 22px; font-weight: 900; color: #22d3ee; }
+    .calc-label { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+    /* Share buttons */
+    .share-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-share { flex: 1; min-width: 80px; padding: 9px 12px; border-radius: 8px; cursor: pointer;
+      font-size: 12px; font-weight: 600; border: 1px solid; display: flex; align-items: center;
+      justify-content: center; gap: 5px; text-decoration: none; }
+
+    /* QR */
+    .qr-wrap { text-align: center; }
+    .qr-wrap img { width: 110px; height: 110px; border-radius: 10px; border: 3px solid rgba(34,211,238,0.25); margin: 0 auto 8px; }
+
+    /* Loading / Error */
+    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: 60vh; gap: 12px; color: #7a8899; }
+    .spinner { width: 36px; height: 36px; border: 3px solid rgba(34,211,238,0.15);
+      border-top-color: #22d3ee; border-radius: 50%; animation: spin 0.8s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .error-box { text-align: center; padding: 60px 20px; }
-    .error-icon { font-size: 48px; opacity: 0.4; margin-bottom: 16px; }
 
-    /* ── Mapa link ── */
-    .map-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.25); color: #60a5fa; border-radius: 8px; font-size: 12px; font-weight: 600; margin-top: 8px; cursor: pointer; }
+    /* Lightbox */
+    .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 9999;
+      display: flex; align-items: center; justify-content: center; }
+    .lightbox img { max-width: 96vw; max-height: 92vh; object-fit: contain; border-radius: 8px; }
 
-    @media (min-width: 600px) {
-      .gallery-main { height: 400px; }
-      .precio { font-size: 36px; }
-    }
+    /* CTA sticky mobile */
+    .cta-bar { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(13,15,31,0.97);
+      backdrop-filter: blur(8px); border-top: 1px solid rgba(255,255,255,0.07);
+      padding: 12px 16px; display: flex; gap: 10px; z-index: 100; }
+    @media(min-width:760px) { .cta-bar { display: none; } }
   </style>
 </head>
 <body>
-  <!-- Barra de marca -->
   <div class="brand-bar">
     <span class="brand-name">NEXUS OS</span>
     <span class="brand-url">nexus-os-chi.vercel.app</span>
   </div>
 
-  <!-- Contenido dinámico -->
   <div id="root">
-    <div class="loading">
-      <div class="spinner"></div>
-      <span>Cargando ficha...</span>
-    </div>
+    <div class="loading"><div class="spinner"></div><span>Cargando ficha...</span></div>
   </div>
 
-  <!-- CTA fijo -->
+  <!-- CTA mobile sticky -->
   <div class="cta-bar" id="cta-bar" style="display:none;">
-    <button class="btn-wa" id="btn-wa">
-      <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-      Contactar por WhatsApp
+    <button class="btn-wa" id="btn-wa-mob" style="flex:2;">
+      <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      WhatsApp
     </button>
-    <button class="btn-link" id="btn-copy">
-      🔗 Copiar link
-    </button>
+    <button class="btn-secondary" id="btn-copy-mob" style="flex:1;margin-top:0;">🔗 Copiar</button>
   </div>
 
   <script>
-    const SUPABASE_URL  = '%VITE_SUPABASE_URL%'
-    const SUPABASE_KEY  = '%VITE_SUPABASE_ANON_KEY%'
+    const SUPABASE_URL = '%VITE_SUPABASE_URL%'
+    const SUPABASE_KEY = '%VITE_SUPABASE_ANON_KEY%'
 
-    const TIPO_ICONS = {casa:'🏠',depto:'🏢',terreno:'🌿',lote:'📐',bodega:'🏭',local:'🏪',nave:'🏗️'}
-    const TIPO_NAMES = {casa:'Casa',depto:'Departamento',terreno:'Terreno',lote:'Lote',bodega:'Bodega',local:'Local Comercial',nave:'Nave Industrial'}
-    const STATUS_NAMES = {captacion:'Captación',activa:'Activa',negociacion:'En negociación',vendida:'Vendida',cancelada:'Cancelada'}
-    const STATUS_CLASS = {activa:'badge-status-activa',negociacion:'badge-status-negociacion',vendida:'badge-status-vendida'}
+    const TIPO_ICONS  = {casa:'🏠',depto:'🏢',terreno:'🌿',lote:'📐',bodega:'🏭',local:'🏪',nave:'🏗️'}
+    const TIPO_NAMES  = {casa:'Casa',depto:'Departamento',terreno:'Terreno',lote:'Lote',bodega:'Bodega',local:'Local Comercial',nave:'Nave Industrial'}
+    const STATUS_NAME = {captacion:'Captación',activa:'Activa',negociacion:'En negociación',vendida:'Vendida',cancelada:'Cancelada'}
+    const STATUS_CLS  = {activa:'badge-activa',negociacion:'badge-negociacion',vendida:'badge-vendida'}
 
-    function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+    const SERV_LIST = [
+      ['agua','💧 Agua'],['luz','⚡ Luz'],['drenaje','🚿 Drenaje'],
+      ['gas','🔥 Gas'],['gas_natural','🔥 Gas natural'],['gas_tanque','🛢 Gas tanque'],
+      ['internet','📶 Internet'],['internet_fibra','⚡ Fibra óptica'],
+      ['cable_tv','📺 Cable TV'],['seguridad_24h','🛡 Seguridad 24h'],
+    ]
+    const AMEN_LIST = [
+      ['alberca','🏊 Alberca'],['jacuzzi','🛁 Jacuzzi'],['gym','🏋 Gym'],
+      ['elevador','🛗 Elevador'],['roof_garden','🌇 Roof garden'],['jardin','🌿 Jardín'],
+      ['terraza','🪴 Terraza'],['asador_bbq','🔥 Asador BBQ'],['salon_eventos','🎉 Salón eventos'],
+      ['area_juegos','🎠 Área juegos'],['cine_privado','🎬 Cine privado'],['lobby','🏛 Lobby'],
+      ['concierge','🧑‍💼 Concierge'],['cctv','📹 CCTV'],['porton_electrico','🚗 Portón eléctrico'],
+      ['cisterna','💧 Cisterna'],['panel_solar','☀️ Panel solar'],['bodega_ext','📦 Bodega'],
+      ['cuarto_servicio','🧹 C. servicio'],['vigilancia','🔒 Vigilancia'],['amueblado','🪑 Amueblado'],
+    ]
+
+    let _currentFotos = []
+    let _currentIdx   = 0
+    let _prop         = null
+
+    function esc(s)  { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
     function fmt$(n, mon='MXN') {
       if (!n && n!==0) return 'A consultar'
       const v = Number(n)
       return mon==='USD' ? 'USD '+v.toLocaleString('es-MX',{maximumFractionDigits:0}) : '$'+v.toLocaleString('es-MX',{maximumFractionDigits:0})
     }
     function fmtM2(n){ return n ? Number(n).toLocaleString('es-MX',{maximumFractionDigits:1})+' m²' : null }
+    function precioLabel(p) {
+      if (p.precio_venta && p.precio_renta) return fmt$(p.precio_venta,p.moneda)+' / '+fmt$(p.precio_renta,p.moneda)+'/mes'
+      if (p.precio_venta) return fmt$(p.precio_venta,p.moneda)
+      if (p.precio_renta) return fmt$(p.precio_renta,p.moneda)+'/mes'
+      return 'Precio a consultar'
+    }
+    function ytId(url) {
+      if (!url) return null
+      const m = url.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/)
+      return m?.[1] || null
+    }
 
     async function fetchProp(id) {
       const res  = await fetch(`${SUPABASE_URL}/rest/v1/properties?id=eq.${id}&select=*`, {
-        headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }
+        headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer '+SUPABASE_KEY }
       })
-      const data = await res.json()
-      return data?.[0] || null
+      return (await res.json())?.[0] || null
     }
 
-    function precioLabel(p) {
-      if (p.precio_venta && p.precio_renta) return fmt$(p.precio_venta,p.moneda) + ' / ' + fmt$(p.precio_renta,p.moneda) + '/mes'
-      if (p.precio_venta) return fmt$(p.precio_venta, p.moneda)
-      if (p.precio_renta) return fmt$(p.precio_renta, p.moneda) + '/mes'
-      return 'Precio a consultar'
+    // ── Calculadora hipotecaria ──────────────────────────────────────────────
+    function calcMort() {
+      const precio   = parseFloat(document.getElementById('calc-precio')?.value  || 0)
+      const enganche = parseFloat(document.getElementById('calc-enganche')?.value || 20)
+      const plazo    = parseFloat(document.getElementById('calc-plazo')?.value    || 20)
+      const tasa     = parseFloat(document.getElementById('calc-tasa')?.value     || 11.5)
+      if (!precio || precio <= 0) return
+      const P = precio * (1 - enganche / 100)
+      const r = tasa / 100 / 12
+      const n = plazo * 12
+      const M = r === 0 ? P / n : P * (r * Math.pow(1+r, n)) / (Math.pow(1+r, n) - 1)
+      const mensual = Math.floor(M * 100) / 100   // floor a 2 decimales
+      document.getElementById('calc-result').innerHTML =
+        `<div class="calc-value">${fmt$(mensual)}/mes</div>
+         <div class="calc-label">Enganche: ${fmt$(Math.floor(precio * enganche / 100 * 100)/100)} · Financiado: ${fmt$(Math.floor(P*100)/100)}</div>`
     }
+    window.calcMort = calcMort
 
+    // ── Galería ──────────────────────────────────────────────────────────────
+    function galleryJump(idx) {
+      if (!_currentFotos.length) return
+      _currentIdx = ((idx % _currentFotos.length) + _currentFotos.length) % _currentFotos.length
+      const main  = document.getElementById('gallery-main')
+      const badge = document.getElementById('gallery-badge')
+      if (main)  main.src = _currentFotos[_currentIdx].url || _currentFotos[_currentIdx].thumb_url
+      if (badge) badge.textContent = (_currentIdx+1)+'/'+_currentFotos.length
+      document.querySelectorAll('.gallery-thumbs img').forEach((t,i) => {
+        t.classList.toggle('active', i === _currentIdx)
+      })
+    }
+    window.galleryJump = galleryJump
+    window.galleryNav  = (d) => galleryJump(_currentIdx + d)
+
+    function openLightbox(idx) {
+      _currentIdx = idx
+      const lb = document.createElement('div')
+      lb.className = 'lightbox'
+      lb.onclick   = () => { lb.remove(); document.removeEventListener('keydown', _lbKey) }
+      lb.innerHTML = `<img src="${esc(_currentFotos[idx]?.url||_currentFotos[idx]?.thumb_url||'')}" alt="Foto ${idx+1}"/>`
+      document.body.appendChild(lb)
+      const _lbKey = (e) => {
+        if (e.key==='ArrowRight') galleryJump(_currentIdx+1)
+        if (e.key==='ArrowLeft')  galleryJump(_currentIdx-1)
+        if (e.key==='Escape')     { lb.remove(); document.removeEventListener('keydown', _lbKey) }
+      }
+      document.addEventListener('keydown', _lbKey)
+    }
+    window.openLightbox = openLightbox
+
+    // ── Render ───────────────────────────────────────────────────────────────
     function render(p) {
-      const fotos   = p.fotos || []
+      _prop       = p
+      _currentFotos = p.fotos || []
+      _currentIdx   = 0
+
       const tipo    = p.tipo || 'casa'
       const ops     = p.operacion || []
       const precio  = precioLabel(p)
       const ubicFull = [p.calle, p.numero].filter(Boolean).join(' ')
       const ubicCity = [p.colonia, p.municipio, p.estado_rep].filter(Boolean).join(', ')
-      const title   = p.titulo || ((TIPO_NAMES[tipo]||tipo) + (p.colonia ? ' en ' + p.colonia : ''))
+      const title   = p.titulo || ((TIPO_NAMES[tipo]||tipo)+(p.colonia?' en '+p.colonia:''))
+      const videoYT = ytId(p.video_url)
+      const fotos   = _currentFotos
+
+      // Agent data from URL agent param or localStorage (app can pass as query)
+      const agNombre  = new URLSearchParams(location.search).get('ag_nombre') || ''
+      const agTel     = new URLSearchParams(location.search).get('ag_tel')    || ''
+      const agEmail   = new URLSearchParams(location.search).get('ag_email')  || ''
+      const agAgencia = new URLSearchParams(location.search).get('ag_agencia')|| 'Nexus OS Inmobiliario'
 
       // OG tags
-      document.title = title + ' — Nexus OS'
-      document.getElementById('og-title').content       = title + ' · ' + precio
+      document.title = title+' — Nexus OS'
+      document.getElementById('og-title').content       = title+' · '+precio
       document.getElementById('og-description').content = [ubicCity, ops.join('/').toUpperCase(), precio].filter(Boolean).join(' · ')
       document.getElementById('og-url').content         = location.href
-      if (fotos[0]) document.getElementById('og-image').content = fotos[0].url || fotos[0].thumb_url || ''
+      if (fotos[0]) document.getElementById('og-image').content = fotos[0].url||fotos[0].thumb_url||''
 
       const specs = [
-        p.recamaras        ? {icon:'🛏', label:'Recámaras',  val: p.recamaras}        : null,
-        p.banos            ? {icon:'🚿', label:'Baños',       val: p.banos}            : null,
-        p.medios_banos     ? {icon:'🚽', label:'Medios b.',   val: p.medios_banos}     : null,
-        p.estacionamientos ? {icon:'🚗', label:'Estac.',      val: p.estacionamientos} : null,
-        p.pisos            ? {icon:'🏗', label:'Pisos',       val: p.pisos}            : null,
-        p.sup_construida   ? {icon:'📐', label:'Construida',  val: fmtM2(p.sup_construida)} : null,
-        p.sup_terreno      ? {icon:'🌿', label:'Terreno',     val: fmtM2(p.sup_terreno)}    : null,
-        p.antiguedad_anios ? {icon:'📅', label:'Antigüedad',  val: p.antiguedad_anios + ' años'} : null,
-      ].filter(Boolean)
+        p.recamaras        ? `<span class="spec-pill">🛏 ${p.recamaras} rec.</span>`                                : '',
+        p.banos            ? `<span class="spec-pill">🚿 ${p.banos} baño${p.banos!==1?'s':''}</span>`             : '',
+        p.medios_banos     ? `<span class="spec-pill">🚽 ${p.medios_banos} ½</span>`                               : '',
+        p.estacionamientos ? `<span class="spec-pill">🚗 ${p.estacionamientos} auto${p.estacionamientos!==1?'s':''}</span>` : '',
+        p.pisos            ? `<span class="spec-pill">🏗 ${p.pisos} nivel${p.pisos!==1?'es':''}</span>`            : '',
+        p.sup_construida   ? `<span class="spec-pill">📐 ${fmtM2(p.sup_construida)} const.</span>`                 : '',
+        p.sup_terreno      ? `<span class="spec-pill">🌿 ${fmtM2(p.sup_terreno)} terreno</span>`                   : '',
+        p.antiguedad_anios ? `<span class="spec-pill">📅 ${p.antiguedad_anios} años</span>`                        : '',
+      ].filter(Boolean).join('')
 
-      const servicios  = ['agua','luz','drenaje','gas','internet'].filter(k=>p[k])
-      const amenidades = ['alberca','jardin','roof_garden','bodega_ext','cuarto_servicio','vigilancia'].filter(k=>p[k])
-      const servLabels = {agua:'💧 Agua',luz:'⚡ Luz',drenaje:'🚿 Drenaje',gas:'🔥 Gas',internet:'📶 Internet'}
-      const amenLabels = {alberca:'🏊 Alberca',jardin:'🌿 Jardín',roof_garden:'🌇 Roof garden',bodega_ext:'📦 Bodega',cuarto_servicio:'🧹 C. servicio',vigilancia:'🔒 Vigilancia'}
+      const servicios  = SERV_LIST.filter(([k])=>p[k]).map(([,l])=>`<span class="tag-green">${l}</span>`).join('')
+      const amenidades = AMEN_LIST.filter(([k])=>p[k]).map(([,l])=>`<span class="tag-cyan">${l}</span>`).join('')
+
+      const mapSrc = p.lat && p.lng
+        ? `https://maps.google.com/maps?q=${p.lat},${p.lng}&z=15&output=embed`
+        : (ubicFull||ubicCity) ? `https://maps.google.com/maps?q=${encodeURIComponent([ubicFull,ubicCity].filter(Boolean).join(', '))}&output=embed` : null
+
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(location.href)}&size=110x110&margin=4&color=0d1627&bgcolor=ffffff`
 
       document.getElementById('root').innerHTML = `
-        <div class="container">
-          <!-- Cabecera -->
-          <div style="padding:20px 0 8px;">
+
+        <!-- ═══ GALERÍA ═══════════════════════════════════════════════════════ -->
+        ${fotos.length ? `
+          <div class="gallery-wrap">
+            <img id="gallery-main" class="gallery-main" src="${esc(fotos[0].url||fotos[0].thumb_url)}"
+              alt="${esc(title)}" onclick="openLightbox(${_currentIdx})"/>
+            <span id="gallery-badge" class="gallery-badge">📷 1/${fotos.length}</span>
+            ${fotos.length>1 ? `
+              <button class="gallery-nav prev" onclick="galleryNav(-1)">‹</button>
+              <button class="gallery-nav next" onclick="galleryNav(1)">›</button>` : ''}
+            ${p.video_url ? `
+              <a href="${esc(p.video_url)}" target="_blank" rel="noopener"
+                style="position:absolute;bottom:12px;left:12px;background:rgba(220,38,38,0.9);color:#fff;
+                font-size:12px;font-weight:700;padding:6px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;">
+                ▶ Video
+              </a>` : ''}
+          </div>
+          ${fotos.length>1 ? `
+            <div class="gallery-thumbs">
+              ${fotos.map((f,i)=>`<img src="${esc(f.thumb_url||f.url)}" class="${i===0?'active':''}"
+                onclick="galleryJump(${i})" alt="Foto ${i+1}"/>`).join('')}
+            </div>` : ''}
+        ` : `<div class="no-photo">${esc(TIPO_ICONS[tipo]||'🏠')}</div>`}
+
+        <!-- YouTube embed si hay video YT -->
+        ${videoYT ? `
+          <div class="yt-embed">
+            <iframe src="https://www.youtube.com/embed/${videoYT}?rel=0&modestbranding=1"
+              title="Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen></iframe>
+          </div>` : ''}
+
+        <!-- ═══ GRID PRINCIPAL ════════════════════════════════════════════════ -->
+        <div class="page-grid">
+
+          <!-- ── Columna izquierda ── -->
+          <div>
+            <!-- Cabecera -->
             <div class="badges">
               <span class="badge badge-tipo">${esc(TIPO_ICONS[tipo]||'🏠')} ${esc(TIPO_NAMES[tipo]||tipo)}</span>
               ${ops.map(op=>`<span class="badge badge-op">${esc(op.toUpperCase())}</span>`).join('')}
-              ${p.status && p.status!=='captacion' ? `<span class="badge ${STATUS_CLASS[p.status]||''}">${esc(STATUS_NAMES[p.status]||p.status)}</span>` : ''}
+              ${p.status && p.status!=='captacion' ? `<span class="badge ${STATUS_CLS[p.status]||''}">${esc(STATUS_NAME[p.status]||p.status)}</span>` : ''}
+              ${p.exclusiva ? `<span class="badge badge-exclusiva">⭐ Exclusiva</span>` : ''}
             </div>
             <h1 style="font-size:22px;font-weight:800;line-height:1.3;margin-bottom:6px;">${esc(title)}</h1>
-            <div style="font-size:13px;color:#7a8899;">📍 ${esc(ubicFull ? ubicFull + ', ' : '')}${esc(ubicCity)}</div>
-          </div>
+            <div style="font-size:13px;color:#7a8899;margin-bottom:14px;">📍 ${esc(ubicFull ? ubicFull+', ' : '')}${esc(ubicCity)}</div>
 
-          <!-- Galería -->
-          ${fotos.length ? `
-            <div class="gallery-wrap">
-              <img id="gallery-main" class="gallery-main" src="${esc(fotos[0].url||fotos[0].thumb_url)}" alt="${esc(title)}"/>
-              ${fotos.length > 1 ? `
-                <div class="gallery-thumbs">
-                  ${fotos.map((f,i)=>`
-                    <img src="${esc(f.thumb_url||f.url)}" class="${i===0?'active':''}"
-                      onclick="selectThumb(this,'${esc(f.url||f.thumb_url)}')" alt="Foto ${i+1}"/>
-                  `).join('')}
-                </div>` : ''}
-            </div>` :
-            `<div class="no-photo">${esc(TIPO_ICONS[tipo]||'🏠')}</div>`
-          }
+            <!-- Precio + specs -->
+            <div class="precio">${esc(precio)}</div>
+            ${p.sup_construida && p.precio_venta ? `<div style="font-size:12px;color:#64748b;margin-top:3px;">$${Math.floor(p.precio_venta/p.sup_construida).toLocaleString('es-MX')}/m² construido</div>` : ''}
+            ${p.precio_negociable ? `<div style="font-size:12px;color:#4ade80;margin-top:4px;">✓ Precio negociable</div>` : ''}
+            <div class="specs">${specs}</div>
 
-          <!-- Precio -->
-          <div class="precio">${esc(precio)}</div>
-          ${p.precio_negociable ? `<div class="precio-small">✓ Precio negociable</div>` : ''}
+            <!-- Servicios + Amenidades -->
+            ${servicios||amenidades ? `<div class="tags">${servicios}${amenidades}</div>` : ''}
 
-          <!-- Specs -->
-          ${specs.length ? `
-            <div class="specs">
-              ${specs.map(s=>`
-                <div class="spec-item">
-                  <div class="spec-icon">${s.icon}</div>
-                  <div class="spec-label">${esc(s.label)}</div>
-                  <div class="spec-value">${esc(String(s.val))}</div>
-                </div>`).join('')}
-            </div>` : ''}
+            <!-- Descripción -->
+            ${p.descripcion ? `
+              <div class="section">
+                <div class="section-title">Descripción</div>
+                <p class="desc-text" id="desc-txt">${esc(p.descripcion)}</p>
+                <button onclick="const el=document.getElementById('desc-txt');el.classList.toggle('expanded');this.textContent=el.classList.contains('expanded')?'Ver menos ▴':'Ver más ▾'"
+                  style="background:none;border:none;color:#22d3ee;font-size:12px;cursor:pointer;padding:4px 0;margin-top:4px;">Ver más ▾</button>
+              </div>` : ''}
 
-          <!-- Servicios + Amenidades -->
-          ${servicios.length || amenidades.length ? `
-            <div class="tags">
-              ${servicios.map(k=>`<span class="tag-green">${esc(servLabels[k])}</span>`).join('')}
-              ${amenidades.map(k=>`<span class="tag-cyan">${esc(amenLabels[k])}</span>`).join('')}
-            </div>` : ''}
+            <!-- Álbum de fotos -->
+            ${p.album_fotos_url ? `
+              <div style="margin-bottom:16px;">
+                <a href="${esc(p.album_fotos_url)}" target="_blank" rel="noopener"
+                  style="display:inline-flex;align-items:center;gap:7px;padding:9px 16px;
+                  background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);color:#fbbf24;
+                  border-radius:9px;text-decoration:none;font-size:13px;font-weight:600;">
+                  📷 Ver álbum completo de fotos
+                </a>
+              </div>` : ''}
 
-          <!-- Descripción -->
-          ${p.descripcion ? `
+            <!-- Tour virtual -->
+            ${p.tour_url ? `
+              <div style="margin-bottom:16px;">
+                <a href="${esc(p.tour_url)}" target="_blank" rel="noopener"
+                  style="display:inline-flex;align-items:center;gap:7px;padding:9px 16px;
+                  background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;
+                  border-radius:9px;text-decoration:none;font-size:13px;font-weight:600;">
+                  🌐 Tour virtual 360°
+                </a>
+              </div>` : ''}
+
+            <!-- Mapa -->
             <div class="section">
-              <div class="section-title">Descripción</div>
-              <p class="descripcion">${esc(p.descripcion)}</p>
-            </div>` : ''}
-
-          <!-- Ubicación -->
-          <div class="section">
-            <div class="section-title">Ubicación</div>
-            <div class="ubicacion">
-              ${ubicFull ? esc(ubicFull) + '<br>' : ''}
-              ${esc(ubicCity)}
-              ${p.referencias ? '<br><span style="color:#7a8899;font-size:13px;">'+esc(p.referencias)+'</span>' : ''}
+              <div class="section-title">Ubicación</div>
+              <div style="font-size:14px;color:#94a3b8;line-height:1.7;margin-bottom:10px;">
+                ${ubicFull ? esc(ubicFull)+'<br>' : ''}${esc(ubicCity)}
+                ${p.referencias ? `<br><span style="font-size:12px;color:#475569;font-style:italic;">${esc(p.referencias)}</span>` : ''}
+              </div>
+              ${mapSrc ? `
+                <div class="map-wrap">
+                  <iframe src="${mapSrc}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Mapa"></iframe>
+                </div>
+                <a href="https://www.google.com/maps?q=${p.lat&&p.lng ? p.lat+','+p.lng : encodeURIComponent([ubicFull,ubicCity].filter(Boolean).join(', '))}" target="_blank" rel="noopener"
+                  style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:7px 14px;
+                  background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);color:#60a5fa;
+                  border-radius:8px;font-size:12px;font-weight:600;">
+                  🗺 Abrir en Google Maps ↗
+                </a>` : ''}
             </div>
-            ${(p.lat && p.lng) ? `
-              <a class="map-btn" href="https://www.google.com/maps?q=${p.lat},${p.lng}" target="_blank" rel="noopener">
-                🗺 Ver en Google Maps
-              </a>` : ''}
+
+            <!-- Folio -->
+            <div style="font-size:11px;color:#4b5563;margin-top:24px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.05);text-align:center;">
+              ${esc(p.folio_interno||'')} · Publicado por NEXUS OS · nexus-os-chi.vercel.app
+            </div>
           </div>
 
-          <!-- Folio -->
-          <div style="font-size:11px;color:#4b5563;text-align:center;margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.05);">
-            ${esc(p.folio_interno||'')} · Publicado por NEXUS OS · nexus-os-chi.vercel.app
-          </div>
-        </div>
+          <!-- ── Sidebar ── -->
+          <div class="sidebar">
+
+            <!-- Card Agente -->
+            <div class="card">
+              <div class="card-title">🧑‍💼 Agente</div>
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+                <div class="agent-avatar">🧑‍💼</div>
+                <div>
+                  <div style="font-size:14px;font-weight:700;color:#e8f0f9;">${esc(agNombre || p.dueno_nombre || 'Agente Nexus OS')}</div>
+                  <div style="font-size:12px;color:#64748b;margin-top:2px;">${esc(agAgencia)}</div>
+                </div>
+              </div>
+              ${(agTel||p.dueno_telefono) ? `
+                <a href="tel:${esc(agTel||p.dueno_telefono)}"
+                  style="display:flex;align-items:center;gap:7px;font-size:13px;color:#94a3b8;margin-bottom:6px;text-decoration:none;">
+                  📞 ${esc(agTel||p.dueno_telefono)}
+                </a>` : ''}
+              ${(agEmail||p.dueno_email) ? `
+                <a href="mailto:${esc(agEmail||p.dueno_email)}"
+                  style="display:flex;align-items:center;gap:7px;font-size:13px;color:#94a3b8;margin-bottom:12px;text-decoration:none;">
+                  ✉ ${esc(agEmail||p.dueno_email)}
+                </a>` : ''}
+              <button class="btn-wa" id="btn-wa-desk" style="margin-bottom:0;">
+                <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                Contactar por WhatsApp
+              </button>
+            </div>
+
+            <!-- Calculadora hipotecaria -->
+            ${p.precio_venta ? `
+              <div class="card">
+                <div class="card-title">🏦 Calculadora hipotecaria</div>
+                <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">Precio ($)</label>
+                <input class="calc-input" type="number" id="calc-precio" value="${p.precio_venta}" oninput="calcMort()"/>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                  <div>
+                    <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">Enganche %</label>
+                    <input class="calc-input" type="number" id="calc-enganche" value="20" min="0" max="99" oninput="calcMort()"/>
+                  </div>
+                  <div>
+                    <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">Plazo (años)</label>
+                    <input class="calc-input" type="number" id="calc-plazo" value="20" min="1" max="30" oninput="calcMort()"/>
+                  </div>
+                </div>
+                <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">Tasa anual %</label>
+                <input class="calc-input" type="number" id="calc-tasa" value="11.5" step="0.1" oninput="calcMort()"/>
+                <div class="calc-result" id="calc-result">
+                  <div class="calc-value">—</div>
+                  <div class="calc-label">Ingresa los datos para calcular</div>
+                </div>
+                <div style="font-size:10px;color:#475569;margin-top:6px;text-align:center;">
+                  Estimación referencial · Consulta con tu banco o INFONAVIT
+                </div>
+              </div>` : ''}
+
+            <!-- Compartir -->
+            <div class="card">
+              <div class="card-title">📤 Compartir</div>
+              <div class="share-row">
+                <a id="btn-share-wa" href="#" target="_blank"
+                  class="btn-share" style="background:rgba(37,211,102,0.1);border-color:rgba(37,211,102,0.3);color:#4ade80;">
+                  <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                  WA
+                </a>
+                <a id="btn-share-fb" href="#" target="_blank"
+                  class="btn-share" style="background:rgba(96,165,250,0.1);border-color:rgba(96,165,250,0.3);color:#60a5fa;">
+                  fb
+                </a>
+                <button id="btn-copy-desk"
+                  class="btn-share" style="background:rgba(34,211,238,0.08);border-color:rgba(34,211,238,0.25);color:#22d3ee;">
+                  🔗 Copiar
+                </button>
+              </div>
+            </div>
+
+            <!-- QR -->
+            <div class="card">
+              <div class="card-title">📲 Código QR</div>
+              <div class="qr-wrap">
+                <img src="${qrUrl}" alt="QR ficha" loading="lazy"/>
+                <div style="font-size:11px;color:#475569;">Escanea para abrir esta ficha</div>
+              </div>
+            </div>
+
+          </div><!-- /sidebar -->
+        </div><!-- /page-grid -->
       `
 
-      // Activar CTA
-      const ctaBar = document.getElementById('cta-bar')
-      if (ctaBar) ctaBar.style.display = 'flex'
+      // Activar CTA mobile
+      document.getElementById('cta-bar').style.display = 'flex'
 
-      // WhatsApp
-      document.getElementById('btn-wa').onclick = () => {
-        const msg = encodeURIComponent(
-          `Hola! Vi esta propiedad en Nexus OS:\n\n🏠 *${title}*\n💰 ${precio}\n📍 ${ubicCity}\n\n${location.href}`
-        )
-        window.open('https://api.whatsapp.com/send?text=' + msg, '_blank')
-      }
+      // Configurar WhatsApp
+      const waMsg = encodeURIComponent(`¡Hola! Vi esta propiedad:\n\n🏠 *${title}*\n💰 ${precio}\n📍 ${ubicCity}\n\n${location.href}`)
+      const waTel = agTel || p.dueno_telefono || ''
+      const waUrl = waTel
+        ? `https://wa.me/52${waTel.replace(/\D/g,'')}?text=${waMsg}`
+        : `https://api.whatsapp.com/send?text=${waMsg}`
+
+      ;['btn-wa-desk','btn-wa-mob'].forEach(id => {
+        const b = document.getElementById(id)
+        if (b) b.onclick = () => window.open(waUrl, '_blank')
+      })
+
+      // Share WA + FB
+      const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(location.href)}`
+      const shareWa = document.getElementById('btn-share-wa')
+      const shareFb = document.getElementById('btn-share-fb')
+      if (shareWa) shareWa.href = `https://api.whatsapp.com/send?text=${waMsg}`
+      if (shareFb) shareFb.href = fbUrl
 
       // Copy link
-      document.getElementById('btn-copy').onclick = () => {
-        navigator.clipboard.writeText(location.href).then(() => {
-          const btn = document.getElementById('btn-copy')
-          btn.textContent = '✅ ¡Copiado!'
-          setTimeout(() => { btn.innerHTML = '🔗 Copiar link' }, 2000)
-        })
+      function copyLink(btnId) {
+        const btn = document.getElementById(btnId)
+        if (!btn) return
+        btn.onclick = () => {
+          navigator.clipboard.writeText(location.href).then(() => {
+            const orig = btn.innerHTML
+            btn.textContent = '✅ ¡Copiado!'
+            setTimeout(() => { btn.innerHTML = orig }, 2000)
+          })
+        }
       }
-    }
+      copyLink('btn-copy-desk')
+      copyLink('btn-copy-mob')
 
-    function selectThumb(el, url) {
-      document.getElementById('gallery-main').src = url
-      document.querySelectorAll('.gallery-thumbs img').forEach(i => i.classList.remove('active'))
-      el.classList.add('active')
+      // Iniciar calculadora
+      if (p.precio_venta) setTimeout(calcMort, 100)
     }
-    window.selectThumb = selectThumb
 
     async function init() {
-      const params = new URLSearchParams(location.search)
-      const id     = params.get('id')
+      const id = new URLSearchParams(location.search).get('id')
       if (!id) {
-        document.getElementById('root').innerHTML = `
-          <div class="error-box">
-            <div class="error-icon">🏠</div>
-            <h2 style="color:#94a3b8;margin-bottom:8px;">Propiedad no encontrada</h2>
-            <p style="color:#7a8899;font-size:14px;">El link que usaste no tiene un ID válido.</p>
-          </div>`
+        document.getElementById('root').innerHTML =
+          `<div class="error-box"><div style="font-size:48px;opacity:0.4;margin-bottom:16px;">🏠</div>
+           <h2 style="color:#94a3b8;">Propiedad no encontrada</h2>
+           <p style="color:#7a8899;font-size:14px;margin-top:8px;">El link no tiene un ID válido.</p></div>`
         return
       }
       try {
         const prop = await fetchProp(id)
-        if (!prop) {
-          document.getElementById('root').innerHTML = `
-            <div class="error-box">
-              <div class="error-icon">🔍</div>
-              <h2 style="color:#94a3b8;margin-bottom:8px;">Propiedad no disponible</h2>
-              <p style="color:#7a8899;font-size:14px;">Es posible que haya sido retirada o el link esté desactualizado.</p>
-            </div>`
-          return
-        }
+        if (!prop) throw new Error('Propiedad no disponible o retirada')
         render(prop)
       } catch(e) {
-        document.getElementById('root').innerHTML = `
-          <div class="error-box">
-            <div class="error-icon">⚠️</div>
-            <h2 style="color:#94a3b8;margin-bottom:8px;">Error al cargar</h2>
-            <p style="color:#7a8899;font-size:14px;">${e.message}</p>
-          </div>`
+        document.getElementById('root').innerHTML =
+          `<div class="error-box"><div style="font-size:48px;opacity:0.4;margin-bottom:16px;">⚠️</div>
+           <h2 style="color:#94a3b8;">Error al cargar</h2>
+           <p style="color:#7a8899;font-size:14px;margin-top:8px;">${e.message}</p></div>`
       }
     }
 

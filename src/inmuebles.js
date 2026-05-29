@@ -28,6 +28,7 @@ let _propFilters = {
 }
 let _propView    = localStorage.getItem('nexus_prop_view') || 'grid'
 let _propPage    = 1
+let _inmTab      = localStorage.getItem('nexus_inm_tab')  || 'propiedades'
 const _PAGE_SIZE = 12
 let _propLoading = false
 
@@ -255,57 +256,194 @@ export function renderInmuebles() {
   const container = document.getElementById('app-content')
   if (!container) return
 
-  const filtered = _filtered()
-  const totalPages = Math.ceil(filtered.length / _PAGE_SIZE)
-  const paged = filtered.slice((_propPage - 1) * _PAGE_SIZE, _propPage * _PAGE_SIZE)
+  const filtered    = _filtered()
+  const totalPages  = Math.ceil(filtered.length / _PAGE_SIZE)
+  const paged       = filtered.slice((_propPage - 1) * _PAGE_SIZE, _propPage * _PAGE_SIZE)
 
   container.innerHTML = `
     <div style="max-width:1200px;margin:0 auto;padding:0 0 40px;">
 
-      <!-- ── Header ── -->
+      <!-- ── Módulo tabs ── -->
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
-        <div>
-          <h2 style="font-size:20px;font-weight:800;color:#e8f0f9;margin:0;letter-spacing:-0.02em;">🏠 Inmuebles</h2>
-          <p style="font-size:12px;color:#7a8899;margin:4px 0 0;">${_props.length} propiedades · ${filtered.length} en vista</p>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <!-- Toggle vista -->
-          <div style="display:flex;background:rgba(255,255,255,0.05);border-radius:8px;padding:2px;">
-            <button onclick="propSetView('grid')"
-              style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;
-              background:${_propView==='grid'?'rgba(34,211,238,0.15)':'transparent'};
-              color:${_propView==='grid'?'#22d3ee':'#7a8899'};">
-              ⊞ Grid
-            </button>
-            <button onclick="propSetView('lista')"
-              style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;
-              background:${_propView==='lista'?'rgba(34,211,238,0.15)':'transparent'};
-              color:${_propView==='lista'?'#22d3ee':'#7a8899'};">
-              ☰ Lista
-            </button>
-          </div>
-          <button onclick="openPropModal()"
-            style="padding:8px 18px;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#0d0f1f;
-            font-weight:700;border:none;border-radius:10px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;">
-            + Captar inmueble
+        <div style="display:flex;gap:0;background:rgba(255,255,255,0.04);border-radius:10px;padding:3px;border:1px solid rgba(255,255,255,0.07);">
+          <button onclick="inmSetTab('propiedades')"
+            style="padding:8px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.15s;
+            background:${_inmTab==='propiedades'?'rgba(34,211,238,0.18)':'transparent'};
+            color:${_inmTab==='propiedades'?'#22d3ee':'#64748b'};">
+            🏘 Propiedades
+          </button>
+          <button onclick="inmSetTab('tramites')"
+            style="padding:8px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.15s;
+            background:${_inmTab==='tramites'?'rgba(167,139,250,0.18)':'transparent'};
+            color:${_inmTab==='tramites'?'#a78bfa':'#64748b'};">
+            📋 Trámites
           </button>
         </div>
+        ${_inmTab === 'propiedades' ? `
+          <div style="display:flex;gap:8px;align-items:center;">
+            <div style="display:flex;background:rgba(255,255,255,0.05);border-radius:8px;padding:2px;">
+              <button onclick="propSetView('grid')"
+                style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;
+                background:${_propView==='grid'?'rgba(34,211,238,0.15)':'transparent'};
+                color:${_propView==='grid'?'#22d3ee':'#7a8899'};">⊞ Grid</button>
+              <button onclick="propSetView('lista')"
+                style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;
+                background:${_propView==='lista'?'rgba(34,211,238,0.15)':'transparent'};
+                color:${_propView==='lista'?'#22d3ee':'#7a8899'};">☰ Lista</button>
+            </div>
+            <button onclick="openPropModal()"
+              style="padding:8px 18px;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#0d0f1f;
+              font-weight:700;border:none;border-radius:10px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;">
+              + Captar inmueble
+            </button>
+          </div>` : ''}
       </div>
 
-      <!-- ── Filtros ── -->
-      ${_renderFilters(filtered.length)}
+      ${_inmTab === 'tramites' ? _renderTramites() : `
+        <!-- ── Filtros ── -->
+        ${_renderFilters(filtered.length)}
+        <!-- ── KPIs rápidos ── -->
+        ${_renderKpis()}
+        <!-- ── Contenido ── -->
+        ${_propLoading ? _loadingSkeleton() : (
+          paged.length === 0 ? _emptyState() :
+          _propView === 'grid' ? _renderGrid(paged) : _renderLista(paged)
+        )}
+        <!-- ── Paginación ── -->
+        ${totalPages > 1 ? _renderPagination(totalPages) : ''}
+      `}
+    </div>
+  `
+}
 
-      <!-- ── KPIs rápidos ── -->
-      ${_renderKpis()}
+// ─── Render: tab Trámites ──────────────────────────────────────────────────────
+function _renderTramites() {
+  // Secciones estilo Par de Santos
+  const CAMPO_FORMS = [
+    { name:'Registro de Campo',     desc:'Captura de leads en campo (prospectos)',         url:'https://forms.gle/6QVv7DeM763Gz9HJA' },
+    { name:'Registro de Propiedad', desc:'Alta de propiedad desde campo con fotos',        url:'https://forms.gle/3ULqTMBdCvJVtZqF8' },
+  ]
+  const RECURSOS = [
+    { name:'Drive Corporativo',   icon:'📁', url:'https://drive.google.com' },
+    { name:'Google Fotos',        icon:'📷', url:'https://photos.google.com' },
+    { name:'Logo y Marca',        icon:'🎨', url:'https://sites.google.com/view/pardesantos' },
+    { name:'Papelería',           icon:'📄', url:'https://sites.google.com/view/pardesantos' },
+  ]
 
-      <!-- ── Contenido ── -->
-      ${_propLoading ? _loadingSkeleton() : (
-        paged.length === 0 ? _emptyState() :
-        _propView === 'grid' ? _renderGrid(paged) : _renderLista(paged)
-      )}
+  // Plantillas por categoría
+  const cats = [
+    { key:'captacion',  label:'Captación',        color:'#22d3ee', icon:'📋',
+      tpls: window._INMUEBLES_TEMPLATES?.filter(t=>t.cat==='captacion') || [] },
+    { key:'negociacion',label:'Negociación',       color:'#fb923c', icon:'🤝',
+      tpls: window._INMUEBLES_TEMPLATES?.filter(t=>t.cat==='negociacion') || [] },
+    { key:'profeco',    label:'Contratos PROFECO', color:'#a78bfa', icon:'📜',
+      tpls: window._INMUEBLES_TEMPLATES?.filter(t=>t.cat==='profeco') || [] },
+  ]
 
-      <!-- ── Paginación ── -->
-      ${totalPages > 1 ? _renderPagination(totalPages) : ''}
+  return `
+    <!-- Header Trámites -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h3 style="margin:0;font-size:18px;font-weight:800;color:#e8f0f9;">📋 Biblioteca de Trámites</h3>
+        <p style="font-size:12px;color:#64748b;margin:4px 0 0;">Documentos legales inmobiliarios · metodología Par de Santos</p>
+      </div>
+      <a href="https://sites.google.com/view/pardesantos" target="_blank" rel="noopener"
+        style="display:inline-flex;align-items:center;gap:7px;padding:8px 16px;
+        background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;
+        border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">
+        🔗 Ver originales Par de Santos
+      </a>
+    </div>
+
+    <!-- ── CAMPO ── -->
+    <div style="margin-bottom:28px;">
+      <div style="font-size:10px;font-weight:800;color:#22d3ee;text-transform:uppercase;letter-spacing:0.1em;
+      margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+        <span style="background:rgba(34,211,238,0.15);padding:3px 10px;border-radius:4px;">🏠 CAMPO</span>
+        <span style="flex:1;height:1px;background:rgba(34,211,238,0.15);"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">
+        <!-- Captar propiedad rápido -->
+        <div onclick="openPropModal()" style="cursor:pointer;padding:14px 16px;background:rgba(34,211,238,0.06);
+          border:1px solid rgba(34,211,238,0.2);border-radius:12px;display:flex;align-items:center;gap:12px;transition:all 0.15s;"
+          onmouseover="this.style.background='rgba(34,211,238,0.12)'" onmouseout="this.style.background='rgba(34,211,238,0.06)'">
+          <div style="width:38px;height:38px;background:rgba(34,211,238,0.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">🏠</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#e2e8f0;">Captar inmueble</div>
+            <div style="font-size:11px;color:#64748b;margin-top:2px;">Alta rápida en Nexus OS</div>
+          </div>
+        </div>
+        ${CAMPO_FORMS.map(f=>`
+          <a href="${f.url}" target="_blank" rel="noopener"
+            style="padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);
+            border-radius:12px;display:flex;align-items:center;gap:12px;text-decoration:none;transition:all 0.15s;"
+            onmouseover="this.style.background='rgba(255,255,255,0.07)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+            <div style="width:38px;height:38px;background:rgba(74,222,128,0.12);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;">📝</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#e2e8f0;">${f.name}</div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px;">${f.desc}</div>
+            </div>
+            <span style="margin-left:auto;font-size:11px;color:#22d3ee;opacity:0.6;">↗</span>
+          </a>`).join('')}
+      </div>
+    </div>
+
+    <!-- ── OFICINA — secciones por categoría ── -->
+    ${cats.map(cat=>`
+      <div style="margin-bottom:28px;">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;
+        color:${cat.color};margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+          <span style="background:${cat.color}18;padding:3px 10px;border-radius:4px;">${cat.icon} OFICINA · ${cat.label.toUpperCase()}</span>
+          <span style="flex:1;height:1px;background:${cat.color}25;"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
+          ${cat.tpls.length ? cat.tpls.map(tpl=>`
+            <div style="padding:14px 16px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);
+              border-radius:12px;display:flex;flex-direction:column;gap:8px;">
+              <div style="display:flex;align-items:flex-start;gap:10px;">
+                <div style="width:36px;height:36px;background:${cat.color}15;border-radius:9px;
+                  display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;">${cat.icon}</div>
+                <div style="min-width:0;">
+                  <div style="font-size:13px;font-weight:700;color:#e2e8f0;line-height:1.3;">${tpl.name}</div>
+                  ${tpl.desc?`<div style="font-size:11px;color:#64748b;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${tpl.desc}</div>`:''}
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:2px;">
+                <button onclick="docPreviewFromLib('${tpl.id}')"
+                  style="flex:1;padding:7px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+                  color:#94a3b8;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;">
+                  👁 Vista previa
+                </button>
+                <button onclick="docCreateFromLib('${tpl.id}')"
+                  style="flex:1;padding:7px 10px;background:${cat.color}15;border:1px solid ${cat.color}40;
+                  color:${cat.color};border-radius:8px;cursor:pointer;font-size:11px;font-weight:700;">
+                  ✚ Crear
+                </button>
+              </div>
+            </div>`).join('')
+          : `<div style="color:#475569;font-size:12px;padding:12px;grid-column:1/-1;">
+              Cargando plantillas... <span style="font-size:11px;">(asegúrate de haber entrado al módulo)</span>
+            </div>`}
+        </div>
+      </div>`).join('')}
+
+    <!-- ── RECURSOS ── -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:10px;font-weight:800;color:#fbbf24;text-transform:uppercase;letter-spacing:0.1em;
+      margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+        <span style="background:rgba(251,191,36,0.15);padding:3px 10px;border-radius:4px;">🎨 RECURSOS Y DISEÑO</span>
+        <span style="flex:1;height:1px;background:rgba(251,191,36,0.15);"></span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${RECURSOS.map(r=>`
+          <a href="${r.url}" target="_blank" rel="noopener"
+            style="display:inline-flex;align-items:center;gap:7px;padding:8px 14px;
+            background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;
+            border-radius:8px;text-decoration:none;font-size:12px;transition:all 0.15s;"
+            onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">
+            ${r.icon} ${r.name} <span style="opacity:0.4;font-size:10px;">↗</span>
+          </a>`).join('')}
+      </div>
     </div>
   `
 }
@@ -769,26 +907,59 @@ export function openPropModal(id = null) {
 
         <!-- ── Sección: Servicios y Amenidades ── -->
         <div style="margin-bottom:22px;">
-          <div style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">
-            Servicios básicos
+          <div style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">
+            Servicios
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
-            ${[['agua','💧 Agua'],['luz','⚡ Luz'],['drenaje','🚿 Drenaje'],['gas','🔥 Gas'],['internet','📶 Internet']].map(([k,l])=>`
-              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:#94a3b8;">
-                <input type="checkbox" id="prop-${k}" ${valB(k)?'checked':''}
-                  style="accent-color:#22d3ee;width:15px;height:15px;"/>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:16px;">
+            ${[
+              ['agua',         '💧 Agua potable'],
+              ['luz',          '⚡ Luz eléctrica'],
+              ['drenaje',      '🚿 Drenaje'],
+              ['gas',          '🔥 Gas (genérico)'],
+              ['gas_natural',  '🔥 Gas natural'],
+              ['gas_tanque',   '🛢 Gas tanque'],
+              ['internet',     '📶 Internet'],
+              ['internet_fibra','⚡ Fibra óptica'],
+              ['cable_tv',     '📺 Cable TV'],
+              ['seguridad_24h','🛡 Seguridad 24h'],
+            ].map(([k,l])=>`
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:#94a3b8;
+              padding:7px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;">
+                <input type="checkbox" id="prop-${k.replace(/_/g,'-')}" ${valB(k)?'checked':''}
+                  style="accent-color:#22d3ee;width:14px;height:14px;flex-shrink:0;"/>
                 ${l}
               </label>`).join('')}
           </div>
-          <div style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">
+          <div style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">
             Amenidades
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:12px;">
-            ${[['alberca','🏊 Alberca'],['jardin','🌿 Jardín'],['roof_garden','🌇 Roof garden'],
-               ['bodega_ext','📦 Bodega'],['cuarto_servicio','🧹 Cuarto servicio'],['vigilancia','🔒 Vigilancia']].map(([k,l])=>`
-              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:#94a3b8;">
-                <input type="checkbox" id="prop-${k.replace('_','-')}" ${valB(k)?'checked':''}
-                  style="accent-color:#22d3ee;width:15px;height:15px;"/>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">
+            ${[
+              ['alberca',         '🏊 Alberca'],
+              ['jacuzzi',         '🛁 Jacuzzi'],
+              ['gym',             '🏋 Gym'],
+              ['elevador',        '🛗 Elevador'],
+              ['roof_garden',     '🌇 Roof garden'],
+              ['jardin',          '🌿 Jardín'],
+              ['terraza',         '🪴 Terraza'],
+              ['asador_bbq',      '🔥 Asador / BBQ'],
+              ['salon_eventos',   '🎉 Salón de eventos'],
+              ['area_juegos',     '🎠 Área de juegos'],
+              ['cine_privado',    '🎬 Cine privado'],
+              ['lobby',           '🏛 Lobby'],
+              ['concierge',       '🧑‍💼 Concierge'],
+              ['cctv',            '📹 CCTV'],
+              ['porton_electrico','🚗 Portón eléctrico'],
+              ['cisterna',        '💧 Cisterna'],
+              ['panel_solar',     '☀️ Panel solar'],
+              ['bodega_ext',      '📦 Bodega exterior'],
+              ['cuarto_servicio', '🧹 Cuarto servicio'],
+              ['vigilancia',      '🔒 Vigilancia'],
+            ].map(([k,l])=>`
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:12px;color:#94a3b8;
+              padding:7px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;">
+                <input type="checkbox" id="prop-${k.replace(/_/g,'-')}" ${valB(k)?'checked':''}
+                  style="accent-color:#22d3ee;width:14px;height:14px;flex-shrink:0;"/>
                 ${l}
               </label>`).join('')}
           </div>
@@ -1409,11 +1580,30 @@ export async function saveProp(id) {
     luz:               gb('prop-luz'),
     drenaje:           gb('prop-drenaje'),
     gas:               gb('prop-gas'),
+    gas_natural:       gb('prop-gas-natural'),
+    gas_tanque:        gb('prop-gas-tanque'),
     internet:          gb('prop-internet'),
+    internet_fibra:    gb('prop-internet-fibra'),
+    cable_tv:          gb('prop-cable-tv'),
+    seguridad_24h:     gb('prop-seguridad-24h'),
 
     alberca:           gb('prop-alberca'),
+    jacuzzi:           gb('prop-jacuzzi'),
+    gym:               gb('prop-gym'),
+    elevador:          gb('prop-elevador'),
     jardin:            gb('prop-jardin'),
     roof_garden:       gb('prop-roof-garden'),
+    terraza:           gb('prop-terraza'),
+    asador_bbq:        gb('prop-asador-bbq'),
+    salon_eventos:     gb('prop-salon-eventos'),
+    area_juegos:       gb('prop-area-juegos'),
+    cine_privado:      gb('prop-cine-privado'),
+    lobby:             gb('prop-lobby'),
+    concierge:         gb('prop-concierge'),
+    cctv:              gb('prop-cctv'),
+    porton_electrico:  gb('prop-porton-electrico'),
+    cisterna:          gb('prop-cisterna'),
+    panel_solar:       gb('prop-panel-solar'),
     bodega_ext:        gb('prop-bodega-ext'),
     cuarto_servicio:   gb('prop-cuarto-servicio'),
     vigilancia:        gb('prop-vigilancia'),
@@ -1570,6 +1760,12 @@ window.closePropModal   = ()   => closePropModal()
 window.saveProp         = (id) => saveProp(id)
 window.propHandleFiles  = (files, id) => propHandleFiles(files, id)
 window.propHandleDrop   = (e)  => propHandleDrop(e)
+
+window.inmSetTab = (tab) => {
+  _inmTab = tab
+  localStorage.setItem('nexus_inm_tab', tab)
+  renderInmuebles()
+}
 
 window.propSetView = (v) => {
   _propView = v

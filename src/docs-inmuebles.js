@@ -1013,10 +1013,18 @@ export function renderDocumentos(propId) {
 
   return `
     <div>
+      <!-- Header con link Par de Santos -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+        <div style="font-size:12px;font-weight:700;color:#7a8899;text-transform:uppercase;letter-spacing:1px;">
+          Documentos de la Propiedad</div>
+        <a href="https://sites.google.com/view/pardesantos/área-de-oficina" target="_blank" rel="noopener"
+          style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#a78bfa;text-decoration:none;
+          padding:4px 10px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);border-radius:6px;">
+          📌 Originales Par de Santos ↗
+        </a>
+      </div>
       <!-- Documentos guardados -->
       <div style="margin-bottom:20px;">
-        <div style="font-size:12px;font-weight:700;color:#7a8899;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">
-          Documentos Guardados</div>
         <div id="docs-list-${_esc(propId)}">${docList}</div>
       </div>
       <!-- Nueva plantilla -->
@@ -1239,4 +1247,226 @@ window.docDelete = async (propId, docId) => {
   } catch (err) {
     window.showToast?.('❌ Error al eliminar: ' + err.message)
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// BIBLIOTECA DE TRÁMITES — acceso desde tab raíz del módulo
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Exponer templates para _renderTramites() en inmuebles.js
+if (typeof window !== 'undefined') {
+  window._INMUEBLES_TEMPLATES = TEMPLATES
+}
+
+/** Vista previa del documento con datos en blanco */
+window.docPreviewFromLib = (templateId) => {
+  const tpl = TEMPLATES.find(t => t.id === templateId)
+  if (!tpl) return
+  const cm = CAT_META[tpl.cat] || CAT_META.captacion
+  const emptyData = Object.fromEntries(tpl.fields.map(f => [f.id, '']))
+  const html = _buildDocHTML(templateId, emptyData)
+  const filled = _fill(html, emptyData)
+
+  const overlay = document.createElement('div')
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);'
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove() }
+
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:760px;max-height:92vh;overflow-y:auto;
+    box-shadow:0 32px 100px rgba(0,0,0,0.8);display:flex;flex-direction:column;">
+      <!-- Header del preview -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;
+      background:#0e1422;border-radius:14px 14px 0 0;border-bottom:1px solid rgba(255,255,255,0.08);">
+        <div>
+          <div style="font-size:13px;font-weight:800;color:#e8f0f9;">${_esc(tpl.name)}</div>
+          <div style="font-size:11px;color:${cm.color};margin-top:2px;">${cm.icon} ${cm.label}</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button onclick="
+            const ov=this.closest('[style*=position\\:fixed]');
+            ov.remove();
+            docCreateFromLib('${templateId}');"
+            style="padding:7px 14px;background:${cm.color}20;border:1px solid ${cm.color}50;
+            color:${cm.color};border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">
+            ✚ Crear documento
+          </button>
+          <button onclick="this.closest('[style*=position\\:fixed]').remove()"
+            style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;
+            width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
+        </div>
+      </div>
+      <!-- Contenido del documento -->
+      <div style="padding:24px 32px;font-family:Arial,sans-serif;font-size:10pt;line-height:1.6;color:#000;overflow-y:auto;">
+        <style>
+          h1{font-size:13pt;font-weight:bold;text-align:center;text-transform:uppercase;margin:0 0 6pt}
+          h2{font-size:10pt;font-weight:bold;border-bottom:1px solid #ccc;padding-bottom:2pt;margin:12pt 0 4pt}
+          table{width:100%;border-collapse:collapse;margin-bottom:8pt;font-size:9pt}
+          th,td{border:0.5pt solid #ccc;padding:4pt 5pt;text-align:left}
+          th{background:#f0f0f0;font-weight:bold;width:28%}
+          .centrado{text-align:center;color:#555;font-size:9pt;margin:4pt 0 8pt}
+          p{margin:4pt 0}
+        </style>
+        ${filled}
+      </div>
+      <div style="padding:12px 20px;background:#0e1422;border-radius:0 0 14px 14px;
+      border-top:1px solid rgba(255,255,255,0.07);font-size:11px;color:#475569;text-align:center;">
+        Vista previa · Los campos en amarillo se rellenan al crear el documento
+      </div>
+    </div>`
+
+  document.body.appendChild(overlay)
+}
+
+/** Crear documento desde la biblioteca (con selector de propiedad) */
+window.docCreateFromLib = (templateId) => {
+  const tpl = TEMPLATES.find(t => t.id === templateId)
+  if (!tpl) return
+  const cm = CAT_META[tpl.cat] || CAT_META.captacion
+
+  // Obtener lista de propiedades del módulo
+  const props = window._nexusProps || []
+
+  const overlay = document.createElement('div')
+  overlay.id = 'doc-lib-overlay'
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);'
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove() }
+
+  overlay.innerHTML = `
+    <div style="background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:16px;
+    width:100%;max-width:520px;box-shadow:0 32px 100px rgba(0,0,0,0.8);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;
+      border-bottom:1px solid rgba(255,255,255,0.07);">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#e8f0f9;">${_esc(tpl.name)}</div>
+          <div style="font-size:11px;color:${cm.color};margin-top:2px;">${cm.icon} ${cm.label}</div>
+        </div>
+        <button onclick="document.getElementById('doc-lib-overlay').remove()"
+          style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;
+          width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
+      </div>
+      <div style="padding:20px 22px 22px;">
+        <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:8px;">
+          Propiedad a asociar <span style="color:#475569;">(opcional)</span>
+        </label>
+        <select id="doc-lib-prop-sel"
+          style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
+          border-radius:8px;color:#e8f0f9;font-size:13px;outline:none;margin-bottom:18px;cursor:pointer;">
+          <option value="">— Sin propiedad asociada —</option>
+          ${props.map(p=>`<option value="${p.id}">${_esc(p.folio_interno||p.id.slice(0,8))} · ${_esc(p.titulo||p.tipo||'Propiedad')}</option>`).join('')}
+        </select>
+        <button onclick="
+          const sel = document.getElementById('doc-lib-prop-sel');
+          const propId = sel?.value || '';
+          document.getElementById('doc-lib-overlay').remove();
+          if (propId) {
+            docOpenNew(propId, '${templateId}');
+          } else {
+            docOpenNewStandalone('${templateId}');
+          }"
+          style="width:100%;padding:12px;background:linear-gradient(135deg,${cm.color},${cm.color}99);
+          color:#0d0f1f;font-weight:800;border:none;border-radius:10px;cursor:pointer;font-size:14px;">
+          ✚ Continuar con este documento
+        </button>
+      </div>
+    </div>`
+
+  document.body.appendChild(overlay)
+}
+
+/** Crear documento standalone (sin propiedad) */
+window.docOpenNewStandalone = async (templateId) => {
+  const tpl = TEMPLATES.find(t => t.id === templateId)
+  if (!tpl) return
+  const emptyData = {}
+  const agData = {
+    agente_nombre:  localStorage.getItem('nexus_agent_name')   || '',
+    agente_tel:     localStorage.getItem('nexus_agent_tel')    || '',
+    agente_email:   localStorage.getItem('nexus_agent_email')  || '',
+    agente_agencia: localStorage.getItem('nexus_agent_agency') || 'Nexus OS Inmobiliario',
+    fecha_hoy:      new Date().toLocaleDateString('es-MX', { day:'numeric', month:'long', year:'numeric' }),
+    lugar:          localStorage.getItem('nexus_agent_ciudad') || '',
+  }
+  _renderDocModal(null, tpl, null, { ...emptyData, ...agData })
+}
+
+/** Renderiza el modal de edición de documento (usado tanto desde propiedad como standalone) */
+function _renderDocModal(propId, tpl, docId, prefill) {
+  const cm = CAT_META[tpl.cat] || CAT_META.captacion
+  const existing = document.getElementById('doc-edit-overlay')
+  if (existing) existing.remove()
+
+  const overlay = document.createElement('div')
+  overlay.id = 'doc-edit-overlay'
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:10001;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);'
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove() }
+
+  overlay.innerHTML = `
+    <div style="background:#0e1422;border:1px solid rgba(34,211,238,0.18);border-radius:16px;
+    width:100%;max-width:700px;max-height:92vh;overflow-y:auto;box-shadow:0 32px 100px rgba(0,0,0,0.8);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;
+      border-bottom:1px solid rgba(255,255,255,0.07);position:sticky;top:0;background:#0e1422;z-index:1;">
+        <div>
+          <div style="font-size:14px;font-weight:800;color:#e8f0f9;">${_esc(tpl.name)}</div>
+          <div style="font-size:11px;color:${cm.color};margin-top:2px;">${cm.icon} ${cm.label}</div>
+        </div>
+        <button onclick="document.getElementById('doc-edit-overlay').remove()"
+          style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;
+          width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
+      </div>
+      <div style="padding:20px 22px;">
+        ${_buildFormFields(tpl, prefill || {})}
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.07);">
+          <button onclick="docExportFromModal('${propId||''}','${tpl.id}','DOC')"
+            style="padding:9px 16px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);
+            color:#60a5fa;border-radius:9px;cursor:pointer;font-size:12px;font-weight:600;">📄 DOC</button>
+          <button onclick="docExportFromModal('${propId||''}','${tpl.id}','PDF')"
+            style="padding:9px 16px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);
+            color:#a78bfa;border-radius:9px;cursor:pointer;font-size:12px;font-weight:600;">🖨 PDF</button>
+          <button onclick="docSaveFromModal('${propId||''}','${tpl.id}','${docId||''}')"
+            style="padding:9px 20px;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#0d0f1f;
+            font-weight:800;border:none;border-radius:9px;cursor:pointer;font-size:13px;">💾 Guardar</button>
+        </div>
+      </div>
+    </div>`
+
+  document.body.appendChild(overlay)
+}
+
+window.docSaveFromModal = async (propId, templateId, docId) => {
+  const tpl    = TEMPLATES.find(t => t.id === templateId)
+  if (!tpl) return
+  const data   = {}
+  tpl.fields.forEach(f => {
+    const el = document.getElementById('doc-f-' + f.id)
+    if (el) data[f.id] = el.value || ''
+  })
+  const user = (await supabase.auth.getUser()).data.user
+  if (!user) { window.showToast?.('❌ Sin sesión'); return }
+  const payload = {
+    template_id:   templateId,
+    template_name: tpl.name,
+    data,
+    status: 'borrador',
+    user_id: user.id,
+    property_id: propId || null,
+  }
+  const { error } = docId
+    ? await supabase.from('property_documents').update(payload).eq('id', docId)
+    : await supabase.from('property_documents').insert(payload)
+  if (error) { window.showToast?.('❌ ' + error.message); return }
+  window.showToast?.('✅ Documento guardado')
+  document.getElementById('doc-edit-overlay')?.remove()
+}
+
+window.docExportFromModal = (propId, templateId, format) => {
+  const tpl  = TEMPLATES.find(t => t.id === templateId)
+  if (!tpl) return
+  const data = {}
+  tpl.fields.forEach(f => {
+    const el = document.getElementById('doc-f-' + f.id)
+    if (el) data[f.id] = el.value || ''
+  })
+  const html = _fill(_buildDocHTML(templateId, data), data)
+  if (format === 'DOC') _exportDOC(html, tpl.name.toLowerCase().replace(/\s+/g,'-'))
+  else                  _exportPDF(html, tpl.name.toLowerCase().replace(/\s+/g,'-'))
 }
