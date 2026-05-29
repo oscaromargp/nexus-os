@@ -6150,17 +6150,24 @@ window.toggleBillPaid = async (nodeId) => {
 let _abonoProviderId   = null
 let _abonoProjectSlug  = null
 let _abonoRefreshId    = null   // project id to refresh after save
+let _abonoCotId        = null   // cotización id to update when abono is saved
+let _abonoComprobantes = []     // [{type:'url'|'image', url, label?}]
 
-window.openAbonoModal = (provId, provName, projSlug, projectId) => {
-  _abonoProviderId  = provId
-  _abonoProjectSlug = projSlug
-  _abonoRefreshId   = projectId
+window.openAbonoModal = (provId, provName, projSlug, projectId, cotId = null) => {
+  _abonoProviderId   = provId
+  _abonoProjectSlug  = projSlug
+  _abonoRefreshId    = projectId
+  _abonoCotId        = cotId || null
+  _abonoComprobantes = []
   const infoEl = document.getElementById('abono-proveedor-info')
   if (infoEl) infoEl.textContent = `💸 Abono a: ${provName}`
   document.getElementById('abono-amount').value = ''
   document.getElementById('abono-date').value   = new Date().toISOString().split('T')[0]
   document.getElementById('abono-method').value = 'transferencia'
   document.getElementById('abono-notes').value  = ''
+  const urlInp = document.getElementById('abono-comp-url-input')
+  if (urlInp) urlInp.value = ''
+  abonoRenderComprobantes()
   document.getElementById('abono-modal').classList.remove('hidden')
   setTimeout(() => document.getElementById('abono-amount')?.focus(), 60)
 }
@@ -6173,26 +6180,101 @@ window.saveAbono = async () => {
   const method = document.getElementById('abono-method').value
   const notes  = document.getElementById('abono-notes').value.trim()
   const label  = notes || `Abono ${method}`
+  const comprobantes = [..._abonoComprobantes]
+  const receiptUrl = comprobantes.find(c => c.type === 'url')?.url || undefined
   const meta = {
     label, amount, date,
     method,
-    contact_id:  _abonoProviderId,
-    project_tag: _abonoProjectSlug,
-    es_abono:    true,
-    notes:       notes || undefined,
+    contact_id:   _abonoProviderId,
+    project_tag:  _abonoProjectSlug,
+    es_abono:     true,
+    notes:        notes || undefined,
+    comprobantes: comprobantes.length ? comprobantes : undefined,
+    receipt_url:  receiptUrl,
   }
   closeAbonoModal()
-  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+  const bypass = localStorage.getItem('nexus_admin_bypass') === 'true'
+  let newExpenseId = null
+  if (bypass) {
     const tmp = { id: Math.random().toString(36).substr(2,9), type:'expense', content:label, metadata:meta, created_at: new Date().toISOString() }
     allNodes.unshift(tmp)
+    newExpenseId = tmp.id
   } else {
     const { data } = await supabase.from('nodes').insert({ owner_id:currentUser.id, type:'expense', content:label, metadata:meta }).select()
-    if (data?.[0]) allNodes.unshift(data[0])
+    if (data?.[0]) { allNodes.unshift(data[0]); newExpenseId = data[0].id }
   }
-  await autoLinkToProject(allNodes[0]?.id, _abonoProjectSlug)
+  await autoLinkToProject(newExpenseId || allNodes[0]?.id, _abonoProjectSlug)
+
+  // ── Actualizar cotización vinculada con el nuevo abono ──────────────────
+  if (_abonoCotId) {
+    const cotNode = allNodes.find(n => n.id === _abonoCotId)
+    if (cotNode) {
+      const cotMeta = { ...(cotNode.metadata || {}) }
+      const abonoEntry = {
+        id:           crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
+        date, amount, method,
+        notes:        notes || null,
+        comprobantes: comprobantes.length ? comprobantes : undefined,
+        receipt_url:  receiptUrl || null,
+        expense_id:   newExpenseId,
+      }
+      cotMeta.abonos = [...(cotMeta.abonos || []), abonoEntry]
+      // Auto-actualizar status
+      const cotTotal = +(cotMeta.amount || 0)
+      const cotPaid  = cotMeta.abonos.reduce((s, a) => s + +(a.amount || 0), 0)
+      if (cotTotal > 0 && cotPaid >= cotTotal) cotMeta.status = 'pagada'
+      else if (cotPaid > 0) cotMeta.status = 'parcial'
+      cotNode.metadata = cotMeta
+      if (!bypass && currentUser) {
+        supabase.from('nodes').update({ metadata: cotMeta }).eq('id', _abonoCotId).then(() => {})
+      }
+    }
+  }
+  // ──────────────────────────────────────────────────────────────────────
+
   showToast(`✅ Abono de $${amount.toLocaleString('es-MX')} registrado`)
   if (_abonoRefreshId) openProjectDashboard(_abonoRefreshId)
 }
+
+// ── Comprobantes helpers — abono-modal ───────────────────────────────────────
+window.abonoRenderComprobantes = () => {
+  const listEl = document.getElementById('abono-comprobantes-list')
+  if (!listEl) return
+  listEl.innerHTML = _abonoComprobantes.length === 0 ? '' : _abonoComprobantes.map((c, i) =>
+    `<div style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:6px;padding:5px 8px;">
+      ${c.type === 'image'
+        ? `<img src="${esc(c.url)}" onclick="viewImage('${c.url.replace(/'/g,'&#39;')}')" style="height:28px;width:28px;object-fit:cover;border-radius:4px;cursor:pointer;flex-shrink:0;" title="Ver imagen" />`
+        : `<span style="flex-shrink:0;font-size:12px;">🔗</span>`}
+      <span style="flex:1;font-size:11px;color:#60a5fa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(c.label||c.url)}">${c.type==='url'?`<a href="${esc(c.url)}" target="_blank" style="color:inherit;text-decoration:none;">${esc(c.label||c.url)}</a>`:esc(c.label||'imagen')}</span>
+      <button onclick="abonoRemoveComp(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;flex-shrink:0;">✕</button>
+    </div>`
+  ).join('')
+}
+
+window.abonoAddCompUrl = () => {
+  const inp = document.getElementById('abono-comp-url-input')
+  const url = inp?.value.trim()
+  if (!url) { showToast('⚠️ Ingresa una URL primero'); return }
+  _abonoComprobantes.push({ type: 'url', url, label: decodeURIComponent(url.split('/').pop() || url).slice(0, 60) })
+  if (inp) inp.value = ''
+  abonoRenderComprobantes()
+}
+
+window.abonoRemoveComp = (i) => {
+  _abonoComprobantes.splice(i, 1)
+  abonoRenderComprobantes()
+}
+
+window.abonoAddCompFile = (inp) => {
+  const file = inp?.files?.[0]
+  if (!file) return
+  compressImage(file, b64 => {
+    _abonoComprobantes.push({ type: 'image', url: b64, label: file.name })
+    abonoRenderComprobantes()
+    inp.value = ''
+  })
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ═══════════════════════════════════════════════════════════
 // DEMO DATA SEEDER — Sprint 5D
@@ -10663,10 +10745,15 @@ document.addEventListener('paste', (e) => {
     if (item.type.startsWith('image/')) {
       const file = item.getAsFile()
       if (!file) continue
-      const cardOpen = !document.getElementById('card-modal')?.classList.contains('hidden')
-      const noteOpen = !document.getElementById('note-edit-modal')?.classList.contains('hidden')
-      const finOpen  = !document.getElementById('finance-detail-modal')?.classList.contains('hidden')
-      const cotOpen  = !document.getElementById('cotizacion-modal')?.classList.contains('hidden')
+      const cardOpen  = !document.getElementById('card-modal')?.classList.contains('hidden')
+      const noteOpen  = !document.getElementById('note-edit-modal')?.classList.contains('hidden')
+      const finOpen   = !document.getElementById('finance-detail-modal')?.classList.contains('hidden')
+      const cotOpen   = !document.getElementById('cotizacion-modal')?.classList.contains('hidden')
+      const abonoOpen = !document.getElementById('abono-modal')?.classList.contains('hidden')
+      if (abonoOpen) {
+        compressImage(file, b64 => { _abonoComprobantes.push({ type:'image', url: b64, label: file.name }); abonoRenderComprobantes(); showToast('📎 Imagen pegada al abono') })
+        break
+      }
       if (cotOpen) {
         if (_cotImagesDraft.filter(s=>typeof s==='string').length >= 5) { showToast('Máximo 5 imágenes por cotización'); break }
         compressImage(file, b64 => { _cotImagesDraft.push(b64); renderCotEvidencias(); showToast('📎 Imagen agregada a evidencias') })
@@ -16479,7 +16566,7 @@ function _renderProjFinanzas(d) {
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
             <span style="font-size:10px;color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.notes || a.method || 'Pago ' + (ai+1))}</span>
             <span style="font-size:9px;color:var(--text-dim);flex-shrink:0;">${(a.date || '').slice(0,10)}</span>
-            ${a.receipt_url ? `<a href="${esc(a.receipt_url)}" target="_blank" onclick="event.stopPropagation()" style="color:#60a5fa;font-size:10px;text-decoration:none;flex-shrink:0;">🔗</a>` : ''}
+            ${(() => { const cs = getAbonoComprobantes(a); return cs.slice(0,2).map(c => c.type==='image' ? `<img src="${esc(c.url)}" onclick="event.stopPropagation();viewImage('${c.url.replace(/'/g,'&#39;')}')" style="height:18px;width:18px;object-fit:cover;border-radius:3px;cursor:pointer;flex-shrink:0;" />` : `<a href="${esc(c.url)}" target="_blank" onclick="event.stopPropagation()" style="color:#60a5fa;font-size:10px;text-decoration:none;flex-shrink:0;">🔗</a>`).join('') + (cs.length > 2 ? `<span style="font-size:9px;color:#60a5fa;flex-shrink:0;">+${cs.length-2}</span>` : '') })()}
             <span style="font-size:11px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;flex-shrink:0;">${fmtM(+a.amount||0)}</span>
           </div>`).join('')
         : `<div style="font-size:11px;color:var(--text-dim);font-style:italic;padding:4px 0;">Sin pagos registrados</div>`
@@ -18402,6 +18489,14 @@ let currentCotizacionId = null
 let _cotAbonosDraft    = []
 let _cotImagesDraft    = []   // imágenes/evidencias de la cotización en edición
 let _editingAbonoIdx   = null // índice del abono en edición inline (-1 = ninguno)
+let _caComprobantes    = []   // comprobantes del formulario nuevo-abono inline
+
+// Helper: normaliza comprobantes de un abono (backward compat con receipt_url)
+const getAbonoComprobantes = (a) => {
+  if (a?.comprobantes?.length) return a.comprobantes
+  if (a?.receipt_url)          return [{ type: 'url', url: a.receipt_url }]
+  return []
+}
 
 window.addCotAbono = () => {
   document.getElementById('cot-new-abono-form').style.display = 'block'
@@ -18409,9 +18504,12 @@ window.addCotAbono = () => {
 }
 
 window.cancelCotAbono = () => {
+  _caComprobantes = []
+  caRenderComprobantes()
   document.getElementById('cot-new-abono-form').style.display = 'none'
   document.getElementById('ca-amount').value = ''
-  document.getElementById('ca-receipt').value = ''
+  const urlInp = document.getElementById('ca-comp-url')
+  if (urlInp) urlInp.value = ''
   document.getElementById('ca-notes').value = ''
 }
 
@@ -18419,17 +18517,60 @@ window.saveCotAbono = () => {
   const amount = parseFloat(document.getElementById('ca-amount').value)
   const date   = document.getElementById('ca-date').value
   if (!amount || !date) { showToast('⚠️ Monto y fecha son obligatorios'); return }
+  const comprobantes = [..._caComprobantes]
   _cotAbonosDraft.push({
-    id: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()),
+    id:           crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),
     date, amount,
-    method: document.getElementById('ca-method').value,
-    receipt_url: document.getElementById('ca-receipt').value.trim() || null,
-    notes: document.getElementById('ca-notes').value.trim() || null,
+    method:       document.getElementById('ca-method').value,
+    comprobantes,
+    receipt_url:  comprobantes.find(c => c.type === 'url')?.url || null,
+    notes:        document.getElementById('ca-notes').value.trim() || null,
   })
+  _caComprobantes = []
   const total = parseFloat(document.getElementById('cot-amount').value) || 0
   renderCotAbonos(_cotAbonosDraft, total)
   cancelCotAbono()
 }
+
+// ── Comprobantes helpers — formulario inline de cotización ───────────────────
+window.caRenderComprobantes = () => {
+  const listEl = document.getElementById('ca-comprobantes-list')
+  if (!listEl) return
+  listEl.innerHTML = _caComprobantes.map((c, i) =>
+    `<div style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:5px;padding:3px 7px;">
+      ${c.type === 'image'
+        ? `<img src="${esc(c.url)}" style="height:22px;width:22px;object-fit:cover;border-radius:3px;flex-shrink:0;" />`
+        : '<span style="font-size:10px;flex-shrink:0;">🔗</span>'}
+      <span style="flex:1;font-size:10px;color:#60a5fa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.label||c.url)}</span>
+      <button onclick="caRemoveComp(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:11px;line-height:1;padding:0 2px;flex-shrink:0;">✕</button>
+    </div>`
+  ).join('')
+}
+
+window.caAddCompUrl = () => {
+  const inp = document.getElementById('ca-comp-url')
+  const url = inp?.value.trim()
+  if (!url) return
+  _caComprobantes.push({ type: 'url', url, label: decodeURIComponent(url.split('/').pop() || url).slice(0, 60) })
+  if (inp) inp.value = ''
+  caRenderComprobantes()
+}
+
+window.caRemoveComp = (i) => {
+  _caComprobantes.splice(i, 1)
+  caRenderComprobantes()
+}
+
+window.caAddCompFile = (inp) => {
+  const file = inp?.files?.[0]
+  if (!file) return
+  compressImage(file, b64 => {
+    _caComprobantes.push({ type: 'image', url: b64, label: file.name })
+    caRenderComprobantes()
+    inp.value = ''
+  })
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 window.deleteCotAbono = async (idx) => {
   const abono = _cotAbonosDraft[idx]
@@ -18460,8 +18601,16 @@ window.renderCotAbonos = (abonos, total) => {
     ? `<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:12px 8px;border:1px dashed rgba(255,255,255,0.08);border-radius:8px;">Sin pagos registrados aún</div>`
     : abonos.map((a,i) => {
         const isEditing = _editingAbonoIdx === i
+        const aComps = getAbonoComprobantes(a)
         if (isEditing) {
           // Formulario de edición inline
+          const existingCompsHTML = aComps.length > 0
+            ? `<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:6px;">
+                ${aComps.map(c => `<div style="display:flex;align-items:center;gap:5px;font-size:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:5px;padding:3px 7px;">
+                  ${c.type==='image'?`<img src="${esc(c.url)}" style="height:20px;width:20px;object-fit:cover;border-radius:3px;flex-shrink:0;" />`:'<span>🔗</span>'}
+                  <span style="flex:1;color:#60a5fa;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(c.label||c.url)}</span>
+                </div>`).join('')}
+              </div>` : ''
           return `<div style="background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.25);border-radius:10px;padding:12px;margin-bottom:4px;">
             <div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:10px;">✏️ Editando Pago ${i+1}</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
@@ -18477,8 +18626,9 @@ window.renderCotAbonos = (abonos, total) => {
               </select>
             </div>
             <div style="margin-bottom:8px;">
-              <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Comprobante (URL)</label>
-              <input type="url" id="ea-receipt" value="${esc(a.receipt_url||'')}" class="modal-input" style="font-size:13px;" placeholder="https://drive.google.com/..." />
+              <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Comprobantes ${aComps.length > 0 ? `(${aComps.length} existentes)` : ''}</label>
+              ${existingCompsHTML}
+              <input type="url" id="ea-receipt" value="" class="modal-input" style="font-size:13px;" placeholder="Agregar URL de comprobante..." />
             </div>
             <div style="margin-bottom:10px;">
               <label style="font-size:10px;color:var(--text-muted);display:block;margin-bottom:3px;">Nota</label>
@@ -18491,12 +18641,18 @@ window.renderCotAbonos = (abonos, total) => {
           </div>`
         }
         // Fila normal de abono
+        const compsHTML = aComps.length === 0 ? '' :
+          aComps.slice(0, 3).map(c =>
+            c.type === 'image'
+              ? `<img src="${esc(c.url)}" onclick="viewImage('${c.url.replace(/'/g,'&#39;')}')" style="height:20px;width:20px;object-fit:cover;border-radius:3px;cursor:pointer;flex-shrink:0;" title="Ver imagen" />`
+              : `<a href="${esc(c.url)}" target="_blank" onclick="event.stopPropagation()" title="${esc(c.label||'Ver comprobante')}" style="color:#60a5fa;font-size:11px;flex-shrink:0;text-decoration:none;">🔗</a>`
+          ).join('') + (aComps.length > 3 ? `<span style="font-size:10px;color:#60a5fa;flex-shrink:0;">+${aComps.length-3}</span>` : '')
         return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;font-size:12px;margin-bottom:4px;">
           <span style="font-size:13px;flex-shrink:0;">${METHOD_ICON[a.method]||'💸'}</span>
           <span style="font-size:10px;font-weight:700;color:#4ade80;flex-shrink:0;min-width:48px;">Pago ${i+1}</span>
           <span style="color:var(--text-muted);flex-shrink:0;min-width:80px;">${a.date||''}</span>
           <span style="flex:1;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(a.notes||a.method||'Pago')}">${esc(a.notes||a.method||'Pago')}</span>
-          ${a.receipt_url ? `<a href="${esc(a.receipt_url)}" target="_blank" onclick="event.stopPropagation()" title="Ver comprobante" style="color:#60a5fa;font-size:11px;flex-shrink:0;text-decoration:none;">🔗</a>` : ''}
+          ${compsHTML}
           <span style="font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;flex-shrink:0;">$${(+a.amount).toLocaleString('es-MX')}</span>
           <button onclick="editCotAbono(${i})" style="background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);color:#60a5fa;cursor:pointer;font-size:10px;border-radius:5px;padding:2px 7px;flex-shrink:0;" title="Editar pago">✏️</button>
           <button onclick="deleteCotAbono(${i})" style="background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.2);color:#f87171;cursor:pointer;font-size:10px;border-radius:5px;padding:2px 7px;flex-shrink:0;" title="Eliminar pago">🗑</button>
@@ -18537,13 +18693,19 @@ window.updateCotAbono = (idx) => {
   const date   = document.getElementById('ea-date')?.value
   if (!amount || !date) { showToast('⚠️ Monto y fecha son obligatorios'); return }
   const existing = _cotAbonosDraft[idx] || {}
+  // Merge: keep existing comprobantes, append new URL if provided
+  let comprobantes = [...(getAbonoComprobantes(existing))]
+  const newUrl = document.getElementById('ea-receipt')?.value.trim()
+  if (newUrl && !comprobantes.some(c => c.url === newUrl)) {
+    comprobantes.push({ type: 'url', url: newUrl, label: decodeURIComponent(newUrl.split('/').pop() || newUrl).slice(0, 60) })
+  }
   _cotAbonosDraft[idx] = {
     ...existing,
-    amount,
-    date,
-    method:      document.getElementById('ea-method')?.value || existing.method,
-    receipt_url: document.getElementById('ea-receipt')?.value.trim() || existing.receipt_url || null,
-    notes:       document.getElementById('ea-notes')?.value.trim() || existing.notes || null,
+    amount, date,
+    method:       document.getElementById('ea-method')?.value || existing.method,
+    comprobantes,
+    receipt_url:  comprobantes.find(c => c.type === 'url')?.url || existing.receipt_url || null,
+    notes:        document.getElementById('ea-notes')?.value.trim() || existing.notes || null,
   }
   _editingAbonoIdx = null
   const total = parseFloat(document.getElementById('cot-amount')?.value) || 0
@@ -18583,9 +18745,14 @@ window.openCotizacionDetail = (id) => {
     const METHOD_ICON = { transferencia:'🏦', efectivo:'💵', tarjeta:'💳', cheque:'📄', domiciliado:'🔄', cripto:'₿' }
     const mIcon = METHOD_ICON[a.method] || '💸'
     const mLabel = a.method || 'Sin especificar'
-    const receiptLink = a.receipt_url
-      ? '<a href="' + esc(a.receipt_url) + '" target="_blank" onclick="event.stopPropagation()" style="color:#60a5fa;font-size:11px;text-decoration:none;display:inline-flex;align-items:center;gap:3px;">📎 Comprobante</a>'
-      : '<span style="font-size:10px;color:var(--text-dim);">Sin comprobante</span>'
+    const aCompsDetail = getAbonoComprobantes(a)
+    const receiptLink = aCompsDetail.length === 0
+      ? '<span style="font-size:10px;color:var(--text-dim);">Sin comprobante</span>'
+      : '<div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;">' + aCompsDetail.map(c =>
+          c.type === 'image'
+            ? '<img src="' + esc(c.url) + '" onclick="viewImage(\'' + c.url.replace(/\\/g,'\\\\').replace(/'/g,'&#39;') + '\')" style="height:36px;width:36px;object-fit:cover;border-radius:5px;cursor:pointer;border:1px solid rgba(255,255,255,0.1);" title="Ver imagen" />'
+            : '<a href="' + esc(c.url) + '" target="_blank" onclick="event.stopPropagation()" style="color:#60a5fa;font-size:11px;text-decoration:none;display:inline-flex;align-items:center;gap:3px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);border-radius:5px;padding:2px 8px;">📎 ' + esc(c.label || 'Comprobante') + '</a>'
+        ).join('') + '</div>'
     return '<div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.05);' + (i===0?'':'') + '">' +
       '<div style="display:flex;flex-direction:column;align-items:center;gap:2px;min-width:36px;">' +
         '<div style="width:30px;height:30px;border-radius:50%;background:rgba(74,222,128,0.12);border:2px solid #4ade80;display:grid;place-items:center;font-size:14px;">' + mIcon + '</div>' +
@@ -18987,9 +19154,10 @@ window.saveCotizacion = async () => {
       contact_id:  meta.provider_id || undefined,
       project_tag: projTag || undefined,
       cot_id:      savedId,
-      receipt_url: abono.receipt_url || undefined,
-      notes:       abono.notes || undefined,
-      es_abono:    true,
+      receipt_url:  abono.receipt_url || undefined,
+      comprobantes: abono.comprobantes?.length ? abono.comprobantes : undefined,
+      notes:        abono.notes || undefined,
+      es_abono:     true,
     }
     if (bypass) {
       const tmpId = 'demo_exp_' + Math.random().toString(36).substr(2,8)
@@ -19071,7 +19239,7 @@ window.showProveedorHistorial = (pid, projSlug, provName) => {
               <span style="color:var(--text-dim);min-width:48px;">Pago ${i+1}</span>
               <span style="min-width:72px;color:var(--text-muted);">${a.date||''}</span>
               <span style="flex:1;color:var(--text-secondary);">${esc(a.notes||a.method||'Pago')}</span>
-              ${a.receipt_url?`<a href="${esc(a.receipt_url)}" target="_blank" style="color:#60a5fa;font-size:10px;">🔗</a>`:''}
+              ${(() => { const cs=getAbonoComprobantes(a); return cs.slice(0,2).map(c=>c.type==='image'?`<img src="${esc(c.url)}" style="height:16px;width:16px;object-fit:cover;border-radius:2px;" />`:`<a href="${esc(c.url)}" target="_blank" style="color:#60a5fa;font-size:10px;">🔗</a>`).join('')+(cs.length>2?`<span style="font-size:9px;color:#60a5fa;">+${cs.length-2}</span>`:'') })()}
               <span style="font-family:monospace;font-weight:700;color:#4ade80;">$${(+a.amount).toLocaleString('es-MX')}</span>
               <span style="font-size:13px;">${METHOD_ICON[a.method]||'💸'}</span>
             </div>`).join('')}
@@ -19377,7 +19545,7 @@ window.printCotizacion = (id) => {
         <div class="pago-meta">
           <div style="font-weight:600;">${a.date||''} — ${esc(METHOD_LABEL[a.method]||a.method||'')}</div>
           ${a.notes ? `<div style="font-size:11px;color:#64748b;">${esc(a.notes)}</div>` : ''}
-          ${a.receipt_url ? `<div style="font-size:10px;color:#3b82f6;">🔗 Comprobante: ${esc(a.receipt_url)}</div>` : ''}
+          ${(() => { const cs=getAbonoComprobantes(a); return cs.length?'<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:2px;">'+cs.map(c=>c.type==='image'?`<img src="${esc(c.url)}" style="height:18px;width:18px;object-fit:cover;border-radius:3px;" />`:`<a href="${esc(c.url)}" target="_blank" style="font-size:10px;color:#3b82f6;">🔗 ${esc(c.label||'Comprobante')}</a>`).join('')+'</div>':'' })()}
         </div>
         <div class="pago-amount">$${(+a.amount).toLocaleString('es-MX',{minimumFractionDigits:2})}</div>
       </div>`).join('') : `<div style="color:#94a3b8;font-style:italic;font-size:12px;">Sin pagos registrados</div>`}

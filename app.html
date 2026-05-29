@@ -3694,8 +3694,14 @@ nav#sidebar .nav-items {
             <option value="cheque">📄 Cheque</option>
           </select>
         </div>
-        <div style="margin-bottom:8px;"><label class="modal-label" style="font-size:10px;">Comprobante (URL)</label>
-          <input type="url" id="ca-receipt" class="modal-input" style="font-size:13px;" placeholder="https://drive.google.com/... o link de foto" />
+        <div style="margin-bottom:8px;">
+          <label class="modal-label" style="font-size:10px;">Comprobantes (fotos / links)</label>
+          <div id="ca-comprobantes-list" style="display:flex;flex-direction:column;gap:3px;margin-bottom:5px;min-height:0;"></div>
+          <div style="display:flex;gap:5px;align-items:center;">
+            <input type="url" id="ca-comp-url" class="modal-input" style="flex:1;font-size:12px;" placeholder="https://drive.google.com/..." onkeydown="if(event.key==='Enter'){event.preventDefault();caAddCompUrl();}" />
+            <button type="button" onclick="caAddCompUrl()" style="flex-shrink:0;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:7px;padding:6px 9px;cursor:pointer;font-size:11px;font-weight:700;">+URL</button>
+            <label style="flex-shrink:0;display:inline-flex;align-items:center;gap:3px;font-size:11px;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.18);color:#60a5fa;border-radius:7px;padding:6px 9px;cursor:pointer;font-weight:700;">📎<input type="file" accept="image/*" style="display:none" onchange="caAddCompFile(this)" /></label>
+          </div>
         </div>
         <div style="margin-bottom:10px;"><label class="modal-label" style="font-size:10px;">Nota</label>
           <input type="text" id="ca-notes" class="modal-input" style="font-size:13px;" placeholder="Primer anticipo, saldo pendiente..." />
@@ -3892,6 +3898,18 @@ nav#sidebar .nav-items {
       <div class="modal-field">
         <label class="modal-label">Notas (opcional)</label>
         <input type="text" id="abono-notes" class="modal-input" placeholder="Ej: Segunda parcialidad, pedido vía WhatsApp..." />
+      </div>
+      <div class="modal-field" style="margin-bottom:10px;">
+        <label class="modal-label">Comprobantes (fotos, links, transfers)</label>
+        <div id="abono-comprobantes-list" style="display:flex;flex-direction:column;gap:5px;margin-bottom:7px;min-height:0;"></div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="url" id="abono-comp-url-input" class="modal-input" style="flex:1;font-size:12px;" placeholder="https://drive.google.com/ · fotos.app · tronscan..." onkeydown="if(event.key==='Enter'){event.preventDefault();abonoAddCompUrl();}" />
+          <button type="button" onclick="abonoAddCompUrl()" style="flex-shrink:0;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:8px;padding:8px 11px;cursor:pointer;font-size:12px;font-weight:700;">+URL</button>
+        </div>
+        <label style="margin-top:6px;display:inline-flex;align-items:center;gap:5px;font-size:11px;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.18);color:#60a5fa;border-radius:7px;padding:5px 10px;cursor:pointer;font-weight:600;">
+          📎 Adjuntar imagen<input type="file" accept="image/*" style="display:none" onchange="abonoAddCompFile(this)" />
+        </label>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:5px;">Ctrl+V para pegar imagen · Puedes agregar varios comprobantes</div>
       </div>
       <div class="modal-actions">
         <button class="btn-ghost" onclick="closeAbonoModal()">Cancelar</button>
