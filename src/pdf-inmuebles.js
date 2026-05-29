@@ -69,9 +69,13 @@ function _mapsUrl(p) {
 
 async function _loadImg(url) {
   if (!url) return ''
+  // Skip URLs that are obviously not images (video players, maps, etc.)
+  if (/youtube\.com|youtu\.be|maps\.google|vimeo\.com|tiktok\.com|instagram\.com|facebook\.com|google\.com\/maps/i.test(url)) return ''
   try {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: AbortSignal.timeout?.(10000) })
     if (!res.ok) return ''
+    const ct = res.headers.get('content-type') || ''
+    if (!ct.includes('image/') && !ct.includes('octet-stream')) return ''
     const blob = await res.blob()
     return new Promise(resolve => {
       const reader = new FileReader()
@@ -80,6 +84,16 @@ async function _loadImg(url) {
       reader.readAsDataURL(blob)
     })
   } catch { return '' }
+}
+
+/** Intenta cada foto en orden hasta encontrar una que cargue — garantiza portada válida */
+async function _loadFirstImg(fotos) {
+  for (const f of (fotos || [])) {
+    const url = f?.url || f?.thumb_url
+    const data = await _loadImg(url)
+    if (data) return data
+  }
+  return ''
 }
 
 function _imgFmt(dataUrl) {
@@ -143,6 +157,95 @@ function _pill(doc, text, x, y, fill = C.sky, textColor = C.white) {
 }
 
 /**
+ * Micro-icono vectorial dibujado con primitivas jsPDF.
+ * cx/cy = centro geométrico, sz = lado del cuadro envolvente en mm.
+ */
+function _icoSpec(doc, type, cx, cy, sz = 3.5) {
+  const r  = sz / 2
+  const lw = 0.28
+  doc.setFillColor(...C.sky)
+  doc.setDrawColor(...C.sky)
+  doc.setLineWidth(lw)
+
+  switch (type) {
+    case 'bed': {
+      // Cabecero (barra izquierda)
+      doc.rect(cx - r, cy - r * 0.4, r * 0.28, r * 1.3, 'F')
+      // Colchón
+      doc.roundedRect(cx - r * 0.62, cy + r * 0.15, r * 1.65, r * 0.7, 0.35, 0.35, 'F')
+      // Almohadas blancas
+      doc.setFillColor(...C.white)
+      doc.roundedRect(cx - r * 0.52, cy - r * 0.05, r * 0.55, r * 0.28, 0.25, 0.25, 'F')
+      doc.roundedRect(cx + r * 0.08,  cy - r * 0.05, r * 0.55, r * 0.28, 0.25, 0.25, 'F')
+      doc.setFillColor(...C.sky)
+      break
+    }
+    case 'bath': {
+      // Tina redondeada
+      doc.roundedRect(cx - r, cy + r * 0.1, sz, r * 0.75, r * 0.28, r * 0.28, 'F')
+      // Grifo (línea vertical + barra horizontal)
+      doc.rect(cx - r * 0.1, cy - r * 0.6, r * 0.2, r * 0.7, 'F')
+      doc.rect(cx - r * 0.4, cy - r * 0.65, r * 0.8, r * 0.18, 'F')
+      break
+    }
+    case 'car': {
+      // Carrocería inferior
+      doc.roundedRect(cx - r, cy + r * 0.1, sz, r * 0.75, r * 0.22, r * 0.22, 'F')
+      // Cabina superior (más estrecha)
+      doc.roundedRect(cx - r * 0.58, cy - r * 0.35, sz * 0.58, r * 0.52, r * 0.18, r * 0.18, 'F')
+      // Ruedas blancas
+      doc.setFillColor(...C.white)
+      doc.circle(cx - r * 0.48, cy + r * 0.88, r * 0.24, 'F')
+      doc.circle(cx + r * 0.48, cy + r * 0.88, r * 0.24, 'F')
+      doc.setFillColor(...C.sky)
+      break
+    }
+    case 'area': {
+      // Cuadrado + cuadrícula 2×2
+      doc.rect(cx - r, cy - r, sz, sz, 'S')
+      doc.line(cx, cy - r, cx, cy + r)
+      doc.line(cx - r, cy, cx + r, cy)
+      break
+    }
+    case 'land': {
+      // Pico principal (triángulo)
+      doc.triangle(cx - r, cy + r, cx - r * 0.05, cy - r, cx + r, cy + r, 'F')
+      // Pico secundario más claro (superpuesto)
+      doc.setFillColor(...C.s100)
+      doc.triangle(cx + r * 0.1, cy + r, cx + r * 0.65, cy - r * 0.3, cx + r, cy + r, 'F')
+      doc.setFillColor(...C.sky)
+      break
+    }
+    case 'floors': {
+      // 3 fajas apiladas
+      const fh  = sz * 0.23
+      const gap = sz * 0.07
+      for (let i = 0; i < 3; i++) {
+        doc.rect(cx - r, cy - r + i * (fh + gap), sz, fh, 'F')
+      }
+      break
+    }
+    case 'calendar': {
+      // Marco
+      doc.setDrawColor(...C.sky)
+      doc.roundedRect(cx - r, cy - r * 0.75, sz, sz, 0.45, 0.45, 'S')
+      // Cabecera rellena
+      doc.roundedRect(cx - r, cy - r * 0.75, sz, r * 0.58, 0.45, 0.45, 'F')
+      // Puntos de días
+      doc.setFillColor(...C.t500)
+      const dotR  = 0.3
+      const cols  = [-0.4, 0, 0.4]
+      const rows  = [r * 0.12, r * 0.65]
+      rows.forEach(dy => cols.forEach(dx => doc.circle(cx + dx * r, cy + dy, dotR, 'F')))
+      break
+    }
+  }
+  // Restaurar
+  doc.setFillColor(...C.sky)
+  doc.setDrawColor(...C.sky)
+}
+
+/**
  * Botón CTA con hipervínculo real.
  * En el PDF se puede hacer clic y abre la URL.
  */
@@ -190,7 +293,7 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
   // ── Pre-cargar imágenes ───────────────────────────────────────────────────
   const fotos  = prop.fotos || []
   const [img0, img1, img2, qrUrl] = await Promise.all([
-    _loadImg(fotos[0]?.url || fotos[0]?.thumb_url),
+    _loadFirstImg(fotos),                                               // ← primera foto válida (salta videos/mapas)
     _loadImg(fotos[1]?.url || fotos[1]?.thumb_url),
     _loadImg(fotos[2]?.url || fotos[2]?.thumb_url),
     QRCode.toDataURL(
@@ -313,22 +416,22 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
   _hline(doc, MX, y + 1, W - MX, C.s200, 0.2)
   y += 6
 
-  // ── Especificaciones — tira horizontal compacta ────────────────────────────
+  // ── Especificaciones — tira horizontal con micro-iconos vectoriales ──────
   const specs = [
-    prop.recamaras        && { lbl: 'Recamaras',    val: String(prop.recamaras) },
-    prop.banos            && { lbl: 'Banos',         val: String(prop.banos) },
-    prop.medios_banos     && { lbl: 'Med. Bano',     val: String(prop.medios_banos) },
-    prop.estacionamientos && { lbl: 'Estac.',        val: String(prop.estacionamientos) },
-    prop.pisos            && { lbl: 'Pisos',         val: String(prop.pisos) },
-    prop.sup_construida   && { lbl: 'Construida',    val: _fmtM2(prop.sup_construida) },
-    prop.sup_terreno      && { lbl: 'Terreno',       val: _fmtM2(prop.sup_terreno) },
-    prop.frente           && { lbl: 'Frente',        val: prop.frente + ' m' },
-    prop.antiguedad_anios && { lbl: 'Antiguedad',    val: prop.antiguedad_anios + ' anos' },
-    prop.amueblado        && { lbl: 'Amueblado',     val: 'Si' },
+    prop.recamaras        && { ico: 'bed',      lbl: 'Recamaras',    val: String(prop.recamaras) },
+    prop.banos            && { ico: 'bath',      lbl: 'Banos',        val: String(prop.banos) },
+    prop.medios_banos     && { ico: 'bath',      lbl: 'Med. Bano',    val: String(prop.medios_banos) },
+    prop.estacionamientos && { ico: 'car',       lbl: 'Estac.',       val: String(prop.estacionamientos) },
+    prop.pisos            && { ico: 'floors',    lbl: 'Pisos',        val: String(prop.pisos) },
+    prop.sup_construida   && { ico: 'area',      lbl: 'Construida',   val: _fmtM2(prop.sup_construida) },
+    prop.sup_terreno      && { ico: 'land',      lbl: 'Terreno',      val: _fmtM2(prop.sup_terreno) },
+    prop.frente           && { ico: null,        lbl: 'Frente',       val: prop.frente + ' m' },
+    prop.antiguedad_anios && { ico: 'calendar',  lbl: 'Antiguedad',   val: prop.antiguedad_anios + ' anos' },
+    prop.amueblado        && { ico: null,        lbl: 'Amueblado',    val: 'Si' },
   ].filter(Boolean)
 
   if (specs.length) {
-    const ROW_H   = 13
+    const ROW_H   = 14
     const ROWS    = [specs.slice(0, 5), specs.slice(5, 10)].filter(r => r.length)
     const rowsUsed = ROWS.length
 
@@ -343,14 +446,16 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
           doc.setFillColor(...C.s50)
           doc.rect(cx, ry, colW, ROW_H, 'F')
         }
-        // Accent line top cyan
+        // Accent bar top
         doc.setFillColor(...C.sky)
-        doc.rect(cx, ry, colW * 0.3, 0.7, 'F')
-        // Label
-        _t(doc, _s(s.lbl), cx + 3, ry + 5, { size: 6, color: C.t400 })
-        // Valor
-        _t(doc, _s(s.val), cx + 3, ry + 11, { size: 10, w: 'bold', color: C.t900 })
-        // Separador vertical (excepto último de la fila)
+        doc.rect(cx, ry, colW * 0.25, 0.65, 'F')
+        // Micro-icono (izquierda, centrado verticalmente)
+        if (s.ico) _icoSpec(doc, s.ico, cx + 5, ry + ROW_H / 2, 3.5)
+        // Texto a la derecha del icono
+        const tx = s.ico ? cx + 10 : cx + 3
+        _t(doc, _s(s.lbl), tx, ry + 5,    { size: 5.5, color: C.t400 })
+        _t(doc, _s(s.val), tx, ry + 11.5, { size: 9.5, w: 'bold', color: C.t900 })
+        // Separador vertical
         if (ci < row.length - 1) _vline(doc, cx + colW, ry + 1, ry + ROW_H - 1, C.s200, 0.15)
       })
     })
@@ -434,13 +539,13 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
     y += 8
   }
 
-  // ── CTAs con hipervínculos reales ─────────────────────────────────────────
+  // ── CTAs con hipervínculos reales — mapa primero, video al final ─────────
   const ctas = [
     mapUrl                && { lbl: 'Ver en mapa',      url: mapUrl },
-    prop.video_url        && { lbl: 'Ver video',         url: prop.video_url },
     prop.tour_url         && { lbl: 'Tour virtual 360',  url: prop.tour_url },
     prop.album_fotos_url  && { lbl: 'Galeria de fotos',  url: prop.album_fotos_url },
     prop.drive_folder_url && { lbl: 'Ver carpeta',       url: prop.drive_folder_url },
+    prop.video_url        && { lbl: 'Ver video',         url: prop.video_url },
   ].filter(Boolean)
 
   if (ctas.length) {
