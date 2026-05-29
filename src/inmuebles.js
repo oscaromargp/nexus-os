@@ -1,14 +1,17 @@
 /**
- * Nexus OS — Módulo Inmobiliario v1.0
+ * Nexus OS — Módulo Inmobiliario v1.1
  * src/inmuebles.js
  *
  * Exporta:
  *   renderInmuebles()          — vista principal (grid/lista + filtros)
  *   openPropModal(id?)         — modal crear/editar
+ *   openPropDetail(id)         — modal detalle con galería + historial CRM
  *   window.* handlers          — acciones desde HTML
  */
 
 import { createClient } from '@supabase/supabase-js'
+import Sortable from 'sortablejs'
+import { pdfFichaCaptacion } from './pdf-inmuebles.js'
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL  || '',
@@ -17,6 +20,7 @@ const supabase = createClient(
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 let _props       = []          // todas las propiedades del usuario
+let _interactions= {}          // { [propId]: interaction[] }
 let _propFilters = {
   tipo: '', operacion: '', status: '', colonia: '',
   precioMin: '', precioMax: '', search: '',
@@ -151,6 +155,98 @@ export async function loadProperties() {
   _props = data || []
   _propFolioSeq = _props.length + 1
   _propLoading = false
+}
+
+// ─── CRM — Historial de interacciones ─────────────────────────────────────────
+export async function loadInteractions(propId) {
+  const { data } = await supabase
+    .from('property_interactions')
+    .select('*')
+    .eq('property_id', propId)
+    .order('created_at', { ascending: false })
+    .limit(20)
+  _interactions[propId] = data || []
+  return _interactions[propId]
+}
+
+export async function logInteraction(propId, tipo, descripcion, monto = null) {
+  const user = (await supabase.auth.getUser()).data.user
+  if (!user) return
+  const { data, error } = await supabase
+    .from('property_interactions')
+    .insert({ property_id: propId, user_id: user.id, tipo, descripcion, monto })
+    .select()
+    .single()
+  if (error) { console.error('[inmuebles] logInteraction:', error); return null }
+  if (!_interactions[propId]) _interactions[propId] = []
+  _interactions[propId].unshift(data)
+  return data
+}
+
+function _renderHistorial(propId) {
+  const items = _interactions[propId] || []
+  const TIPO_ICONS = {
+    visita:'👁', llamada:'📞', whatsapp:'📲', oferta:'💰',
+    nota:'📝', cambio_status:'🔄', otro:'📌',
+  }
+  const TIPO_COLORS = {
+    visita:'#60a5fa', llamada:'#a78bfa', whatsapp:'#4ade80', oferta:'#fb923c',
+    nota:'#facc15', cambio_status:'#22d3ee', otro:'#94a3b8',
+  }
+
+  return `
+    <div style="margin-top:0;">
+      <!-- Log nueva interacción -->
+      <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;margin-bottom:12px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+          ${['visita','llamada','whatsapp','oferta','nota'].map(t=>`
+            <button onclick="propSelectInterTipo('${t}')" id="inter-tipo-${t}"
+              style="padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.15s;
+              background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#7a8899;">
+              ${TIPO_ICONS[t]} ${t.charAt(0).toUpperCase()+t.slice(1)}
+            </button>`).join('')}
+        </div>
+        <input type="hidden" id="inter-tipo-val" value="nota"/>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="inter-desc" placeholder="Descripción de la interacción..."
+            style="flex:1;padding:8px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+            border-radius:8px;color:#e8f0f9;font-size:13px;outline:none;"
+            onkeydown="if(event.key==='Enter')propLogInter('${propId}')"/>
+          <input type="number" id="inter-monto" placeholder="$ Monto" step="0.01"
+            style="width:100px;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+            border-radius:8px;color:#e8f0f9;font-size:13px;outline:none;"/>
+          <button onclick="propLogInter('${propId}')"
+            style="padding:8px 14px;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#0d0f1f;
+            font-weight:700;border:none;border-radius:8px;cursor:pointer;font-size:12px;white-space:nowrap;">
+            + Registrar
+          </button>
+        </div>
+      </div>
+
+      <!-- Lista de interacciones -->
+      <div id="inter-list-${propId}" style="display:flex;flex-direction:column;gap:6px;">
+        ${items.length === 0
+          ? `<div style="text-align:center;padding:20px;color:#4b5563;font-size:13px;">Sin interacciones registradas</div>`
+          : items.map(it => {
+            const color = TIPO_COLORS[it.tipo] || '#94a3b8'
+            const icon  = TIPO_ICONS[it.tipo]  || '📌'
+            const fecha = new Date(it.created_at).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })
+            return `
+              <div style="display:flex;gap:10px;padding:10px;background:rgba(255,255,255,0.03);border-radius:8px;border-left:3px solid ${color};">
+                <div style="font-size:18px;flex-shrink:0;">${icon}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span style="font-size:11px;font-weight:700;color:${color};text-transform:uppercase;">${_esc(it.tipo||'nota')}</span>
+                    ${it.monto ? `<span style="font-size:11px;color:#4ade80;font-weight:700;">$${Number(it.monto).toLocaleString('es-MX')}</span>` : ''}
+                    <span style="font-size:10px;color:#4b5563;margin-left:auto;">${fecha}</span>
+                  </div>
+                  <div style="font-size:13px;color:#94a3b8;margin-top:3px;">${_esc(it.descripcion||'')}</div>
+                </div>
+              </div>`
+          }).join('')}
+      </div>
+    </div>
+  `
 }
 
 // ─── Render principal ─────────────────────────────────────────────────────────
@@ -821,7 +917,7 @@ function _field(id, label, type, value = '', placeholder = '', disabled = false)
 }
 
 // ─── Modal de detalle ─────────────────────────────────────────────────────────
-export function openPropDetail(id) {
+export async function openPropDetail(id) {
   const p = _props.find(x => x.id === id)
   if (!p) return
 
@@ -829,21 +925,34 @@ export function openPropDetail(id) {
   const tipo  = _tipoInfo(p.tipo)
   const fotos = p.fotos || []
 
+  // Carga historial en paralelo
+  loadInteractions(id).then(() => {
+    const el = document.getElementById(`inter-list-${id}`)
+    if (el) el.outerHTML = _renderHistorial(id).match(/id="inter-list-[^"]+">[\s\S]*?<\/div>/)?.[0] || ''
+  })
+
   const specs = [
-    p.recamaras        ? ['🛏', 'Recámaras', p.recamaras] : null,
-    p.banos            ? ['🚿', 'Baños', p.banos] : null,
-    p.medios_banos     ? ['🚽', 'Medios baños', p.medios_banos] : null,
-    p.estacionamientos ? ['🚗', 'Estacionam.', p.estacionamientos] : null,
-    p.pisos            ? ['🏗', 'Pisos', p.pisos] : null,
-    p.sup_construida   ? ['📐', 'Construida', _fmtM2(p.sup_construida)] : null,
-    p.sup_terreno      ? ['🌿', 'Terreno', _fmtM2(p.sup_terreno)] : null,
-    p.frente           ? ['↔', 'Frente', p.frente + ' m'] : null,
-    p.fondo            ? ['↕', 'Fondo', p.fondo + ' m'] : null,
-    p.antiguedad_anios ? ['📅', 'Antigüedad', p.antiguedad_anios + ' años'] : null,
+    p.recamaras        ? { icon:'🛏', label:'Recámaras',   val: p.recamaras }              : null,
+    p.banos            ? { icon:'🚿', label:'Baños',        val: p.banos }                  : null,
+    p.medios_banos     ? { icon:'🚽', label:'Medios baños', val: p.medios_banos }            : null,
+    p.estacionamientos ? { icon:'🚗', label:'Estacionam.',  val: p.estacionamientos }        : null,
+    p.pisos            ? { icon:'🏗', label:'Pisos',         val: p.pisos }                  : null,
+    p.sup_construida   ? { icon:'📐', label:'Construida',   val: _fmtM2(p.sup_construida) }  : null,
+    p.sup_terreno      ? { icon:'🌿', label:'Terreno',      val: _fmtM2(p.sup_terreno) }     : null,
+    p.frente           ? { icon:'↔', label:'Frente',        val: p.frente + ' m' }           : null,
+    p.fondo            ? { icon:'↕', label:'Fondo',         val: p.fondo + ' m' }            : null,
+    p.antiguedad_anios ? { icon:'📅', label:'Antigüedad',   val: p.antiguedad_anios + ' años'}: null,
   ].filter(Boolean)
 
-  const servicios = ['agua','luz','drenaje','gas','internet'].filter(k=>p[k])
-  const amenidades = ['alberca','jardin','roof_garden','bodega_ext','cuarto_servicio','vigilancia'].filter(k=>p[k])
+  const servicios  = ['agua','luz','drenaje','gas','internet'].filter(k => p[k])
+  const amenidades = ['alberca','jardin','roof_garden','bodega_ext','cuarto_servicio','vigilancia'].filter(k => p[k])
+  const SERV_ICONS  = { agua:'💧',luz:'⚡',drenaje:'🚿',gas:'🔥',internet:'📶' }
+  const SERV_LABELS = { agua:'Agua',luz:'Luz',drenaje:'Drenaje',gas:'Gas',internet:'Internet' }
+  const AMEN_ICONS  = { alberca:'🏊',jardin:'🌿',roof_garden:'🌇',bodega_ext:'📦',cuarto_servicio:'🧹',vigilancia:'🔒' }
+  const AMEN_LABELS = { alberca:'Alberca',jardin:'Jardín',roof_garden:'Roof garden',bodega_ext:'Bodega',cuarto_servicio:'C. servicio',vigilancia:'Vigilancia' }
+
+  // Tab activa
+  let _detailTab = 'info'
 
   const overlay = document.createElement('div')
   overlay.id = 'prop-detail-overlay'
@@ -852,24 +961,32 @@ export function openPropDetail(id) {
 
   overlay.innerHTML = `
     <div style="background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:16px;
-    width:100%;max-width:800px;max-height:93vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.6);">
+    width:100%;max-width:860px;max-height:93vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.6);">
 
-      <!-- Header -->
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;
-      border-bottom:1px solid rgba(255,255,255,0.07);position:sticky;top:0;background:#0e1422;z-index:1;">
+      <!-- ── Header sticky ── -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;
+      border-bottom:1px solid rgba(255,255,255,0.07);position:sticky;top:0;background:#0e1422;z-index:2;flex-wrap:wrap;gap:8px;">
         <div>
-          <div style="font-size:11px;color:#7a8899;margin-bottom:3px;">${_esc(p.folio_interno||'')} · ${tipo.icon} ${tipo.label} · <span style="color:${st.color}">${st.label}</span></div>
-          <h3 style="margin:0;font-size:16px;font-weight:800;color:#e8f0f9;">${_esc(p.titulo||tipo.label+' en '+(p.colonia||''))}</h3>
+          <div style="font-size:10px;color:#7a8899;margin-bottom:2px;">
+            ${_esc(p.folio_interno||'')} · ${tipo.icon} ${tipo.label}
+            <span style="color:${st.color};font-weight:700;"> · ${st.label}</span>
+          </div>
+          <h3 style="margin:0;font-size:15px;font-weight:800;color:#e8f0f9;line-height:1.2;">
+            ${_esc(p.titulo || tipo.label + ' en ' + (p.colonia || ''))}
+          </h3>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button onclick="propExportPDF('${p.id}')"
+            style="padding:6px 13px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);
+            color:#a78bfa;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">📄 PDF Ficha</button>
           <button onclick="propWhatsApp('${p.id}')"
-            style="padding:7px 14px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);
+            style="padding:6px 13px;background:rgba(74,222,128,0.1);border:1px solid rgba(74,222,128,0.3);
             color:#4ade80;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">📲 WhatsApp</button>
           <button onclick="propCopyLink('${p.id}','${_esc(p.slug||p.id)}')"
-            style="padding:7px 14px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.25);
-            color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🔗 Copiar link</button>
+            style="padding:6px 13px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.25);
+            color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🔗 Link</button>
           <button onclick="openPropModal('${p.id}')"
-            style="padding:7px 14px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+            style="padding:6px 13px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
             color:#94a3b8;border-radius:8px;cursor:pointer;font-size:12px;">✏️ Editar</button>
           <button onclick="document.getElementById('prop-detail-overlay').remove()"
             style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
@@ -877,98 +994,188 @@ export function openPropDetail(id) {
         </div>
       </div>
 
-      <div style="padding:22px;">
-        <!-- Galería -->
-        ${fotos.length ? `
-          <div style="display:grid;grid-template-columns:${fotos.length>1?'2fr 1fr':' 1fr'};gap:6px;margin-bottom:20px;border-radius:10px;overflow:hidden;">
-            <img src="${_esc(fotos[0].url)}" style="width:100%;height:240px;object-fit:cover;border-radius:8px;"/>
-            ${fotos.length>1 ? `
-              <div style="display:grid;grid-template-rows:repeat(2,1fr);gap:6px;">
-                ${fotos.slice(1,3).map(f=>`<img src="${_esc(f.url)}" style="width:100%;height:117px;object-fit:cover;border-radius:8px;"/>`).join('')}
-              </div>` : ''}
-          </div>` : ''}
+      <!-- ── Tabs ── -->
+      <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 20px;">
+        ${[['info','Ficha'],['galeria','Galería ('+fotos.length+')'],['crm','Historial']].map(([tab,label])=>`
+          <button onclick="propDetailTab('${tab}','${p.id}')" id="dtab-${tab}"
+            style="padding:10px 16px;border:none;background:transparent;cursor:pointer;font-size:13px;font-weight:600;
+            color:${tab==='info'?'#22d3ee':'#7a8899'};border-bottom:2px solid ${tab==='info'?'#22d3ee':'transparent'};
+            transition:all 0.15s;">${label}</button>`).join('')}
+      </div>
 
-        <!-- Precio + Ubicación -->
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-          <div>
-            <div style="font-size:26px;font-weight:900;color:#22d3ee;">${_esc(_precioLabel(p))}</div>
-            ${p.precio_negociable?`<div style="font-size:12px;color:#4ade80;">Precio negociable</div>`:''}
-            <div style="font-size:13px;color:#7a8899;margin-top:6px;">
-              📍 ${_esc([p.calle,p.numero].filter(Boolean).join(' '))}
-              ${p.calle?'<br>':''} ${_esc([p.colonia,p.municipio,p.estado_rep].filter(Boolean).join(', '))}
+      <div style="padding:20px;">
+
+        <!-- ══ TAB: INFO ══ -->
+        <div id="dpanel-info">
+
+          <!-- Galería preview -->
+          ${fotos.length ? `
+            <div id="detail-gallery" style="display:grid;grid-template-columns:${fotos.length>1?'2fr 1fr':'1fr'};gap:5px;margin-bottom:18px;border-radius:10px;overflow:hidden;max-height:280px;">
+              <img id="detail-main-img" src="${_esc(fotos[0].url||fotos[0].thumb_url||'')}"
+                style="width:100%;height:100%;max-height:280px;object-fit:cover;cursor:zoom-in;"
+                onclick="propDetailTab('galeria','${p.id}')"/>
+              ${fotos.length > 1 ? `
+                <div style="display:grid;grid-template-rows:repeat(${Math.min(fotos.length-1,3)},1fr);gap:5px;">
+                  ${fotos.slice(1,4).map((f,i)=>`
+                    <div style="position:relative;overflow:hidden;">
+                      <img src="${_esc(f.thumb_url||f.url||'')}"
+                        style="width:100%;height:${Math.floor(280/Math.min(fotos.length-1,3))}px;object-fit:cover;cursor:zoom-in;"
+                        onclick="propDetailTab('galeria','${p.id}')"/>
+                      ${i === 2 && fotos.length > 4 ? `
+                        <div style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;cursor:pointer;"
+                          onclick="propDetailTab('galeria','${p.id}')">
+                          <span style="font-size:16px;font-weight:800;color:#fff;">+${fotos.length-4} fotos</span>
+                        </div>` : ''}
+                    </div>`).join('')}
+                </div>` : ''}
+            </div>` : ''}
+
+          <!-- Precio + ops -->
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+            <div>
+              <div style="font-size:24px;font-weight:900;color:#22d3ee;">${_esc(_precioLabel(p))}</div>
+              ${p.precio_negociable ? `<div style="font-size:12px;color:#4ade80;margin-top:2px;">Precio negociable</div>` : ''}
+              <div style="font-size:13px;color:#7a8899;margin-top:6px;">
+                📍 ${_esc([p.calle,p.numero].filter(Boolean).join(' '))}
+                <br>${_esc([p.colonia,p.municipio,p.estado_rep].filter(Boolean).join(', '))}
+                ${p.referencias ? `<br><span style="color:#4b5563;">${_esc(p.referencias)}</span>` : ''}
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+              ${(p.operacion||[]).map(op=>`
+                <span style="padding:5px 14px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
+                color:#22d3ee;border-radius:8px;font-size:12px;font-weight:700;text-transform:uppercase;">${op}</span>`).join('')}
+              ${p.lat && p.lng ? `
+                <a href="https://www.google.com/maps?q=${p.lat},${p.lng}" target="_blank" rel="noopener"
+                  style="font-size:11px;color:#60a5fa;text-decoration:none;">🗺 Ver en Google Maps</a>` : ''}
             </div>
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;">
-            ${(p.operacion||[]).map(op=>`
-              <span style="padding:5px 14px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
-              color:#22d3ee;border-radius:8px;font-size:12px;font-weight:700;text-transform:uppercase;">${op}</span>`).join('')}
+
+          <!-- Specs -->
+          ${specs.length ? `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;margin-bottom:16px;">
+              ${specs.map(s=>`
+                <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
+                border-radius:8px;padding:10px;text-align:center;">
+                  <div style="font-size:18px;margin-bottom:3px;">${s.icon}</div>
+                  <div style="font-size:10px;color:#7a8899;">${s.label}</div>
+                  <div style="font-size:13px;font-weight:700;color:#e8f0f9;">${_esc(String(s.val))}</div>
+                </div>`).join('')}
+            </div>` : ''}
+
+          <!-- Servicios + Amenidades -->
+          ${servicios.length || amenidades.length ? `
+            <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;">
+              ${servicios.map(k=>`<span style="font-size:12px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);color:#4ade80;padding:4px 10px;border-radius:6px;">${SERV_ICONS[k]} ${SERV_LABELS[k]}</span>`).join('')}
+              ${amenidades.map(k=>`<span style="font-size:12px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);color:#22d3ee;padding:4px 10px;border-radius:6px;">${AMEN_ICONS[k]} ${AMEN_LABELS[k]}</span>`).join('')}
+            </div>` : ''}
+
+          <!-- Descripción -->
+          ${p.descripcion ? `
+            <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;margin-bottom:16px;">
+              <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Descripción</div>
+              <p style="font-size:13px;color:#94a3b8;line-height:1.7;margin:0;white-space:pre-wrap;">${_esc(p.descripcion)}</p>
+            </div>` : ''}
+
+          <!-- Dueño + Drive -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+            <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;">
+              <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:7px;">Dueño</div>
+              <div style="font-size:13px;color:#e8f0f9;font-weight:600;">${_esc(p.dueno_nombre||'—')}</div>
+              ${p.dueno_telefono ? `
+                <a href="tel:${_esc(p.dueno_telefono)}" style="font-size:12px;color:#4ade80;display:block;margin-top:4px;text-decoration:none;">
+                  📞 ${_esc(p.dueno_telefono)}</a>` : ''}
+              ${p.dueno_email ? `
+                <a href="mailto:${_esc(p.dueno_email)}" style="font-size:12px;color:#60a5fa;display:block;margin-top:2px;text-decoration:none;">
+                  ✉ ${_esc(p.dueno_email)}</a>` : ''}
+            </div>
+            <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:12px;">
+              <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:7px;">Archivos</div>
+              ${p.drive_folder_url
+                ? `<a href="${_esc(p.drive_folder_url)}" target="_blank" rel="noopener"
+                    style="font-size:13px;color:#60a5fa;text-decoration:none;display:flex;align-items:center;gap:5px;">
+                    📁 Carpeta Google Drive
+                  </a>`
+                : `<span style="font-size:12px;color:#4b5563;">Sin carpeta vinculada</span>`}
+              <div style="margin-top:8px;font-size:11px;color:#4b5563;">${fotos.length} foto${fotos.length!==1?'s':''} en Nexus</div>
+            </div>
           </div>
+
+          <!-- Exclusiva -->
+          ${p.exclusiva && p.exclusiva_fin ? (() => {
+            const diff = (new Date(p.exclusiva_fin) - new Date()) / (1000 * 60 * 60 * 24)
+            const alertColor = diff < 0 ? '#f87171' : diff <= 7 ? '#fb923c' : '#22d3ee'
+            return `
+              <div style="background:${alertColor}10;border:1px solid ${alertColor}30;border-radius:10px;padding:12px;">
+                <div style="font-size:11px;color:${alertColor};font-weight:700;text-transform:uppercase;margin-bottom:6px;">
+                  ${diff < 0 ? '⚠ Exclusiva vencida' : diff <= 7 ? `⚠ Exclusiva vence en ${Math.ceil(diff)} días` : 'Exclusiva activa'}
+                </div>
+                <div style="font-size:13px;color:#94a3b8;">
+                  ${_esc(p.exclusiva_inicio||'')} → ${_esc(p.exclusiva_fin)}
+                  &nbsp;·&nbsp; Comisión: <strong style="color:${alertColor};">${p.comision_pct||5}%</strong>
+                </div>
+              </div>` })() : ''}
         </div>
 
-        <!-- Specs grid -->
-        ${specs.length ? `
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:20px;">
-            ${specs.map(([icon,label,val])=>`
-              <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
-              border-radius:8px;padding:10px;text-align:center;">
-                <div style="font-size:20px;margin-bottom:4px;">${icon}</div>
-                <div style="font-size:11px;color:#7a8899;">${label}</div>
-                <div style="font-size:14px;font-weight:700;color:#e8f0f9;">${val}</div>
+        <!-- ══ TAB: GALERÍA ══ -->
+        <div id="dpanel-galeria" style="display:none;">
+          <div style="font-size:12px;color:#7a8899;margin-bottom:12px;">
+            Arrastra para reordenar · Las fotos se guardan automáticamente
+          </div>
+          <div id="gallery-sortable-${p.id}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;">
+            ${fotos.map((f,i)=>`
+              <div data-index="${i}" data-url="${_esc(f.url||f.thumb_url||'')}"
+                style="position:relative;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);
+                cursor:grab;aspect-ratio:4/3;background:rgba(14,20,34,0.8);">
+                <img src="${_esc(f.thumb_url||f.url||'')}" style="width:100%;height:100%;object-fit:cover;pointer-events:none;"/>
+                ${f.categoria ? `
+                  <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 6px;
+                  background:rgba(0,0,0,0.65);font-size:9px;color:#22d3ee;font-weight:700;text-transform:uppercase;">
+                    ${_esc(f.categoria)}
+                  </div>` : ''}
+                <button onclick="propDeleteFoto('${p.id}',${i})"
+                  style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
+                  background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:12px;line-height:1;">✕</button>
+                ${i===0 ? `<div style="position:absolute;top:4px;left:4px;background:rgba(34,211,238,0.85);
+                  color:#0d0f1f;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;">PORTADA</div>` : ''}
               </div>`).join('')}
-          </div>` : ''}
-
-        <!-- Servicios + Amenidades -->
-        ${servicios.length || amenidades.length ? `
-          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
-            ${servicios.map(k=>{
-              const icons={agua:'💧',luz:'⚡',drenaje:'🚿',gas:'🔥',internet:'📶'}
-              const labels={agua:'Agua',luz:'Luz',drenaje:'Drenaje',gas:'Gas',internet:'Internet'}
-              return `<span style="font-size:12px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);color:#4ade80;padding:4px 10px;border-radius:6px;">${icons[k]} ${labels[k]}</span>`
-            }).join('')}
-            ${amenidades.map(k=>{
-              const icons={alberca:'🏊',jardin:'🌿',roof_garden:'🌇',bodega_ext:'📦',cuarto_servicio:'🧹',vigilancia:'🔒'}
-              const labels={alberca:'Alberca',jardin:'Jardín',roof_garden:'Roof garden',bodega_ext:'Bodega',cuarto_servicio:'C. servicio',vigilancia:'Vigilancia'}
-              return `<span style="font-size:12px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);color:#22d3ee;padding:4px 10px;border-radius:6px;">${icons[k]} ${labels[k]}</span>`
-            }).join('')}
-          </div>` : ''}
-
-        <!-- Descripción -->
-        ${p.descripcion ? `
-          <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;margin-bottom:20px;">
-            <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Descripción</div>
-            <p style="font-size:13px;color:#94a3b8;line-height:1.6;margin:0;">${_esc(p.descripcion).replace(/\n/g,'<br>')}</p>
-          </div>` : ''}
-
-        <!-- Dueño + Drive -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px;">
-          <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;">
-            <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Dueño</div>
-            <div style="font-size:13px;color:#e8f0f9;font-weight:600;">${_esc(p.dueno_nombre||'—')}</div>
-            ${p.dueno_telefono?`<div style="font-size:12px;color:#7a8899;margin-top:4px;">📞 ${_esc(p.dueno_telefono)}</div>`:''}
-            ${p.dueno_email?`<div style="font-size:12px;color:#7a8899;margin-top:2px;">✉ ${_esc(p.dueno_email)}</div>`:''}
           </div>
-          ${p.drive_folder_url ? `
-            <div style="background:rgba(255,255,255,0.03);border-radius:10px;padding:14px;">
-              <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Google Drive</div>
-              <a href="${_esc(p.drive_folder_url)}" target="_blank" rel="noopener"
-                style="font-size:13px;color:#60a5fa;text-decoration:none;display:flex;align-items:center;gap:6px;">
-                📁 Abrir carpeta de fotos
-              </a>
-            </div>` : '<div></div>'}
+          ${fotos.length === 0 ? `
+            <div style="text-align:center;padding:40px 20px;color:#4b5563;">
+              Sin fotos. Edita la propiedad para agregar imágenes.
+            </div>` : ''}
+
+          <!-- Subir más fotos desde este panel -->
+          <div style="margin-top:16px;border:2px dashed rgba(34,211,238,0.2);border-radius:10px;padding:14px;text-align:center;cursor:pointer;"
+            onclick="document.getElementById('gallery-upload-${p.id}').click()">
+            <input type="file" id="gallery-upload-${p.id}" multiple accept="image/*" style="display:none;"
+              onchange="propHandleFiles(this.files,'${p.id}')"/>
+            <div style="font-size:12px;color:#7a8899;">+ Agregar más fotos</div>
+          </div>
         </div>
 
-        <!-- Exclusiva -->
-        ${p.exclusiva && p.exclusiva_fin ? `
-          <div style="background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.2);border-radius:10px;padding:14px;margin-bottom:20px;">
-            <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;margin-bottom:8px;">Exclusiva</div>
-            <div style="font-size:13px;color:#94a3b8;">
-              ${_esc(p.exclusiva_inicio||'')} → ${_esc(p.exclusiva_fin)} · Comisión: ${p.comision_pct||5}%
-            </div>
-          </div>` : ''}
+        <!-- ══ TAB: HISTORIAL CRM ══ -->
+        <div id="dpanel-crm" style="display:none;">
+          ${_renderHistorial(p.id)}
+        </div>
+
       </div>
     </div>
   `
+
   document.body.appendChild(overlay)
+
+  // Inicializar drag-drop galería (SortableJS)
+  requestAnimationFrame(() => {
+    const sortEl = document.getElementById(`gallery-sortable-${p.id}`)
+    if (sortEl && typeof Sortable !== 'undefined') {
+      new Sortable(sortEl, {
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        onEnd: () => { propSaveGalleryOrder(p.id) },
+      })
+    }
+  })
 }
 
 // ─── Cerrar modal ─────────────────────────────────────────────────────────────
@@ -1275,6 +1482,148 @@ window.propWhatsApp = (id) => {
     `\n🔗 ${link}`
   )
   window.open('https://api.whatsapp.com/send?text=' + msg, '_blank')
+}
+
+// ─── Handlers modal de detalle ────────────────────────────────────────────────
+
+window.propDetailTab = (tab, propId) => {
+  ;['info', 'galeria', 'crm'].forEach(p => {
+    const panel = document.getElementById('dpanel-' + p)
+    const btn   = document.getElementById('dtab-' + p)
+    const active = p === tab
+    if (panel) panel.style.display = active ? 'block' : 'none'
+    if (btn) {
+      btn.style.color        = active ? '#22d3ee' : '#7a8899'
+      btn.style.borderBottom = active ? '2px solid #22d3ee' : '2px solid transparent'
+    }
+  })
+}
+
+window.propSaveGalleryOrder = async (propId) => {
+  const sortEl   = document.getElementById('gallery-sortable-' + propId)
+  const existing = _props.find(p => p.id === propId)
+  if (!sortEl || !existing) return
+  const oldFotos = existing.fotos || []
+  const reordered = [...sortEl.children].map((child, i) => {
+    const url  = child.dataset.url
+    const orig = oldFotos.find(f => (f.url || f.thumb_url) === url)
+    return orig ? { ...orig, orden: i } : null
+  }).filter(Boolean)
+  if (reordered.length === 0) return
+  const { error } = await supabase.from('properties').update({ fotos: reordered }).eq('id', propId)
+  if (!error) {
+    existing.fotos = reordered
+    window.showToast?.('🔄 Orden guardado')
+  }
+}
+
+window.propDeleteFoto = async (propId, index) => {
+  const existing = _props.find(p => p.id === propId)
+  if (!existing) return
+  const fotos    = [...(existing.fotos || [])]
+  // Identify by current DOM position (SortableJS may have reordered)
+  const sortEl   = document.getElementById('gallery-sortable-' + propId)
+  let   targetUrl = null
+  if (sortEl) {
+    const item = [...sortEl.children].find(el => Number(el.dataset.index) === index)
+               || sortEl.children[index]
+    targetUrl  = item?.dataset?.url
+  }
+  const newFotos = targetUrl
+    ? fotos.filter(f => (f.url || f.thumb_url) !== targetUrl)
+    : fotos.filter((_, i) => i !== index)
+
+  const { error } = await supabase.from('properties').update({ fotos: newFotos }).eq('id', propId)
+  if (error) { window.showToast?.('❌ Error al eliminar foto'); return }
+  existing.fotos = newFotos
+  window.showToast?.('🗑 Foto eliminada')
+
+  // Re-render gallery in-place
+  if (sortEl) {
+    sortEl.innerHTML = newFotos.map((f, i) => `
+      <div data-index="${i}" data-url="${_esc(f.url||f.thumb_url||'')}"
+        style="position:relative;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);
+        cursor:grab;aspect-ratio:4/3;background:rgba(14,20,34,0.8);">
+        <img src="${_esc(f.thumb_url||f.url||'')}" style="width:100%;height:100%;object-fit:cover;pointer-events:none;"/>
+        ${f.categoria ? `
+          <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 6px;
+          background:rgba(0,0,0,0.65);font-size:9px;color:#22d3ee;font-weight:700;text-transform:uppercase;">
+            ${_esc(f.categoria)}
+          </div>` : ''}
+        <button onclick="propDeleteFoto('${propId}',${i})"
+          style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
+          background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:12px;line-height:1;">✕</button>
+        ${i === 0 ? `<div style="position:absolute;top:4px;left:4px;background:rgba(34,211,238,0.85);
+          color:#0d0f1f;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;">PORTADA</div>` : ''}
+      </div>`).join('')
+    new Sortable(sortEl, {
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      onEnd: () => { window.propSaveGalleryOrder(propId) },
+    })
+  }
+}
+
+window.propSelectInterTipo = (tipo) => {
+  document.querySelectorAll('[id^="inter-tipo-"]').forEach(btn => {
+    btn.style.background  = 'rgba(255,255,255,0.05)'
+    btn.style.borderColor = 'rgba(255,255,255,0.1)'
+    btn.style.color       = '#7a8899'
+  })
+  const active = document.getElementById('inter-tipo-' + tipo)
+  if (active) {
+    active.style.background  = 'rgba(34,211,238,0.15)'
+    active.style.borderColor = 'rgba(34,211,238,0.4)'
+    active.style.color       = '#22d3ee'
+  }
+  const hidden = document.getElementById('inter-tipo-val')
+  if (hidden) hidden.value = tipo
+}
+
+window.propLogInter = async (propId) => {
+  const tipo    = document.getElementById('inter-tipo-val')?.value || 'nota'
+  const descEl  = document.getElementById('inter-desc')
+  const montoEl = document.getElementById('inter-monto')
+  const desc    = descEl?.value?.trim()
+  const monto   = montoEl?.value ? Number(montoEl.value) : null
+  if (!desc) { window.showToast?.('⚠ Escribe una descripción'); return }
+
+  const item = await logInteraction(propId, tipo, desc, monto)
+  if (!item) return
+  if (descEl)  descEl.value  = ''
+  if (montoEl) montoEl.value = ''
+
+  // Reemplazar solo la lista (no el formulario)
+  const listEl = document.getElementById('inter-list-' + propId)
+  if (listEl) {
+    const tmp = document.createElement('div')
+    tmp.innerHTML = _renderHistorial(propId)
+    const newList = tmp.querySelector('#inter-list-' + propId)
+    if (newList) listEl.replaceWith(newList)
+  }
+  window.showToast?.('✅ Interacción registrada')
+}
+
+window.propExportPDF = async (propId) => {
+  const p = _props.find(x => x.id === propId)
+  if (!p) return
+  const btn = document.querySelector(`button[onclick*="propExportPDF('${propId}')"]`)
+  if (btn) { btn.textContent = '⏳ Generando...'; btn.disabled = true }
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    const emisor = {
+      nombre:  localStorage.getItem('nexus_agent_name')   || user?.user_metadata?.full_name || 'Agente',
+      tel:     localStorage.getItem('nexus_agent_tel')    || '',
+      email:   localStorage.getItem('nexus_agent_email')  || user?.email || '',
+      agencia: localStorage.getItem('nexus_agent_agency') || 'Nexus OS Inmobiliario',
+    }
+    await pdfFichaCaptacion(p, emisor)
+  } catch (err) {
+    console.error('[inmuebles] propExportPDF:', err)
+    window.showToast?.('❌ Error al generar PDF: ' + err.message)
+  } finally {
+    if (btn) { btn.textContent = '📄 PDF Ficha'; btn.disabled = false }
+  }
 }
 
 // Exportar función de carga para app.js
