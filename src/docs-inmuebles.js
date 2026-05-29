@@ -6,12 +6,7 @@
  *   Captación (7) + Negociación (4) + Contratos Profeco (3)
  */
 
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL  || '',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-)
+import { supabase } from './supabase.js'
 
 // ─── Estado ───────────────────────────────────────────────────────────────────
 let _docs = {}          // { [propId]: doc[] }
@@ -1268,6 +1263,7 @@ window.docPreviewFromLib = (templateId) => {
   const filled = _fill(html, emptyData)
 
   const overlay = document.createElement('div')
+  overlay.id = 'doc-preview-overlay'
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(6px);'
   overlay.onclick = e => { if (e.target === overlay) overlay.remove() }
 
@@ -1283,14 +1279,13 @@ window.docPreviewFromLib = (templateId) => {
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
           <button onclick="
-            const ov=this.closest('[style*=position\\:fixed]');
-            ov.remove();
+            document.getElementById('doc-preview-overlay')?.remove();
             docCreateFromLib('${templateId}');"
             style="padding:7px 14px;background:${cm.color}20;border:1px solid ${cm.color}50;
             color:${cm.color};border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">
             ✚ Crear documento
           </button>
-          <button onclick="this.closest('[style*=position\\:fixed]').remove()"
+          <button onclick="document.getElementById('doc-preview-overlay')?.remove()"
             style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;
             width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;line-height:1;">✕</button>
         </div>

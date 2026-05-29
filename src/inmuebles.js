@@ -9,15 +9,10 @@
  *   window.* handlers          — acciones desde HTML
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './supabase.js'
 import Sortable from 'sortablejs'
 import { pdfFichaCaptacion } from './pdf-inmuebles.js'
 import { renderDocumentos, loadPropertyDocs } from './docs-inmuebles.js'
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL  || '',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-)
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 let _props       = []          // todas las propiedades del usuario

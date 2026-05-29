@@ -1,5 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
 import Fuse from 'fuse.js'
+import { supabase } from './src/supabase.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -176,13 +176,8 @@ window._NX_TYPE_BADGE = NX_TYPE_BADGE
 window._NX_STATUS_BADGE = NX_STATUS_BADGE
 
 // ─────────────────────────────────────────
-// Clientes y Estado
+// Estado
 // ─────────────────────────────────────────
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL  || 'https://t.supabase.co',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'a'
-)
-
 let currentUser   = null
 let allNodes      = []
 let activeView    = 'feed'
@@ -6794,7 +6789,7 @@ window.otcFetchBitso = async function() {
       otcRecalc()
       return
     }
-    const resp = await fetch('https://api.bitso.com/v3/ticker/?book=' + book)
+    const resp = await fetch('/api/bitso?book=' + book)
     const json = await resp.json()
     if (json.success && json.payload) {
       const ask = parseFloat(json.payload.ask) || 0
