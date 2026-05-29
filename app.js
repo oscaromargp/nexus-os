@@ -4,6 +4,7 @@ import Fuse from 'fuse.js'
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
 import { getTransactions, calcBalance, buildRunningBalance, currentPeriod } from './src/finance-engine.js'
+import { renderInmuebles, loadProperties, openPropModal, openPropDetail, closePropModal, saveProp, propHandleFiles, propHandleDrop } from './src/inmuebles.js'
 import Sortable from 'sortablejs'
 import {
   Chart, DoughnutController, ArcElement, Tooltip, Legend,
@@ -443,6 +444,7 @@ fixLayoutDOM()   // Run BEFORE async IIFE — DOM is ready at module parse time
     currentUser = session.user
     document.getElementById('user-email').textContent = currentUser.email
     await loadNodes()
+    loadProperties().catch(e => console.warn('[inmuebles] init:', e))
     setupRealtimeSubscription()
   }
   fixLayoutDOM()   // Ensure aside/toggles/spotlight are inside #nexus-layout
@@ -2236,6 +2238,7 @@ const VIEW_RENDER_MAP = {
   proyectos:    ()      => renderProyectos(),
   movimientos:  ()      => renderMovimientos(),
   cotizaciones: ()      => renderCotizaciones(),
+  inmuebles:    ()      => renderInmuebles(),
 }
 
 function renderAll() {
@@ -19756,7 +19759,7 @@ window.gsNavigateTo = function(nodeId, type) {
 //
 const NEXUS_VIEW_KEYS = {
   '1': 'feed', '2': 'kanban', '3': 'finance', '4': 'notes',
-  '5': 'calendar', '6': 'proyectos', '7': 'contacts', '8': 'agenda',
+  '5': 'calendar', '6': 'proyectos', '7': 'contacts', '8': 'agenda', '9': 'inmuebles',
 }
 
 document.addEventListener('keydown', e => {

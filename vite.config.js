@@ -11,6 +11,7 @@ export default defineConfig({
       input: {
         main:           resolve(__dirname, 'index.html'),
         app:            resolve(__dirname, 'app.html'),
+        propiedad:      resolve(__dirname, 'propiedad.html'),
         privacy:        resolve(__dirname, 'privacy.html'),
         terms:          resolve(__dirname, 'terms.html'),
         resetPassword:  resolve(__dirname, 'reset-password.html'),

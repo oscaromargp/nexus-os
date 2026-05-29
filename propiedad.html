@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Propiedad — Nexus OS</title>
+  <!-- OG básico: lo actualiza JS al cargar -->
+  <meta id="og-title"       property="og:title"       content="Inmueble en venta — Nexus OS"/>
+  <meta id="og-description" property="og:description" content="Ficha de propiedad"/>
+  <meta id="og-image"       property="og:image"        content=""/>
+  <meta id="og-url"         property="og:url"          content=""/>
+  <meta property="og:type"  content="website"/>
+  <meta name="theme-color"  content="#0d0f1f"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d0f1f;
+      color: #e8f0f9;
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { display: block; max-width: 100%; }
+
+    /* ── Layout ── */
+    .container { max-width: 900px; margin: 0 auto; padding: 0 16px 60px; }
+
+    /* ── Header brand ── */
+    .brand-bar {
+      background: #05080f;
+      border-bottom: 1px solid rgba(34,211,238,0.15);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand-name { font-size: 13px; font-weight: 800; color: #22d3ee; letter-spacing: 0.08em; }
+    .brand-url  { font-size: 11px; color: #7a8899; }
+
+    /* ── Galería ── */
+    .gallery-main  { width: 100%; height: 320px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; }
+    .gallery-thumbs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+    .gallery-thumbs img { width: 80px; height: 60px; object-fit: cover; border-radius: 6px; flex-shrink: 0; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s; }
+    .gallery-thumbs img.active { border-color: #22d3ee; }
+    .gallery-wrap { margin: 20px 0; }
+    .no-photo { height: 260px; background: rgba(34,211,238,0.04); border: 1px solid rgba(34,211,238,0.1); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 64px; opacity: 0.3; margin: 20px 0; }
+
+    /* ── Precio ── */
+    .precio { font-size: 30px; font-weight: 900; color: #22d3ee; margin-bottom: 4px; }
+    .precio-small { font-size: 13px; color: #4ade80; margin-bottom: 12px; }
+
+    /* ── Badges ── */
+    .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    .badge { padding: 5px 14px; border-radius: 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+    .badge-op   { background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.3); color: #22d3ee; }
+    .badge-tipo { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #94a3b8; }
+    .badge-status-activa      { background: rgba(74,222,128,0.1);  border: 1px solid rgba(74,222,128,0.3);  color: #4ade80; }
+    .badge-status-negociacion { background: rgba(251,146,60,0.1);  border: 1px solid rgba(251,146,60,0.3);  color: #fb923c; }
+    .badge-status-vendida     { background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.3); color: #a78bfa; }
+
+    /* ── Specs ── */
+    .specs { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin: 18px 0; }
+    .spec-item { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 10px; padding: 12px; text-align: center; }
+    .spec-icon  { font-size: 22px; margin-bottom: 4px; }
+    .spec-label { font-size: 10px; color: #7a8899; }
+    .spec-value { font-size: 15px; font-weight: 700; color: #e8f0f9; margin-top: 2px; }
+
+    /* ── Tags servicios ── */
+    .tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+    .tag-green { background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); color: #4ade80; padding: 4px 12px; border-radius: 6px; font-size: 12px; }
+    .tag-cyan  { background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.2); color: #22d3ee; padding: 4px 12px; border-radius: 6px; font-size: 12px; }
+
+    /* ── Secciones ── */
+    .section { margin: 24px 0; }
+    .section-title { font-size: 12px; font-weight: 700; color: #22d3ee; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 1px solid rgba(34,211,238,0.15); }
+    .descripcion { font-size: 14px; color: #94a3b8; line-height: 1.7; white-space: pre-wrap; }
+    .ubicacion   { font-size: 14px; color: #94a3b8; line-height: 1.8; }
+
+    /* ── Botones CTA ── */
+    .cta-bar {
+      position: sticky;
+      bottom: 0;
+      background: rgba(13,15,31,0.95);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid rgba(255,255,255,0.07);
+      padding: 14px 16px;
+      display: flex;
+      gap: 10px;
+    }
+    .btn-wa { flex: 1; padding: 14px; background: #25D366; color: #fff; font-weight: 700; font-size: 14px; border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-link { flex: 1; padding: 14px; background: rgba(34,211,238,0.12); border: 1px solid rgba(34,211,238,0.3); color: #22d3ee; font-weight: 700; font-size: 14px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+    /* ── Loading / Error ── */
+    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; gap: 12px; color: #7a8899; }
+    .spinner { width: 36px; height: 36px; border: 3px solid rgba(34,211,238,0.15); border-top-color: #22d3ee; border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-box { text-align: center; padding: 60px 20px; }
+    .error-icon { font-size: 48px; opacity: 0.4; margin-bottom: 16px; }
+
+    /* ── Mapa link ── */
+    .map-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.25); color: #60a5fa; border-radius: 8px; font-size: 12px; font-weight: 600; margin-top: 8px; cursor: pointer; }
+
+    @media (min-width: 600px) {
+      .gallery-main { height: 400px; }
+      .precio { font-size: 36px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Barra de marca -->
+  <div class="brand-bar">
+    <span class="brand-name">NEXUS OS</span>
+    <span class="brand-url">nexus-os-chi.vercel.app</span>
+  </div>
+
+  <!-- Contenido dinámico -->
+  <div id="root">
+    <div class="loading">
+      <div class="spinner"></div>
+      <span>Cargando ficha...</span>
+    </div>
+  </div>
+
+  <!-- CTA fijo -->
+  <div class="cta-bar" id="cta-bar" style="display:none;">
+    <button class="btn-wa" id="btn-wa">
+      <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Contactar por WhatsApp
+    </button>
+    <button class="btn-link" id="btn-copy">
+      🔗 Copiar link
+    </button>
+  </div>
+
+  <script>
+    const SUPABASE_URL  = '%VITE_SUPABASE_URL%'
+    const SUPABASE_KEY  = '%VITE_SUPABASE_ANON_KEY%'
+
+    const TIPO_ICONS = {casa:'🏠',depto:'🏢',terreno:'🌿',lote:'📐',bodega:'🏭',local:'🏪',nave:'🏗️'}
+    const TIPO_NAMES = {casa:'Casa',depto:'Departamento',terreno:'Terreno',lote:'Lote',bodega:'Bodega',local:'Local Comercial',nave:'Nave Industrial'}
+    const STATUS_NAMES = {captacion:'Captación',activa:'Activa',negociacion:'En negociación',vendida:'Vendida',cancelada:'Cancelada'}
+    const STATUS_CLASS = {activa:'badge-status-activa',negociacion:'badge-status-negociacion',vendida:'badge-status-vendida'}
+
+    function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+    function fmt$(n, mon='MXN') {
+      if (!n && n!==0) return 'A consultar'
+      const v = Number(n)
+      return mon==='USD' ? 'USD '+v.toLocaleString('es-MX',{maximumFractionDigits:0}) : '$'+v.toLocaleString('es-MX',{maximumFractionDigits:0})
+    }
+    function fmtM2(n){ return n ? Number(n).toLocaleString('es-MX',{maximumFractionDigits:1})+' m²' : null }
+
+    async function fetchProp(id) {
+      const res  = await fetch(`${SUPABASE_URL}/rest/v1/properties?id=eq.${id}&select=*`, {
+        headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY }
+      })
+      const data = await res.json()
+      return data?.[0] || null
+    }
+
+    function precioLabel(p) {
+      if (p.precio_venta && p.precio_renta) return fmt$(p.precio_venta,p.moneda) + ' / ' + fmt$(p.precio_renta,p.moneda) + '/mes'
+      if (p.precio_venta) return fmt$(p.precio_venta, p.moneda)
+      if (p.precio_renta) return fmt$(p.precio_renta, p.moneda) + '/mes'
+      return 'Precio a consultar'
+    }
+
+    function render(p) {
+      const fotos   = p.fotos || []
+      const tipo    = p.tipo || 'casa'
+      const ops     = p.operacion || []
+      const precio  = precioLabel(p)
+      const ubicFull = [p.calle, p.numero].filter(Boolean).join(' ')
+      const ubicCity = [p.colonia, p.municipio, p.estado_rep].filter(Boolean).join(', ')
+      const title   = p.titulo || ((TIPO_NAMES[tipo]||tipo) + (p.colonia ? ' en ' + p.colonia : ''))
+
+      // OG tags
+      document.title = title + ' — Nexus OS'
+      document.getElementById('og-title').content       = title + ' · ' + precio
+      document.getElementById('og-description').content = [ubicCity, ops.join('/').toUpperCase(), precio].filter(Boolean).join(' · ')
+      document.getElementById('og-url').content         = location.href
+      if (fotos[0]) document.getElementById('og-image').content = fotos[0].url || fotos[0].thumb_url || ''
+
+      const specs = [
+        p.recamaras        ? {icon:'🛏', label:'Recámaras',  val: p.recamaras}        : null,
+        p.banos            ? {icon:'🚿', label:'Baños',       val: p.banos}            : null,
+        p.medios_banos     ? {icon:'🚽', label:'Medios b.',   val: p.medios_banos}     : null,
+        p.estacionamientos ? {icon:'🚗', label:'Estac.',      val: p.estacionamientos} : null,
+        p.pisos            ? {icon:'🏗', label:'Pisos',       val: p.pisos}            : null,
+        p.sup_construida   ? {icon:'📐', label:'Construida',  val: fmtM2(p.sup_construida)} : null,
+        p.sup_terreno      ? {icon:'🌿', label:'Terreno',     val: fmtM2(p.sup_terreno)}    : null,
+        p.antiguedad_anios ? {icon:'📅', label:'Antigüedad',  val: p.antiguedad_anios + ' años'} : null,
+      ].filter(Boolean)
+
+      const servicios  = ['agua','luz','drenaje','gas','internet'].filter(k=>p[k])
+      const amenidades = ['alberca','jardin','roof_garden','bodega_ext','cuarto_servicio','vigilancia'].filter(k=>p[k])
+      const servLabels = {agua:'💧 Agua',luz:'⚡ Luz',drenaje:'🚿 Drenaje',gas:'🔥 Gas',internet:'📶 Internet'}
+      const amenLabels = {alberca:'🏊 Alberca',jardin:'🌿 Jardín',roof_garden:'🌇 Roof garden',bodega_ext:'📦 Bodega',cuarto_servicio:'🧹 C. servicio',vigilancia:'🔒 Vigilancia'}
+
+      document.getElementById('root').innerHTML = `
+        <div class="container">
+          <!-- Cabecera -->
+          <div style="padding:20px 0 8px;">
+            <div class="badges">
+              <span class="badge badge-tipo">${esc(TIPO_ICONS[tipo]||'🏠')} ${esc(TIPO_NAMES[tipo]||tipo)}</span>
+              ${ops.map(op=>`<span class="badge badge-op">${esc(op.toUpperCase())}</span>`).join('')}
+              ${p.status && p.status!=='captacion' ? `<span class="badge ${STATUS_CLASS[p.status]||''}">${esc(STATUS_NAMES[p.status]||p.status)}</span>` : ''}
+            </div>
+            <h1 style="font-size:22px;font-weight:800;line-height:1.3;margin-bottom:6px;">${esc(title)}</h1>
+            <div style="font-size:13px;color:#7a8899;">📍 ${esc(ubicFull ? ubicFull + ', ' : '')}${esc(ubicCity)}</div>
+          </div>
+
+          <!-- Galería -->
+          ${fotos.length ? `
+            <div class="gallery-wrap">
+              <img id="gallery-main" class="gallery-main" src="${esc(fotos[0].url||fotos[0].thumb_url)}" alt="${esc(title)}"/>
+              ${fotos.length > 1 ? `
+                <div class="gallery-thumbs">
+                  ${fotos.map((f,i)=>`
+                    <img src="${esc(f.thumb_url||f.url)}" class="${i===0?'active':''}"
+                      onclick="selectThumb(this,'${esc(f.url||f.thumb_url)}')" alt="Foto ${i+1}"/>
+                  `).join('')}
+                </div>` : ''}
+            </div>` :
+            `<div class="no-photo">${esc(TIPO_ICONS[tipo]||'🏠')}</div>`
+          }
+
+          <!-- Precio -->
+          <div class="precio">${esc(precio)}</div>
+          ${p.precio_negociable ? `<div class="precio-small">✓ Precio negociable</div>` : ''}
+
+          <!-- Specs -->
+          ${specs.length ? `
+            <div class="specs">
+              ${specs.map(s=>`
+                <div class="spec-item">
+                  <div class="spec-icon">${s.icon}</div>
+                  <div class="spec-label">${esc(s.label)}</div>
+                  <div class="spec-value">${esc(String(s.val))}</div>
+                </div>`).join('')}
+            </div>` : ''}
+
+          <!-- Servicios + Amenidades -->
+          ${servicios.length || amenidades.length ? `
+            <div class="tags">
+              ${servicios.map(k=>`<span class="tag-green">${esc(servLabels[k])}</span>`).join('')}
+              ${amenidades.map(k=>`<span class="tag-cyan">${esc(amenLabels[k])}</span>`).join('')}
+            </div>` : ''}
+
+          <!-- Descripción -->
+          ${p.descripcion ? `
+            <div class="section">
+              <div class="section-title">Descripción</div>
+              <p class="descripcion">${esc(p.descripcion)}</p>
+            </div>` : ''}
+
+          <!-- Ubicación -->
+          <div class="section">
+            <div class="section-title">Ubicación</div>
+            <div class="ubicacion">
+              ${ubicFull ? esc(ubicFull) + '<br>' : ''}
+              ${esc(ubicCity)}
+              ${p.referencias ? '<br><span style="color:#7a8899;font-size:13px;">'+esc(p.referencias)+'</span>' : ''}
+            </div>
+            ${(p.lat && p.lng) ? `
+              <a class="map-btn" href="https://www.google.com/maps?q=${p.lat},${p.lng}" target="_blank" rel="noopener">
+                🗺 Ver en Google Maps
+              </a>` : ''}
+          </div>
+
+          <!-- Folio -->
+          <div style="font-size:11px;color:#4b5563;text-align:center;margin-top:32px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.05);">
+            ${esc(p.folio_interno||'')} · Publicado por NEXUS OS · nexus-os-chi.vercel.app
+          </div>
+        </div>
+      `
+
+      // Activar CTA
+      const ctaBar = document.getElementById('cta-bar')
+      if (ctaBar) ctaBar.style.display = 'flex'
+
+      // WhatsApp
+      document.getElementById('btn-wa').onclick = () => {
+        const msg = encodeURIComponent(
+          `Hola! Vi esta propiedad en Nexus OS:\n\n🏠 *${title}*\n💰 ${precio}\n📍 ${ubicCity}\n\n${location.href}`
+        )
+        window.open('https://api.whatsapp.com/send?text=' + msg, '_blank')
+      }
+
+      // Copy link
+      document.getElementById('btn-copy').onclick = () => {
+        navigator.clipboard.writeText(location.href).then(() => {
+          const btn = document.getElementById('btn-copy')
+          btn.textContent = '✅ ¡Copiado!'
+          setTimeout(() => { btn.innerHTML = '🔗 Copiar link' }, 2000)
+        })
+      }
+    }
+
+    function selectThumb(el, url) {
+      document.getElementById('gallery-main').src = url
+      document.querySelectorAll('.gallery-thumbs img').forEach(i => i.classList.remove('active'))
+      el.classList.add('active')
+    }
+    window.selectThumb = selectThumb
+
+    async function init() {
+      const params = new URLSearchParams(location.search)
+      const id     = params.get('id')
+      if (!id) {
+        document.getElementById('root').innerHTML = `
+          <div class="error-box">
+            <div class="error-icon">🏠</div>
+            <h2 style="color:#94a3b8;margin-bottom:8px;">Propiedad no encontrada</h2>
+            <p style="color:#7a8899;font-size:14px;">El link que usaste no tiene un ID válido.</p>
+          </div>`
+        return
+      }
+      try {
+        const prop = await fetchProp(id)
+        if (!prop) {
+          document.getElementById('root').innerHTML = `
+            <div class="error-box">
+              <div class="error-icon">🔍</div>
+              <h2 style="color:#94a3b8;margin-bottom:8px;">Propiedad no disponible</h2>
+              <p style="color:#7a8899;font-size:14px;">Es posible que haya sido retirada o el link esté desactualizado.</p>
+            </div>`
+          return
+        }
+        render(prop)
+      } catch(e) {
+        document.getElementById('root').innerHTML = `
+          <div class="error-box">
+            <div class="error-icon">⚠️</div>
+            <h2 style="color:#94a3b8;margin-bottom:8px;">Error al cargar</h2>
+            <p style="color:#7a8899;font-size:14px;">${e.message}</p>
+          </div>`
+      }
+    }
+
+    init()
+  </script>
+</body>
+</html>
