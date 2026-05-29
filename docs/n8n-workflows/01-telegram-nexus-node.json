@@ -1,0 +1,145 @@
+{
+  "name": "Nexus OS — Telegram → Nodo",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer texto del mensaje de Telegram\nconst msg = $input.first().json.message;\nconst text = msg?.text || '';\nconst userId = $env.NEXUS_USER_ID;\n\n// Ignorar mensajes que no son texto\nif (!text) {\n  return [];\n}\n\n// Ignorar comandos /start /help\nif (text.startsWith('/')) {\n  return [{ json: { skip: true, text } }];\n}\n\nreturn [{ json: {\n  text,\n  user_id: userId,\n  source: 'telegram',\n  chat_id: msg.chat?.id,\n  from: msg.from?.first_name || 'Telegram'\n}}];"
+      },
+      "id": "prepare-payload",
+      "name": "Preparar payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "false" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-skip",
+      "name": "¿Enviar a Nexus?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXUS_WEBHOOK_URL }}/api/n8n",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "text",    "value": "={{ $json.text }}" },
+            { "name": "user_id", "value": "={{ $json.user_id }}" },
+            { "name": "source",  "value": "telegram" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "nexus-webhook",
+      "name": "Crear nodo en Nexus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 220],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "NEXUS_BEARER_CREDENTIAL_ID",
+          "name": "Nexus Webhook Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Preparar payload').first().json.chat_id }}",
+        "text": "={{ $json.ok ? '✅ Nodo guardado en Nexus OS (' + $json.node.type + ')' : '❌ Error: ' + $json.error }}",
+        "additionalFields": {}
+      },
+      "id": "telegram-reply",
+      "name": "Confirmar por Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1120, 220],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{ "node": "Preparar payload", "type": "main", "index": 0 }]]
+    },
+    "Preparar payload": {
+      "main": [[{ "node": "¿Enviar a Nexus?", "type": "main", "index": 0 }]]
+    },
+    "¿Enviar a Nexus?": {
+      "main": [
+        [{ "node": "Crear nodo en Nexus", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Crear nodo en Nexus": {
+      "main": [[{ "node": "Confirmar por Telegram", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "description": "Envía mensajes a tu bot de Telegram con sintaxis Nexus (#tarea, +$, -$, etc.) y se crean nodos automáticamente en Nexus OS.",
+    "templateId": "nexus-telegram-01"
+  },
+  "_nexus_setup": {
+    "env_vars_needed": [
+      "NEXUS_WEBHOOK_URL: URL de tu deploy en Vercel (ej: https://nexus-os-chi.vercel.app)",
+      "NEXUS_USER_ID: tu UUID de usuario en Supabase (Settings > Auth > Users)",
+      "NEXUS_WEBHOOK_SECRET: el mismo secreto que pusiste en Vercel env vars"
+    ],
+    "credentials_needed": [
+      "Telegram Bot: token de @BotFather",
+      "Nexus Webhook Token: HTTP Bearer con el valor de NEXUS_WEBHOOK_SECRET"
+    ],
+    "examples": [
+      "#tarea llamar al cliente mañana p1",
+      "-$350 gasolina @bbva #auto",
+      "+$5000 pago proyecto @nómina",
+      "Nota libre sin prefijo → tipo 'note'"
+    ]
+  }
+}

@@ -1,0 +1,108 @@
+{
+  "name": "Nexus OS — Recordatorios de Pagos (Agenda Financiera)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * *" }]
+        }
+      },
+      "id": "schedule",
+      "name": "Cada día 9:00am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "nodes",
+        "additionalFields": {
+          "filter": "type=in.(bill,subscription,income)&metadata->>is_recurring=eq.true"
+        }
+      },
+      "id": "supabase-recurring",
+      "name": "Obtener pagos recurrentes",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Nexus Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nconst today = new Date();\nconst pad = n => String(n).padStart(2,'0');\nconst isoToday = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;\n\n// Filtrar pagos que vencen hoy o en los próximos 3 días\nconst upcoming = [];\n\nfor (const r of rows) {\n  const meta = r.metadata || {};\n  const dueDay = meta.due_day || meta.billing_day;\n  if (!dueDay) continue;\n\n  // Calcular próxima fecha de vencimiento este mes\n  const dueDate = new Date(today.getFullYear(), today.getMonth(), parseInt(dueDay));\n  if (dueDate < today) dueDate.setMonth(dueDate.getMonth()+1); // siguiente mes\n  const diffMs = dueDate.getTime() - today.getTime();\n  const diffDays = Math.floor(diffMs / 86400000);\n\n  if (diffDays >= 0 && diffDays <= 3) {\n    upcoming.push({\n      label: meta.label || r.content || 'Pago',\n      amount: meta.amount || 0,\n      account: meta.account_hint || meta.bank || '',\n      dueDay,\n      diffDays,\n      type: r.type,\n    });\n  }\n}\n\nif (upcoming.length === 0) {\n  return [{ json: { skip: true, mensaje: 'Sin pagos próximos' } }];\n}\n\nconst lines = upcoming.map(p => {\n  const icon = p.type === 'income' ? '💰' : '💸';\n  const days = p.diffDays === 0 ? '*¡HOY!*' : `en ${p.diffDays} día${p.diffDays>1?'s':''}`;\n  const acct = p.account ? ` (@${p.account})` : '';\n  return `${icon} ${p.label}${acct}: $${parseFloat(p.amount).toFixed(2)} — ${days} (día ${p.dueDay})`;\n}).join('\\n');\n\nconst mensaje = [\n  `📅 *Nexus OS — Agenda Financiera*`,\n  ``,\n  `Pagos próximos:`,\n  lines,\n  ``,\n  `🔗 Ver agenda: nexus-os-chi.vercel.app/app`,\n].join('\\n');\n\nreturn [{ json: { skip: false, mensaje, count: upcoming.length } }];"
+      },
+      "id": "filter-upcoming",
+      "name": "Filtrar próximos 3 días",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "false" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-empty",
+      "name": "¿Hay recordatorios?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.NEXUS_TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "send-reminder",
+      "name": "Enviar recordatorio",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1120, 220],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada día 9:00am": {
+      "main": [[{ "node": "Obtener pagos recurrentes", "type": "main", "index": 0 }]]
+    },
+    "Obtener pagos recurrentes": {
+      "main": [[{ "node": "Filtrar próximos 3 días", "type": "main", "index": 0 }]]
+    },
+    "Filtrar próximos 3 días": {
+      "main": [[{ "node": "¿Hay recordatorios?", "type": "main", "index": 0 }]]
+    },
+    "¿Hay recordatorios?": {
+      "main": [
+        [{ "node": "Enviar recordatorio", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "_nexus_setup": {
+    "description": "Revisa cada mañana la Agenda Financiera de Nexus OS y envía por Telegram avisos de pagos y cobros que vencen en los próximos 3 días.",
+    "prerequisites": "Los nodos de Agenda deben tener metadata.is_recurring=true y metadata.due_day=[número]",
+    "tip": "Cambia el rango de 3 días editando el código: diffDays <= 3"
+  }
+}

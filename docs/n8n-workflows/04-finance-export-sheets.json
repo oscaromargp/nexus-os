@@ -1,0 +1,128 @@
+{
+  "name": "Nexus OS — Export Semanal → Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 7 * * 1" }]
+        }
+      },
+      "id": "schedule",
+      "name": "Cada lunes 7:00am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date();\nconst lastMonday = new Date(today);\nlastMonday.setDate(today.getDate() - 7);\nconst pad = n => String(n).padStart(2,'0');\nconst fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;\nreturn [{ json: { from: fmt(lastMonday), to: fmt(today) } }];"
+      },
+      "id": "date-range",
+      "name": "Calcular rango semana pasada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "nodes",
+        "additionalFields": {
+          "filter": "type=in.(income,expense)&created_at=gte.{{ $json.from }}&created_at=lt.{{ $json.to }}",
+          "order": "created_at.asc"
+        }
+      },
+      "id": "supabase-query",
+      "name": "Obtener transacciones",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Nexus Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nreturn rows.map(r => {\n  const meta = r.metadata || {};\n  return { json: {\n    Fecha:       (r.created_at || '').slice(0,10),\n    Tipo:        r.type === 'income' ? 'Ingreso' : 'Gasto',\n    Concepto:    meta.label || r.content || '',\n    Monto:       parseFloat(meta.amount || 0),\n    Cuenta:      meta.account_hint || '',\n    Proyecto:    meta.project_tag || '',\n    Tags:        (meta.tags || []).join(', '),\n    ID:          r.id || '',\n  }};\n});"
+      },
+      "id": "format-rows",
+      "name": "Formatear filas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.NEXUS_SHEETS_DOC_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Transacciones",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Fecha":     "={{ $json.Fecha }}",
+            "Tipo":      "={{ $json.Tipo }}",
+            "Concepto":  "={{ $json.Concepto }}",
+            "Monto":     "={{ $json.Monto }}",
+            "Cuenta":    "={{ $json.Cuenta }}",
+            "Proyecto":  "={{ $json.Proyecto }}",
+            "Tags":      "={{ $json.Tags }}"
+          },
+          "matchingColumns": ["ID"],
+          "schema": [
+            { "id": "Fecha", "displayName": "Fecha", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "Tipo", "displayName": "Tipo", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Concepto", "displayName": "Concepto", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Monto", "displayName": "Monto", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": false }
+          ]
+        }
+      },
+      "id": "sheets-append",
+      "name": "Agregar a Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1120, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada lunes 7:00am": {
+      "main": [[{ "node": "Calcular rango semana pasada", "type": "main", "index": 0 }]]
+    },
+    "Calcular rango semana pasada": {
+      "main": [[{ "node": "Obtener transacciones", "type": "main", "index": 0 }]]
+    },
+    "Obtener transacciones": {
+      "main": [[{ "node": "Formatear filas", "type": "main", "index": 0 }]]
+    },
+    "Formatear filas": {
+      "main": [[{ "node": "Agregar a Google Sheets", "type": "main", "index": 0 }]]
+    }
+  },
+  "_nexus_setup": {
+    "description": "Cada lunes exporta todas las transacciones de la semana pasada a Google Sheets para llevar la contabilidad.",
+    "env_vars_needed": [
+      "NEXUS_SHEETS_DOC_ID: ID del Google Sheet (está en la URL: docs.google.com/spreadsheets/d/ID/)"
+    ],
+    "sheets_structure": "Crea una hoja llamada 'Transacciones' con columnas: Fecha | Tipo | Concepto | Monto | Cuenta | Proyecto | Tags",
+    "credentials_needed": [
+      "Supabase: URL + Service Role Key",
+      "Google Sheets: OAuth2 (autoriza en n8n)"
+    ]
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "name": "Nexus OS — Resumen Financiero Diario",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      },
+      "id": "schedule",
+      "name": "Cada día 8:00am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "nodes",
+        "additionalFields": {
+          "filter": "type=in.(income,expense)&created_at=gte.{{ new Date(new Date().setDate(new Date().getDate()-7)).toISOString().split('T')[0] }}",
+          "order": "created_at.desc"
+        }
+      },
+      "id": "supabase-query",
+      "name": "Obtener transacciones (7 días)",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "SUPABASE_CREDENTIAL_ID",
+          "name": "Nexus Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\n\nlet ingresos = 0, gastos = 0;\nconst byDay = {};\n\nfor (const r of rows) {\n  const meta = r.metadata || {};\n  const amt = parseFloat(meta.amount || 0);\n  const day = (r.created_at || '').slice(0,10);\n  if (!byDay[day]) byDay[day] = { in: 0, out: 0 };\n  if (r.type === 'income') { ingresos += amt; byDay[day].in += amt; }\n  else { gastos += amt; byDay[day].out += amt; }\n}\n\nconst balance = ingresos - gastos;\nconst sign = balance >= 0 ? '🟢' : '🔴';\n\nconst today = new Date().toLocaleDateString('es-MX', { weekday:'long', day:'numeric', month:'long' });\n\nconst dayLines = Object.entries(byDay)\n  .sort(([a],[b]) => b.localeCompare(a))\n  .slice(0,5)\n  .map(([d,[,v]]) => {\n    const vals = byDay[d];\n    return `📅 ${d}: +$${vals.in.toFixed(2)} / -$${vals.out.toFixed(2)}`;\n  }).join('\\n');\n\nconst mensaje = [\n  `🧠 *Nexus OS — Resumen Financiero*`,\n  `📆 ${today}`,\n  ``,\n  `💰 Ingresos (7d): $${ingresos.toFixed(2)}`,\n  `💸 Gastos (7d):  $${gastos.toFixed(2)}`,\n  `${sign} Balance:      $${balance.toFixed(2)}`,\n  ``,\n  `*Últimos días:*`,\n  dayLines || 'Sin transacciones',\n  ``,\n  `🔗 Ver detalle: nexus-os-chi.vercel.app/app`,\n].join('\\n');\n\nreturn [{ json: { mensaje, ingresos, gastos, balance } }];"
+      },
+      "id": "calculate-summary",
+      "name": "Calcular resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.NEXUS_TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "send-telegram",
+      "name": "Enviar resumen por Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [900, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cada día 8:00am": {
+      "main": [[{ "node": "Obtener transacciones (7 días)", "type": "main", "index": 0 }]]
+    },
+    "Obtener transacciones (7 días)": {
+      "main": [[{ "node": "Calcular resumen", "type": "main", "index": 0 }]]
+    },
+    "Calcular resumen": {
+      "main": [[{ "node": "Enviar resumen por Telegram", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "_nexus_setup": {
+    "description": "Cada mañana a las 8am envía por Telegram un resumen de los últimos 7 días de ingresos y gastos registrados en Nexus OS.",
+    "env_vars_needed": [
+      "NEXUS_TELEGRAM_CHAT_ID: tu chat ID personal (obtenlo con @userinfobot)"
+    ],
+    "credentials_needed": [
+      "Supabase: URL + Service Role Key de tu proyecto",
+      "Telegram Bot: token de @BotFather"
+    ],
+    "tip": "Ajusta el cron 0 8 * * * para la hora que prefieras. Ejemplo: 0 7 * * 1-5 = 7am lunes-viernes"
+  }
+}
