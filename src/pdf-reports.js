@@ -518,36 +518,67 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
   doc.text(letLines[0], T.mX + 8, y + 29)
   y += 38
 
-  // ── KPIs — 5 cajas ───────────────────────────────────────────────────────────
-  const uniqCats = new Set(list.map(m => m.categoria).filter(Boolean)).size
+  // ── KPIs — 5 cajas con mini-iconos vectoriales ───────────────────────────────
+  const uniqBancos = new Set(list.map(m => m.banco).filter(Boolean)).size
   const kGap = 3
   const kW   = (W - T.mX * 2 - kGap * 4) / 5
   _kpi(doc, T.mX,                        y, kW, 22, 'Entradas',     fmt$(kpis.entradas),  T.green)
   _kpi(doc, T.mX + (kW + kGap),          y, kW, 22, 'Salidas',      fmt$(kpis.salidas),   T.red)
   _kpi(doc, T.mX + (kW + kGap) * 2,     y, kW, 22, 'Neto periodo', fmt$(kpis.net),       kpis.net >= 0 ? T.green : T.red)
   _kpi(doc, T.mX + (kW + kGap) * 3,     y, kW, 22, 'Movimientos',  String(list.length),  T.cyan)
-  _kpi(doc, T.mX + (kW + kGap) * 4,     y, kW, 22, 'Categorias',   String(uniqCats || 0), T.violet)
+  _kpi(doc, T.mX + (kW + kGap) * 4,     y, kW, 22, 'Bancos',       String(uniqBancos || 0), T.violet)
+
+  // Mini-iconos en esquina superior derecha de cada KPI
+  const _kpiIco = (type, kx) => {
+    const ix = kx + kW - 5.5
+    const iy = y + 5
+    const s  = 2.2
+    switch (type) {
+      case 'up':   doc.setFillColor(...T.greenD); doc.triangle(ix - s, iy + s, ix + s, iy + s, ix, iy - s, 'F'); break
+      case 'down': doc.setFillColor(...T.redD);   doc.triangle(ix - s, iy - s, ix + s, iy - s, ix, iy + s, 'F'); break
+      case 'dot':  doc.setFillColor(...T.cyan);   doc.circle(ix, iy, s * 0.85, 'F'); break
+      case 'bank':
+        doc.setFillColor(...T.violet)
+        doc.roundedRect(ix - s, iy - s * 0.5, s * 2, s * 1.1, 0.3, 0.3, 'F')
+        doc.setFillColor(...T.surface)
+        doc.rect(ix - s * 0.6, iy - s * 0.05, s * 0.4, s * 0.7, 'F')
+        doc.rect(ix + s * 0.15, iy - s * 0.05, s * 0.4, s * 0.7, 'F')
+        break
+    }
+  }
+  _kpiIco('up',   T.mX)
+  _kpiIco('down', T.mX + (kW + kGap))
+  _kpiIco(kpis.net >= 0 ? 'up' : 'down', T.mX + (kW + kGap) * 2)
+  _kpiIco('dot',  T.mX + (kW + kGap) * 3)
+  _kpiIco('bank', T.mX + (kW + kGap) * 4)
   y += 28
 
-  // ── Tabla de movimientos ─────────────────────────────────────────────────────
+  // ── Tabla de movimientos — trazable (ordenante → beneficiario + banco + CLABE) ─
   _autoTable(doc, {
     startY: y,
-    head: [['FECHA', 'CONCEPTO / BENEFICIARIO', 'CATEGORIA', 'CRIPTO', 'CARGO (-)', 'ABONO (+)', 'SALDO']],
+    head: [['FECHA', '', 'ORDENANTE / BENEFICIARIO', 'CRIPTO', 'CARGO (-)', 'ABONO (+)', 'SALDO']],
     body: list.map(m => {
-      const net     = m.tipo === 'entrada' && m.comision != null
+      const net      = m.tipo === 'entrada' && m.comision != null
         ? Math.round((m.monto_mxn ?? 0) * (1 - (m.comision || 0)) * 100) / 100
         : (m.monto_mxn ?? 0)
       const isCan    = m.estado === 'cancelado'
       const isCrypto = m.moneda !== 'MXN' && m.moneda !== 'USD'
-      const concepto = m.tipo === 'entrada'
+      // Contraparte rastreable: nombre + banco + CLABE enmascarada
+      const nombre      = m.tipo === 'entrada'
         ? (m.ordenante    || m.notas || 'Deposito')
         : (m.beneficiario || m.notas || 'Retiro')
+      const clabeHint   = m.clabe ? '···' + String(m.clabe).slice(-4) : ''
+      const bancoClabe  = [m.banco, clabeHint].filter(Boolean).join(' · ')
+      const extraNote   = m.notas && m.notas !== nombre ? m.notas : ''
+      const contraparte = nombre
+        + (bancoClabe ? '\n' + bancoClabe : '')
+        + (extraNote  ? '\n' + extraNote  : '')
       return [
         m.fecha,
-        concepto + (m.banco ? '\n' + m.banco : ''),
-        m.categoria || '',
+        '',            // ← triángulo dibujado en didDrawCell
+        contraparte,
         isCrypto && !isCan
-          ? (m.cantidad || 0).toLocaleString('es-MX', { maximumFractionDigits: 6 }) + ' ' + m.moneda
+          ? (m.cantidad || 0).toLocaleString('es-MX', { maximumFractionDigits: 6 }) + '\n' + m.moneda
           : '',
         !isCan && m.tipo === 'salida'  ? fmt$(net) : '',
         !isCan && m.tipo === 'entrada' ? fmt$(net) : '',
@@ -556,14 +587,29 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
     }),
     columnStyles: {
       0: { cellWidth: 20, halign: 'center', textColor: T.textMid,  fontSize: 7 },
-      1: { cellWidth: 44 },
-      2: { cellWidth: 21, halign: 'center', textColor: T.violet,   fontSize: 7 },
-      3: { cellWidth: 18, halign: 'right',  textColor: T.orange,   fontSize: 7 },
-      4: { cellWidth: 24, halign: 'right',  textColor: T.red },
-      5: { cellWidth: 24, halign: 'right',  textColor: T.green },
-      6: { cellWidth: 27, halign: 'right',  fontStyle: 'bold' },
+      1: { cellWidth:  8, halign: 'center' },
+      2: { cellWidth: 55, fontSize: 7.5 },
+      3: { cellWidth: 17, halign: 'center', textColor: T.orange,   fontSize: 6.5 },
+      4: { cellWidth: 23, halign: 'right',  textColor: T.redD,     fontStyle: 'bold' },
+      5: { cellWidth: 23, halign: 'right',  textColor: T.greenD,   fontStyle: 'bold' },
+      6: { cellWidth: 32, halign: 'right',  fontStyle: 'bold',     fontSize: 8 },
     },
     didDrawCell: (data) => {
+      // ── Triángulo direccional (col 1) ────────────────────────────────────────
+      if (data.section === 'body' && data.column.index === 1) {
+        const m    = list[data.row.index]
+        const isEnt = m?.tipo === 'entrada'
+        const cx   = data.cell.x + data.cell.width  / 2
+        const cy   = data.cell.y + data.cell.height / 2
+        const s    = 2.2
+        doc.setFillColor(...(isEnt ? T.greenD : T.redD))
+        if (isEnt) {
+          doc.triangle(cx - s, cy + s * 0.85, cx + s, cy + s * 0.85, cx, cy - s * 0.85, 'F')
+        } else {
+          doc.triangle(cx - s, cy - s * 0.85, cx + s, cy - s * 0.85, cx, cy + s * 0.85, 'F')
+        }
+      }
+      // ── Saldo — color según positivo / negativo (col 6) ─────────────────────
       if (data.section === 'body' && data.column.index === 6) {
         const bal = list[data.row.index]?._balance ?? 0
         data.cell.styles.textColor = bal >= 0 ? T.greenD : T.redD
@@ -576,12 +622,12 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
     },
   })
 
-  // ── Top 5 contactos por volumen ──────────────────────────────────────────────
-  const afterY = (doc.lastAutoTable?.finalY ?? y) + 8
+  // ── Top contactos por volumen (compacto) ─────────────────────────────────────
+  const afterY = (doc.lastAutoTable?.finalY ?? y) + 6
   let topY = afterY
 
-  // Nueva página si no cabe (~52mm necesarios)
-  if (topY + 52 > H - 18) {
+  // Nueva página si no cabe (~40mm necesarios)
+  if (topY + 40 > H - 18) {
     doc.addPage()
     _headerReport(doc, 'Estado de Cuenta',
       `${orq?.nombre || ''} · ${filters.dateFrom || ''} → ${filters.dateTo || 'Hoy'}`, folio)
@@ -601,39 +647,56 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
     .slice(0, 5)
 
   if (top5.length) {
-    topY = _section(doc, 'Top 5 Contactos por Volumen', topY)
-    const maxVol = (top5[0][1].ent + top5[0][1].sal) || 1
-    const barW   = W - T.mX * 2 - 60
+    topY = _section(doc, 'Contactos por Volumen', topY)
 
-    top5.forEach(([nombre, data], i) => {
-      const rowY = topY + i * 13
-      // Posición
-      doc.setFontSize(7.5)
+    const CTCL    = [T.cyan, T.violet, T.orange, T.greenD, T.blue]  // paleta avatar
+    const maxVol  = (top5[0][1].ent + top5[0][1].sal) || 1
+    const barMaxW = W - T.mX * 2 - 68          // ancho máximo de barra relativa
+    const ROW_H   = 9                           // mm por fila (antes: 13)
+    const AVR     = 2.6                         // radio del avatar circle
+
+    top5.forEach(([nombre, d], i) => {
+      const clr  = CTCL[i % CTCL.length]
+      const rowY = topY + i * ROW_H
+      const midY = rowY + ROW_H / 2
+
+      // ── Avatar circle con inicial ──────────────────────────────────────────
+      doc.setFillColor(...clr)
+      doc.circle(T.mX + AVR, midY, AVR, 'F')
+      doc.setFontSize(5.5)
+      doc.setFont(T.font, 'bold')
+      doc.setTextColor(...T.white)
+      doc.text((nombre.trim()[0] || '?').toUpperCase(), T.mX + AVR, midY + 1.1, { align: 'center' })
+
+      // ── Nombre ─────────────────────────────────────────────────────────────
+      doc.setFontSize(7)
       doc.setFont(T.font, 'bold')
       doc.setTextColor(...T.textInk)
-      doc.text(String(i + 1) + '.', T.mX, rowY + 5)
-      // Nombre
-      const nm = doc.splitTextToSize(nombre, 52)[0]
-      doc.text(nm, T.mX + 6, rowY + 5)
-      // Conteo
-      doc.setFontSize(7)
+      doc.text(doc.splitTextToSize(nombre, 44)[0], T.mX + 7.5, midY + 1.1)
+
+      // ── Conteo ─────────────────────────────────────────────────────────────
+      doc.setFontSize(6)
       doc.setFont(T.font, 'normal')
       doc.setTextColor(...T.textMid)
-      doc.text(data.count + ' mov.', T.mX + 61, rowY + 5)
-      // Entradas
+      doc.text(d.count + ' mov.', T.mX + 55, midY + 1.1)
+
+      // ── Entrada ────────────────────────────────────────────────────────────
+      doc.setFontSize(6.5)
       doc.setTextColor(...T.greenD)
-      doc.text('+ ' + fmt$(data.ent), T.mX + 80, rowY + 5)
-      // Salidas
+      doc.text('+' + fmt$(d.ent), T.mX + 73, midY + 1.1)
+
+      // ── Salida ─────────────────────────────────────────────────────────────
       doc.setTextColor(...T.redD)
-      doc.text('- ' + fmt$(data.sal), T.mX + 117, rowY + 5)
-      // Barra de progreso relativa al máximo
-      const vol  = data.ent + data.sal
-      const pct  = vol / maxVol
+      doc.text('-' + fmt$(d.sal), T.mX + 110, midY + 1.1)
+
+      // ── Barra de progreso fina con color del avatar ────────────────────────
+      const pct  = (d.ent + d.sal) / maxVol
+      const barY = rowY + ROW_H - 2
       doc.setFillColor(220, 228, 240)
-      doc.roundedRect(T.mX + 6, rowY + 7, barW, 3, 1, 1, 'F')
+      doc.roundedRect(T.mX + 7, barY, barMaxW, 1.4, 0.4, 0.4, 'F')
       if (pct > 0) {
-        doc.setFillColor(...T.cyan)
-        doc.roundedRect(T.mX + 6, rowY + 7, barW * pct, 3, 1, 1, 'F')
+        doc.setFillColor(...clr)
+        doc.roundedRect(T.mX + 7, barY, barMaxW * pct, 1.4, 0.4, 0.4, 'F')
       }
     })
   }
