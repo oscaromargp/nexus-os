@@ -185,6 +185,13 @@ let calDate       = new Date()
 let editingCardId = null
 let userPrefs     = { tempUnit: 'C' }
 
+// ── Constante de modo demo — cacheada una sola vez (evita 101 lecturas de localStorage) ──
+const IS_DEMO = localStorage.getItem('nexus_admin_bypass') === 'true'
+
+// ── Flag de índice Fuse — solo reconstruir cuando allNodes cambia ──────────────
+let _fuseIndexDirty = true
+function _markFuseDirty() { _fuseIndexDirty = true }
+
 /** Reads emisor (fiscal) data from localStorage settings for PDF footers */
 function getEmisor() {
   const s = JSON.parse(localStorage.getItem('nexus_settings') || '{}')
@@ -478,23 +485,36 @@ window.onunhandledrejection = (e) => {
   showToast(`⚠️ ${text}`)
 }
 
+// Referencia al canal Realtime — necesaria para cleanup al cerrar sesión
+let _realtimeChannel = null
+// Debounce para evitar escrituras excesivas en localStorage durante importaciones
+let _cacheDebounce = null
+function _debouncedSaveCache() {
+  clearTimeout(_cacheDebounce)
+  _cacheDebounce = setTimeout(() => saveNodesToCache(allNodes), 500)
+}
+
 function setupRealtimeSubscription() {
-  supabase
-    .channel('public:nodes')
+  // Limpiar suscripción anterior si existe (evita canales huérfanos)
+  if (_realtimeChannel) supabase.removeChannel(_realtimeChannel)
+
+  _realtimeChannel = supabase
+    .channel(`public:nodes:${currentUser.id}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'nodes', filter: `owner_id=eq.${currentUser.id}` }, (payload) => {
-      console.log('Realtime change:', payload)
       if (payload.eventType === 'INSERT') {
         // Solo agregar si no existe ya (evita duplicado cuando el mismo cliente hizo el insert)
         if (!allNodes.find(n => n.id === payload.new.id)) {
           allNodes.unshift(_normNode(payload.new))
+          _fuseIndexDirty = true
         }
       } else if (payload.eventType === 'UPDATE') {
         const idx = allNodes.findIndex(n => n.id === payload.new.id)
-        if (idx !== -1) allNodes[idx] = _normNode(payload.new)
+        if (idx !== -1) { allNodes[idx] = _normNode(payload.new); _fuseIndexDirty = true }
       } else if (payload.eventType === 'DELETE') {
         allNodes = allNodes.filter(n => n.id !== payload.old.id)
+        _fuseIndexDirty = true
       }
-      saveNodesToCache(allNodes)
+      _debouncedSaveCache()
       renderAll()
     })
     .subscribe()
@@ -571,12 +591,13 @@ async function loadNodes() {
     console.error('[loadNodes]', error)
   } else {
     allNodes = (data || []).map(_normNode)
+    _markFuseDirty()
     saveNodesToCache(allNodes)
     renderAll()
   }
 
   // Muestra el onboarding solo la primera vez (no en admin bypass)
-  if (!localStorage.getItem('nexus_onboarded') && localStorage.getItem('nexus_admin_bypass') !== 'true') {
+  if (!localStorage.getItem('nexus_onboarded') && !IS_DEMO) {
     setTimeout(() => {
       const m = document.getElementById('welcome-modal')
       if (m) {
@@ -625,6 +646,10 @@ function renderKanban(nodes) {
   // ── KPI strip with visual charts ─────────────────────────
   const kpiRoot = document.getElementById('kanban-kpi-root')
   if (kpiRoot) {
+    // Destruir charts ANTES de sobreescribir el DOM — previene "Canvas already in use" y memory leaks
+    if (window._kanbanDonut)  { window._kanbanDonut.destroy();  window._kanbanDonut  = null }
+    if (window._kanbanWeekly) { window._kanbanWeekly.destroy(); window._kanbanWeekly = null }
+
     const today0 = new Date().toISOString().slice(0,10)
     const kNodes  = allNodes.filter(n=>n.type==='kanban')
     const kTotal  = kNodes.length
@@ -647,7 +672,7 @@ function renderKanban(nodes) {
       weekCounts.push(kNodes.filter(n=>n.metadata?.status==='done'&&n.metadata?.done_at>=ws&&n.metadata?.done_at<=we).length)
     }
 
-    kpiRoot.innerHTML = `<div style="display:grid;grid-template-columns:200px 1fr 200px;gap:12px;align-items:stretch;">
+    kpiRoot.innerHTML = `<div style="display:grid;grid-template-columns:minmax(140px,200px) 1fr minmax(140px,200px);gap:12px;align-items:stretch;">
       <!-- Donut chart -->
       <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:16px;display:flex;flex-direction:column;align-items:center;gap:8px;">
         <div style="font-size:9px;font-weight:800;letter-spacing:.08em;color:var(--text-dim);text-transform:uppercase;">Distribución</div>
@@ -701,12 +726,11 @@ function renderKanban(nodes) {
       </div>
     </div>`
 
-    // Initialize charts after DOM insertion
+    // Initialize charts after DOM insertion (charts ya destruidos antes del innerHTML)
     setTimeout(() => {
       // Donut chart
       const donutCtx = document.getElementById('kanban-donut')?.getContext('2d')
       if (donutCtx) {
-        if (window._kanbanDonut) window._kanbanDonut.destroy()
         window._kanbanDonut = new Chart(donutCtx, {
           type:'doughnut',
           data: {
@@ -719,7 +743,6 @@ function renderKanban(nodes) {
       // Weekly bar chart
       const barCtx = document.getElementById('kanban-weekly')?.getContext('2d')
       if (barCtx) {
-        if (window._kanbanWeekly) window._kanbanWeekly.destroy()
         window._kanbanWeekly = new Chart(barCtx, {
           type:'bar',
           data: {
@@ -733,8 +756,9 @@ function renderKanban(nodes) {
   }
 
   const today = new Date().toISOString().split('T')[0]
-  // Linear.app-style: flex row, thin borders, minimal cards
-  root.style.cssText = 'display:flex; gap:16px; overflow-x:auto; padding-bottom:8px;'
+  // Linear.app-style: flex row responsive, thin borders, minimal cards
+  // Responsive: minmax(240px, 280px) en lugar de 280px fijo (fix mobile scroll)
+  root.style.cssText = 'display:flex; gap:16px; overflow-x:auto; padding-bottom:8px; min-width:0;'
   const COL_COLORS = { todo:'#94a3b8', in_progress:'#fbbf24', done:'#4ade80' }
   const PCLR = { alta:'#f87171', '1':'#f87171', media:'#fbbf24', baja:'#4ade80' }
 
@@ -801,7 +825,7 @@ function renderKanban(nodes) {
 
     return `
       <div class="trello-list" id="list-${list.id}"
-           style="flex:0 0 280px; display:flex; flex-direction:column; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:12px; overflow:hidden; max-height:calc(100vh - 200px);">
+           style="flex:0 0 clamp(240px, 28vw, 280px); display:flex; flex-direction:column; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06); border-radius:12px; overflow:hidden; max-height:calc(100vh - 200px);">
         <div class="trello-list-header" style="padding:12px 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid ${colColor}40; background:transparent;">
           <div style="display:flex; align-items:center; gap:8px; min-width:0;">
             <span style="width:8px;height:8px;border-radius:50%;background:${colColor};flex-shrink:0;"></span>
@@ -1274,29 +1298,25 @@ async function updateNodeMetadata(id, metadata) {
 }
 
 document.getElementById('tm-btn-archive')?.addEventListener('click', async () => {
-  if (!confirm('¿Archivar tarjeta? Se ocultará del tablero pero podrás verla en Crónica.')) return
   const node = allNodes.find(n => n.id === editingCardId)
   if (node) {
     node.metadata = { ...(node.metadata || {}), status: 'archived' }
-    if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
+    if (!IS_DEMO) {
       await supabase.from('nodes').update({ metadata: node.metadata }).eq('id', editingCardId)
     }
   }
   allNodes = allNodes.filter(n => n.id !== editingCardId)
+  _markFuseDirty()
   renderAll()
   closeCardModal()
+  showToast('📦 Tarjeta archivada — visible en Crónica')
 })
 
 document.getElementById('tm-btn-delete')?.addEventListener('click', async () => {
-  if (!confirm('¿Eliminar esta tarjeta permanentemente? Esta acción no se puede deshacer.')) return
-  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
-    allNodes = allNodes.filter(n => n.id !== editingCardId)
-    renderAll(); closeCardModal(); return
-  }
-  allNodes = allNodes.filter(n => n.id !== editingCardId)
-  renderAll()
+  const id    = editingCardId
+  const label = allNodes.find(n => n.id === id)?.metadata?.label || 'Tarjeta'
   closeCardModal()
-  await supabase.from('nodes').delete().eq('id', editingCardId)
+  await nxUndoToast(id, label)
 })
 
 // ─────────────────────────────────────────
@@ -1385,9 +1405,10 @@ async function insertNodeRaw(raw, metadataOverrides={}) {
   const tempId = '_tmp_' + Date.now()
   const tempNode = { id: tempId, type, content: content || raw, metadata: finalMetadata, created_at: new Date().toISOString(), _optimistic: true }
   allNodes.unshift(tempNode)
+  _markFuseDirty()
   renderAll()
 
-  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+  if (IS_DEMO) {
     const idx = allNodes.findIndex(n => n.id === tempId)
     const perm = { ...tempNode, id: Math.random().toString(36).substr(2,9), _optimistic: false }
     if (idx !== -1) allNodes[idx] = perm; else allNodes.unshift(perm)
@@ -1407,6 +1428,7 @@ async function insertNodeRaw(raw, metadataOverrides={}) {
   const idx = allNodes.findIndex(n => n.id === tempId)
   if (!error && inserted?.[0]) {
     if (idx !== -1) allNodes[idx] = inserted[0]; else allNodes.unshift(inserted[0])
+    _markFuseDirty()
     saveNodesToCache(allNodes)
     renderAll(); showToast(`NODO INYECTADO: ${type.toUpperCase()}`)
   } else {
@@ -1423,6 +1445,7 @@ async function insertDirectNode(type, content, metadata) {
   const tempId = '_tmp_' + Date.now()
   const tempNode = { id: tempId, type, content, metadata: finalMeta, created_at: new Date().toISOString(), _optimistic: true }
   allNodes.unshift(tempNode)
+  _markFuseDirty()
   renderAll()
 
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
@@ -1461,6 +1484,63 @@ function showToast(msg) {
     el.style.opacity = '0'
     setTimeout(() => el.classList.add('hidden'), 500)
   }, 3000)
+}
+
+/**
+ * nxUndoToast — elimina un nodo de forma optimista con posibilidad de deshacer.
+ * Reemplaza el patrón confirm() + delete inmediato.
+ *
+ * @param {string}   nodeId   - ID del nodo a eliminar
+ * @param {string}   label    - Nombre para mostrar en el toast
+ * @param {Function} [onDone] - Callback opcional tras eliminar definitivamente
+ */
+async function nxUndoToast(nodeId, label, onDone) {
+  // 1. Remover optimistamente del estado local
+  const node = allNodes.find(n => n.id === nodeId)
+  if (!node) return
+  allNodes = allNodes.filter(n => n.id !== nodeId)
+  _markFuseDirty()
+  renderAll()
+
+  // 2. Mostrar toast con botón "Deshacer" durante 5 segundos
+  let undone = false
+  const toastEl = document.getElementById('node-msg')
+  if (toastEl) {
+    clearTimeout(toastEl._timeout)
+    toastEl.innerHTML = `
+      <span>🗑 ${esc(label || 'Elemento')} eliminado</span>
+      <button onclick="window._nxUndoDelete('${nodeId}')"
+        style="margin-left:12px;padding:3px 10px;border-radius:6px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:11px;font-weight:700;cursor:pointer;">
+        Deshacer
+      </button>`
+    toastEl.classList.remove('hidden')
+    toastEl.style.opacity = '1'
+    // Guardar el nodo para posible restauración
+    window._nxPendingDelete = { nodeId, node }
+    toastEl._timeout = setTimeout(async () => {
+      toastEl.style.opacity = '0'
+      setTimeout(() => { toastEl.innerHTML = ''; toastEl.classList.add('hidden') }, 500)
+      if (!undone && !IS_DEMO) {
+        await supabase.from('nodes').delete().eq('id', nodeId)
+        window._nxPendingDelete = null
+        onDone?.()
+      }
+    }, 5000)
+  }
+
+  // Función de deshacer accesible globalmente
+  window._nxUndoDelete = function(id) {
+    if (!window._nxPendingDelete || window._nxPendingDelete.nodeId !== id) return
+    undone = true
+    allNodes.push(window._nxPendingDelete.node)
+    allNodes.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+    _markFuseDirty()
+    renderAll()
+    window._nxPendingDelete = null
+    clearTimeout(toastEl?._timeout)
+    if (toastEl) { toastEl.innerHTML = '✓ Eliminación cancelada'; toastEl.style.opacity = '1' }
+    setTimeout(() => { if (toastEl) { toastEl.style.opacity = '0'; setTimeout(() => { toastEl.innerHTML = ''; toastEl.classList.add('hidden') }, 500) } }, 2000)
+  }
 }
 
 function showMsg(text, type = 'info') {
@@ -2222,18 +2302,22 @@ window.renderPanelDashboard = renderPanelDashboard
 
 // ── Mapa de renders por vista — lazy render (Phase C) ───────────────────────────
 const VIEW_RENDER_MAP = {
-  feed:      (nodes) => { renderPanelDashboard(); renderFeed(nodes); renderFilterBar() },
-  kanban:    (nodes) => renderKanban(nodes),
-  notes:     (nodes) => renderNotes(nodes),
-  finance:   (nodes) => renderFinance(nodes),
-  calendar:  (nodes) => renderCalendar(nodes),
-  cronica:   (nodes) => renderCronica(nodes),
-  contacts:  ()      => renderContacts(),
+  // Feed: incluye semáforo y pulso semanal (solo necesarios en esta vista)
+  feed:         (nodes) => { renderPanelDashboard(); renderFeed(nodes); renderFilterBar(); renderSemaforoCuentas(); renderPulsoSemanal() },
+  kanban:       (nodes) => renderKanban(nodes),
+  notes:        (nodes) => renderNotes(nodes),
+  finance:      (nodes) => renderFinance(nodes),
+  calendar:     (nodes) => renderCalendar(nodes),
+  cronica:      (nodes) => renderCronica(nodes),
+  contacts:     ()      => renderContacts(),
   agenda:       ()      => renderAgenda(allNodes),
   proyectos:    ()      => renderProyectos(),
   movimientos:  ()      => renderMovimientos(),
   cotizaciones: ()      => renderCotizaciones(),
   inmuebles:    ()      => renderInmuebles(),
+  // Vistas adicionales — evitan que caigan al fallback costoso
+  tags:         (nodes) => { if (typeof renderTagsView === 'function') renderTagsView(nodes) },
+  herramientas: ()      => {},
 }
 
 function renderAll() {
@@ -2242,23 +2326,17 @@ function renderAll() {
     try { fn(...args) } catch (e) { console.warn('[renderAll]', fn.name || '?', e) }
   }
   const nodes = getFilteredNodes()
-  // Siempre: stats globales, alertas, búsqueda
+  // Siempre: stats globales + alertas de hábitos + índice de búsqueda (solo si allNodes cambió)
   safe(updateStats, nodes)
   safe(checkHabitAlerts)
   if (typeof buildFuseIndex === 'function') safe(buildFuseIndex)
-  // Feed siempre: semáforo y pulso son widgets del panel principal
-  safe(renderSemaforoCuentas)
-  safe(renderPulsoSemanal)
-  // Lazy: solo renderiza la vista activa
+  // Lazy: solo renderiza la vista activa (semáforo/pulso solo en 'feed')
   const viewFn = VIEW_RENDER_MAP[activeView]
   if (viewFn) safe(viewFn, nodes)
   else {
-    // Fallback: render todas las vistas conocidas para vistas no mapeadas (tags, herramientas…)
+    // Fallback mínimo para vistas desconocidas — solo feed
     safe(renderFeed, nodes); safe(renderFilterBar)
-    safe(renderKanban, nodes); safe(renderNotes, nodes)
-    safe(renderFinance, nodes); safe(renderCalendar, nodes)
-    safe(renderCronica, nodes); safe(renderContacts)
-    safe(renderAgenda, allNodes); safe(renderMovimientos)
+    console.warn('[renderAll] vista no mapeada:', activeView)
   }
   // Herramientas sub-renderers — siempre actualizar aunque no sea la vista activa
   if (typeof renderOtcHistory === 'function') safe(renderOtcHistory)
@@ -6342,6 +6420,8 @@ window.seedDemoData = async () => {
 // Logout
 document.getElementById('btn-logout')?.addEventListener('click', async (e) => {
   e.stopPropagation()
+  // Limpiar canal Realtime antes de cerrar sesión (evita canales huérfanos)
+  if (_realtimeChannel) { supabase.removeChannel(_realtimeChannel); _realtimeChannel = null }
   clearNodesCache()
   localStorage.removeItem('nexus_admin_bypass')
   await supabase.auth.signOut()
@@ -12080,14 +12160,10 @@ window.saveContact = async () => {
 
 window.deleteContact = async () => {
   if (!_currentContactId) return
-  if (!confirm('¿Eliminar este contacto?')) return
-  allNodes = allNodes.filter(n => n.id !== _currentContactId)
-  if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
-    await supabase.from('nodes').delete().eq('id', _currentContactId)
-  }
+  const id    = _currentContactId
+  const label = allNodes.find(n => n.id === id)?.metadata?.name || 'Contacto'
   closeContactModal()
-  renderContacts()
-  showToast('🗑 Contacto eliminado')
+  await nxUndoToast(id, label, () => renderContacts())
 }
 
 // ── Contact Profile — Full-page view (like Projects) ─────────────────────────
@@ -12098,22 +12174,9 @@ window.openContactProfile = function(id) {
   renderContacts()
 }
 
-function _OLD_openContactProfile_DISABLED(id) {  // kept for reference only
-  const c = allNodes.find(n => n.id === id)
-  if (!c) return
-  const m = c.metadata || {}
-  const name    = m.name || c.content || '?'
-  const color   = m.color || '#00f0ff'
-  const roles   = m.roles || (m.cType ? [m.cType] : ['persona'])
-  const specs   = m.specialties || (m.specialty ? [m.specialty] : [])
-  const phones  = m.phones || (m.phone ? [{ label:'Personal', number:m.phone }] : [])
-  const emails  = m.emails || (m.email ? [{ label:'Personal', address:m.email }] : [])
-  const docs    = m.documents || []
-  const accounts = m.contact_accounts || []
-  const initials = name.trim().split(/\s+/).map(w=>w[0]||'').join('').substring(0,2).toUpperCase() || '?'
-
-  const roleColors = { persona:'#00f0ff', proveedor:'#f97316', cliente:'#4ade80', colaborador:'#a78bfa' }
-  const roleIcons  = { persona:'👤', proveedor:'🔧', cliente:'💼', colaborador:'🤝' }
+// _OLD_openContactProfile_DISABLED eliminado — dead code removido (ver git history)
+// Función suprimida, mantener el cierre de bloque vacío para no romper el parser
+function _OLD_noop() {  // placeholder para evitar fragmento de código huérfano
 
   // ── Avatar / Photo ──────────────────────────────────────────────
   const avatarEl = document.getElementById('cpf-avatar')
@@ -19782,6 +19845,8 @@ let searchDebounceTimer = null
 // TYPE_LABELS — movido al bloque de constantes (antes del boot IIFE)
 
 function buildFuseIndex() {
+  // Solo reconstruir cuando allNodes realmente cambió — evita 5-15ms bloqueantes en cada renderAll()
+  if (!_fuseIndexDirty && fuseInstance) return
   const docs = allNodes.map(n => ({
     id: n.id,
     content: n.content || '',
@@ -19806,6 +19871,42 @@ function buildFuseIndex() {
     ignoreLocation: true,
     minMatchCharLength: 2,
   })
+  _fuseIndexDirty = false
+}
+
+// ── Command Palette quick actions ─────────────────────────────────────────────
+const _NX_QUICK_ACTIONS = [
+  { icon: '📝', label: 'Ir a Feed',          action: () => switchView('feed') },
+  { icon: '📌', label: 'Ir a Kanban',         action: () => switchView('kanban') },
+  { icon: '💸', label: 'Ir a Bio-Finanzas',   action: () => switchView('finance') },
+  { icon: '🧠', label: 'Ir a Bóveda Neural',  action: () => switchView('notes') },
+  { icon: '📅', label: 'Ir a Calendario',     action: () => switchView('calendar') },
+  { icon: '👥', label: 'Ir a Contactos',      action: () => switchView('contacts') },
+  { icon: '📋', label: 'Ir a Proyectos',      action: () => switchView('proyectos') },
+  { icon: '📒', label: 'Ir a Agenda',         action: () => switchView('agenda') },
+  { icon: '🏠', label: 'Ir a Inmuebles',      action: () => switchView('inmuebles') },
+  { icon: '💰', label: 'Ir a Movimientos',    action: () => switchView('movimientos') },
+  { icon: '📄', label: 'Ir a Cotizaciones',   action: () => switchView('cotizaciones') },
+]
+
+function _gsShowQuickActions() {
+  const resultsEl = document.getElementById('gs-results')
+  if (!resultsEl) return
+  resultsEl.innerHTML = `
+    <div style="font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--text-dim);padding:8px 12px 4px;text-transform:uppercase;">⚡ Acciones rápidas</div>
+    ${_NX_QUICK_ACTIONS.map((a, i) => `
+      <div class="gs-result-row" onclick="_nxQuickAction(${i})" style="cursor:pointer;" role="button" tabindex="0" onkeydown="if(event.key==='Enter')_nxQuickAction(${i})">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:16px;flex-shrink:0;">${a.icon}</span>
+          <span style="font-size:13px;color:var(--text-primary);">${a.label}</span>
+        </div>
+      </div>`).join('')}
+    <div style="font-size:10px;color:var(--text-dim);text-align:center;padding:12px 0 4px;">Escribe para buscar en tus nodos…</div>`
+}
+
+window._nxQuickAction = function(idx) {
+  window.closeGlobalSearch()
+  _NX_QUICK_ACTIONS[idx]?.action()
 }
 
 window.openGlobalSearch = function() {
@@ -19815,7 +19916,8 @@ window.openGlobalSearch = function() {
   modal.style.display = 'flex'
   const inp = document.getElementById('gs-input')
   if (inp) { inp.value = ''; inp.focus() }
-  document.getElementById('gs-results').innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:32px 0; font-size:13px;">Empieza a escribir para buscar en todos tus nodos…</div>'
+  // Mostrar acciones rápidas cuando no hay query
+  _gsShowQuickActions()
 }
 
 window.closeGlobalSearch = function() {
@@ -19835,7 +19937,7 @@ function runGlobalSearch() {
 
   const q = inp.value.trim()
   if (!q) {
-    resultsEl.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:32px 0; font-size:13px;">Empieza a escribir para buscar en todos tus nodos…</div>'
+    _gsShowQuickActions()
     return
   }
 

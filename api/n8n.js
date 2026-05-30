@@ -108,24 +108,35 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'method not allowed' })
   }
 
-  // Auth: Bearer token
+  // Auth: Bearer token — OBLIGATORIO. Si no está configurado el secreto, el endpoint está inactivo.
   const secret = process.env.NEXUS_WEBHOOK_SECRET
-  if (secret) {
-    const auth = req.headers['authorization'] || ''
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
-    if (!token || token !== secret) {
-      return res.status(401).json({ error: 'unauthorized' })
-    }
+  if (!secret) {
+    return res.status(503).json({ error: 'webhook not configured — set NEXUS_WEBHOOK_SECRET' })
+  }
+  const auth  = req.headers['authorization'] || ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  if (!token || token !== secret) {
+    return res.status(401).json({ error: 'unauthorized' })
   }
 
   const body = req.body || {}
 
+  // Whitelist de tipos permitidos — previene inserción de tipos arbitrarios
+  const ALLOWED_TYPES = new Set(['note','income','expense','kanban','contact','proyecto','event','cotizacion'])
+
   // Modo raw: body ya tiene { type, content, metadata, user_id }
   if (body.type && body.content && body.user_id) {
+    if (!ALLOWED_TYPES.has(body.type)) {
+      return res.status(400).json({ error: `invalid type: ${body.type}` })
+    }
+    // Validar que user_id sea un UUID válido (formato básico)
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.user_id)) {
+      return res.status(400).json({ error: 'invalid user_id format' })
+    }
     const node = {
       type:     body.type,
-      content:  body.content,
-      metadata: body.metadata || {},
+      content:  String(body.content).slice(0, 2000),
+      metadata: typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata : {},
       owner_id: body.user_id,
     }
     return insertNode(res, node)
