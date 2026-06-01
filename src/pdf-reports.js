@@ -464,9 +464,9 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
     })
   } catch { /* sin QR */ }
 
-  const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  const W      = doc.internal.pageSize.getWidth()
-  const H      = doc.internal.pageSize.getHeight()
+  const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  const W      = doc.internal.pageSize.getWidth()   // 297 en landscape
+  const H      = doc.internal.pageSize.getHeight()  // 210 en landscape
   const now    = new Date()
   const folio  = _folio()
   const saldo  = list[0]?._balance ?? 0
@@ -519,7 +519,9 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
   y += 38
 
   // ── KPIs — 5 cajas con mini-iconos vectoriales ───────────────────────────────
-  const uniqBancos = new Set(list.map(m => m.banco).filter(Boolean)).size
+  const uniqBancos = new Set(
+    list.flatMap(m => [m.banco_origen, m.banco_destino, m.banco].filter(Boolean))
+  ).size
   const kGap = 3
   const kW   = (W - T.mX * 2 - kGap * 4) / 5
   _kpi(doc, T.mX,                        y, kW, 22, 'Entradas',     fmt$(kpis.entradas),  T.green)
@@ -553,74 +555,81 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
   _kpiIco('bank', T.mX + (kW + kGap) * 4)
   y += 28
 
-  // ── Tabla de movimientos — trazable (ordenante → beneficiario + banco + CLABE) ─
+  // ── Tabla de movimientos (landscape, 7 columnas, sin comisión interna) ─────────
+  // Usable width: 297 − 14×2 = 269 mm
+  // Cols: 22+8+103+30+32+32+42 = 269
   _autoTable(doc, {
     startY: y,
-    head: [['FECHA', '', 'CONCEPTO\nORDENANTE → BENEFICIARIO', 'CRIPTO', 'COMISIÓN', 'CARGO (−)', 'ABONO (+)', 'SALDO']],
+    margin: { left: T.mX, right: T.mX, top: 42 },
+    head: [['FECHA', '', 'CONCEPTO / TRAZABILIDAD', 'CRIPTO', 'CARGO (−)', 'ABONO (+)', 'SALDO']],
     body: list.map(m => {
-      const bruto    = m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
-      // Comisión interna de Oscar (factor almacenado)
-      const comMxn   = (m.tipo === 'entrada' && m.comision != null)
+      const bruto  = m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
+      const comMxn = (m.tipo === 'entrada' && m.comision != null)
         ? Math.round(bruto * (1 - m.comision) * 100) / 100 : 0
-      // NETO = lo que se abona/carga en la cuenta del cliente
-      const neto     = Math.round((bruto - comMxn) * 100) / 100
+      const neto   = Math.round((bruto - comMxn) * 100) / 100
       const isCan    = m.estado === 'cancelado'
       const isCrypto = m.moneda !== 'MXN' && m.moneda !== 'USD'
-      // Contraparte rastreable
-      const nombre      = m.tipo === 'entrada'
+
+      // Nombre de la contraparte
+      const nombre = m.tipo === 'entrada'
         ? (m.ordenante    || m.notas || 'Depósito')
         : (m.beneficiario || m.notas || 'Retiro')
-      // Show origen → destino banks when available, fall back to legacy banco/clabe
-      const bo = m.banco_origen, bd = m.banco_destino
-      const co = m.clabe_origen ? String(m.clabe_origen) : ''
-      const cd = m.clabe_destino ? String(m.clabe_destino) : ''
+
+      // Línea banco origen → destino (nueva trazabilidad dual)
+      const bo = m.banco_origen,  co = m.clabe_origen  ? String(m.clabe_origen)  : ''
+      const bd = m.banco_destino, cd = m.clabe_destino ? String(m.clabe_destino) : ''
       let bancoLine = ''
       if (bo || bd) {
-        if (bo) bancoLine += bo + (co ? ' ' + co : '')
-        if (bo && bd) bancoLine += ' → '
-        if (bd) bancoLine += bd + (cd ? ' ' + cd : '')
+        if (bo) bancoLine += bo + (co ? '  ' + co : '')
+        if (bo && bd) bancoLine += '  →  '
+        if (bd) bancoLine += bd + (cd ? '  ' + cd : '')
       } else if (m.banco || m.clabe) {
-        bancoLine = [m.banco, m.clabe ? String(m.clabe) : ''].filter(Boolean).join(' · ')
+        bancoLine = [m.banco, m.clabe ? String(m.clabe) : ''].filter(Boolean).join('  ·  ')
       }
+
       const extraNote   = m.notas && m.notas !== nombre ? m.notas : ''
       const contraparte = nombre
-        + (bancoLine  ? '\n' + bancoLine  : '')
-        + (extraNote  ? '\n' + extraNote  : '')
+        + (bancoLine ? '\n' + bancoLine : '')
+        + (extraNote ? '\n' + extraNote : '')
+
+      const cryptoStr = isCrypto && !isCan
+        ? (m.cantidad || 0).toLocaleString('es-MX', { maximumFractionDigits: 6 })
+          + ' ' + m.moneda
+          + (m.tc ? '\n@$' + m.tc.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
+        : ''
+
       return [
         m.fecha,
         '',            // ← triángulo dibujado en didDrawCell
         contraparte,
-        isCrypto && !isCan
-          ? (m.cantidad || 0).toLocaleString('es-MX', { maximumFractionDigits: 6 }) + '\n' + m.moneda
-            + (m.tc ? '\n@$' + m.tc.toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '')
-          : '',
-        // Comisión (solo entradas cripto/USD con comisión registrada)
-        !isCan && comMxn > 0
-          ? fmt$(comMxn) + '\n' + ((1 - m.comision) * 100).toFixed(1) + '%'
-          : '',
+        cryptoStr,
         !isCan && m.tipo === 'salida'  ? fmt$(neto) : '',
         !isCan && m.tipo === 'entrada' ? fmt$(neto) : '',
         isCan ? 'CANCELADO' : fmt$(m._balance),
       ]
     }),
+    styles: { fontSize: 7.5, cellPadding: 3, lineColor: [30, 45, 70], lineWidth: 0.1 },
+    headStyles: {
+      fillColor: T.ink, textColor: T.cyan,
+      fontSize: 7, fontStyle: 'bold', cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+    },
     columnStyles: {
-      0: { cellWidth: 18, halign: 'center', textColor: T.textMid,  fontSize: 7 },
-      1: { cellWidth:  7, halign: 'center' },
-      2: { cellWidth: 48, fontSize: 7 },
-      3: { cellWidth: 18, halign: 'center', textColor: T.orange,   fontSize: 6.5 },
-      4: { cellWidth: 18, halign: 'right',  textColor: T.yellow,   fontSize: 7 },
-      5: { cellWidth: 21, halign: 'right',  textColor: T.redD,     fontStyle: 'bold' },
-      6: { cellWidth: 21, halign: 'right',  textColor: T.greenD,   fontStyle: 'bold' },
-      7: { cellWidth: 27, halign: 'right',  fontStyle: 'bold',     fontSize: 8 },
+      0: { cellWidth: 22, halign: 'center', textColor: T.textMid, fontSize: 7 },
+      1: { cellWidth:  8, halign: 'center' },
+      2: { cellWidth: 103, fontSize: 7 },
+      3: { cellWidth: 30, halign: 'center', textColor: T.orange, fontSize: 6.5 },
+      4: { cellWidth: 32, halign: 'right',  textColor: T.redD,   fontStyle: 'bold' },
+      5: { cellWidth: 32, halign: 'right',  textColor: T.greenD, fontStyle: 'bold' },
+      6: { cellWidth: 42, halign: 'right',  fontStyle: 'bold',   fontSize: 8 },
     },
     didDrawCell: (data) => {
       // ── Triángulo direccional (col 1) ────────────────────────────────────────
       if (data.section === 'body' && data.column.index === 1) {
-        const m    = list[data.row.index]
-        const isEnt = m?.tipo === 'entrada'
-        const cx   = data.cell.x + data.cell.width  / 2
-        const cy   = data.cell.y + data.cell.height / 2
-        const s    = 2.2
+        const m_    = list[data.row.index]
+        const isEnt = m_?.tipo === 'entrada'
+        const cx    = data.cell.x + data.cell.width  / 2
+        const cy    = data.cell.y + data.cell.height / 2
+        const s     = 2.2
         doc.setFillColor(...(isEnt ? T.greenD : T.redD))
         if (isEnt) {
           doc.triangle(cx - s, cy + s * 0.85, cx + s, cy + s * 0.85, cx, cy - s * 0.85, 'F')
@@ -628,8 +637,8 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
           doc.triangle(cx - s, cy - s * 0.85, cx + s, cy - s * 0.85, cx, cy + s * 0.85, 'F')
         }
       }
-      // ── Saldo — color según positivo / negativo (col 7) ─────────────────────
-      if (data.section === 'body' && data.column.index === 7) {
+      // ── Saldo — verde/rojo según positivo/negativo (col 6) ──────────────────
+      if (data.section === 'body' && data.column.index === 6) {
         const bal = list[data.row.index]?._balance ?? 0
         data.cell.styles.textColor = bal >= 0 ? T.greenD : T.redD
       }
