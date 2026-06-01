@@ -558,16 +558,15 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
     startY: y,
     head: [['FECHA', '', 'ORDENANTE / BENEFICIARIO', 'CRIPTO', 'CARGO (-)', 'ABONO (+)', 'SALDO']],
     body: list.map(m => {
-      const net      = m.tipo === 'entrada' && m.comision != null
-        ? Math.round((m.monto_mxn ?? 0) * (1 - (m.comision || 0)) * 100) / 100
-        : (m.monto_mxn ?? 0)
+      // Abono/cargo = valor bruto en MXN (cantidad × TC). La comisión es interna, no aparece en el estado de cuenta.
+      const net      = m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
       const isCan    = m.estado === 'cancelado'
       const isCrypto = m.moneda !== 'MXN' && m.moneda !== 'USD'
-      // Contraparte rastreable: nombre + banco + CLABE enmascarada
+      // Contraparte rastreable: nombre + banco + CLABE completa para comprobación Banxico/CEP
       const nombre      = m.tipo === 'entrada'
         ? (m.ordenante    || m.notas || 'Deposito')
         : (m.beneficiario || m.notas || 'Retiro')
-      const clabeHint   = m.clabe ? '···' + String(m.clabe).slice(-4) : ''
+      const clabeHint   = m.clabe ? String(m.clabe) : ''
       const bancoClabe  = [m.banco, clabeHint].filter(Boolean).join(' · ')
       const extraNote   = m.notas && m.notas !== nombre ? m.notas : ''
       const contraparte = nombre

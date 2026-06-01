@@ -226,16 +226,18 @@ let tagPeriod        = 'all'      // '7d' | '30d' | '90d' | 'all'
 let tagTypeFilter    = 'all'      // node type filter for tags view
 
 // ── Módulo Movimientos — state
-let _mvOrqs        = []
-let _mvMovs        = []
-let _mvActiveOrqId = null
-let _mvFilters     = { tipo:'', moneda:'', estado:'', search:'', dateFrom:'', dateTo:'', categoria:'', banco:'' }
-let _mvView        = localStorage.getItem('nexus_mv_view') || 'tabla'   // 'tabla' | 'cards'
-let _mvPage        = 1
-const _MV_PER_PAGE = 30
-let _mvTcCache     = {}     // { USDT: {price, ts}, BTC: {...}, ... }
-let _mvEditingId   = null
-let _mvPendingFile = null
+let _mvOrqs         = []
+let _mvMovs         = []
+let _mvActiveOrqId  = null
+let _mvViewMode     = 'landing'   // 'landing' | 'detail'
+let _mvOrqSummaries = {}          // { [orqId]: { entradas, salidas, comisiones, count, balance } }
+let _mvFilters      = { tipo:'', moneda:'', estado:'', search:'', dateFrom:'', dateTo:'', categoria:'', banco:'' }
+let _mvView         = localStorage.getItem('nexus_mv_view') || 'tabla'   // 'tabla' | 'cards'
+let _mvPage         = 1
+const _MV_PER_PAGE  = 30
+let _mvTcCache      = {}     // { USDT: {price, ts}, BTC: {...}, ... }
+let _mvEditingId    = null
+let _mvPendingFile  = null
 
 // Categorías base de movimientos (con autosugerencia)
 const _MV_CATS = ['Operaciones','Proveedores','Nómina','Servicios','Impuestos',
@@ -12050,9 +12052,10 @@ function renderCmAccounts() {
         <button onclick="removeCmAccount('${a.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:18px;padding:4px;">✕</button>
       </div>
       <div id="cm-acc-bank-${a.id}" style="${a.type!=='bank'?'display:none;':''}display:flex;gap:8px;">
-        <input type="text" value="${esc(a.bank)}" placeholder="Banco (BBVA, Nu…)" class="modal-input" style="flex:1;" onchange="updateCmAccount('${a.id}','bank',this.value)"/>
-        <input type="text" value="${esc(a.clabe)}" placeholder="CLABE / No. cuenta" class="modal-input" style="flex:1;font-family:'JetBrains Mono',monospace;" onchange="updateCmAccount('${a.id}','clabe',this.value)"/>
+        <input type="text" list="mx-banks-list" value="${esc(a.bank)}" placeholder="Banco (BBVA, Nu…)" class="modal-input" style="flex:1;" onchange="updateCmAccount('${a.id}','bank',this.value)" oninput="updateCmAccount('${a.id}','bank',this.value)"/>
+        <input type="text" value="${esc(a.clabe)}" placeholder="CLABE / No. cuenta (18 dígitos)" class="modal-input" style="flex:1;font-family:'JetBrains Mono',monospace;" oninput="updateCmAccount('${a.id}','clabe',this.value.replace(/\\s/g,''))"/>
       </div>
+      <datalist id="mx-banks-list">${MX_BANKS.map(b=>`<option value="${b}">`).join('')}</datalist>
       <div id="cm-acc-crypto-${a.id}" style="${a.type!=='crypto'?'display:none;':''}display:flex;gap:8px;">
         <input type="text" value="${esc(a.network)}" placeholder="Red (XRP, ETH, TRX…)" class="modal-input" style="flex:1;" onchange="updateCmAccount('${a.id}','network',this.value)"/>
         <input type="text" value="${esc(a.wallet)}" placeholder="Dirección / wallet" class="modal-input" style="flex:1;font-family:'JetBrains Mono',monospace;" onchange="updateCmAccount('${a.id}','wallet',this.value)"/>
@@ -20959,6 +20962,33 @@ async function _mvLoadMovs() {
   _mvMovs = data || []
 }
 
+/** Carga resumen de KPIs para TODAS las cuentas — usada en la landing page */
+async function _mvLoadAllSummaries() {
+  const { data, error } = await supabase
+    .from('movimientos')
+    .select('orquestador_id, tipo, cantidad, tc, monto_mxn, comision, estado')
+    .eq('owner_id', currentUser.id)
+  if (error) { console.warn('[mv] loadSummaries', error); return }
+  const summ = {}
+  for (const m of (data || [])) {
+    const oid = m.orquestador_id
+    if (!summ[oid]) summ[oid] = { entradas: 0, salidas: 0, comisiones: 0, count: 0, balance: 0 }
+    const s = summ[oid]
+    if (m.estado === 'cancelado') continue
+    const bruto = m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
+    const com   = (m.tipo === 'entrada' && m.comision != null)
+                  ? Math.round(bruto * (1 - m.comision) * 100) / 100 : 0
+    s.count++
+    if (m.tipo === 'entrada') { s.entradas += bruto; s.comisiones += com }
+    else s.salidas += bruto
+  }
+  // Calcular balance neto por cuenta
+  for (const oid of Object.keys(summ)) {
+    summ[oid].balance = Math.round((summ[oid].entradas - summ[oid].salidas) * 100) / 100
+  }
+  _mvOrqSummaries = summ
+}
+
 // ── Crypto → Bitso book mapping ───────────────────────────────────────────────
 const _MV_BITSO_BOOKS = {
   USDT: 'usdt_mxn', BTC: 'btc_mxn', ETH: 'eth_mxn',
@@ -20966,6 +20996,21 @@ const _MV_BITSO_BOOKS = {
 }
 // Monedas que aplican comisión por defecto (entradas)
 const _MV_CRYPTO_SET = new Set(['USDT','BTC','ETH','XRP','SOL','LTC','USD'])
+
+// ── Lista de bancos mexicanos + entidades especiales ─────────────────────────
+const MX_BANKS = [
+  'BBVA','Banorte','Santander','Banamex (Citibanamex)','HSBC','Scotiabank','Inbursa',
+  'Banregio','BanBajío','Afirme','Multiva','Monexcb','Actinver','Bansí','Invex',
+  'Ixe','Compartamos','Inmobiliario Mexicano','The Royal Bank of Scotland','ABC Capital',
+  'Autofin','Azteca','Bancoppel','Bafin','Bajío','Bansí','CI Banco','Consubanco',
+  'Famsa','Hipotecaria Federal','Icbc','Inmobiliario Mexicano','J.P. Morgan','Mifel',
+  'Sabadell','Ve por Más','Ve-Por-Mas','Bbase','Bancrea','Bank of America','Barclays',
+  'CIBanco','Deutsche','Fondverde','GBM','HSBC','Impersa','InterBanco','Nafinsa',
+  'Nu (Nubank)','N26','Hey Banco','Spin by OXXO','Klar','Albo','Cuenca',
+  // Entidades para operaciones especiales
+  'STP (Tamsa)','Bancalizo','SPEI directo','Tether/TRX','Tether/ERC20','Tether/BEP20',
+  'Efectivo','OXXO Pay','Mercado Pago','PayPal','Otro',
+]
 
 async function _mvFetchCryptoTc(moneda) {
   if (moneda === 'MXN') return 1
@@ -21017,24 +21062,29 @@ function _mvFiltered() {
   return list
 }
 
-/** Importe que realmente impacta el balance: neto de comisión para entradas cripto */
+/** Valor bruto MXN: USDT × TC (o monto_mxn si ya está calculado) — SIEMPRE el importe completo */
 function _mvNetAmount(m) {
-  const bruto = m.monto_mxn ?? (m.cantidad * (m.tc || 1))
-  return (m.tipo === 'entrada' && m.comision != null)
-    ? Math.round(bruto * m.comision * 100) / 100
-    : bruto
+  return m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
+}
+
+/** Comisión ganada en esta entrada (uso interno — NO aparece en estado de cuenta) */
+function _mvComisionMxn(m) {
+  if (m.tipo !== 'entrada' || m.comision == null) return 0
+  const bruto = _mvNetAmount(m)
+  // comision almacenado como factor (ej. 0.97) → ganancia = bruto × (1 - factor)
+  return Math.round(bruto * (1 - m.comision) * 100) / 100
 }
 
 function _mvKpis(list) {
-  let entradas = 0, salidas = 0, pendiente = 0
+  let entradas = 0, salidas = 0, pendiente = 0, comisiones = 0
   for (const m of list) {
     if (m.estado === 'cancelado') continue
     const amt = _mvNetAmount(m)
     if (m.estado === 'pendiente') { pendiente += (m.tipo === 'entrada' ? amt : -amt); continue }
-    if (m.tipo === 'entrada') entradas += amt
+    if (m.tipo === 'entrada') { entradas += amt; comisiones += _mvComisionMxn(m) }
     else salidas += amt
   }
-  return { entradas, salidas, net: entradas - salidas, pendiente }
+  return { entradas, salidas, net: entradas - salidas, pendiente, comisiones }
 }
 
 function _mvWithBalance(sorted) {
@@ -21115,7 +21165,7 @@ function _mvRenderCards(paged, emptyState) {
       const amtColor = isCan ? '#64748b' : isEnt ? '#4ade80' : '#f87171'
       const quien    = isEnt ? (m.ordenante || '—') : (m.beneficiario || '—')
       const quien2   = isEnt ? (m.beneficiario || '') : (m.ordenante || '')
-      const cla      = m.clabe ? '···' + m.clabe.slice(-4) : ''
+      const cla      = m.clabe || ''
       const balColor = m._balance >= 0 ? '#4ade80' : '#f87171'
       const arrowIcon = isEnt ? 'ArrowDownLeft' : 'ArrowUpRight'
       const signPfx   = isEnt ? '+' : '−'
@@ -21152,6 +21202,98 @@ function _mvRenderCards(paged, emptyState) {
   </div>`
 }
 
+// ── Landing page: fichas resumen por cuenta ────────────────────────────────────
+function _mvRenderLanding(root) {
+  const fmt = (n) => (n ?? 0).toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 })
+  const monColors = { MXN:'#4ade80', USD:'#60a5fa', USDT:'#fbbf24', BTC:'#f7931a', ETH:'#8c8dfc' }
+
+  const cards = _mvOrqs.map(o => {
+    const s = _mvOrqSummaries[o.id] || { entradas:0, salidas:0, comisiones:0, count:0, balance:0 }
+    const monColor = monColors[o.moneda_principal] || '#00f0ff'
+    const balColor = s.balance >= 0 ? '#4ade80' : '#f87171'
+    return `
+      <div onclick="mvOpenAccount('${o.id}')"
+        style="background:rgba(14,20,34,0.97);border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;cursor:pointer;transition:transform 0.15s,box-shadow 0.15s,border-color 0.15s;"
+        onmouseenter="this.style.transform='translateY(-3px)';this.style.boxShadow='0 12px 40px rgba(0,0,0,0.45)';this.style.borderColor='rgba(0,246,255,0.3)'"
+        onmouseleave="this.style.transform='';this.style.boxShadow='';this.style.borderColor='rgba(255,255,255,0.08)'">
+        <!-- Header con gradiente -->
+        <div style="height:80px;background:linear-gradient(135deg,${monColor}18,rgba(14,20,34,0.9));padding:18px 20px;display:flex;align-items:flex-start;justify-content:space-between;position:relative;overflow:hidden;">
+          <div style="position:absolute;right:-20px;top:-20px;width:100px;height:100px;border-radius:50%;background:${monColor}10;"></div>
+          <div>
+            <div style="font-size:16px;font-weight:800;color:#f0f6fc;letter-spacing:-0.3px;">${_mvEsc(o.nombre)}</div>
+            ${o.descripcion ? `<div style="font-size:11px;color:#7a8899;margin-top:2px;">${_mvEsc(o.descripcion)}</div>` : ''}
+          </div>
+          <span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:8px;background:${monColor}20;border:1px solid ${monColor}40;color:${monColor};">${_mvEsc(o.moneda_principal||'MXN')}</span>
+        </div>
+        <!-- Saldo -->
+        <div style="padding:16px 20px 0;">
+          <div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:4px;">Saldo acumulado</div>
+          <div style="font-size:26px;font-weight:900;color:${balColor};font-family:'JetBrains Mono',monospace;line-height:1;">
+            ${s.balance >= 0 ? '' : '−'}$${fmt(Math.abs(s.balance))}
+          </div>
+        </div>
+        <!-- KPIs -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;padding:12px 20px;margin-top:8px;border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="padding:8px 0;">
+            <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;">Entradas</div>
+            <div style="font-size:13px;font-weight:700;color:#4ade80;font-family:'JetBrains Mono',monospace;">$${fmt(s.entradas)}</div>
+          </div>
+          <div style="padding:8px 0 8px 12px;border-left:1px solid rgba(255,255,255,0.05);">
+            <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;">Salidas</div>
+            <div style="font-size:13px;font-weight:700;color:#f87171;font-family:'JetBrains Mono',monospace;">$${fmt(s.salidas)}</div>
+          </div>
+          ${s.comisiones > 0 ? `
+          <div style="padding:8px 0;border-top:1px solid rgba(255,255,255,0.04);">
+            <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;">Comisiones</div>
+            <div style="font-size:13px;font-weight:700;color:#fbbf24;font-family:'JetBrains Mono',monospace;">$${fmt(s.comisiones)}</div>
+          </div>
+          <div style="padding:8px 0 8px 12px;border-left:1px solid rgba(255,255,255,0.05);border-top:1px solid rgba(255,255,255,0.04);">
+            <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;">Movimientos</div>
+            <div style="font-size:13px;font-weight:700;color:#94a3b8;font-family:'JetBrains Mono',monospace;">${s.count}</div>
+          </div>` : `
+          <div style="padding:8px 0;border-top:1px solid rgba(255,255,255,0.04);">
+            <div style="font-size:9px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.06em;">Movimientos</div>
+            <div style="font-size:13px;font-weight:700;color:#94a3b8;font-family:'JetBrains Mono',monospace;">${s.count}</div>
+          </div>`}
+        </div>
+        <!-- Footer -->
+        <div style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:12px;color:#00f0ff;font-weight:600;display:flex;align-items:center;gap:5px;">${lx('ArrowRight',12)} Ver detalle</span>
+          <button onclick="event.stopPropagation();_mvActiveOrqId='${o.id}';_mvViewMode='detail';mvOpenModal()" style="display:flex;align-items:center;gap:5px;padding:5px 12px;background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.25);color:#00f0ff;border-radius:8px;cursor:pointer;font-size:11px;font-weight:700;transition:background 0.15s;" onmouseover="this.style.background='rgba(0,246,255,0.18)'" onmouseout="this.style.background='rgba(0,246,255,0.08)'">${lx('Plus',11)} Nuevo</button>
+        </div>
+      </div>`
+  }).join('')
+
+  const emptyLanding = nxEmptyState({
+    img: '/empty/no-finance.svg',
+    title: 'Sin cuentas creadas',
+    sub: 'Crea tu primera cuenta para registrar movimientos.',
+    cta: `<button onclick="mvOpenOrqModal(null,true)" style="margin-top:12px;padding:10px 22px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-weight:700;">+ Nueva cuenta</button>`
+  })
+
+  root.innerHTML = `
+    <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px;">
+      <div>
+        <h1 class="view-title" style="display:flex;align-items:center;gap:10px;">
+          ${lx('ArrowLeftRight',22,'',{color:'#00f0ff'})} Movimientos
+        </h1>
+        <p style="font-size:12px;color:var(--text-dim);margin-top:2px;">Selecciona una cuenta para ver su detalle</p>
+      </div>
+      <button onclick="mvOpenOrqModal(null,true)" style="display:flex;align-items:center;gap:7px;padding:9px 18px;background:rgba(0,246,255,0.08);border:1px dashed rgba(0,246,255,0.3);color:#00f0ff;border-radius:12px;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.background='rgba(0,246,255,0.15)'" onmouseout="this.style.background='rgba(0,246,255,0.08)'">${lx('Plus',15)} Nueva cuenta</button>
+    </div>
+    ${_mvOrqs.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;">${cards}</div>` : emptyLanding}`
+}
+
+window.mvOpenAccount = async (id) => {
+  _mvActiveOrqId = id
+  _mvViewMode    = 'detail'
+  _mvMovs        = []
+  _mvPage        = 1
+  Object.assign(_mvFilters, { tipo:'', moneda:'', estado:'', search:'', dateFrom:'', dateTo:'', categoria:'', banco:'' })
+  await _mvLoadMovs()
+  renderMovimientos()
+}
+
 // ── Vista principal ────────────────────────────────────────────────────────────
 async function renderMovimientos() {
   const root = document.getElementById('view-movimientos')
@@ -21159,6 +21301,14 @@ async function renderMovimientos() {
 
   // Carga inicial si no hay datos
   if (!_mvOrqs.length) await _mvLoadOrqs()
+
+  // ── LANDING: fichas resumen por cuenta ──
+  if (_mvViewMode === 'landing' || !_mvActiveOrqId) {
+    if (!Object.keys(_mvOrqSummaries).length) await _mvLoadAllSummaries()
+    _mvRenderLanding(root)
+    return
+  }
+
   if (_mvActiveOrqId && !_mvMovs.length) await _mvLoadMovs()
 
   const activeOrq   = _mvOrqs.find(o => o.id === _mvActiveOrqId)
@@ -21195,11 +21345,11 @@ async function renderMovimientos() {
 
   const kpiHtml = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;">
-      ${kpiCard('TrendingUp',   'Entradas MXN', kpis.entradas, '#4ade80')}
-      ${kpiCard('TrendingDown', 'Salidas MXN',  kpis.salidas,  '#f87171')}
-      ${kpiCard('BarChart2',    'Saldo Neto',   Math.abs(kpis.net), kpis.net >= 0 ? '#4ade80' : '#f87171')}
-      ${kpiCard('Clock',        'Pendiente',    Math.abs(kpis.pendiente), '#fbbf24')}
-      ${Object.entries(_mvTcCache).map(([mon, c]) => kpiCard('RefreshCw', `TC ${mon}/MXN`, c.price, '#00f0ff', '')).join('')}
+      ${kpiCard('TrendingUp',   'Entradas MXN',         kpis.entradas,  '#4ade80')}
+      ${kpiCard('TrendingDown', 'Salidas MXN',           kpis.salidas,   '#f87171')}
+      ${kpiCard('BarChart2',    'Saldo Neto',            Math.abs(kpis.net), kpis.net >= 0 ? '#4ade80' : '#f87171')}
+      ${kpis.comisiones > 0 ? kpiCard('Percent', 'Comisiones (interno)', kpis.comisiones, '#fbbf24') : ''}
+      ${kpis.pendiente  !== 0 ? kpiCard('Clock', 'Pendiente', Math.abs(kpis.pendiente), '#a78bfa') : ''}
     </div>`
 
   // ── Action bar ──
@@ -21213,8 +21363,7 @@ async function renderMovimientos() {
       ${gBtn('CSV','Download','mvExportCSV()')}
       <label style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx('Upload',14)} Importar<input type="file" accept=".csv" style="display:none;" onchange="mvImportCSV(this)" /></label>
       <button onclick="mvDownloadTemplate()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'" title="Descargar plantilla CSV para importación masiva">${lx('FileDown',14)} Plantilla</button>
-      ${gBtn('T/C Bitso','RefreshCw','mvFetchTcAndRender()')}
-      ${gBtn('Orquestadores','Settings','mvOpenOrqModal()')}
+      <button onclick="_mvViewMode='landing';renderMovimientos()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx('LayoutGrid',14)} Mis Cuentas</button>
       <!-- Toggle vista Cards / Tabla -->
       <div style="display:flex;gap:2px;padding:3px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-left:auto;">
         <button onclick="mvSetView('tabla')"  style="padding:6px 13px;border-radius:8px;border:none;background:${_mvView==='tabla'?'rgba(0,246,255,0.15)':'transparent'};color:${_mvView==='tabla'?'#00f0ff':'var(--text-dim)'};font-size:12px;font-weight:${_mvView==='tabla'?700:400};cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:5px;">${lx('AlignJustify',12)} Tabla</button>
@@ -21279,7 +21428,7 @@ async function renderMovimientos() {
             const amtColor = isCan ? '#64748b' : isEnt ? '#4ade80' : '#f87171'
             const balColor = m._balance >= 0 ? '#4ade80' : '#f87171'
             const quien    = _mvEsc(isEnt ? (m.ordenante||'—') : (m.beneficiario||'—'))
-            const cla      = m.clabe ? `···${m.clabe.slice(-4)}` : '—'
+            const cla      = m.clabe ? _mvEsc(m.clabe) : '—'
             return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.15s;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''" onclick="mvOpenModal('${m.id}')">
               <td style="padding:10px 12px;color:var(--text-muted);white-space:nowrap;">${_mvFmtD(m.fecha)}</td>
               <td style="padding:10px 12px;">${_mvMonedaBadge(m.moneda)}</td>
@@ -21287,7 +21436,7 @@ async function renderMovimientos() {
                 <div style="display:flex;align-items:center;gap:5px;font-weight:600;color:${isCan?'#64748b':'var(--text-primary)'};">
                   ${isEnt ? lx('ArrowDownLeft',11,'',{color:'#4ade80'}) : lx('ArrowUpRight',11,'',{color:'#f87171'})} ${quien}
                 </div>
-                ${m.comision != null ? `<div style="font-size:10px;color:#fbbf24;margin-top:2px;">com. ${(m.comision*100).toFixed(1)}% · bruto $${_mvFmt$(m.monto_mxn)}</div>` : ''}
+                ${m.comision != null ? `<div style="font-size:10px;color:#fbbf24;margin-top:2px;">com. ${((1-m.comision)*100).toFixed(1)}% · ganancia $${_mvFmt$(_mvComisionMxn(m))}</div>` : ''}
                 ${m.notas ? `<div style="font-size:10px;color:var(--text-dim);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px;">${_mvEsc(m.notas)}</div>` : ''}
               </td>
               <td style="padding:10px 12px;">
@@ -21323,18 +21472,17 @@ async function renderMovimientos() {
   // ── Ensamblado ──
   root.innerHTML = `
     <div class="view-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
-      <div>
-        <h1 class="view-title" style="display:flex;align-items:center;gap:10px;">
-          ${lx('ArrowLeftRight',22,'',{color:'#00f0ff'})} Movimientos
-        </h1>
-        ${activeOrq ? `<p style="font-size:12px;color:var(--text-dim);margin-top:2px;">${_mvEsc(activeOrq.descripcion || activeOrq.nombre)} · ${_mvEsc(activeOrq.moneda_principal)}</p>` : ''}
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button onclick="_mvViewMode='landing';renderMovimientos()" style="display:flex;align-items:center;gap:5px;padding:6px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx('ChevronLeft',13)} Mis Cuentas</button>
+        <div>
+          <h1 class="view-title" style="display:flex;align-items:center;gap:10px;">
+            ${lx('ArrowLeftRight',22,'',{color:'#00f0ff'})} ${activeOrq ? _mvEsc(activeOrq.nombre) : 'Movimientos'}
+          </h1>
+          ${activeOrq ? `<p style="font-size:12px;color:var(--text-dim);margin-top:2px;">${_mvEsc(activeOrq.descripcion||'')}${activeOrq.descripcion&&activeOrq.moneda_principal?' · ':''}<span style="color:#fbbf24;">${_mvEsc(activeOrq.moneda_principal||'')}</span></p>` : ''}
+        </div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:20px;">
-      ${orqTabs}
-      <button onclick="mvOpenOrqModal(null, true)" style="display:flex;align-items:center;gap:5px;padding:7px 13px;border-radius:20px;border:1px dashed rgba(0,246,255,0.25);background:transparent;color:var(--text-dim);font-size:12px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='rgba(0,246,255,0.5)';this.style.color='#00f0ff'" onmouseout="this.style.borderColor='rgba(0,246,255,0.25)';this.style.color='var(--text-dim)'">${lx('Plus',12)} Orquestador</button>
-    </div>
-    ${_mvActiveOrqId ? kpiHtml + actionsHtml : nxEmptyState({ img:'/empty/no-finance.svg', title:'Sin orquestadores', sub:'Crea tu primer orquestador para registrar entradas y salidas.', cta:`<button onclick="mvOpenOrqModal(null,true)" style="margin-top:12px;padding:10px 22px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-weight:700;">+ Crear orquestador</button>` })}
+    ${kpiHtml + actionsHtml}
     ${_mvActiveOrqId ? `
       <!-- Gráficas panel -->
       <div id="mv-charts-panel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px;">
@@ -21515,7 +21663,7 @@ window.mvOpenModal = async (id = null) => {
     `<div><label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${label}</label>${inner}</div>`
 
   document.body.insertAdjacentHTML('beforeend', `
-    <div id="mv-modal-overlay" onclick="if(event.target===this)mvCloseModal()" style="position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;animation:nexus-modal-in 0.2s both;">
+    <div id="mv-modal-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;animation:nexus-modal-in 0.2s both;">
       <div style="background:var(--bg-panel);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:28px;width:100%;max-width:600px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.55);" onclick="event.stopPropagation()">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
           <h2 style="font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px;">${lx('ArrowLeftRight',17,'',{color:'#00f0ff'})} ${id?'Editar':'Nuevo'} movimiento</h2>
@@ -21553,7 +21701,7 @@ window.mvOpenModal = async (id = null) => {
 
         <!-- Banco / CLABE -->
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
-          ${fld('Banco', `<input type="text" id="mv-banco" value="${_mvEsc(mov?.banco||'')}" placeholder="BBVA, HSBC, STP..." style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" />`)}
+          ${fld('Banco', `<input type="text" list="mx-banks-list" id="mv-banco" value="${_mvEsc(mov?.banco||'')}" placeholder="BBVA, HSBC, STP..." style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" /><datalist id="mx-banks-list">${MX_BANKS.map(b=>`<option value="${b}">`).join('')}</datalist>`)}
           ${fld('CLABE / Cuenta', `<input type="text" id="mv-clabe" value="${_mvEsc(mov?.clabe||'')}" placeholder="18 dígitos" maxlength="18" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
         </div>
 
@@ -21576,12 +21724,15 @@ window.mvOpenModal = async (id = null) => {
         <!-- Preview MXN + campo comisión (solo Entrada + cripto/USD) -->
         <div id="mv-comision-wrap" style="display:${(mov?.comision != null && mov?.tipo==='entrada')?'grid':'none'};grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
           <div>
-            <label style="display:block;font-size:11px;font-weight:700;color:#fbbf24;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Factor comisión</label>
-            <input type="number" id="mv-comision" value="${mov?.comision??0.97}" step="0.001" min="0.01" max="1" oninput="mvCalcMxn()" style="width:100%;padding:9px 12px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);border-radius:10px;color:#fbbf24;font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />
+            <label style="display:block;font-size:11px;font-weight:700;color:#fbbf24;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">% Comisión que cobras</label>
+            <div style="position:relative;">
+              <input type="number" id="mv-comision" value="${mov?.comision != null ? Math.round((1-mov.comision)*10000)/100 : 3}" step="0.01" min="0.01" max="99" oninput="mvCalcMxn()" style="width:100%;padding:9px 36px 9px 12px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);border-radius:10px;color:#fbbf24;font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />
+              <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:#fbbf24;font-weight:700;font-size:14px;pointer-events:none;">%</span>
+            </div>
           </div>
           <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:2px;">
-            <div id="mv-com-pct" style="font-size:12px;color:var(--text-dim);margin-bottom:4px;"></div>
-            <div id="mv-com-gain" style="font-size:13px;font-weight:700;color:#4ade80;font-family:'JetBrains Mono',monospace;"></div>
+            <div id="mv-com-pct" style="font-size:11px;color:var(--text-dim);margin-bottom:4px;"></div>
+            <div id="mv-com-gain" style="font-size:14px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;"></div>
           </div>
         </div>
         <div id="mv-mxn-preview" style="display:none;padding:10px 14px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:10px;font-size:12px;color:#00f0ff;font-family:'JetBrains Mono',monospace;margin-bottom:14px;line-height:1.7;"></div>
@@ -21726,7 +21877,7 @@ function _mvToggleComision() {
   wrap.style.display = show ? 'grid' : 'none'
   if (show) {
     const comEl = document.getElementById('mv-comision')
-    if (comEl && !comEl.value) comEl.value = '0.97'
+    if (comEl && !comEl.value) comEl.value = '3'
   }
 }
 
@@ -21747,21 +21898,20 @@ window.mvCalcMxn = () => {
     prev.style.display = 'block'
     const bruto = cant * tc
     if (showCom) {
-      const factor  = parseFloat(comEl.value) || 0.97
-      const net     = bruto * factor
-      const ganancia = bruto - net
-      const pct     = ((1 - factor) * 100).toFixed(2)
-      // Actualiza hints en el panel de comisión
-      const pctEl = document.getElementById('mv-com-pct')
+      const pct      = parseFloat(comEl.value) || 3      // % (ej. 3)
+      const factor   = 1 - (pct / 100)                  // factor (ej. 0.97)
+      const ganancia = bruto * (pct / 100)               // tu comisión en MXN
+      const net      = bruto * factor                    // cliente recibe
+      const pctEl  = document.getElementById('mv-com-pct')
       const gainEl = document.getElementById('mv-com-gain')
-      if (pctEl)  pctEl.textContent  = `${pct}% de ganancia`
+      if (pctEl)  pctEl.innerHTML  = `Equivale a <strong style="color:#fbbf24;">factor ${factor.toFixed(4)}</strong>`
       if (gainEl) gainEl.textContent = `+$${fmt(ganancia)} MXN`
       prev.innerHTML = `
-        Bruto: <strong>$${fmt(bruto)} MXN</strong>
-        &nbsp;·&nbsp; Cliente recibe: <strong>$${fmt(net)} MXN</strong>
-        &nbsp;·&nbsp; Tu ganancia: <strong style="color:#4ade80;">+$${fmt(ganancia)} MXN</strong>`
+        Total recibido: <strong>$${fmt(bruto)} MXN</strong>
+        &nbsp;·&nbsp; Tu comisión (${pct.toFixed(2)}%): <strong style="color:#4ade80;">+$${fmt(ganancia)} MXN</strong>
+        &nbsp;·&nbsp; Cliente neto: <strong>$${fmt(net)} MXN</strong>`
     } else {
-      prev.textContent = `≈ $${fmt(bruto)} MXN`
+      prev.innerHTML = `≈ <strong>$${fmt(bruto)} MXN</strong>`
     }
   } else {
     prev.style.display = 'none'
@@ -21814,10 +21964,13 @@ window.mvSaveMov = async () => {
 
   const tc     = parseFloat(g('mv-tc')?.value) || 1
   const moneda = g('mv-moneda')?.value || 'MXN'
-  // Comisión: solo se guarda si aplica (Entrada + cripto/USD)
-  const showCom   = tipo === 'entrada' && _MV_CRYPTO_SET.has(moneda)
-  const comisionRaw = showCom ? parseFloat(g('mv-comision')?.value) : null
-  const comision  = (comisionRaw != null && !isNaN(comisionRaw)) ? comisionRaw : null
+  // Comisión: campo ahora almacena % (ej. 3) — convertimos a factor (0.97) para BD
+  const showCom     = tipo === 'entrada' && _MV_CRYPTO_SET.has(moneda)
+  const comisionPct = showCom ? parseFloat(g('mv-comision')?.value) : null
+  // Guardado como factor para compatibilidad: 3% → 0.97
+  const comision    = (comisionPct != null && !isNaN(comisionPct) && comisionPct > 0)
+                      ? Math.round((1 - comisionPct / 100) * 10000) / 10000
+                      : null
 
   // URL manual (solo se usa si no hay archivo pendiente)
   const manualUrl = !_mvPendingFile ? (g('mv-comp-url')?.value.trim() || null) : null
