@@ -570,11 +570,21 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
       const nombre      = m.tipo === 'entrada'
         ? (m.ordenante    || m.notas || 'Depósito')
         : (m.beneficiario || m.notas || 'Retiro')
-      const clabeHint   = m.clabe ? String(m.clabe) : ''
-      const bancoClabe  = [m.banco, clabeHint].filter(Boolean).join(' · ')
+      // Show origen → destino banks when available, fall back to legacy banco/clabe
+      const bo = m.banco_origen, bd = m.banco_destino
+      const co = m.clabe_origen ? String(m.clabe_origen) : ''
+      const cd = m.clabe_destino ? String(m.clabe_destino) : ''
+      let bancoLine = ''
+      if (bo || bd) {
+        if (bo) bancoLine += bo + (co ? ' ' + co : '')
+        if (bo && bd) bancoLine += ' → '
+        if (bd) bancoLine += bd + (cd ? ' ' + cd : '')
+      } else if (m.banco || m.clabe) {
+        bancoLine = [m.banco, m.clabe ? String(m.clabe) : ''].filter(Boolean).join(' · ')
+      }
       const extraNote   = m.notas && m.notas !== nombre ? m.notas : ''
       const contraparte = nombre
-        + (bancoClabe ? '\n' + bancoClabe : '')
+        + (bancoLine  ? '\n' + bancoLine  : '')
         + (extraNote  ? '\n' + extraNote  : '')
       return [
         m.fecha,

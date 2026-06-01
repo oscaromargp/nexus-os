@@ -21463,8 +21463,20 @@ async function renderMovimientos() {
                 ${m.notas ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px;" title="${_mvEsc(m.notas)}">${_mvEsc(m.notas)}</div>` : ''}
               </td>
               <td style="padding:10px 12px;">
-                ${m.banco ? `<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${lx('Landmark',10,'',{color:'#475569'})} ${_mvEsc(m.banco)}</div>` : '<span style="color:#334155;font-size:11px;">—</span>'}
-                ${m.clabe ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);margin-top:1px;letter-spacing:0.05em;">${_mvEsc(m.clabe)}</div>` : ''}
+                ${(()=>{
+                  const bo = m.banco_origen, bd = m.banco_destino
+                  const co = m.clabe_origen, cd = m.clabe_destino
+                  if (!bo && !bd && !m.banco) return '<span style="color:#334155;font-size:11px;">—</span>'
+                  if (bo || bd) {
+                    return `${bo ? `<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${lx('Landmark',10,'',{color:'#475569'})} ${_mvEsc(bo)}</div>` : ''}
+                            ${co ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);margin-top:1px;">${_mvEsc(co)}</div>` : ''}
+                            ${bd ? `<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;margin-top:3px;"><span style="color:#334155;margin-right:3px;">→</span>${lx('Landmark',10,'',{color:'#334155'})} ${_mvEsc(bd)}</div>` : ''}
+                            ${cd ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);margin-top:1px;">${_mvEsc(cd)}</div>` : ''}`
+                  }
+                  // legacy fallback
+                  return `<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${lx('Landmark',10,'',{color:'#475569'})} ${_mvEsc(m.banco)}</div>
+                          ${m.clabe ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);margin-top:1px;">${_mvEsc(m.clabe)}</div>` : ''}`
+                })()}
               </td>
               <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:700;font-family:'JetBrains Mono',monospace;white-space:nowrap;font-size:12px;">
                 ${isCan ? '<span style="color:#64748b">—</span>' : `${isEnt?'+':'-'}${_mvFmt$(m.cantidad)}&thinsp;${_mvEsc(m.moneda)}`}
@@ -21729,10 +21741,15 @@ window.mvOpenModal = async (id = null) => {
           </div>`)}
         </div>
 
-        <!-- Banco / CLABE -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
-          ${fld('Banco', `<input type="text" list="mx-banks-list" id="mv-banco" value="${_mvEsc(mov?.banco||'')}" placeholder="BBVA, HSBC, STP..." style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" /><datalist id="mx-banks-list">${MX_BANKS.map(b=>`<option value="${b}">`).join('')}</datalist>`)}
-          ${fld('CLABE / Cuenta', `<input type="text" id="mv-clabe" value="${_mvEsc(mov?.clabe||'')}" placeholder="18 dígitos" maxlength="18" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
+        <!-- Banco Origen (quien envía) -->
+        <div id="mv-banco-orig-row" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:10px;">
+          ${fld('🏦 Banco Origen', `<input type="text" list="mx-banks-list" id="mv-banco-origen" value="${_mvEsc(mov?.banco_origen||mov?.banco||'')}" placeholder="BBVA, STP, Bancalizo..." style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" /><datalist id="mx-banks-list">${MX_BANKS.map(b=>`<option value="${b}">`).join('')}</datalist>`)}
+          ${fld('CLABE Origen', `<input type="text" id="mv-clabe-origen" value="${_mvEsc(mov?.clabe_origen||mov?.clabe||'')}" placeholder="18 dígitos" maxlength="18" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
+        </div>
+        <!-- Banco Destino (quien recibe) -->
+        <div id="mv-banco-dest-row" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          ${fld('🏦 Banco Destino', `<input type="text" list="mx-banks-list2" id="mv-banco-destino" value="${_mvEsc(mov?.banco_destino||'')}" placeholder="BBVA, STP, Bancalizo..." style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;box-sizing:border-box;" /><datalist id="mx-banks-list2">${MX_BANKS.map(b=>`<option value="${b}">`).join('')}</datalist>`)}
+          ${fld('CLABE Destino', `<input type="text" id="mv-clabe-destino" value="${_mvEsc(mov?.clabe_destino||'')}" placeholder="18 dígitos" maxlength="18" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
         </div>
 
         <!-- Cantidad / Moneda / TC -->
@@ -22005,13 +22022,24 @@ window.mvSaveMov = async () => {
   // URL manual (solo se usa si no hay archivo pendiente)
   const manualUrl = !_mvPendingFile ? (g('mv-comp-url')?.value.trim() || null) : null
 
+  const bancoOrigen  = g('mv-banco-origen')?.value.trim()  || null
+  const clabeOrigen  = g('mv-clabe-origen')?.value.trim()  || null
+  const bancoDestino = g('mv-banco-destino')?.value.trim() || null
+  const clabeDestino = g('mv-clabe-destino')?.value.trim() || null
+  // Backward-compat: keep legacy 'banco'/'clabe' as the relevant side for filters
+  const legacyBanco = tipo === 'entrada' ? (bancoOrigen || bancoDestino) : (bancoDestino || bancoOrigen)
+  const legacyClabe = tipo === 'entrada' ? (clabeOrigen || clabeDestino) : (clabeDestino || clabeOrigen)
+
   const payload = {
     owner_id: currentUser.id, orquestador_id: _mvActiveOrqId,
     tipo, fecha,
     ordenante:    g('mv-ordenante')?.value.trim()    || null,
     beneficiario: g('mv-beneficiario')?.value.trim() || null,
-    banco:        g('mv-banco')?.value.trim()         || null,
-    clabe:        g('mv-clabe')?.value.trim()         || null,
+    banco_origen:  bancoOrigen,
+    clabe_origen:  clabeOrigen,
+    banco_destino: bancoDestino,
+    clabe_destino: clabeDestino,
+    banco: legacyBanco, clabe: legacyClabe,
     cantidad: cant, moneda, tc,
     monto_mxn: Math.round(cant * tc * 100) / 100,
     comision,
@@ -22156,10 +22184,12 @@ window.mvDeleteOrq = async (id) => {
 window.mvExportCSV = () => {
   const list = _mvWithBalance(_mvFiltered())
   if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
-  const hdr  = ['Fecha','Tipo','Ordenante','Beneficiario','Banco','CLABE','Cantidad','Moneda','T/C','Bruto MXN','Comision MXN','Neto MXN','Balance MXN','Comision Factor','Estado','Categoria','Proyecto','Notas']
+  const hdr  = ['Fecha','Tipo','Ordenante','Beneficiario','Banco Origen','CLABE Origen','Banco Destino','CLABE Destino','Cantidad','Moneda','T/C','Bruto MXN','Comision MXN','Neto MXN','Balance MXN','Comision Factor','Estado','Categoria','Proyecto','Notas']
   const rows = list.map(m => [
     m.fecha, m.tipo, m.ordenante||'', m.beneficiario||'',
-    m.banco||'', m.clabe||'', m.cantidad, m.moneda, m.tc,
+    m.banco_origen||m.banco||'', m.clabe_origen||m.clabe||'',
+    m.banco_destino||'', m.clabe_destino||'',
+    m.cantidad, m.moneda, m.tc,
     _mvNetAmount(m), _mvComisionMxn(m), _mvNetoAmount(m), m._balance, m.comision??'',
     m.estado, m.categoria||'', m.proyecto||'', (m.notas||'').replace(/"/g,'""')
   ].map(v => `"${v}"`).join(','))
@@ -22323,38 +22353,57 @@ window.mvPickContact = (field, contactId) => {
   if (drop) drop.style.display = 'none'
 
   if (accounts.length === 1) {
-    const acc = accounts[0]
-    const b = document.getElementById('mv-banco'); if (b) b.value = acc.banco || ''
-    const cl = document.getElementById('mv-clabe'); if (cl) cl.value = acc.clabe || ''
+    _mvFillBankFields(field, accounts[0])
   } else if (accounts.length > 1) {
-    _mvShowAccountPicker(accounts)
+    _mvShowAccountPicker(field, accounts)
   }
 }
 
-function _mvShowAccountPicker(accounts) {
+/** Fills banco_origen/clabe_origen or banco_destino/clabe_destino depending on field */
+function _mvFillBankFields(field, acc) {
+  const bankVal  = acc.bank || acc.bank_name || acc.network || ''
+  const clabeVal = acc.clabe || acc.wallet   || ''
+  const side     = field === 'ordenante' ? 'origen' : 'destino'
+  const b  = document.getElementById(`mv-banco-${side}`)
+  const cl = document.getElementById(`mv-clabe-${side}`)
+  if (b)  b.value  = bankVal
+  if (cl) cl.value = clabeVal
+}
+
+function _mvShowAccountPicker(field, accounts) {
   document.getElementById('mv-acct-picker')?.remove()
-  const anchor = document.getElementById('mv-banco')?.closest('div')?.parentElement
+  // anchor below the relevant bank row
+  const rowId = field === 'ordenante' ? 'mv-banco-orig-row' : 'mv-banco-dest-row'
+  const anchor = document.getElementById(rowId)
   if (!anchor) return
   const wrap = document.createElement('div')
   wrap.id = 'mv-acct-picker'
-  wrap.style.cssText = 'margin-bottom:14px;padding:12px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.2);border-radius:12px;'
-  wrap.innerHTML = `<div style="font-size:11px;font-weight:700;color:#00f0ff;margin-bottom:8px;display:flex;align-items:center;gap:6px;">${lx('Building2',12)} Selecciona cuenta bancaria</div>
-    ${accounts.map((acc, i) => `
-      <button onclick="window._mvSelectAccount(${i})" data-acct='${JSON.stringify(acc).replace(/'/g,'&apos;')}' style="display:flex;justify-content:space-between;width:100%;padding:8px 12px;margin-bottom:4px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.09);border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-primary);transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(0,246,255,0.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.09)'">
-        <span style="font-weight:600;">${esc(acc.label || acc.banco || 'Cuenta ' + (i+1))}</span>
-        <span style="color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:11px;">···${(acc.clabe||'').slice(-4)}</span>
-      </button>`).join('')}
+  wrap.dataset.field = field
+  wrap.style.cssText = 'margin-bottom:10px;padding:12px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.2);border-radius:12px;'
+  const label = field === 'ordenante' ? 'cuenta de origen (quien envía)' : 'cuenta de destino (quien recibe)'
+  wrap.innerHTML = `<div style="font-size:11px;font-weight:700;color:#00f0ff;margin-bottom:8px;display:flex;align-items:center;gap:6px;">${lx('Building2',12)} Selecciona ${label}</div>
+    ${accounts.map((acc, i) => {
+      const bankLabel = acc.label || acc.bank || acc.bank_name || acc.network || ('Cuenta ' + (i+1))
+      const clabeHint = (acc.clabe || acc.wallet || '')
+      const clabeDisp = clabeHint.length > 6 ? '···' + clabeHint.slice(-4) : clabeHint
+      return `<button onclick="window._mvSelectAccount(${i})" data-acct='${JSON.stringify(acc).replace(/'/g,'&apos;')}' style="display:flex;justify-content:space-between;width:100%;padding:8px 12px;margin-bottom:4px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.09);border-radius:8px;cursor:pointer;font-size:12px;color:var(--text-primary);transition:all 0.15s;" onmouseover="this.style.borderColor='rgba(0,246,255,0.4)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.09)'">
+        <span style="font-weight:600;">${esc(bankLabel)}</span>
+        <span style="color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:11px;">${esc(clabeDisp)}</span>
+      </button>`
+    }).join('')}
   `
   anchor.insertAdjacentElement('afterend', wrap)
 }
 
 window._mvSelectAccount = (idx) => {
-  const btns = document.querySelectorAll('#mv-acct-picker button')
-  const btn  = btns[idx]; if (!btn) return
-  const acc  = JSON.parse(btn.getAttribute('data-acct').replace(/&apos;/g,"'"))
-  const b = document.getElementById('mv-banco'); if (b) b.value = acc.banco || ''
-  const cl = document.getElementById('mv-clabe'); if (cl) cl.value = acc.clabe || ''
-  document.getElementById('mv-acct-picker')?.remove()
+  const picker = document.getElementById('mv-acct-picker')
+  if (!picker) return
+  const field = picker.dataset.field || 'ordenante'
+  const btns  = picker.querySelectorAll('button')
+  const btn   = btns[idx]; if (!btn) return
+  const acc   = JSON.parse(btn.getAttribute('data-acct').replace(/&apos;/g,"'"))
+  _mvFillBankFields(field, acc)
+  picker.remove()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
