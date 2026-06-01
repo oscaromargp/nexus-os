@@ -21257,9 +21257,13 @@ function _mvRenderLanding(root) {
           </div>`}
         </div>
         <!-- Footer -->
-        <div style="padding:12px 20px;border-top:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;">
+        <div style="padding:10px 20px;border-top:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;gap:8px;">
           <span style="font-size:12px;color:#00f0ff;font-weight:600;display:flex;align-items:center;gap:5px;">${lx('ArrowRight',12)} Ver detalle</span>
-          <button onclick="event.stopPropagation();_mvActiveOrqId='${o.id}';_mvViewMode='detail';mvOpenModal()" style="display:flex;align-items:center;gap:5px;padding:5px 12px;background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.25);color:#00f0ff;border-radius:8px;cursor:pointer;font-size:11px;font-weight:700;transition:background 0.15s;" onmouseover="this.style.background='rgba(0,246,255,0.18)'" onmouseout="this.style.background='rgba(0,246,255,0.08)'">${lx('Plus',11)} Nuevo</button>
+          <div style="display:flex;gap:6px;" onclick="event.stopPropagation()">
+            <button onclick="mvOpenOrqModal('${o.id}',false)" title="Editar cuenta" style="display:flex;align-items:center;gap:4px;padding:5px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.15s;" onmouseover="this.style.background='rgba(0,246,255,0.1)';this.style.color='#00f0ff';this.style.borderColor='rgba(0,246,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.04)';this.style.color='var(--text-muted)';this.style.borderColor='rgba(255,255,255,0.1)'">${lx('Pencil',11)}</button>
+            <button onclick="mvDeleteOrq('${o.id}')" title="Eliminar cuenta y todos sus movimientos" style="display:flex;align-items:center;gap:4px;padding:5px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.15s;" onmouseover="this.style.background='rgba(248,113,113,0.1)';this.style.color='#f87171';this.style.borderColor='rgba(248,113,113,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.04)';this.style.color='var(--text-muted)';this.style.borderColor='rgba(255,255,255,0.1)'">${lx('Trash2',11)}</button>
+            <button onclick="_mvActiveOrqId='${o.id}';_mvViewMode='detail';mvOpenModal()" style="display:flex;align-items:center;gap:4px;padding:5px 10px;background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.25);color:#00f0ff;border-radius:8px;cursor:pointer;font-size:11px;font-weight:700;transition:background 0.15s;" onmouseover="this.style.background='rgba(0,246,255,0.18)'" onmouseout="this.style.background='rgba(0,246,255,0.08)'">${lx('Plus',11)} Nuevo</button>
+          </div>
         </div>
       </div>`
   }).join('')
@@ -21364,6 +21368,8 @@ async function renderMovimientos() {
       <label style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx('Upload',14)} Importar<input type="file" accept=".csv" style="display:none;" onchange="mvImportCSV(this)" /></label>
       <button onclick="mvDownloadTemplate()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'" title="Descargar plantilla CSV para importación masiva">${lx('FileDown',14)} Plantilla</button>
       <button onclick="_mvViewMode='landing';renderMovimientos()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx('LayoutGrid',14)} Mis Cuentas</button>
+      <button onclick="mvOpenOrqModal('${_mvActiveOrqId}',false)" title="Editar esta cuenta" style="display:flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,246,255,0.08)';this.style.color='#00f0ff'" onmouseout="this.style.background='rgba(255,255,255,0.04)';this.style.color='var(--text-muted)'">${lx('Pencil',13)} Editar</button>
+      <button onclick="mvDeleteOrq('${_mvActiveOrqId}')" title="Eliminar esta cuenta y todos sus movimientos" style="display:flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.08)';this.style.color='#f87171'" onmouseout="this.style.background='rgba(255,255,255,0.04)';this.style.color='var(--text-muted)'">${lx('Trash2',13)}</button>
       <!-- Toggle vista Cards / Tabla -->
       <div style="display:flex;gap:2px;padding:3px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-left:auto;">
         <button onclick="mvSetView('tabla')"  style="padding:6px 13px;border-radius:8px;border:none;background:${_mvView==='tabla'?'rgba(0,246,255,0.15)':'transparent'};color:${_mvView==='tabla'?'#00f0ff':'var(--text-dim)'};font-size:12px;font-weight:${_mvView==='tabla'?700:400};cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:5px;">${lx('AlignJustify',12)} Tabla</button>
@@ -22026,6 +22032,7 @@ window.mvDeleteMov = async (id) => {
   const { error } = await supabase.from('movimientos').delete().eq('id', id)
   if (error) { showToast('⚠ Error al eliminar'); return }
   _mvMovs = _mvMovs.filter(m => m.id !== id)
+  _mvOrqSummaries = {}   // invalidar cache del landing
   renderMovimientos()
   showToast('🗑 Movimiento eliminado')
 }
@@ -22106,16 +22113,19 @@ window.mvSaveOrq = async (id) => {
 }
 
 window.mvDeleteOrq = async (id) => {
-  if (!confirm('¿Eliminar este orquestador y todos sus movimientos?')) return
+  const orq = _mvOrqs.find(o => o.id === id)
+  const nombre = orq?.nombre || 'esta cuenta'
+  if (!confirm(`¿Eliminar "${nombre}" y TODOS sus movimientos? Esta acción no se puede deshacer.`)) return
   const { error } = await supabase.from('orquestadores').delete().eq('id', id)
   if (error) { showToast('⚠ Error al eliminar'); return }
-  _mvOrqs = _mvOrqs.filter(o => o.id !== id)
-  if (_mvActiveOrqId === id) {
-    _mvActiveOrqId = _mvOrqs[0]?.id || null
-    _mvMovs = []
-    if (_mvActiveOrqId) await _mvLoadMovs()
-  }
-  mvCloseOrqModal(); renderMovimientos(); showToast('🗑 Orquestador eliminado')
+  _mvOrqs          = _mvOrqs.filter(o => o.id !== id)
+  _mvOrqSummaries  = {}   // invalidar cache
+  _mvMovs          = []
+  _mvActiveOrqId   = null
+  _mvViewMode      = 'landing'
+  mvCloseOrqModal()
+  renderMovimientos()
+  showToast(`🗑 "${nombre}" eliminada`)
 }
 
 // ── Export CSV ────────────────────────────────────────────────────────────────
