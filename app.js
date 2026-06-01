@@ -20978,9 +20978,11 @@ async function _mvLoadAllSummaries() {
     const bruto = m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
     const com   = (m.tipo === 'entrada' && m.comision != null)
                   ? Math.round(bruto * (1 - m.comision) * 100) / 100 : 0
+    const neto  = Math.round((bruto - com) * 100) / 100
     s.count++
-    if (m.tipo === 'entrada') { s.entradas += bruto; s.comisiones += com }
-    else s.salidas += bruto
+    // Entradas = neto (lo que el cliente tiene disponible), comisiones separadas
+    if (m.tipo === 'entrada') { s.entradas += neto; s.comisiones += com }
+    else s.salidas += neto
   }
   // Calcular balance neto por cuenta
   for (const oid of Object.keys(summ)) {
@@ -21062,12 +21064,12 @@ function _mvFiltered() {
   return list
 }
 
-/** Valor bruto MXN: USDT × TC (o monto_mxn si ya está calculado) — SIEMPRE el importe completo */
+/** Bruto MXN: USDT × TC — lo que Oscar recibe en equivalente MXN */
 function _mvNetAmount(m) {
   return m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
 }
 
-/** Comisión ganada en esta entrada (uso interno — NO aparece en estado de cuenta) */
+/** Comisión de Oscar en MXN (uso interno — NO aparece en estado de cuenta del cliente) */
 function _mvComisionMxn(m) {
   if (m.tipo !== 'entrada' || m.comision == null) return 0
   const bruto = _mvNetAmount(m)
@@ -21075,14 +21077,22 @@ function _mvComisionMxn(m) {
   return Math.round(bruto * (1 - m.comision) * 100) / 100
 }
 
+/** Neto MXN del cliente = bruto − comisión. Es lo que se abona/carga en el estado de cuenta.
+ *  Para salidas no hay comisión → neto = bruto.
+ */
+function _mvNetoAmount(m) {
+  return Math.round((_mvNetAmount(m) - _mvComisionMxn(m)) * 100) / 100
+}
+
 function _mvKpis(list) {
   let entradas = 0, salidas = 0, pendiente = 0, comisiones = 0
   for (const m of list) {
     if (m.estado === 'cancelado') continue
-    const amt = _mvNetAmount(m)
-    if (m.estado === 'pendiente') { pendiente += (m.tipo === 'entrada' ? amt : -amt); continue }
-    if (m.tipo === 'entrada') { entradas += amt; comisiones += _mvComisionMxn(m) }
-    else salidas += amt
+    // Usar neto (bruto − comisión) para reflejar el saldo real del cliente
+    const neto = _mvNetoAmount(m)
+    if (m.estado === 'pendiente') { pendiente += (m.tipo === 'entrada' ? neto : -neto); continue }
+    if (m.tipo === 'entrada') { entradas += neto; comisiones += _mvComisionMxn(m) }
+    else salidas += neto
   }
   return { entradas, salidas, net: entradas - salidas, pendiente, comisiones }
 }
@@ -21093,9 +21103,10 @@ function _mvWithBalance(sorted) {
   let   bal     = 0
   const withBal = asc.map(m => {
     if (m.estado !== 'cancelado') {
-      bal += m.tipo === 'entrada' ? _mvNetAmount(m) : -_mvNetAmount(m)
+      // Balance usa NETO (bruto − comisión) = lo que realmente se mueve en la cuenta del cliente
+      bal += m.tipo === 'entrada' ? _mvNetoAmount(m) : -_mvNetoAmount(m)
     }
-    return { ...m, _balance: bal }
+    return { ...m, _balance: Math.round(bal * 100) / 100 }
   })
   return withBal.reverse()
 }
@@ -21415,12 +21426,12 @@ async function renderMovimientos() {
         <thead>
           <tr style="border-bottom:1px solid rgba(255,255,255,0.08);">
             <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Fecha</th>
-            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Tipo</th>
-            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Concepto</th>
-            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Banco · CLABE</th>
-            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Categoría</th>
-            <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Cantidad</th>
-            <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">MXN Neto</th>
+            <th style="padding:10px 6px;text-align:center;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">↕</th>
+            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Concepto / Notas</th>
+            <th style="padding:10px 12px;text-align:left;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Banco Emisor · CLABE</th>
+            <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Cantidad</th>
+            <th style="padding:10px 12px;text-align:right;color:#fbbf24;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Comisión</th>
+            <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;white-space:nowrap;">Neto MXN</th>
             <th style="padding:10px 12px;text-align:right;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Balance</th>
             <th style="padding:10px 12px;text-align:center;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;">Estado</th>
             <th style="padding:10px 12px;text-align:center;color:var(--text-dim);font-weight:700;font-size:10px;text-transform:uppercase;">Comp.</th>
@@ -21433,28 +21444,41 @@ async function renderMovimientos() {
             const isCan    = m.estado === 'cancelado'
             const amtColor = isCan ? '#64748b' : isEnt ? '#4ade80' : '#f87171'
             const balColor = m._balance >= 0 ? '#4ade80' : '#f87171'
-            const quien    = _mvEsc(isEnt ? (m.ordenante||'—') : (m.beneficiario||'—'))
-            const cla      = m.clabe ? _mvEsc(m.clabe) : '—'
+            // Concepto: quién envió → quién recibió
+            const emisor   = _mvEsc(isEnt ? (m.ordenante || '—') : 'Cuenta propia')
+            const receptor = _mvEsc(isEnt ? (m.beneficiario || '') : (m.beneficiario || m.ordenante || '—'))
+            const neto     = _mvNetoAmount(m)
+            const com      = _mvComisionMxn(m)
+            const bruto    = _mvNetAmount(m)
             return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.15s;cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''" onclick="mvOpenModal('${m.id}')">
-              <td style="padding:10px 12px;color:var(--text-muted);white-space:nowrap;">${_mvFmtD(m.fecha)}</td>
-              <td style="padding:10px 12px;">${_mvMonedaBadge(m.moneda)}</td>
-              <td style="padding:10px 12px;max-width:200px;">
-                <div style="display:flex;align-items:center;gap:5px;font-weight:600;color:${isCan?'#64748b':'var(--text-primary)'};">
-                  ${isEnt ? lx('ArrowDownLeft',11,'',{color:'#4ade80'}) : lx('ArrowUpRight',11,'',{color:'#f87171'})} ${quien}
-                </div>
-                ${m.comision != null ? `<div style="font-size:10px;color:#fbbf24;margin-top:2px;">com. ${((1-m.comision)*100).toFixed(1)}% · ganancia $${_mvFmt$(_mvComisionMxn(m))}</div>` : ''}
-                ${m.notas ? `<div style="font-size:10px;color:var(--text-dim);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px;">${_mvEsc(m.notas)}</div>` : ''}
+              <td style="padding:10px 12px;color:var(--text-muted);white-space:nowrap;font-size:11px;">${_mvFmtD(m.fecha)}</td>
+              <td style="padding:10px 6px;text-align:center;">
+                <span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:${amtColor}18;border:1px solid ${amtColor}33;" title="${isEnt?'Entrada':'Salida'}">
+                  ${isCan ? lx('X',10,'',{color:'#64748b'}) : lx(isEnt?'ArrowDownLeft':'ArrowUpRight',10,'',{color:amtColor})}
+                </span>
+              </td>
+              <td style="padding:10px 12px;max-width:220px;">
+                <div style="font-weight:700;font-size:12px;color:${isCan?'#64748b':'var(--text-primary)'};">${emisor}${receptor && receptor!==emisor ? `<span style="color:#475569;font-weight:400;"> → ${receptor}</span>` : ''}</div>
+                ${m.categoria ? `<div style="margin-top:2px;">${_mvCatBadge(m.categoria)}</div>` : ''}
+                ${m.notas ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:210px;" title="${_mvEsc(m.notas)}">${_mvEsc(m.notas)}</div>` : ''}
               </td>
               <td style="padding:10px 12px;">
-                ${m.banco ? `<div style="font-size:11px;color:var(--text-muted);">${_mvEsc(m.banco)}</div>` : ''}
-                ${m.clabe ? `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);">${_mvEsc(cla)}</div>` : ''}
+                ${m.banco ? `<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${lx('Landmark',10,'',{color:'#475569'})} ${_mvEsc(m.banco)}</div>` : '<span style="color:#334155;font-size:11px;">—</span>'}
+                ${m.clabe ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);margin-top:1px;letter-spacing:0.05em;">${_mvEsc(m.clabe)}</div>` : ''}
               </td>
-              <td style="padding:10px 12px;">${_mvCatBadge(m.categoria)}</td>
-              <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:700;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${isEnt?'+':'-'}${_mvFmt$(m.cantidad)} ${_mvEsc(m.moneda)}</td>
-              <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:600;font-family:'JetBrains Mono',monospace;white-space:nowrap;" title="${m.comision!=null?'Bruto: $'+_mvFmt$(m.monto_mxn):''}">
-                ${isCan?'<span style="color:#64748b">—</span>':(isEnt?'+':'-')+'$'+_mvFmt$(_mvNetAmount(m))}
+              <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:700;font-family:'JetBrains Mono',monospace;white-space:nowrap;font-size:12px;">
+                ${isCan ? '<span style="color:#64748b">—</span>' : `${isEnt?'+':'-'}${_mvFmt$(m.cantidad)}&thinsp;${_mvEsc(m.moneda)}`}
               </td>
-              <td style="padding:10px 12px;text-align:right;color:${balColor};font-weight:800;font-family:'JetBrains Mono',monospace;white-space:nowrap;">${isCan?'<span style="color:#475569">—</span>':(m._balance>=0?'+':'')+' $'+_mvFmt$(m._balance)}</td>
+              <td style="padding:10px 12px;text-align:right;font-family:'JetBrains Mono',monospace;white-space:nowrap;font-size:11px;">
+                ${isCan || com === 0 ? '<span style="color:#334155;">—</span>' : `<span style="color:#fbbf24;" title="${((1-m.comision)*100).toFixed(2)}%">$${_mvFmt$(com)}</span>`}
+                ${!isCan && com > 0 && m.comision != null ? `<div style="font-size:9px;color:#78350f;">${((1-m.comision)*100).toFixed(1)}%</div>` : ''}
+              </td>
+              <td style="padding:10px 12px;text-align:right;color:${amtColor};font-weight:800;font-family:'JetBrains Mono',monospace;white-space:nowrap;font-size:13px;"
+                  title="${m.moneda!=='MXN'&&!isCan?'Bruto: $'+_mvFmt$(bruto)+' MXN':'' }">
+                ${isCan ? '<span style="color:#64748b">—</span>' : `${isEnt?'+':'-'}$${_mvFmt$(neto)}`}
+                ${!isCan && m.moneda !== 'MXN' ? `<div style="font-size:9px;color:#334155;" title="Bruto antes de comisión">bruto $${_mvFmt$(bruto)}</div>` : ''}
+              </td>
+              <td style="padding:10px 12px;text-align:right;color:${balColor};font-weight:900;font-family:'JetBrains Mono',monospace;white-space:nowrap;font-size:13px;">${isCan?'<span style="color:#475569">—</span>':(m._balance>=0?'':'-')+' $'+_mvFmt$(Math.abs(m._balance))}</td>
               <td style="padding:10px 12px;text-align:center;">${_mvEstadoBadge(m.estado)}</td>
               <td style="padding:10px 12px;text-align:center;">${m.comprobante_url ? `<a href="${_mvEsc(m.comprobante_url)}" target="_blank" onclick="event.stopPropagation()" style="color:#00f0ff;" title="Ver comprobante">${lx('ExternalLink',13)}</a>` : '<span style="color:#334155;">—</span>'}</td>
               <td style="padding:10px 6px;text-align:center;">
@@ -21576,7 +21600,7 @@ function _mvRenderCharts(withBal) {
     withBal.forEach(m => {
       if (m.estado === 'cancelado') return
       const key = m.moneda
-      byMoneda[key] = (byMoneda[key] || 0) + _mvNetAmount(m)
+      byMoneda[key] = (byMoneda[key] || 0) + _mvNetoAmount(m)
     })
     const labels = Object.keys(byMoneda)
     const data   = Object.values(byMoneda).map(Math.abs)
@@ -21612,8 +21636,8 @@ function _mvRenderCharts(withBal) {
       if (m.estado === 'cancelado') return
       const key = String(m.fecha).slice(0, 7)  // YYYY-MM
       if (!byMonth[key]) byMonth[key] = { entradas: 0, salidas: 0 }
-      if (m.tipo === 'entrada') byMonth[key].entradas += _mvNetAmount(m)
-      else byMonth[key].salidas += _mvNetAmount(m)
+      if (m.tipo === 'entrada') byMonth[key].entradas += _mvNetoAmount(m)
+      else byMonth[key].salidas += _mvNetoAmount(m)
     })
     const months = Object.keys(byMonth).sort().slice(-8)  // últimos 8 meses
     const shortLabel = (k) => {
@@ -22132,11 +22156,11 @@ window.mvDeleteOrq = async (id) => {
 window.mvExportCSV = () => {
   const list = _mvWithBalance(_mvFiltered())
   if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
-  const hdr  = ['Fecha','Tipo','Ordenante','Beneficiario','Banco','CLABE','Cantidad','Moneda','T/C','Bruto MXN','Neto MXN','Balance MXN','Comision','Estado','Categoria','Proyecto','Notas']
+  const hdr  = ['Fecha','Tipo','Ordenante','Beneficiario','Banco','CLABE','Cantidad','Moneda','T/C','Bruto MXN','Comision MXN','Neto MXN','Balance MXN','Comision Factor','Estado','Categoria','Proyecto','Notas']
   const rows = list.map(m => [
     m.fecha, m.tipo, m.ordenante||'', m.beneficiario||'',
     m.banco||'', m.clabe||'', m.cantidad, m.moneda, m.tc,
-    m.monto_mxn, _mvNetAmount(m), m._balance, m.comision??'',
+    _mvNetAmount(m), _mvComisionMxn(m), _mvNetoAmount(m), m._balance, m.comision??'',
     m.estado, m.categoria||'', m.proyecto||'', (m.notas||'').replace(/"/g,'""')
   ].map(v => `"${v}"`).join(','))
   const blob = new Blob(['﻿' + [hdr.join(','),...rows].join('\n')], { type:'text/csv;charset=utf-8;' })

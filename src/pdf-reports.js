@@ -556,15 +556,19 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
   // ── Tabla de movimientos — trazable (ordenante → beneficiario + banco + CLABE) ─
   _autoTable(doc, {
     startY: y,
-    head: [['FECHA', '', 'ORDENANTE / BENEFICIARIO', 'CRIPTO', 'CARGO (-)', 'ABONO (+)', 'SALDO']],
+    head: [['FECHA', '', 'CONCEPTO\nORDENANTE → BENEFICIARIO', 'CRIPTO', 'COMISIÓN', 'CARGO (−)', 'ABONO (+)', 'SALDO']],
     body: list.map(m => {
-      // Abono/cargo = valor bruto en MXN (cantidad × TC). La comisión es interna, no aparece en el estado de cuenta.
-      const net      = m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
+      const bruto    = m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
+      // Comisión interna de Oscar (factor almacenado)
+      const comMxn   = (m.tipo === 'entrada' && m.comision != null)
+        ? Math.round(bruto * (1 - m.comision) * 100) / 100 : 0
+      // NETO = lo que se abona/carga en la cuenta del cliente
+      const neto     = Math.round((bruto - comMxn) * 100) / 100
       const isCan    = m.estado === 'cancelado'
       const isCrypto = m.moneda !== 'MXN' && m.moneda !== 'USD'
-      // Contraparte rastreable: nombre + banco + CLABE completa para comprobación Banxico/CEP
+      // Contraparte rastreable
       const nombre      = m.tipo === 'entrada'
-        ? (m.ordenante    || m.notas || 'Deposito')
+        ? (m.ordenante    || m.notas || 'Depósito')
         : (m.beneficiario || m.notas || 'Retiro')
       const clabeHint   = m.clabe ? String(m.clabe) : ''
       const bancoClabe  = [m.banco, clabeHint].filter(Boolean).join(' · ')
@@ -578,20 +582,26 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
         contraparte,
         isCrypto && !isCan
           ? (m.cantidad || 0).toLocaleString('es-MX', { maximumFractionDigits: 6 }) + '\n' + m.moneda
+            + (m.tc ? '\n@$' + m.tc.toLocaleString('es-MX', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '')
           : '',
-        !isCan && m.tipo === 'salida'  ? fmt$(net) : '',
-        !isCan && m.tipo === 'entrada' ? fmt$(net) : '',
+        // Comisión (solo entradas cripto/USD con comisión registrada)
+        !isCan && comMxn > 0
+          ? fmt$(comMxn) + '\n' + ((1 - m.comision) * 100).toFixed(1) + '%'
+          : '',
+        !isCan && m.tipo === 'salida'  ? fmt$(neto) : '',
+        !isCan && m.tipo === 'entrada' ? fmt$(neto) : '',
         isCan ? 'CANCELADO' : fmt$(m._balance),
       ]
     }),
     columnStyles: {
-      0: { cellWidth: 20, halign: 'center', textColor: T.textMid,  fontSize: 7 },
-      1: { cellWidth:  8, halign: 'center' },
-      2: { cellWidth: 55, fontSize: 7.5 },
-      3: { cellWidth: 17, halign: 'center', textColor: T.orange,   fontSize: 6.5 },
-      4: { cellWidth: 23, halign: 'right',  textColor: T.redD,     fontStyle: 'bold' },
-      5: { cellWidth: 23, halign: 'right',  textColor: T.greenD,   fontStyle: 'bold' },
-      6: { cellWidth: 32, halign: 'right',  fontStyle: 'bold',     fontSize: 8 },
+      0: { cellWidth: 18, halign: 'center', textColor: T.textMid,  fontSize: 7 },
+      1: { cellWidth:  7, halign: 'center' },
+      2: { cellWidth: 48, fontSize: 7 },
+      3: { cellWidth: 18, halign: 'center', textColor: T.orange,   fontSize: 6.5 },
+      4: { cellWidth: 18, halign: 'right',  textColor: T.yellow,   fontSize: 7 },
+      5: { cellWidth: 21, halign: 'right',  textColor: T.redD,     fontStyle: 'bold' },
+      6: { cellWidth: 21, halign: 'right',  textColor: T.greenD,   fontStyle: 'bold' },
+      7: { cellWidth: 27, halign: 'right',  fontStyle: 'bold',     fontSize: 8 },
     },
     didDrawCell: (data) => {
       // ── Triángulo direccional (col 1) ────────────────────────────────────────
@@ -608,8 +618,8 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
           doc.triangle(cx - s, cy - s * 0.85, cx + s, cy - s * 0.85, cx, cy + s * 0.85, 'F')
         }
       }
-      // ── Saldo — color según positivo / negativo (col 6) ─────────────────────
-      if (data.section === 'body' && data.column.index === 6) {
+      // ── Saldo — color según positivo / negativo (col 7) ─────────────────────
+      if (data.section === 'body' && data.column.index === 7) {
         const bal = list[data.row.index]?._balance ?? 0
         data.cell.styles.textColor = bal >= 0 ? T.greenD : T.redD
       }
@@ -637,8 +647,12 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
   list.forEach(m => {
     const nombre = m.tipo === 'entrada' ? (m.ordenante || '—') : (m.beneficiario || '—')
     if (!contactMap[nombre]) contactMap[nombre] = { ent: 0, sal: 0, count: 0 }
-    if (m.tipo === 'entrada') contactMap[nombre].ent += (m.monto_mxn ?? 0)
-    else                       contactMap[nombre].sal += (m.monto_mxn ?? 0)
+    const bruto  = m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
+    const comMxn = (m.tipo === 'entrada' && m.comision != null)
+      ? Math.round(bruto * (1 - m.comision) * 100) / 100 : 0
+    const neto   = bruto - comMxn
+    if (m.tipo === 'entrada') contactMap[nombre].ent += neto
+    else                       contactMap[nombre].sal += neto
     contactMap[nombre].count++
   })
   const top5 = Object.entries(contactMap)
