@@ -464,16 +464,17 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
     })
   } catch { /* sin QR */ }
 
-  const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const W      = doc.internal.pageSize.getWidth()   // 297 en landscape
-  const H      = doc.internal.pageSize.getHeight()  // 210 en landscape
+  const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W      = doc.internal.pageSize.getWidth()   // 210 portrait
+  const H      = doc.internal.pageSize.getHeight()  // 297 portrait
   const now    = new Date()
   const folio  = _folio()
   const saldo  = list[0]?._balance ?? 0
   const tcUsdt = tcCache['USDT']?.price || 0
 
+  // QR solo va en el panel de saldo de portada — el footer no lo lleva
   const _pageFooter = (pageNum, total) =>
-    _footerWithQR(doc, pageNum, total, emisor, qrDataUrl)
+    _footerWithQR(doc, pageNum, total, emisor, '')
 
   // ── Header ───────────────────────────────────────────────────────────────────
   let y = _headerReport(doc,
@@ -482,41 +483,50 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
     folio)
 
   // ── Saldo principal ──────────────────────────────────────────────────────────
-  const saldoColor = saldo >= 0 ? T.green : T.red
+  const saldoColor  = saldo >= 0 ? T.green : T.red
+  const panelH      = 38
+  const qrSize      = 28                              // QR embebido en la portada
+  const qrX         = W - T.mX - qrSize - 2          // esquina derecha del panel
+  const qrY         = y + 5
+  const textMaxX    = qrX - 4                         // texto nunca invade la zona QR
   doc.setFillColor(...T.surface)
-  doc.roundedRect(T.mX, y, W - T.mX * 2, 32, 3, 3, 'F')
+  doc.roundedRect(T.mX, y, W - T.mX * 2, panelH, 3, 3, 'F')
   // Borde izquierdo de color según positivo/negativo
   doc.setFillColor(...saldoColor)
-  doc.rect(T.mX, y, 3, 32, 'F')
+  doc.rect(T.mX, y, 3, panelH, 'F')
+  // QR en la esquina superior derecha del panel (solo portada)
+  if (qrDataUrl) {
+    try { doc.addImage(qrDataUrl, 'PNG', qrX, qrY, qrSize, qrSize) } catch { /* skip */ }
+  }
   doc.setTextColor(...T.textMid)
   doc.setFontSize(7)
   doc.setFont(T.font, 'normal')
   doc.text(
     'SALDO NETO AL ' + now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase(),
-    T.mX + 8, y + 8,
+    T.mX + 8, y + 9,
   )
   doc.setTextColor(...saldoColor)
-  doc.setFontSize(22)
+  doc.setFontSize(20)
   doc.setFont(T.font, 'bold')
   doc.text(fmt$(saldo) + ' MXN', T.mX + 8, y + 22)
-  // Equivalente USDT (derecha)
+  // Equivalente USDT — a la izquierda del QR para no tapar el monto
   if (tcUsdt > 1) {
     const eqUsdt = (Math.abs(saldo) / tcUsdt).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    doc.setFontSize(9)
+    doc.setFontSize(8)
     doc.setFont(T.font, 'normal')
     doc.setTextColor(...T.yellow)
-    doc.text('~' + eqUsdt + ' USDT', W - T.mX - 5, y + 15, { align: 'right' })
-    doc.setFontSize(7)
+    doc.text('~' + eqUsdt + ' USDT', textMaxX, y + 9, { align: 'right' })
+    doc.setFontSize(6.5)
     doc.setTextColor(...T.textMid)
-    doc.text('T/C USDT: $' + tcUsdt.toFixed(2), W - T.mX - 5, y + 22, { align: 'right' })
+    doc.text('T/C USDT: $' + tcUsdt.toFixed(2), textMaxX, y + 15, { align: 'right' })
   }
-  // Saldo en letras (dentro del mismo panel)
-  doc.setFontSize(7)
+  // Saldo en letras — solo ocupa la zona izquierda
+  doc.setFontSize(6.5)
   doc.setFont(T.font, 'italic')
   doc.setTextColor(...T.textMid)
-  const letLines = doc.splitTextToSize(numToLetras(saldo), W - T.mX * 2 - 16)
-  doc.text(letLines[0], T.mX + 8, y + 29)
-  y += 38
+  const letLines = doc.splitTextToSize(numToLetras(saldo), textMaxX - T.mX - 10)
+  doc.text(letLines[0], T.mX + 8, y + 31)
+  y += panelH + 6
 
   // ── KPIs — 5 cajas con mini-iconos vectoriales ───────────────────────────────
   const uniqBancos = new Set(
@@ -555,9 +565,9 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
   _kpiIco('bank', T.mX + (kW + kGap) * 4)
   y += 28
 
-  // ── Tabla de movimientos (landscape, 7 columnas, sin comisión interna) ─────────
-  // Usable width: 297 − 14×2 = 269 mm
-  // Cols: 22+8+103+30+32+32+42 = 269
+  // ── Tabla de movimientos (portrait, 7 columnas, sin comisión interna) ──────────
+  // Usable width: 210 − 14×2 = 182 mm
+  // Cols: 20+7+65+20+23+23+24 = 182
   _autoTable(doc, {
     startY: y,
     margin: { left: T.mX, right: T.mX, top: 42 },
@@ -608,19 +618,20 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
         isCan ? 'CANCELADO' : fmt$(m._balance),
       ]
     }),
-    styles: { fontSize: 7.5, cellPadding: 3, lineColor: [30, 45, 70], lineWidth: 0.1 },
+    styles: { fontSize: 7, cellPadding: 2.5, lineColor: [30, 45, 70], lineWidth: 0.1 },
     headStyles: {
       fillColor: T.ink, textColor: T.cyan,
-      fontSize: 7, fontStyle: 'bold', cellPadding: { top: 3, bottom: 3, left: 3, right: 3 },
+      fontSize: 6.5, fontStyle: 'bold',
+      cellPadding: { top: 3, bottom: 3, left: 2.5, right: 2.5 },
     },
     columnStyles: {
-      0: { cellWidth: 22, halign: 'center', textColor: T.textMid, fontSize: 7 },
-      1: { cellWidth:  8, halign: 'center' },
-      2: { cellWidth: 103, fontSize: 7 },
-      3: { cellWidth: 30, halign: 'center', textColor: T.orange, fontSize: 6.5 },
-      4: { cellWidth: 32, halign: 'right',  textColor: T.redD,   fontStyle: 'bold' },
-      5: { cellWidth: 32, halign: 'right',  textColor: T.greenD, fontStyle: 'bold' },
-      6: { cellWidth: 42, halign: 'right',  fontStyle: 'bold',   fontSize: 8 },
+      0: { cellWidth: 20, halign: 'center', textColor: T.textMid, fontSize: 6.5 },
+      1: { cellWidth:  7, halign: 'center' },
+      2: { cellWidth: 65, fontSize: 6.5 },
+      3: { cellWidth: 20, halign: 'center', textColor: T.orange, fontSize: 6 },
+      4: { cellWidth: 23, halign: 'right',  textColor: T.redD,   fontStyle: 'bold', fontSize: 7 },
+      5: { cellWidth: 23, halign: 'right',  textColor: T.greenD, fontStyle: 'bold', fontSize: 7 },
+      6: { cellWidth: 24, halign: 'right',  fontStyle: 'bold',   fontSize: 7.5 },
     },
     didDrawCell: (data) => {
       // ── Triángulo direccional (col 1) ────────────────────────────────────────
