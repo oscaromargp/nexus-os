@@ -4,6 +4,7 @@
   "framework": "vite",
   "rewrites": [
     { "source": "/app",            "destination": "/app.html" },
-    { "source": "/reset-password", "destination": "/reset-password.html" }
+    { "source": "/reset-password", "destination": "/reset-password.html" },
+    { "source": "/reporte",        "destination": "/reporte.html" }
   ]
 }

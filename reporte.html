@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reporte — Nexus OS</title>
+  <meta name="theme-color" content="#0e1422" />
+  <style>
+    html, body { margin: 0; padding: 0; background: #0a0e1f; color: #e8f0f9;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    .nx-loading { display: flex; align-items: center; justify-content: center; height: 100vh;
+      color: #94a3b8; font-size: 14px; gap: 10px; }
+    .nx-loading::before { content: ''; width: 18px; height: 18px;
+      border: 2px solid rgba(34,211,238,0.2); border-top-color: #22d3ee;
+      border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .nx-print-btn {
+      position: fixed; bottom: 24px; right: 24px;
+      background: linear-gradient(135deg, #22d3ee, #0891b2);
+      color: #0a0e1f; border: none; padding: 12px 22px;
+      border-radius: 999px; font-weight: 800; font-size: 14px;
+      cursor: pointer; box-shadow: 0 10px 32px rgba(34,211,238,0.35);
+      z-index: 9999; display: inline-flex; align-items: center; gap: 8px;
+    }
+    .nx-print-btn:hover { transform: translateY(-2px); }
+
+    .nx-error { padding: 40px 24px; max-width: 720px; margin: 60px auto;
+      background: rgba(239,68,68,0.06); border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 14px; color: #fca5a5; }
+    .nx-error h1 { margin: 0 0 10px; font-size: 18px; color: #fee2e2; }
+
+    iframe.nx-report {
+      border: 0; width: 100%; height: 100vh; background: #0e1422; display: block;
+    }
+
+    @media print {
+      .nx-print-btn { display: none !important; }
+      html, body { background: #fff !important; color: #000 !important; }
+      iframe.nx-report { height: auto; }
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  </style>
+</head>
+<body>
+  <div id="nx-root">
+    <div class="nx-loading">Cargando reporte…</div>
+  </div>
+
+  <button id="nx-print" class="nx-print-btn" style="display:none;"
+    onclick="window.print()" title="Imprimir o guardar como PDF">
+    🖨 Imprimir / Guardar PDF
+  </button>
+
+  <script>
+    (async function () {
+      const root = document.getElementById('nx-root')
+      const printBtn = document.getElementById('nx-print')
+      const id = new URLSearchParams(location.search).get('id')
+
+      const renderError = (msg) => {
+        root.innerHTML = '<div class="nx-error"><h1>No se pudo cargar el reporte</h1><p>' + msg + '</p></div>'
+      }
+      if (!id) return renderError('Falta el parámetro ?id=...')
+
+      try {
+        const r = await fetch('/api/get-report?id=' + encodeURIComponent(id))
+        if (!r.ok) {
+          const txt = await r.text()
+          return renderError('Error ' + r.status + ': ' + txt.slice(0, 200))
+        }
+        const html = await r.text()
+        if (!html.trim()) return renderError('El reporte no tiene contenido')
+
+        const iframe = document.createElement('iframe')
+        iframe.className = 'nx-report'
+        iframe.title = 'Reporte'
+        root.innerHTML = ''
+        root.appendChild(iframe)
+        const doc = iframe.contentDocument || iframe.contentWindow.document
+        doc.open()
+        doc.write(html)
+        doc.close()
+        document.title = (doc.title || 'Reporte') + ' — Nexus OS'
+        printBtn.style.display = 'inline-flex'
+        printBtn.onclick = () => {
+          try { iframe.contentWindow.focus(); iframe.contentWindow.print() }
+          catch (_) { window.print() }
+        }
+      } catch (e) {
+        renderError(e.message)
+      }
+    })()
+  </script>
+</body>
+</html>

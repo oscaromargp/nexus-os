@@ -16,6 +16,7 @@ import { renderDocumentos, loadPropertyDocs } from './docs-inmuebles.js'
 import { loadMxLocations, renderEstadoMunicipioSelects } from './mx-locations.js'
 import { openMapPicker } from './map-picker.js'
 import { loadLinksFor, renderLinksBlock, persistLinks, fetchLinksFor } from './property-links.js'
+import './report-modal.js'
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 let _props       = []          // todas las propiedades del usuario
