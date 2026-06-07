@@ -249,12 +249,15 @@ function _icoSpec(doc, type, cx, cy, sz = 3.5) {
  * Botón CTA con hipervínculo real.
  * En el PDF se puede hacer clic y abre la URL.
  */
-function _cta(doc, label, url, x, y, bw, bh = 8.5) {
+function _cta(doc, label, url, x, y, bw, bh = 12, icon = '') {
   const fill   = url ? C.s50   : [238, 238, 238]
   const stroke = url ? C.s200  : [210, 210, 210]
   const tColor = url ? C.sky   : C.t400
-  _box(doc, x, y, bw, bh, fill, stroke, 0.3, 2)
-  _t(doc, label, x + bw / 2, y + bh / 2 + 1.5, { size: 7, w: 'bold', color: tColor, align: 'center' })
+  _box(doc, x, y, bw, bh, fill, stroke, 0.4, 2.5)
+  // Icono grande arriba
+  if (icon) _t(doc, icon, x + bw / 2, y + 4.5, { size: 10, color: tColor, align: 'center' })
+  // Label abajo
+  _t(doc, label, x + bw / 2, y + bh - 2.5, { size: 7, w: 'bold', color: tColor, align: 'center' })
   if (url) doc.link(x, y, bw, bh, { url })
 }
 
@@ -303,7 +306,8 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
   ])
 
   const extraFotos = fotos.slice(1)
-  const totalPages = extraFotos.length >= 2 ? 2 : 1
+  // totalPages se calcula dinámicamente al final (descripción larga puede agregar páginas)
+  let totalPages = extraFotos.length >= 2 ? 2 : 1
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PÁGINA 1
@@ -520,28 +524,47 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
     y += 5
   }
 
-  // ── Narrativa IA (si existe) ─────────────────────────────────────────────
-  if (prop.descripcion_ai) {
-    _t(doc, 'NARRATIVA', MX, y + 5, { size: 7.5, w: 'bold', color: C.sky })
-    doc.setFillColor(...C.sky)
-    doc.rect(MX, y + 6.2, 22, 0.6, 'F')
-    y += 10
-    const aiLines = doc.splitTextToSize(_s(prop.descripcion_ai), W - MX * 2)
-    const showAi = aiLines.slice(0, 9)
-    _t(doc, showAi, MX, y, { size: 8.5, color: C.t700 })
-    y += showAi.length * 4.8 + 5
+  // Helper local: imprime texto largo con auto-pagebreak respetando footer
+  const FOOTER_SAFE = 22
+  const LINE_H = 4.8
+  const printLongText = (title, text, accentColor) => {
+    if (!text) return
+    // Si no cabe ni el título, salta página
+    if (y + 14 > H - FOOTER_SAFE) {
+      doc.addPage()
+      doc.setFillColor(...accentColor); doc.rect(0, 0, W, 2, 'F')
+      y = 14
+    }
+    // Banda de título con color accent
+    _t(doc, title, MX, y + 5, { size: 8.5, w: 'bold', color: accentColor })
+    doc.setFillColor(...accentColor)
+    doc.rect(MX, y + 6.5, 28, 0.7, 'F')
+    y += 11
+
+    const lines = doc.splitTextToSize(_s(text), W - MX * 2)
+    for (let i = 0; i < lines.length; i++) {
+      if (y + LINE_H > H - FOOTER_SAFE) {
+        _renderFooter(doc, emisor, doc.internal.getNumberOfPages(), totalPages, W, H)
+        doc.addPage()
+        doc.setFillColor(...accentColor); doc.rect(0, 0, W, 2, 'F')
+        _t(doc, title + ' (cont.)', MX, 9, { size: 7.5, color: C.t500 })
+        _hline(doc, MX, 12, W - MX, C.s200, 0.2)
+        y = 16
+      }
+      _t(doc, lines[i], MX, y, { size: 9, color: C.t700 })
+      y += LINE_H
+    }
+    y += 4
   }
 
-  // ── Descripción del agente ────────────────────────────────────────────────
+  // ── Narrativa IA (texto completo, auto-paginado) ─────────────────────────
+  if (prop.descripcion_ai) {
+    printLongText('NARRATIVA', prop.descripcion_ai, C.sky)
+  }
+
+  // ── Descripción del agente (texto completo, auto-paginado) ───────────────
   if (prop.descripcion) {
-    _t(doc, 'DESCRIPCION', MX, y + 5, { size: 7.5, w: 'bold', color: C.sky })
-    doc.setFillColor(...C.sky)
-    doc.rect(MX, y + 6.2, 22, 0.6, 'F')
-    y += 10
-    const descLines = doc.splitTextToSize(_s(prop.descripcion), W - MX * 2)
-    const show = descLines.slice(0, 7)
-    _t(doc, show, MX, y, { size: 8.5, color: C.t700 })
-    y += show.length * 4.8 + 4
+    printLongText('DESCRIPCION', prop.descripcion, C.sky)
   }
 
   // ── Atributos enriquecidos ────────────────────────────────────────────────
@@ -581,22 +604,30 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
     y += 8
   }
 
-  // ── CTAs con hipervínculos reales — mapa primero, video al final ─────────
+  // ── CTAs con icono + hipervínculos — mapa primero, video al final ────────
   const ctas = [
-    mapUrl                && { lbl: 'Ver en mapa',      url: mapUrl },
-    prop.tour_url         && { lbl: 'Tour virtual 360',  url: prop.tour_url },
-    prop.album_fotos_url  && { lbl: 'Galeria de fotos',  url: prop.album_fotos_url },
-    prop.drive_folder_url && { lbl: 'Ver carpeta',       url: prop.drive_folder_url },
-    prop.video_url        && { lbl: 'Ver video',         url: prop.video_url },
+    mapUrl                && { lbl: 'Ver en mapa',       url: mapUrl,                 icon: 'MAPA'   },
+    prop.tour_url         && { lbl: 'Tour virtual 360',  url: prop.tour_url,          icon: '360 VR' },
+    prop.album_fotos_url  && { lbl: 'Galeria fotos',     url: prop.album_fotos_url,   icon: 'FOTOS'  },
+    prop.drive_folder_url && { lbl: 'Ver carpeta',       url: prop.drive_folder_url,  icon: 'DRIVE'  },
+    prop.video_url        && { lbl: 'Ver video',         url: prop.video_url,         icon: 'VIDEO'  },
   ].filter(Boolean)
 
   if (ctas.length) {
+    // Asegurar espacio (CTA box mide 14mm de alto)
+    if (y + 16 > H - 14) {
+      doc.addPage()
+      doc.setFillColor(...C.sky); doc.rect(0, 0, W, 2, 'F')
+      _t(doc, 'ENLACES Y RECURSOS', MX, 9, { size: 8, w: 'bold', color: C.sky })
+      _hline(doc, MX, 12, W - MX, C.s200, 0.2)
+      y = 16
+    }
     const gap  = 4
-    const ctaW = Math.min(48, (W - MX * 2 - gap * (ctas.length - 1)) / ctas.length)
+    const ctaW = (W - MX * 2 - gap * (ctas.length - 1)) / ctas.length
     ctas.forEach((c, i) => {
-      _cta(doc, c.lbl, c.url, MX + i * (ctaW + gap), y, ctaW)
+      _cta(doc, c.lbl, c.url, MX + i * (ctaW + gap), y, ctaW, 13, c.icon)
     })
-    y += 14
+    y += 17
   }
 
   // ── Exclusiva ─────────────────────────────────────────────────────────────
@@ -612,8 +643,7 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
     y += 15
   }
 
-  // ── Footer página 1 ───────────────────────────────────────────────────────
-  _renderFooter(doc, emisor, 1, totalPages, W, H)
+  // (footer se estampa al final de todas las páginas)
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PÁGINA 2 — Galería completa (si hay 2+ fotos adicionales)
@@ -676,8 +706,14 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
       } catch { /* skip */ }
     }
 
-    // Footer página 2
-    _renderFooter(doc, emisor, 2, totalPages, W, H)
+    // (footer se estampa al final)
+  }
+
+  // ── Estampar footers en TODAS las páginas con número correcto ────────────
+  totalPages = doc.internal.getNumberOfPages()
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p)
+    _renderFooter(doc, emisor, p, totalPages, W, H)
   }
 
   // ── Guardar ───────────────────────────────────────────────────────────────

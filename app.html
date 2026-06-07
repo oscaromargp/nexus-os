@@ -42,6 +42,18 @@
     body.side-collapsed #toggle-side {
       right: 0px !important;
     }
+
+    /* ── FIX: dropdowns / selects — texto invisible en menú colgante ── */
+    select option,
+    select optgroup {
+      background-color: #0e1422 !important;
+      color: #e8f0f9 !important;
+    }
+    select option:checked,
+    select option:hover {
+      background-color: #1a2540 !important;
+      color: #22d3ee !important;
+    }
   </style>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
