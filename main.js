@@ -85,6 +85,7 @@ formLogin?.addEventListener('submit', async (e) => {
   const email    = document.getElementById('login-email').value.trim()
   const password = document.getElementById('login-password').value
 
+  // (Google OAuth handler está más abajo)
   if (email === 'admin@nexus.os' && password === 'admin') {
     localStorage.setItem('nexus_admin_bypass', 'true')
     showMessage('¡Bienvenido Super Admin (Demo Mode)! Redirigiendo...')
@@ -144,4 +145,23 @@ formRecovery?.addEventListener('submit', async (e) => {
   }
 
   showMessage('¡Enviado! Revisa tu correo electrónico para restablecer tu contraseña.')
+})
+
+// ─────────────────────────────────────────
+// GOOGLE OAUTH (login + Drive scopes)
+// ─────────────────────────────────────────
+document.getElementById('btn-google-login')?.addEventListener('click', async () => {
+  showMessage('Conectando con Google...')
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin + '/app.html',
+      scopes: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
+    },
+  })
+  if (error) showMessage(error.message || 'Error con Google login', true)
 })

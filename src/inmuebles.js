@@ -17,6 +17,7 @@ import { loadMxLocations, renderEstadoMunicipioSelects } from './mx-locations.js
 import { openMapPicker } from './map-picker.js'
 import { loadLinksFor, renderLinksBlock, persistLinks, fetchLinksFor } from './property-links.js'
 import './report-modal.js'
+import { ensureNexusFolder, uploadToDrive, hasDriveAccess, driveDirectImageUrl } from './drive-storage.js'
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 let _props       = []          // todas las propiedades del usuario
@@ -1657,7 +1658,7 @@ export async function openPropDetail(id) {
 
         <!-- ── TABS ──────────────────────────────────────────────────────── -->
         <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:18px;overflow-x:auto;scrollbar-width:none;">
-          ${[['info','📋 Info'],['galeria','🖼 Galería'+(fotos.length?` (${fotos.length})`:'')],['crm','📞 CRM'],['docs','📄 Docs']].map(([tab,label])=>`
+          ${[['info','📋 Info'],['galeria','🖼 Galería'+(fotos.length?` (${fotos.length})`:'')],['crm','📞 CRM'],['docs','📄 Docs'],['reportes','🌟 Reportes']].map(([tab,label])=>`
             <button onclick="propDetailTab('${tab}','${p.id}')" id="dtab-${tab}"
               style="padding:10px 14px;border:none;background:transparent;cursor:pointer;font-size:12px;font-weight:600;
               color:${tab==='info'?'#22d3ee':'#64748b'};border-bottom:2px solid ${tab==='info'?'#22d3ee':'transparent'};
@@ -1816,6 +1817,11 @@ export async function openPropDetail(id) {
         <!-- ── TAB DOCS ───────────────────────────────────────────────────── -->
         <div id="dpanel-docs" data-prop-id="${p.id}" style="display:none;">
           <div style="text-align:center;padding:20px;color:#475569;font-size:13px;">Cargando documentos…</div>
+        </div>
+
+        <!-- ── TAB REPORTES ───────────────────────────────────────────────── -->
+        <div id="dpanel-reportes" data-prop-id="${p.id}" style="display:none;">
+          <div style="text-align:center;padding:20px;color:#475569;font-size:13px;">Cargando reportes…</div>
         </div>
 
       </div>
@@ -2049,31 +2055,58 @@ export async function propHandleFiles(files, propId) {
   const user = (await supabase.auth.getUser()).data.user
   if (!user) return
 
+  // ¿Usuario tiene Google Drive conectado? Si sí, subimos a Drive; si no, fallback a Supabase Storage
+  const useDrive = await hasDriveAccess()
+  let driveFolderId = null
+  if (useDrive && propId) {
+    const existing = _props.find(p => p.id === propId)
+    const folio = existing?.folio_interno || propId.slice(0, 8)
+    try {
+      driveFolderId = await ensureNexusFolder(`Nexus OS/Inmuebles/${folio}/fotos`)
+    } catch (e) {
+      console.warn('[drive] folder create fail, fallback Supabase Storage:', e.message)
+    }
+  }
+
   for (const file of Array.from(files)) {
     if (file.size > 8 * 1024 * 1024) { window.showToast?.('⚠ ' + file.name + ' es muy grande (máx 8MB)'); continue }
 
-    // Skeleton mientras sube
-    const skId = 'sk-' + Date.now()
+    const skId = 'sk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
     if (preview) preview.innerHTML += `
       <div id="${skId}" style="width:80px;height:80px;border-radius:8px;background:rgba(34,211,238,0.08);
       border:1px dashed rgba(34,211,238,0.3);display:flex;align-items:center;justify-content:center;font-size:10px;color:#22d3ee;">⏳</div>`
 
     const compressed = await _compressImage(file)
-    const ext   = 'jpg'
     const cat   = _categorizarFoto(file.name)
-    const path  = `properties/${propId || 'draft-' + user.id}/${cat}-${Date.now()}.${ext}`
+    const fname = `${cat}-${Date.now()}.jpg`
 
-    const { data, error } = await supabase.storage.from('nexus-media').upload(path, compressed, { upsert: false })
+    let url, storage_path, drive_id
+
+    if (useDrive && driveFolderId) {
+      // Drive del usuario
+      try {
+        const driveFile = await uploadToDrive(compressed, { folderId: driveFolderId, name: fname })
+        drive_id = driveFile.id
+        url = driveDirectImageUrl(driveFile.id)
+      } catch (e) {
+        console.error('[drive] upload fail, fallback Supabase:', e)
+        window.showToast?.('⚠ Drive falló, subiendo a Supabase: ' + e.message)
+      }
+    }
+
+    if (!url) {
+      // Fallback Supabase Storage
+      const path  = `properties/${propId || 'draft-' + user.id}/${fname}`
+      const { error } = await supabase.storage.from('nexus-media').upload(path, compressed, { upsert: false })
+      if (error) { document.getElementById(skId)?.remove(); window.showToast?.('❌ Error subiendo ' + file.name); continue }
+      const { data: urlData } = supabase.storage.from('nexus-media').getPublicUrl(path)
+      url = urlData.publicUrl
+      storage_path = path
+    }
+
     document.getElementById(skId)?.remove()
 
-    if (error) { window.showToast?.('❌ Error subiendo ' + file.name); continue }
-
-    const { data: urlData } = supabase.storage.from('nexus-media').getPublicUrl(path)
-    const url = urlData.publicUrl
-
-    // Agregar a la vista previa
     if (preview) {
-      const idx = preview.children.length
       preview.innerHTML += `
         <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid rgba(34,211,238,0.3);">
           <img src="${url}" style="width:100%;height:100%;object-fit:cover;"/>
@@ -2084,10 +2117,15 @@ export async function propHandleFiles(files, propId) {
         </div>`
     }
 
-    // Si la propiedad ya existe, guardar en DB inmediatamente
     if (propId) {
       const existing = _props.find(p => p.id === propId)
-      const fotos = [...(existing?.fotos || []), { url, storage_path: path, categoria: cat, orden: (existing?.fotos||[]).length }]
+      const fotos = [...(existing?.fotos || []), {
+        url,
+        storage_path: storage_path || null,
+        drive_id:     drive_id || null,
+        categoria:    cat,
+        orden:        (existing?.fotos||[]).length,
+      }]
       await supabase.from('properties').update({ fotos }).eq('id', propId)
       if (existing) existing.fotos = fotos
     }
@@ -2239,7 +2277,7 @@ window.propWhatsApp = (id) => {
 // ─── Handlers modal de detalle ────────────────────────────────────────────────
 
 window.propDetailTab = (tab, propId) => {
-  ;['info', 'galeria', 'crm', 'docs'].forEach(p => {
+  ;['info', 'galeria', 'crm', 'docs', 'reportes'].forEach(p => {
     const panel = document.getElementById('dpanel-' + p)
     const btn   = document.getElementById('dtab-' + p)
     const active = p === tab
@@ -2249,6 +2287,71 @@ window.propDetailTab = (tab, propId) => {
       btn.style.borderBottom = active ? '2px solid #22d3ee' : '2px solid transparent'
     }
   })
+  if (tab === 'reportes') _loadReportesPanel(propId)
+}
+
+async function _loadReportesPanel(propId) {
+  const el = document.getElementById('dpanel-reportes')
+  if (!el || el.dataset.loaded === '1') return
+  const { data, error } = await supabase
+    .from('property_reports')
+    .select('id, presenter_data, proposito, model, generated_at')
+    .eq('property_id', propId)
+    .order('generated_at', { ascending: false })
+  if (error) {
+    el.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:12px;">Error: ${_esc(error.message)}</div>`
+    return
+  }
+  el.dataset.loaded = '1'
+  const reports = data || []
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:12px;color:#94a3b8;">${reports.length} reporte${reports.length===1?'':'s'} generado${reports.length===1?'':'s'}</div>
+      <button onclick="propOpenReportModal('${propId}')"
+        style="padding:7px 14px;background:linear-gradient(135deg,#facc15,#f59e0b);border:none;color:#0a0e1f;border-radius:8px;cursor:pointer;font-size:12px;font-weight:800;">
+        🌟 Generar nuevo
+      </button>
+    </div>
+    ${reports.length === 0 ? `
+      <div style="text-align:center;padding:40px 20px;color:#64748b;font-size:13px;">
+        <div style="font-size:48px;margin-bottom:12px;opacity:0.4;">🌟</div>
+        Aún no hay reportes geomarketing para este inmueble.<br>
+        Click en "Generar nuevo" arriba para crear uno con IA.
+      </div>` : `
+      <div style="display:grid;gap:8px;">
+        ${reports.map(r => {
+          const presenter = r.presenter_data?.nombre || '—'
+          const fecha = new Date(r.generated_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
+          return `
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:11px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <div style="font-size:22px;">🌟</div>
+              <div style="flex:1;min-width:200px;">
+                <div style="font-weight:700;color:#f1f5f9;font-size:13px;">${_esc(r.proposito || 'Reporte')}</div>
+                <div style="font-size:11px;color:#64748b;margin-top:2px;">
+                  Presentador: ${_esc(presenter)} · ${fecha} · ${_esc(r.model||'gemini')}
+                </div>
+              </div>
+              <a href="/reporte?id=${r.id}" target="_blank" rel="noopener"
+                style="padding:6px 12px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
+                color:#22d3ee;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">↗ Abrir</a>
+              <button onclick="propDeleteReport('${r.id}','${propId}')"
+                style="padding:6px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
+                color:#ef4444;border-radius:8px;cursor:pointer;font-size:12px;">🗑</button>
+            </div>`
+        }).join('')}
+      </div>`}
+  `
+}
+
+window.propDeleteReport = async (reportId, propId) => {
+  if (!confirm('¿Eliminar este reporte? La acción no se puede deshacer.')) return
+  const { error } = await supabase.from('property_reports').delete().eq('id', reportId)
+  if (error) { window.showToast?.('❌ ' + error.message); return }
+  // Forzar reload del panel
+  const el = document.getElementById('dpanel-reportes')
+  if (el) el.dataset.loaded = ''
+  _loadReportesPanel(propId)
+  window.showToast?.('🗑 Reporte eliminado')
 }
 
 window.propSaveGalleryOrder = async (propId) => {
