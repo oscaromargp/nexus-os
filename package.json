@@ -19,6 +19,7 @@
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
+    "leaflet": "^1.9.4",
     "lucide": "^1.16.0",
     "qrcode": "^1.5.4",
     "sortablejs": "^1.15.7",

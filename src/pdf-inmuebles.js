@@ -520,7 +520,19 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
     y += 5
   }
 
-  // ── Descripción ───────────────────────────────────────────────────────────
+  // ── Narrativa IA (si existe) ─────────────────────────────────────────────
+  if (prop.descripcion_ai) {
+    _t(doc, 'NARRATIVA', MX, y + 5, { size: 7.5, w: 'bold', color: C.sky })
+    doc.setFillColor(...C.sky)
+    doc.rect(MX, y + 6.2, 22, 0.6, 'F')
+    y += 10
+    const aiLines = doc.splitTextToSize(_s(prop.descripcion_ai), W - MX * 2)
+    const showAi = aiLines.slice(0, 9)
+    _t(doc, showAi, MX, y, { size: 8.5, color: C.t700 })
+    y += showAi.length * 4.8 + 5
+  }
+
+  // ── Descripción del agente ────────────────────────────────────────────────
   if (prop.descripcion) {
     _t(doc, 'DESCRIPCION', MX, y + 5, { size: 7.5, w: 'bold', color: C.sky })
     doc.setFillColor(...C.sky)
@@ -530,6 +542,36 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
     const show = descLines.slice(0, 7)
     _t(doc, show, MX, y, { size: 8.5, color: C.t700 })
     y += show.length * 4.8 + 4
+  }
+
+  // ── Atributos enriquecidos ────────────────────────────────────────────────
+  const atribs = [
+    prop.vista          && ['Vista',       String(prop.vista)],
+    prop.orientacion    && ['Orientación', String(prop.orientacion)],
+    prop.estatus_obra   && ['Estatus obra', String(prop.estatus_obra).replace('_',' ')],
+    prop.uso_suelo      && ['Uso suelo',   String(prop.uso_suelo)],
+    prop.regimen_propiedad && ['Régimen',  String(prop.regimen_propiedad)],
+    prop.topografia     && ['Topografía',  String(prop.topografia).replace('_',' ')],
+    prop.clave_catastral&& ['Cat. catastral', String(prop.clave_catastral)],
+    (prop.altura_libre_m && (prop.tipo==='bodega'||prop.tipo==='nave')) && ['Altura libre', prop.altura_libre_m+' m'],
+    (prop.andenes_cantidad && (prop.tipo==='bodega'||prop.tipo==='nave')) && ['Andenes', String(prop.andenes_cantidad)],
+    (prop.kva && (prop.tipo==='bodega'||prop.tipo==='nave')) && ['KVA', String(prop.kva)],
+    (prop.aforo && (prop.tipo==='local'||prop.tipo==='oficina')) && ['Aforo', String(prop.aforo) + ' pers.'],
+  ].filter(Boolean)
+  if (atribs.length) {
+    _t(doc, 'ATRIBUTOS', MX, y + 5, { size: 7.5, w: 'bold', color: C.sky })
+    doc.setFillColor(...C.sky)
+    doc.rect(MX, y + 6.2, 22, 0.6, 'F')
+    y += 10
+    const cols = 3
+    const colW = (W - MX * 2) / cols
+    atribs.forEach((a, i) => {
+      const cx = MX + (i % cols) * colW
+      const cy = y + Math.floor(i / cols) * 5.5
+      _t(doc, a[0] + ':', cx, cy, { size: 7.5, color: C.t400 })
+      _t(doc, a[1], cx + 16, cy, { size: 7.5, color: C.t700, w: 'bold' })
+    })
+    y += Math.ceil(atribs.length / cols) * 5.5 + 4
   }
 
   // Referencia

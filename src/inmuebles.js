@@ -14,6 +14,7 @@ import Sortable from 'sortablejs'
 import { pdfFichaCaptacion } from './pdf-inmuebles.js'
 import { renderDocumentos, loadPropertyDocs } from './docs-inmuebles.js'
 import { loadMxLocations, renderEstadoMunicipioSelects } from './mx-locations.js'
+import { openMapPicker } from './map-picker.js'
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 let _props       = []          // todas las propiedades del usuario
@@ -955,6 +956,18 @@ export function openPropModal(id = null) {
             ${_field('prop-cp','C.P.','text',val('cp'),'23000')}
           </div>
           ${_field('prop-referencias','Referencias','text',val('referencias'),'Frente al parque, portón azul')}
+
+          <!-- Coordenadas + mapa picker -->
+          <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;">
+            ${_field('prop-lat','Latitud','number',val('lat'),'24.142600')}
+            ${_field('prop-lng','Longitud','number',val('lng'),'-110.312800')}
+            <button type="button" onclick="propOpenMapPicker()"
+              style="padding:9px 14px;background:rgba(34,211,238,0.15);border:1px solid rgba(34,211,238,0.35);
+              color:#22d3ee;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;height:38px;">
+              📍 Ubicar en mapa
+            </button>
+          </div>
+          <div style="font-size:11px;color:#64748b;margin-top:4px;">Para terrenos sin dirección clara, usa el mapa para fijar el pin.</div>
         </div>
 
         <!-- ── Sección: Precios ── -->
@@ -962,7 +975,7 @@ export function openPropModal(id = null) {
           <div style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">
             Precios
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
             ${_field('prop-precio-venta','Precio venta','number',val('precio_venta'),'2500000')}
             ${_field('prop-precio-renta','Precio renta/mes','number',val('precio_renta'),'15000')}
             <div>
@@ -974,11 +987,154 @@ export function openPropModal(id = null) {
                 <option value="USD" ${val('moneda')==='USD'?'selected':''}>USD</option>
               </select>
             </div>
+            <div>
+              <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:6px;">Tipo precio</label>
+              <select id="prop-price-type"
+                style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+                border-radius:8px;color:#e8f0f9;font-size:13px;">
+                <option value="total"        ${val('price_type','total')==='total'?'selected':''}>Total</option>
+                <option value="por_m2"       ${val('price_type')==='por_m2'?'selected':''}>Por m²</option>
+                <option value="por_hectarea" ${val('price_type')==='por_hectarea'?'selected':''}>Por hectárea</option>
+                <option value="por_mes"      ${val('price_type')==='por_mes'?'selected':''}>Por mes (renta)</option>
+              </select>
+            </div>
           </div>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#94a3b8;">
-            <input type="checkbox" id="prop-negociable" ${valB('precio_negociable')?'checked':''}
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end;">
+            ${_field('prop-expenses','Mantenimiento mensual ($)','number',val('expenses'),'1500')}
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#94a3b8;height:38px;">
+              <input type="checkbox" id="prop-negociable" ${valB('precio_negociable')?'checked':''}
+                style="accent-color:#22d3ee;width:15px;height:15px;"/>
+              Precio negociable
+            </label>
+          </div>
+        </div>
+
+        <!-- ── Sección: Detalles avanzados ── -->
+        <div style="margin-bottom:22px;">
+          <div style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">
+            Detalles avanzados
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:6px;">Vista</label>
+              <select id="prop-vista" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;">
+                <option value="">—</option>
+                ${['mar','montana','golf','jardin','ciudad','interior','panoramica','desierto'].map(v =>
+                  `<option value="${v}" ${val('vista')===v?'selected':''}>${v[0].toUpperCase()+v.slice(1)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:6px;">Orientación</label>
+              <select id="prop-orientacion" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;">
+                <option value="">—</option>
+                ${['norte','sur','este','oeste','noreste','noroeste','sureste','suroeste'].map(o =>
+                  `<option value="${o}" ${val('orientacion')===o?'selected':''}>${o[0].toUpperCase()+o.slice(1)}</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:6px;">Estatus de obra</label>
+              <select id="prop-estatus-obra" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;">
+                <option value="">—</option>
+                <option value="a_estrenar"      ${val('estatus_obra')==='a_estrenar'?'selected':''}>A estrenar</option>
+                <option value="preventa"        ${val('estatus_obra')==='preventa'?'selected':''}>Preventa</option>
+                <option value="en_construccion" ${val('estatus_obra')==='en_construccion'?'selected':''}>En construcción</option>
+                <option value="usado"           ${val('estatus_obra')==='usado'?'selected':''}>Usado</option>
+                <option value="remodelado"      ${val('estatus_obra')==='remodelado'?'selected':''}>Remodelado</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div>
+              <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:6px;">Régimen propiedad</label>
+              <select id="prop-regimen" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;">
+                <option value="">—</option>
+                <option value="privada"             ${val('regimen_propiedad')==='privada'?'selected':''}>Privada</option>
+                <option value="ejidal"              ${val('regimen_propiedad')==='ejidal'?'selected':''}>Ejidal</option>
+                <option value="comunal"             ${val('regimen_propiedad')==='comunal'?'selected':''}>Comunal</option>
+                <option value="fideicomiso"         ${val('regimen_propiedad')==='fideicomiso'?'selected':''}>Fideicomiso (zona costera)</option>
+                <option value="posesion"            ${val('regimen_propiedad')==='posesion'?'selected':''}>Posesión</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:6px;">Uso de suelo</label>
+              <select id="prop-uso-suelo" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;">
+                <option value="">—</option>
+                <option value="residencial" ${val('uso_suelo')==='residencial'?'selected':''}>Residencial</option>
+                <option value="comercial"   ${val('uso_suelo')==='comercial'?'selected':''}>Comercial</option>
+                <option value="mixto"       ${val('uso_suelo')==='mixto'?'selected':''}>Mixto</option>
+                <option value="industrial"  ${val('uso_suelo')==='industrial'?'selected':''}>Industrial</option>
+                <option value="rustico"     ${val('uso_suelo')==='rustico'?'selected':''}>Rústico</option>
+                <option value="agricola"    ${val('uso_suelo')==='agricola'?'selected':''}>Agrícola</option>
+              </select>
+            </div>
+            ${_field('prop-clave-catastral','Clave catastral / folio real','text',val('clave_catastral'),'III-001-234-567')}
+          </div>
+
+          ${(tipo==='terreno' || tipo==='lote') ? `
+          <!-- Específico terreno -->
+          <div style="background:rgba(74,222,128,0.04);border:1px solid rgba(74,222,128,0.18);border-radius:10px;padding:10px 12px;margin-top:8px;">
+            <div style="font-size:10px;font-weight:700;color:#4ade80;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">🌿 Específico de terreno</div>
+            <div>
+              <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:6px;">Topografía</label>
+              <select id="prop-topografia" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;">
+                <option value="">—</option>
+                <option value="plana"                 ${val('topografia')==='plana'?'selected':''}>Plana</option>
+                <option value="pendiente_leve"        ${val('topografia')==='pendiente_leve'?'selected':''}>Pendiente leve</option>
+                <option value="pendiente_pronunciada" ${val('topografia')==='pendiente_pronunciada'?'selected':''}>Pendiente pronunciada</option>
+                <option value="irregular"             ${val('topografia')==='irregular'?'selected':''}>Irregular</option>
+                <option value="en_esquina"            ${val('topografia')==='en_esquina'?'selected':''}>En esquina</option>
+              </select>
+            </div>
+          </div>` : ''}
+
+          ${(tipo==='local' || tipo==='oficina') ? `
+          <!-- Específico comercial -->
+          <div style="background:rgba(251,146,60,0.04);border:1px solid rgba(251,146,60,0.18);border-radius:10px;padding:10px 12px;margin-top:8px;">
+            <div style="font-size:10px;font-weight:700;color:#fb923c;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">🏪 Específico comercial</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              ${_field('prop-aforo','Aforo (personas)','number',val('aforo'),'80')}
+              ${_field('prop-frente-avenida','Frente sobre avenida (m)','number',val('frente_avenida_m'),'12')}
+            </div>
+            <div style="margin-top:10px;">
+              ${_field('prop-giros','Giros permitidos (separados por coma)','text',val('giros_permitidos')?.toString()||'','restaurante, oficina, retail')}
+            </div>
+          </div>` : ''}
+
+          ${(tipo==='bodega' || tipo==='nave') ? `
+          <!-- Específico industrial -->
+          <div style="background:rgba(168,85,247,0.04);border:1px solid rgba(168,85,247,0.18);border-radius:10px;padding:10px 12px;margin-top:8px;">
+            <div style="font-size:10px;font-weight:700;color:#a855f7;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">🏭 Específico industrial</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px;">
+              ${_field('prop-altura-libre','Altura libre (m)','number',val('altura_libre_m'),'8')}
+              ${_field('prop-andenes-cant','Andenes cantidad','number',val('andenes_cantidad'),'4')}
+              <div>
+                <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:6px;">Andenes tipo</label>
+                <select id="prop-andenes-tipo" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;">
+                  <option value="">—</option>
+                  <option value="dock_high"            ${val('andenes_tipo')==='dock_high'?'selected':''}>Dock high</option>
+                  <option value="a_piso"               ${val('andenes_tipo')==='a_piso'?'selected':''}>A piso</option>
+                  <option value="nivelador_hidraulico" ${val('andenes_tipo')==='nivelador_hidraulico'?'selected':''}>Nivelador hidráulico</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end;">
+              ${_field('prop-kva','Capacidad eléctrica (KVA)','number',val('kva'),'300')}
+              ${_field('prop-patio-maniobras','Patio maniobras (m²)','number',val('patio_maniobras_m2'),'500')}
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:#94a3b8;height:38px;">
+                <input type="checkbox" id="prop-trifasica" ${valB('trifasica')?'checked':''} style="accent-color:#a855f7;width:15px;height:15px;"/>
+                Trifásica
+              </label>
+            </div>
+            <div style="margin-top:8px;">
+              ${_field('prop-resistencia-piso','Resistencia piso (kg/cm²)','text',val('resistencia_piso'),'350 kg/cm²')}
+            </div>
+          </div>` : ''}
+
+          <!-- Privacidad pin -->
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#94a3b8;margin-top:12px;">
+            <input type="checkbox" id="prop-show-pin" ${(prop?.show_exact_location !== false)?'checked':''}
               style="accent-color:#22d3ee;width:15px;height:15px;"/>
-            Precio negociable
+            Mostrar ubicación exacta en fichas públicas (desmarca para ocultar el pin exacto)
           </label>
         </div>
 
@@ -1368,6 +1524,11 @@ export async function openPropDetail(id) {
           <button onclick="openPropModal('${p.id}')"
             style="padding:6px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
             color:#94a3b8;border-radius:8px;cursor:pointer;font-size:12px;">✏️ Editar</button>
+          <button onclick="propGenerateNarrative('${p.id}')"
+            id="btn-ai-${p.id}"
+            title="Generar narrativa con Gemini AI"
+            style="padding:6px 12px;background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);
+            color:#facc15;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ IA</button>
           <button onclick="propDelete('${p.id}')"
             title="Enviar a papelera"
             style="padding:6px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
@@ -1530,7 +1691,19 @@ export async function openPropDetail(id) {
             </div>
           </div>
 
-          <!-- Descripción -->
+          <!-- Narrativa IA (Gemini) -->
+          ${p.descripcion_ai ? `
+            <div style="margin-bottom:16px;background:linear-gradient(135deg,rgba(250,204,21,0.06),rgba(250,204,21,0.02));border:1px solid rgba(250,204,21,0.18);border-radius:12px;padding:14px 16px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <div style="font-size:10px;font-weight:700;color:#facc15;text-transform:uppercase;letter-spacing:1px;">✨ Narrativa IA</div>
+                <button onclick="propGenerateNarrative('${p.id}')"
+                  style="background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);color:#facc15;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">↻ Regenerar</button>
+              </div>
+              <p style="font-size:13px;color:#cbd5e1;line-height:1.75;margin:0;white-space:pre-wrap;font-style:italic;">${_esc(p.descripcion_ai)}</p>
+              ${p.descripcion_ai_updated_at ? `<div style="font-size:10px;color:#64748b;margin-top:8px;">Generada: ${new Date(p.descripcion_ai_updated_at).toLocaleString('es-MX')}</div>` : ''}
+            </div>` : ''}
+
+          <!-- Descripción del agente -->
           ${p.descripcion ? `
             <div style="margin-bottom:16px;">
               <div style="font-size:10px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Descripción</div>
@@ -1538,6 +1711,21 @@ export async function openPropDetail(id) {
               display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;">${_esc(p.descripcion)}</p>
               <button onclick="const el=document.getElementById('desc-text-${p.id}');const exp=el.style.webkitLineClamp==='unset';el.style.webkitLineClamp=exp?'4':'unset';this.textContent=exp?'Ver más ▾':'Ver menos ▴'"
                 style="background:none;border:none;color:#22d3ee;font-size:12px;cursor:pointer;padding:4px 0;margin-top:4px;">Ver más ▾</button>
+            </div>` : ''}
+
+          <!-- Atributos enriquecidos: vista/orientación/régimen/uso suelo/clave catastral -->
+          ${(p.vista||p.orientacion||p.regimen_propiedad||p.uso_suelo||p.estatus_obra||p.clave_catastral||p.topografia) ? `
+            <div style="margin-bottom:16px;background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.15);border-radius:10px;padding:12px;">
+              <div style="font-size:10px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Atributos clave</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px 14px;font-size:12px;">
+                ${p.vista          ? `<div><span style="color:#64748b;">Vista:</span> <span style="color:#e8f0f9;text-transform:capitalize;">${_esc(p.vista)}</span></div>` : ''}
+                ${p.orientacion    ? `<div><span style="color:#64748b;">Orientación:</span> <span style="color:#e8f0f9;text-transform:capitalize;">${_esc(p.orientacion)}</span></div>` : ''}
+                ${p.estatus_obra   ? `<div><span style="color:#64748b;">Estatus:</span> <span style="color:#e8f0f9;">${_esc(p.estatus_obra.replace('_',' '))}</span></div>` : ''}
+                ${p.uso_suelo      ? `<div><span style="color:#64748b;">Uso suelo:</span> <span style="color:#e8f0f9;text-transform:capitalize;">${_esc(p.uso_suelo)}</span></div>` : ''}
+                ${p.regimen_propiedad ? `<div><span style="color:#64748b;">Régimen:</span> <span style="color:#e8f0f9;text-transform:capitalize;">${_esc(p.regimen_propiedad)}</span></div>` : ''}
+                ${p.topografia     ? `<div><span style="color:#64748b;">Topografía:</span> <span style="color:#e8f0f9;">${_esc(p.topografia.replace('_',' '))}</span></div>` : ''}
+                ${p.clave_catastral? `<div><span style="color:#64748b;">Catastral:</span> <span style="color:#e8f0f9;font-family:monospace;">${_esc(p.clave_catastral)}</span></div>` : ''}
+              </div>
             </div>` : ''}
 
           <!-- Amenidades -->
@@ -1770,6 +1958,34 @@ export async function saveProp(id) {
     dueno_nombre:      gv('prop-dueno-nombre'),
     dueno_telefono:    gv('prop-dueno-tel'),
     dueno_email:       gv('prop-dueno-email'),
+
+    // Coordenadas
+    lat:               gv('prop-lat') ? Number(gv('prop-lat')) : null,
+    lng:               gv('prop-lng') ? Number(gv('prop-lng')) : null,
+
+    // Campos enriquecidos (Fase 1 parte 2)
+    price_type:        gv('prop-price-type')        || 'total',
+    expenses:          gv('prop-expenses')          ? Number(gv('prop-expenses')) : null,
+    orientacion:       gv('prop-orientacion'),
+    vista:             gv('prop-vista'),
+    regimen_propiedad: gv('prop-regimen'),
+    estatus_obra:      gv('prop-estatus-obra'),
+    clave_catastral:   gv('prop-clave-catastral'),
+    show_exact_location: g('prop-show-pin') ? g('prop-show-pin').checked : true,
+    uso_suelo:         gv('prop-uso-suelo'),
+    topografia:        gv('prop-topografia'),
+    // Industrial
+    altura_libre_m:    gv('prop-altura-libre')      ? Number(gv('prop-altura-libre')) : null,
+    andenes_cantidad:  gv('prop-andenes-cant')      ? Number(gv('prop-andenes-cant')) : null,
+    andenes_tipo:      gv('prop-andenes-tipo'),
+    kva:               gv('prop-kva')               ? Number(gv('prop-kva'))          : null,
+    trifasica:         gb('prop-trifasica'),
+    patio_maniobras_m2:gv('prop-patio-maniobras')   ? Number(gv('prop-patio-maniobras')) : null,
+    resistencia_piso:  gv('prop-resistencia-piso'),
+    // Comercial
+    aforo:             gv('prop-aforo')             ? Number(gv('prop-aforo'))        : null,
+    frente_avenida_m:  gv('prop-frente-avenida')    ? Number(gv('prop-frente-avenida')) : null,
+    giros_permitidos:  gv('prop-giros') ? gv('prop-giros').split(',').map(s=>s.trim()).filter(Boolean) : null,
   }
 
   // Generar slug si es nuevo
@@ -1905,6 +2121,68 @@ window.openPropModal    = (id) => openPropModal(id)
 window.openPropDetail   = (id) => openPropDetail(id)
 window.closePropModal   = ()   => closePropModal()
 window.saveProp         = (id) => saveProp(id)
+
+// Map picker: abre overlay y llena lat/lng + (opcional) calle/colonia/municipio/cp si están vacíos
+// Generar narrativa con Gemini
+window.propGenerateNarrative = async (propId) => {
+  const p = _props.find(x => x.id === propId)
+  if (!p) return
+  const btn = document.getElementById(`btn-ai-${propId}`)
+  if (btn) { btn.textContent = '⏳ Generando…'; btn.disabled = true }
+  try {
+    const r = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ property: p }),
+    })
+    const data = await r.json()
+    if (!r.ok || !data.narrativa) {
+      window.showToast?.('❌ ' + (data.error || 'Error generando narrativa'))
+      return
+    }
+    // Guarda en DB
+    await supabase.from('properties').update({
+      descripcion_ai: data.narrativa,
+      descripcion_ai_updated_at: new Date().toISOString(),
+    }).eq('id', propId)
+    // Refresca en memoria
+    p.descripcion_ai = data.narrativa
+    p.descripcion_ai_updated_at = new Date().toISOString()
+    window.showToast?.('✨ Narrativa generada')
+    // Re-render detalle
+    document.getElementById('prop-detail-overlay')?.remove()
+    openPropDetail(propId)
+  } catch (e) {
+    window.showToast?.('❌ ' + e.message)
+  } finally {
+    if (btn) { btn.textContent = '✨ IA'; btn.disabled = false }
+  }
+}
+
+window.propOpenMapPicker = async () => {
+  const g = (id) => document.getElementById(id)
+  const cur = {
+    lat: parseFloat(g('prop-lat')?.value) || 24.1426,
+    lng: parseFloat(g('prop-lng')?.value) || -110.3128,
+  }
+  const result = await openMapPicker(cur)
+  if (!result) return
+  g('prop-lat').value = result.lat.toFixed(6)
+  g('prop-lng').value = result.lng.toFixed(6)
+  if (result.address) {
+    const a = result.address
+    // Solo rellena los que estén vacíos para no sobrescribir lo que el usuario ya puso
+    if (g('prop-calle')   && !g('prop-calle').value   && a.calle)     g('prop-calle').value   = a.calle
+    if (g('prop-colonia') && !g('prop-colonia').value && a.colonia)   g('prop-colonia').value = a.colonia
+    if (g('prop-cp')      && !g('prop-cp').value      && a.cp)        g('prop-cp').value      = a.cp
+    // Para municipio/estado intentamos match en el dataset
+    if (a.municipio && g('prop-municipio')) {
+      const opt = [...g('prop-municipio').options].find(o => o.value.toLowerCase() === a.municipio.toLowerCase())
+      if (opt) g('prop-municipio').value = opt.value
+    }
+  }
+  window.showToast?.('📍 Coordenadas guardadas')
+}
 window.propHandleFiles  = (files, id) => propHandleFiles(files, id)
 window.propHandleDrop   = (e)  => propHandleDrop(e)
 
