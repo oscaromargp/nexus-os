@@ -359,13 +359,6 @@
             <!-- Servicios + Amenidades -->
             ${servicios||amenidades ? `<div class="tags">${servicios}${amenidades}</div>` : ''}
 
-            <!-- Narrativa IA -->
-            ${p.descripcion_ai ? `
-              <div class="section" style="background:linear-gradient(135deg,rgba(250,204,21,0.05),rgba(250,204,21,0.01));border:1px solid rgba(250,204,21,0.18);border-radius:14px;padding:18px 20px;">
-                <div class="section-title" style="color:#facc15;">✨ Sobre esta propiedad</div>
-                <p style="font-size:14px;color:#e2e8f0;line-height:1.85;margin:0;white-space:pre-wrap;font-style:italic;">${esc(p.descripcion_ai)}</p>
-              </div>` : ''}
-
             <!-- Descripción del agente — completa, sin truncado -->
             ${p.descripcion ? `
               <div class="section">

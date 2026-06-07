@@ -15,6 +15,7 @@ import { pdfFichaCaptacion } from './pdf-inmuebles.js'
 import { renderDocumentos, loadPropertyDocs } from './docs-inmuebles.js'
 import { loadMxLocations, renderEstadoMunicipioSelects } from './mx-locations.js'
 import { openMapPicker } from './map-picker.js'
+import { loadLinksFor, renderLinksBlock, persistLinks, fetchLinksFor } from './property-links.js'
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 let _props       = []          // todas las propiedades del usuario
@@ -880,6 +881,12 @@ export function openPropModal(id = null) {
     })
   })
 
+  // Cargar links múltiples del inmueble (si existe) y montar UI
+  loadLinksFor(prop?.id || null).then(() => {
+    const mount = document.getElementById('prop-links-mount')
+    if (mount) mount.innerHTML = renderLinksBlock()
+  })
+
   overlay.innerHTML = `
     <div id="prop-modal" style="background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:16px;
     width:100%;max-width:760px;max-height:92vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.6);">
@@ -1279,33 +1286,13 @@ export function openPropModal(id = null) {
           </div>
         </div>
 
-        <!-- ── Sección: Fotos y multimedia ── -->
+        <!-- ── Sección: Multimedia y links múltiples ── -->
         <div style="margin-bottom:22px;">
           <div style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">
-            📸 Fotos y multimedia
+            📸 Links multimedia (videos, álbumes, tours, archivos)
           </div>
-
-          <!-- Google Fotos: álbum compartido -->
-          <div style="margin-bottom:10px;">
-            ${_field('prop-album-fotos','📷 Álbum Google Fotos (link compartido)','url',val('album_fotos_url'),'https://photos.app.goo.gl/...')}
-            <div style="font-size:11px;color:#475569;margin-top:5px;">Crea un álbum en Google Fotos → Comparte el link aquí. Las fotos son visibles para clientes.</div>
-          </div>
-
-          <!-- Video YouTube / Drive -->
-          <div style="margin-bottom:10px;">
-            ${_field('prop-video-url','🎥 Video (YouTube o Google Drive)','url',val('video_url'),'https://youtube.com/watch?v=... o link de descarga Drive')}
-            <div style="font-size:11px;color:#475569;margin-top:5px;">YouTube: se incrusta automáticamente. Drive: se muestra como botón de descarga.</div>
-          </div>
-
-          <!-- Tour virtual -->
-          <div style="margin-bottom:10px;">
-            ${_field('prop-tour-url','🌐 Tour virtual 360°','url',val('tour_url'),'https://...')}
-          </div>
-
-          <!-- Carpeta Google Drive documentos -->
-          <div style="margin-bottom:14px;">
-            ${_field('prop-drive','📁 Carpeta Google Drive (documentos)','url',val('drive_folder_url'),'https://drive.google.com/drive/folders/...')}
-            <div style="font-size:11px;color:#475569;margin-top:5px;">Sugerencia: nombra la carpeta como el folio interno (${val('folio_interno','Ej: LP-2026-001')}) para encontrarla fácil.</div>
+          <div id="prop-links-mount" style="background:rgba(255,255,255,0.02);border:1px dashed rgba(255,255,255,0.08);border-radius:10px;padding:12px;">
+            <div style="font-size:12px;color:#64748b;">Cargando links…</div>
           </div>
 
           <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;margin-top:4px;">
@@ -1524,11 +1511,10 @@ export async function openPropDetail(id) {
           <button onclick="openPropModal('${p.id}')"
             style="padding:6px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
             color:#94a3b8;border-radius:8px;cursor:pointer;font-size:12px;">✏️ Editar</button>
-          <button onclick="propGenerateNarrative('${p.id}')"
-            id="btn-ai-${p.id}"
-            title="Generar narrativa con Gemini AI"
+          <button onclick="propOpenReportModal('${p.id}')"
+            title="Generar reporte geomarketing"
             style="padding:6px 12px;background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);
-            color:#facc15;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">✨ IA</button>
+            color:#facc15;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🌟 Reporte</button>
           <button onclick="propDelete('${p.id}')"
             title="Enviar a papelera"
             style="padding:6px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
@@ -1690,18 +1676,6 @@ export async function openPropDetail(id) {
               ${p.referencias ? `<br><span style="font-size:12px;color:#475569;font-style:italic;">${_esc(p.referencias)}</span>` : ''}
             </div>
           </div>
-
-          <!-- Narrativa IA (Gemini) -->
-          ${p.descripcion_ai ? `
-            <div style="margin-bottom:16px;background:linear-gradient(135deg,rgba(250,204,21,0.06),rgba(250,204,21,0.02));border:1px solid rgba(250,204,21,0.18);border-radius:12px;padding:14px 16px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                <div style="font-size:10px;font-weight:700;color:#facc15;text-transform:uppercase;letter-spacing:1px;">✨ Narrativa IA</div>
-                <button onclick="propGenerateNarrative('${p.id}')"
-                  style="background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);color:#facc15;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">↻ Regenerar</button>
-              </div>
-              <p style="font-size:13px;color:#cbd5e1;line-height:1.75;margin:0;white-space:pre-wrap;font-style:italic;">${_esc(p.descripcion_ai)}</p>
-              ${p.descripcion_ai_updated_at ? `<div style="font-size:10px;color:#64748b;margin-top:8px;">Generada: ${new Date(p.descripcion_ai_updated_at).toLocaleString('es-MX')}</div>` : ''}
-            </div>` : ''}
 
           <!-- Descripción del agente -->
           ${p.descripcion ? `
@@ -1945,10 +1919,9 @@ export async function saveProp(id) {
 
     descripcion:       g('prop-descripcion')?.value?.trim() || null,
     notas_internas:    g('prop-notas')?.value?.trim()       || null,
-    drive_folder_url:  gv('prop-drive'),
-    video_url:         gv('prop-video-url'),
-    tour_url:          gv('prop-tour-url'),
-    album_fotos_url:   gv('prop-album-fotos'),
+    // Links múltiples viven en tabla property_links; campos legacy
+    // (drive_folder_url, video_url, tour_url, album_fotos_url) NO se tocan al
+    // guardar para no perder datos antiguos. Vistas legacy los leen como fallback.
 
     exclusiva:         gb('prop-exclusiva'),
     exclusiva_inicio:  gv('prop-excl-inicio'),
@@ -1997,11 +1970,17 @@ export async function saveProp(id) {
   const btn = document.querySelector('#prop-form button[onclick*="saveProp"]')
   if (btn) { btn.textContent = '⏳ Guardando...'; btn.disabled = true }
 
-  let error
+  let error, savedId = id
   if (id) {
     ;({ error } = await supabase.from('properties').update(payload).eq('id', id))
   } else {
-    ;({ error } = await supabase.from('properties').insert({ ...payload, user_id: (await supabase.auth.getUser()).data.user?.id }))
+    const insertRes = await supabase
+      .from('properties')
+      .insert({ ...payload, user_id: (await supabase.auth.getUser()).data.user?.id })
+      .select('id')
+      .single()
+    error = insertRes.error
+    savedId = insertRes.data?.id
   }
 
   if (error) {
@@ -2009,6 +1988,12 @@ export async function saveProp(id) {
     if (btn) { btn.textContent = '❌ Error — reintentar'; btn.disabled = false }
     if (typeof window.showToast === 'function') window.showToast('❌ Error al guardar: ' + error.message)
     return
+  }
+
+  // Persistir links múltiples (después de tener id del inmueble)
+  if (savedId) {
+    try { await persistLinks(savedId) }
+    catch (e) { console.error('[inmuebles] persistLinks', e) }
   }
 
   closePropModal()
@@ -2123,42 +2108,6 @@ window.closePropModal   = ()   => closePropModal()
 window.saveProp         = (id) => saveProp(id)
 
 // Map picker: abre overlay y llena lat/lng + (opcional) calle/colonia/municipio/cp si están vacíos
-// Generar narrativa con Gemini
-window.propGenerateNarrative = async (propId) => {
-  const p = _props.find(x => x.id === propId)
-  if (!p) return
-  const btn = document.getElementById(`btn-ai-${propId}`)
-  if (btn) { btn.textContent = '⏳ Generando…'; btn.disabled = true }
-  try {
-    const r = await fetch('/api/gemini', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ property: p }),
-    })
-    const data = await r.json()
-    if (!r.ok || !data.narrativa) {
-      window.showToast?.('❌ ' + (data.error || 'Error generando narrativa'))
-      return
-    }
-    // Guarda en DB
-    await supabase.from('properties').update({
-      descripcion_ai: data.narrativa,
-      descripcion_ai_updated_at: new Date().toISOString(),
-    }).eq('id', propId)
-    // Refresca en memoria
-    p.descripcion_ai = data.narrativa
-    p.descripcion_ai_updated_at = new Date().toISOString()
-    window.showToast?.('✨ Narrativa generada')
-    // Re-render detalle
-    document.getElementById('prop-detail-overlay')?.remove()
-    openPropDetail(propId)
-  } catch (e) {
-    window.showToast?.('❌ ' + e.message)
-  } finally {
-    if (btn) { btn.textContent = '✨ IA'; btn.disabled = false }
-  }
-}
-
 window.propOpenMapPicker = async () => {
   const g = (id) => document.getElementById(id)
   const cur = {

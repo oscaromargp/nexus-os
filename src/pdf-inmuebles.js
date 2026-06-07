@@ -557,11 +557,6 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
     y += 4
   }
 
-  // ── Narrativa IA (texto completo, auto-paginado) ─────────────────────────
-  if (prop.descripcion_ai) {
-    printLongText('NARRATIVA', prop.descripcion_ai, C.sky)
-  }
-
   // ── Descripción del agente (texto completo, auto-paginado) ───────────────
   if (prop.descripcion) {
     printLongText('DESCRIPCION', prop.descripcion, C.sky)
