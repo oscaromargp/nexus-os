@@ -13,6 +13,7 @@ import { supabase } from './supabase.js'
 import Sortable from 'sortablejs'
 import { pdfFichaCaptacion } from './pdf-inmuebles.js'
 import { renderDocumentos, loadPropertyDocs } from './docs-inmuebles.js'
+import { loadMxLocations, renderEstadoMunicipioSelects } from './mx-locations.js'
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
 let _props       = []          // todas las propiedades del usuario
@@ -147,11 +148,63 @@ export async function loadProperties() {
   const { data, error } = await supabase
     .from('properties')
     .select('*')
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
   if (error) { console.error('[inmuebles] load:', error); _propLoading = false; return }
   _props = data || []
   _propFolioSeq = _props.length + 1
   _propLoading = false
+}
+
+// Cargar inmuebles en papelera (eliminados últimos 30 días)
+export async function loadTrash() {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const { data, error } = await supabase
+    .from('properties')
+    .select('*')
+    .not('deleted_at', 'is', null)
+    .gte('deleted_at', cutoff)
+    .order('deleted_at', { ascending: false })
+  if (error) { console.error('[inmuebles] trash:', error); return [] }
+  return data || []
+}
+
+// Soft delete
+window.propDelete = async (id) => {
+  const p = _props.find(x => x.id === id)
+  if (!p) return
+  const label = p.titulo || p.folio_interno || 'este inmueble'
+  if (!confirm(`¿Enviar "${label}" a la papelera?\n\nPodrás recuperarlo dentro de 30 días desde la vista Papelera.`)) return
+  const { error } = await supabase
+    .from('properties')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { window.showToast?.('❌ No se pudo eliminar: ' + error.message); return }
+  _props = _props.filter(x => x.id !== id)
+  window.showToast?.('🗑️ Inmueble enviado a papelera')
+  if (window.propBackToList) window.propBackToList()
+  else window.renderInmuebles?.()
+}
+
+// Restaurar desde papelera
+window.propRestore = async (id) => {
+  const { error } = await supabase
+    .from('properties')
+    .update({ deleted_at: null })
+    .eq('id', id)
+  if (error) { window.showToast?.('❌ No se pudo restaurar: ' + error.message); return }
+  window.showToast?.('♻️ Inmueble restaurado')
+  await loadProperties()
+  window.renderInmuebles?.()
+}
+
+// Hard delete definitivo desde papelera
+window.propPurge = async (id) => {
+  if (!confirm('⚠️ ELIMINAR DEFINITIVAMENTE\n\nEsta acción NO se puede deshacer. ¿Continuar?')) return
+  const { error } = await supabase.from('properties').delete().eq('id', id)
+  if (error) { window.showToast?.('❌ No se pudo eliminar: ' + error.message); return }
+  window.showToast?.('🔥 Inmueble eliminado definitivamente')
+  window.renderInmuebles?.()
 }
 
 // ─── CRM — Historial de interacciones ─────────────────────────────────────────
@@ -273,6 +326,12 @@ export function renderInmuebles() {
             color:${_inmTab==='tramites'?'#a78bfa':'#64748b'};">
             📋 Trámites
           </button>
+          <button onclick="inmSetTab('papelera')"
+            style="padding:8px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.15s;
+            background:${_inmTab==='papelera'?'rgba(239,68,68,0.18)':'transparent'};
+            color:${_inmTab==='papelera'?'#ef4444':'#64748b'};">
+            🗑️ Papelera
+          </button>
         </div>
         ${_inmTab === 'propiedades' ? `
           <div style="display:flex;gap:8px;align-items:center;">
@@ -294,7 +353,8 @@ export function renderInmuebles() {
           </div>` : ''}
       </div>
 
-      ${_inmTab === 'tramites' ? _renderTramites() : `
+      ${_inmTab === 'tramites' ? _renderTramites() :
+        _inmTab === 'papelera' ? `<div id="papelera-mount">${_renderPapeleraSkeleton()}</div>` : `
         <!-- ── Filtros ── -->
         ${_renderFilters(filtered.length)}
         <!-- ── KPIs rápidos ── -->
@@ -309,6 +369,54 @@ export function renderInmuebles() {
       `}
     </div>
   `
+}
+
+// ─── Render: tab Papelera ─────────────────────────────────────────────────────
+function _renderPapeleraSkeleton() {
+  // Trigger async load after mount
+  setTimeout(() => _mountPapelera(), 30)
+  return `<div style="text-align:center;padding:60px 20px;color:#64748b;">Cargando papelera…</div>`
+}
+
+async function _mountPapelera() {
+  const trash = await loadTrash()
+  const el = document.getElementById('papelera-mount')
+  if (!el) return
+  if (!trash.length) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:60px 20px;color:#64748b;">
+        <div style="font-size:64px;margin-bottom:16px;opacity:0.4;">🗑️</div>
+        <h3 style="color:#94a3b8;margin:0 0 8px;font-size:16px;">Papelera vacía</h3>
+        <p style="font-size:13px;color:#64748b;margin:0;">Los inmuebles eliminados se conservan 30 días antes de borrarse definitivamente.</p>
+      </div>`
+    return
+  }
+  el.innerHTML = `
+    <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#fca5a5;font-size:12px;">
+      ⏳ ${trash.length} inmueble${trash.length>1?'s':''} en papelera. Se eliminan automáticamente 30 días después de su envío.
+    </div>
+    <div style="display:grid;gap:10px;">
+      ${trash.map(p => {
+        const tipo = _tipoInfo(p.tipo)
+        const daysLeft = 30 - Math.floor((Date.now() - new Date(p.deleted_at).getTime()) / 86400000)
+        return `
+          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+            <span style="font-size:28px;">${tipo.icon}</span>
+            <div style="flex:1;min-width:200px;">
+              <div style="font-weight:700;color:#f1f5f9;font-size:14px;">${_esc(p.titulo || tipo.label + ' en ' + (p.colonia||p.municipio||''))}</div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px;">
+                ${p.folio_interno ? _esc(p.folio_interno) + ' · ' : ''}Eliminado hace ${30 - daysLeft} día${30-daysLeft===1?'':'s'} · Quedan ${daysLeft} día${daysLeft===1?'':'s'}
+              </div>
+            </div>
+            <button onclick="propRestore('${p.id}')"
+              style="padding:6px 12px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
+              color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">♻️ Restaurar</button>
+            <button onclick="propPurge('${p.id}')"
+              style="padding:6px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
+              color:#ef4444;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🔥 Borrar</button>
+          </div>`
+      }).join('')}
+    </div>`
 }
 
 // ─── Render: tab Trámites ──────────────────────────────────────────────────────
@@ -762,6 +870,15 @@ export function openPropModal(id = null) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px);'
   overlay.onclick = (e) => { if (e.target === overlay) closePropModal() }
 
+  // Preload MX locations dataset (estados/municipios) y repaint selects al llegar
+  loadMxLocations().then(() => {
+    const row = document.getElementById('prop-edo-mun-row')
+    if (row) row.innerHTML = renderEstadoMunicipioSelects({
+      estadoVal:    document.getElementById('prop-estado-rep')?.value || prop?.estado_rep || 'BCS',
+      municipioVal: document.getElementById('prop-municipio')?.value  || prop?.municipio  || '',
+    })
+  })
+
   overlay.innerHTML = `
     <div id="prop-modal" style="background:#0e1422;border:1px solid rgba(34,211,238,0.2);border-radius:16px;
     width:100%;max-width:760px;max-height:92vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.6);">
@@ -830,15 +947,14 @@ export function openPropModal(id = null) {
             ${_field('prop-calle','Calle','text',val('calle'),'Calle Álvaro Obregón')}
             ${_field('prop-numero','Número','text',val('numero'),'123')}
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;" id="prop-edo-mun-row">
+            ${renderEstadoMunicipioSelects({ estadoVal: prop?.estado_rep || 'BCS', municipioVal: prop?.municipio || '' })}
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
             ${_field('prop-colonia','Colonia','text',val('colonia'),'Col. Centro')}
-            ${_field('prop-municipio','Municipio','text',val('municipio','La Paz'),'La Paz')}
             ${_field('prop-cp','C.P.','text',val('cp'),'23000')}
           </div>
-          <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px;">
-            ${_field('prop-estado-rep','Estado','text',val('estado_rep','BCS'),'BCS')}
-            ${_field('prop-referencias','Referencias','text',val('referencias'),'Frente al parque, portón azul')}
-          </div>
+          ${_field('prop-referencias','Referencias','text',val('referencias'),'Frente al parque, portón azul')}
         </div>
 
         <!-- ── Sección: Precios ── -->
@@ -1252,6 +1368,10 @@ export async function openPropDetail(id) {
           <button onclick="openPropModal('${p.id}')"
             style="padding:6px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
             color:#94a3b8;border-radius:8px;cursor:pointer;font-size:12px;">✏️ Editar</button>
+          <button onclick="propDelete('${p.id}')"
+            title="Enviar a papelera"
+            style="padding:6px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
+            color:#ef4444;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🗑️ Eliminar</button>
           <button onclick="document.getElementById('prop-detail-overlay').remove()"
             style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
             color:#94a3b8;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:18px;line-height:1;">✕</button>
