@@ -60,11 +60,30 @@ async function fetchOverpass(lat, lng, radius) {
   const query = buildOverpassQuery(lat, lng, radius)
   const r = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+      'User-Agent': 'NexusOS/1.0 (https://nexus-os-chi.vercel.app)',
+    },
     body: 'data=' + encodeURIComponent(query),
   })
-  if (!r.ok) throw new Error('Overpass ' + r.status)
-  const data = await r.json()
+  let data
+  if (!r.ok) {
+    // Fallback a otro mirror si el principal falla
+    const r2 = await fetch('https://overpass.kumi.systems/api/interpreter', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'User-Agent': 'NexusOS/1.0 (https://nexus-os-chi.vercel.app)',
+      },
+      body: 'data=' + encodeURIComponent(query),
+    })
+    if (!r2.ok) throw new Error('Overpass ' + r.status + ' / mirror ' + r2.status)
+    data = await r2.json()
+  } else {
+    data = await r.json()
+  }
   const elements = data.elements || []
   const pois = []
   for (const el of elements) {

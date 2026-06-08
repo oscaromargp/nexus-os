@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { buildReportPrompt, getProposito } from './_lib/report-prompt.js'
 
-const GEMINI_MODEL = 'gemini-1.5-flash'
+const GEMINI_MODEL = 'gemini-2.0-flash'
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 
 function getSupabase() {
@@ -117,12 +117,37 @@ export default async function handler(req, res) {
     }
 
     // 3) Contexto geomarketing (POIs + clima + ubicación)
+    // Si hay lat/lng usamos esas; si no, intentamos geocodificar la dirección
+    let lat = property.lat ? Number(property.lat) : null
+    let lng = property.lng ? Number(property.lng) : null
+
+    if (!lat || !lng) {
+      // Geocodifica desde la dirección textual usando Nominatim
+      const addrParts = [property.calle, property.numero, property.colonia, property.municipio, property.estado_rep, 'México']
+        .filter(Boolean).join(', ')
+      if (addrParts) {
+        try {
+          const geoUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(addrParts)}&countrycodes=mx&limit=1`
+          const geoR = await fetch(geoUrl, { headers: { 'User-Agent': 'NexusOS/1.0' } })
+          if (geoR.ok) {
+            const geoData = await geoR.json()
+            if (geoData?.[0]?.lat) {
+              lat = parseFloat(geoData[0].lat)
+              lng = parseFloat(geoData[0].lon)
+            }
+          }
+        } catch (e) { console.warn('[geocode]', e.message) }
+      }
+    }
+
     let contexto = null
-    if (property.lat && property.lng) {
+    if (lat && lng) {
       const proto = req.headers['x-forwarded-proto'] || 'https'
       const host = req.headers['x-forwarded-host'] || req.headers.host
       const baseUrl = `${proto}://${host}`
-      contexto = await fetchContext(Number(property.lat), Number(property.lng), baseUrl)
+      contexto = await fetchContext(lat, lng, baseUrl)
+      // Inyecta las coords resueltas en el objeto property para el prompt
+      if (!property.lat) { property.lat = lat; property.lng = lng }
     }
 
     // 4) Propósito (auto si no vino)
