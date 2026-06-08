@@ -6619,12 +6619,13 @@ function fixLayoutDOM() {
 
       /* ═══ Mobile overrides — vencer al !important global de arriba ═══ */
       @media (max-width: 768px) {
-        /* Drawer slim de SOLO iconos. Ancho compacto, items centrados */
+        /* Drawer slim de SOLO iconos. Ancho ultra-compacto, items centrados */
         nav#sidebar {
-          width: 56px !important;
-          max-width: 56px !important;
-          padding: 56px 0 12px !important;
+          width: 48px !important;
+          max-width: 48px !important;
+          padding: 56px 0 8px !important;
           overflow-x: hidden !important;
+          background: var(--bg-deep, #0a0e1f) !important;
         }
         nav#sidebar .nav-logo {
           justify-content: center !important;
@@ -6642,31 +6643,31 @@ function fixLayoutDOM() {
         /* Botones nav-item: solo el icono, centrado, sin label */
         nav#sidebar .nav-item {
           font-size: 0 !important;   /* oculta el text node después del span */
-          padding: 10px 4px !important;
+          padding: 8px 0 !important;
           text-align: center !important;
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
-          border-radius: 10px !important;
-          margin: 3px 6px !important;
-          min-height: 44px !important;
+          border-radius: 8px !important;
+          margin: 2px 4px !important;
+          min-height: 40px !important;
         }
         nav#sidebar .nav-item .nav-icon {
-          font-size: 20px !important;
-          width: 20px !important;
-          height: 20px !important;
+          font-size: 18px !important;
+          width: 18px !important;
+          height: 18px !important;
           margin: 0 !important;
         }
         nav#sidebar .nav-item .nav-icon i,
         nav#sidebar .nav-item .nav-icon svg {
-          width: 20px !important;
-          height: 20px !important;
+          width: 18px !important;
+          height: 18px !important;
         }
         /* Tooltip nativo del data-tip al mantener pulsado */
         nav#sidebar .nav-item[data-tip]::after {
           content: attr(data-tip);
           position: absolute;
-          left: 60px;
+          left: 52px;
           background: rgba(0,0,0,0.92);
           color: #e8f0f9;
           padding: 6px 10px;

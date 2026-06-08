@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "handoff": "bash scripts/handoff.sh",
+    "context:save": "echo 'Snapshot guardado en .opencode/context/$(date +%s).json' && mkdir -p .opencode/context && cat > .opencode/context/$(date +%s).json <<< '{\"timestamp\":\"$(date -Iseconds)\",\"branch\":\"$(git branch --show-current)\",\"lastCommit\":\"$(git log --oneline -1)\",\"files\":$(git status --porcelain | jq -R . | jq -s .)}'",
+    "context:load": "ls -t .opencode/context/*.json 2>/dev/null | head -1 | xargs -I {} cat {} | jq ."
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",

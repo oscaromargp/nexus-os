@@ -1,0 +1,33 @@
+{
+  "project": "nexus-os",
+  "version": "2.5.0",
+  "skills": {
+    "supabase": true,
+    "supabase-postgres-best-practices": true
+  },
+  "context": {
+    "autoSave": true,
+    "autoLoad": true,
+    "directory": ".opencode/context",
+    "maxSnapshots": 50
+  },
+  "handoff": {
+    "enabled": true,
+    "script": "scripts/handoff.sh",
+    "outputFile": "HANDOFF.md"
+  },
+  "memory": {
+    "primaryLog": "NEXUS_PROJECT_LOG.md",
+    "secondaryLog": "CLAUDE.md",
+    "syncBidirectional": true
+  },
+  "tools": {
+    "vercel": "~/.npm-global/bin/vercel",
+    "supabase": "~/.npm-global/bin/supabase",
+    "gh": "gh"
+  },
+  "env": {
+    "local": ".env",
+    "example": ".env.example"
+  }
+}
