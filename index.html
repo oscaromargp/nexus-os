@@ -162,7 +162,11 @@
     .nav-link::after { content: ''; position: absolute; bottom: -4px; left: 0; width: 0; height: 2px; background: var(--p400); transition: width 0.3s ease; border-radius: 2px; }
     .nav-link:hover { color: var(--p400); }
     .nav-link:hover::after { width: 100%; }
-    @media (max-width: 768px) { .nav-links { display: none; } }
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      /* Botón móvil DEBE verse — override del inline display:none */
+      #btn-login-mobile { display: inline-flex !important; }
+    }
 
     /* ─── HERO ─── */
     #hero { position: relative; min-height: 100vh; display: flex; align-items: center; padding: 120px 0 80px; overflow: hidden; }
@@ -479,6 +483,56 @@
     .faq-item.active { border-color: rgba(var(--primary-rgb), 0.4); background: rgba(var(--primary-rgb), 0.08); }
     .faq-item.active .faq-answer { max-height: 400px; padding-bottom: 24px; opacity: 1; transform: translateY(0); transition: max-height 0.6s ease, padding 0.4s ease, opacity 0.4s ease 0.1s, transform 0.4s ease 0.1s; }
     .faq-item.active .faq-icon { transform: rotate(180deg); }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* ── LANDING RESPONSIVE MÓVIL (≤768px) ──────────────────────────────── */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      /* Navbar más compacta */
+      #navbar { padding: 12px 0; }
+      .nav-inner { padding: 0 14px !important; }
+      .nav-logo { font-size: 16px !important; }
+
+      /* Modal de auth: full-screen en cel */
+      #auth-modal { padding: 0; }
+      .modal-box {
+        max-width: 100% !important;
+        width: 100% !important;
+        min-height: 100vh;
+        padding: 20px 18px !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+        overflow-y: auto;
+      }
+
+      /* Inputs grandes (evita zoom iOS y mejora tap) */
+      .form-input, input.form-input {
+        font-size: 16px !important;
+        padding: 12px 14px !important;
+        min-height: 48px !important;
+      }
+      .form-submit, .btn-primary, .btn-outline {
+        min-height: 48px !important;
+        font-size: 15px !important;
+      }
+
+      /* Hero: padding/title más amigables */
+      #hero { padding: 80px 14px 40px !important; }
+      .hero-title, h1 { font-size: 30px !important; line-height: 1.15 !important; }
+      .hero-subtitle, h1 + p { font-size: 15px !important; }
+      .hero-grid { gap: 24px !important; }
+
+      /* Containers / secciones generales */
+      .container { padding: 0 14px !important; }
+      section { padding: 50px 0 !important; }
+
+      /* Botones del nav-inner mejor tamaño */
+      #btn-login-mobile, #btn-register-nav, #btn-login-nav {
+        padding: 10px 14px !important;
+        font-size: 13px !important;
+        min-height: 40px !important;
+      }
+    }
   </style>
 </head>
 <body>
