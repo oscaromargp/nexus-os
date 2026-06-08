@@ -6602,24 +6602,74 @@ function fixLayoutDOM() {
 
       /* ═══ Mobile overrides — vencer al !important global de arriba ═══ */
       @media (max-width: 768px) {
-        /* Nav items deben ocupar todo el ancho del drawer */
+        /* Drawer slim de SOLO iconos. Ancho compacto, items centrados */
+        nav#sidebar {
+          width: 72px !important;
+          max-width: 72px !important;
+          padding: 60px 0 16px !important;
+          overflow-x: hidden !important;
+        }
+        nav#sidebar .nav-logo {
+          justify-content: center !important;
+          padding: 0 0 16px !important;
+          margin-bottom: 12px !important;
+          gap: 0 !important;
+        }
+        /* Logo: ocultar texto, dejar solo el ícono hex */
+        nav#sidebar .nav-logo > *:not(.logo-hex):not(.nav-logo-icon) { display: none !important; }
         nav#sidebar .nav-items, nav#sidebar .nav-items > * {
           width: 100% !important;
           min-width: 0 !important;
-          max-width: 100% !important;
           box-sizing: border-box !important;
         }
+        /* Botones nav-item: solo el icono, centrado, sin label */
         nav#sidebar .nav-item {
-          white-space: normal !important;
-          text-align: left !important;
-          padding: 12px 14px !important;
-          font-size: 14px !important;
+          font-size: 0 !important;   /* oculta el text node después del span */
+          padding: 14px 8px !important;
+          text-align: center !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border-radius: 12px !important;
+          margin: 4px 8px !important;
+          min-height: 48px !important;
         }
-        nav#sidebar .nav-logo, nav#sidebar > * {
-          padding-left: 14px !important;
-          padding-right: 14px !important;
+        nav#sidebar .nav-item .nav-icon {
+          font-size: 22px !important;
+          width: 22px !important;
+          height: 22px !important;
+          margin: 0 !important;
         }
-        nav#sidebar { overflow-x: hidden !important; }
+        nav#sidebar .nav-item .nav-icon i,
+        nav#sidebar .nav-item .nav-icon svg {
+          width: 22px !important;
+          height: 22px !important;
+        }
+        /* Tooltip nativo del data-tip al mantener pulsado */
+        nav#sidebar .nav-item[data-tip]::after {
+          content: attr(data-tip);
+          position: absolute;
+          left: 76px;
+          background: rgba(0,0,0,0.92);
+          color: #e8f0f9;
+          padding: 6px 10px;
+          border-radius: 8px;
+          font-size: 12px;
+          white-space: nowrap;
+          pointer-events: none;
+          opacity: 0;
+          transition: opacity 0.15s;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+          z-index: 9200;
+        }
+        nav#sidebar .nav-item[data-tip]:active::after,
+        nav#sidebar .nav-item[data-tip]:focus::after { opacity: 1; }
+        /* Sección user-info / logout abajo: compacta */
+        nav#sidebar .user-info, nav#sidebar .logout-btn {
+          font-size: 0 !important;
+          text-align: center !important;
+        }
+        nav#sidebar .logout-btn svg { width: 20px !important; height: 20px !important; }
         aside#widgets-sidebar { display: none !important; }
         #nexus-layout {
           padding-right: 0 !important;
