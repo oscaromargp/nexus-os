@@ -147,21 +147,5 @@ formRecovery?.addEventListener('submit', async (e) => {
   showMessage('¡Enviado! Revisa tu correo electrónico para restablecer tu contraseña.')
 })
 
-// ─────────────────────────────────────────
-// GOOGLE OAUTH (login + Drive scopes)
-// ─────────────────────────────────────────
-document.getElementById('btn-google-login')?.addEventListener('click', async () => {
-  showMessage('Conectando con Google...')
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: window.location.origin + '/app.html',
-      scopes: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
-      queryParams: {
-        access_type: 'offline',
-        prompt: 'consent',
-      },
-    },
-  })
-  if (error) showMessage(error.message || 'Error con Google login', true)
-})
+// Nota: Google OAuth ya no se muestra como botón de login.
+// El usuario lo conecta desde Configuración → Conexiones (más control y opcional).

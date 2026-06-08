@@ -13279,6 +13279,100 @@ window.switchCfgTab = function(panelId, btn) {
   const panel = document.getElementById(`cfg-panel-${panelId}`)
   if (panel) panel.classList.add('active')
   if (btn)   btn.classList.add('active')
+  if (panelId === 'conexiones') _initGoogleConnector()
+}
+
+// ── Conector Google Drive ───────────────────────────────────────────────────
+async function _initGoogleConnector() {
+  const statusEl = document.getElementById('conn-google-status')
+  const btn      = document.getElementById('conn-google-btn')
+  if (!statusEl || !btn) return
+  if (btn.dataset.wired) return // ya conectado el handler
+  btn.dataset.wired = '1'
+
+  const refresh = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const hasGoogle = !!session?.provider_token
+    const googleEmail =
+      session?.user?.identities?.find(i => i.provider === 'google')?.identity_data?.email
+      || (hasGoogle ? session?.user?.email : null)
+
+    if (hasGoogle) {
+      statusEl.innerHTML = `✅ <span style="color:#4ade80;">Conectado</span>${googleEmail ? ' como <strong style="color:var(--text-main);">' + googleEmail + '</strong>' : ''}`
+      btn.textContent = 'Desconectar'
+      btn.style.background = 'rgba(239,68,68,0.1)'
+      btn.style.borderColor = 'rgba(239,68,68,0.35)'
+      btn.style.color = '#f87171'
+    } else {
+      statusEl.innerHTML = '⚪ <span style="color:var(--text-muted);">No conectado</span> — conecta para subir fotos de inmuebles a tu Drive'
+      btn.textContent = 'Conectar Google Drive'
+      btn.style.background = 'rgba(34,211,238,0.12)'
+      btn.style.borderColor = 'rgba(34,211,238,0.35)'
+      btn.style.color = 'var(--accent-cyan)'
+    }
+  }
+
+  btn.onclick = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const isConnected = !!session?.provider_token
+    if (isConnected) {
+      if (!confirm('¿Desconectar Google Drive? Las fotos futuras se guardarán en Supabase Storage hasta que vuelvas a conectar.')) return
+      // Cierra sesión completa y deja al usuario que vuelva a entrar SIN Google (con email/pass)
+      // Esto es lo más seguro porque borra el provider_token.
+      // Alternativa más amigable cuando linkIdentity esté disponible: unlinkIdentity.
+      try {
+        if (typeof supabase.auth.unlinkIdentity === 'function' && session?.user?.identities) {
+          const googleId = session.user.identities.find(i => i.provider === 'google')
+          if (googleId) {
+            const { error } = await supabase.auth.unlinkIdentity(googleId)
+            if (error) throw error
+            window.showToast?.('🔌 Google desconectado')
+            await refresh()
+            return
+          }
+        }
+      } catch (e) {
+        console.warn('unlinkIdentity falló, cae a signOut:', e.message)
+      }
+      // Fallback: cierra sesión completa
+      await supabase.auth.signOut()
+      window.location.href = '/'
+      return
+    }
+
+    // Conectar: dispara OAuth con scopes Drive
+    btn.disabled = true
+    btn.textContent = '⏳ Redirigiendo a Google…'
+    const opts = {
+      redirectTo: window.location.origin + '/app.html#settings-conexiones',
+      scopes: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+      queryParams: { access_type: 'offline', prompt: 'consent' },
+    }
+    try {
+      // Si está disponible linkIdentity (vincular Google al user actual), úsalo
+      if (typeof supabase.auth.linkIdentity === 'function') {
+        const { error } = await supabase.auth.linkIdentity({ provider: 'google', options: opts })
+        if (error) throw error
+        return
+      }
+    } catch (e) {
+      console.warn('linkIdentity falló, fallback signInWithOAuth:', e.message)
+    }
+    const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: opts })
+    if (error) {
+      window.showToast?.('❌ ' + error.message)
+      btn.disabled = false
+      await refresh()
+    }
+  }
+
+  await refresh()
+
+  // Si el usuario aterrizó con hash settings-conexiones (vuelta de OAuth), activa panel y muestra toast
+  if (location.hash === '#settings-conexiones') {
+    setTimeout(() => window.showToast?.('✅ Google Drive conectado'), 400)
+    history.replaceState(null, '', location.pathname + location.search)
+  }
 }
 
 window.selectFbType = function(type, btn) {

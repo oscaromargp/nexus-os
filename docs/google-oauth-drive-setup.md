@@ -3,9 +3,13 @@
 Esta guía tiene los pasos manuales que **tú** debes hacer en Google Cloud Console y Supabase Dashboard para que el flujo "Continuar con Google" + storage de fotos/docs en el Drive del agente funcione.
 
 El código ya está implementado:
-- Botón "Continuar con Google" en `/` (login).
+- Conector "Google Drive" en **Configuración → 🔗 Conexiones** dentro de `/app`.
 - `src/drive-storage.js` (upload, folder ensure, delete, public link).
-- `src/inmuebles.js` ahora detecta `provider_token` y sube fotos a Drive si está disponible (fallback Supabase Storage si no).
+- `src/inmuebles.js` detecta `provider_token` y sube fotos a Drive si está disponible (fallback Supabase Storage si no).
+
+> Nota: removimos el botón "Continuar con Google" del login para que la conexión
+> sea **opcional y voluntaria** desde Configuración. El usuario entra normal con
+> email/password y conecta Drive cuando lo necesite.
 
 ---
 
