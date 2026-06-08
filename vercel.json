@@ -6,5 +6,11 @@
     { "source": "/app",            "destination": "/app.html" },
     { "source": "/reset-password", "destination": "/reset-password.html" },
     { "source": "/reporte",        "destination": "/reporte.html" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron-backup",
+      "schedule": "0 3 * * *"
+    }
   ]
 }

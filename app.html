@@ -2517,6 +2517,27 @@ nav#sidebar .nav-items {
 
       <!-- ── Panel: Datos ── -->
       <div id="cfg-panel-datos" class="cfg-panel">
+
+        <!-- ── Backup a Google Sheets ─────────────────────────────────── -->
+        <div class="settings-card" style="margin-bottom:20px;">
+          <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">📊 Backup a Google Sheets</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;">
+            Tus inmuebles, finanzas y contactos se sincronizan automáticamente cada 24h a un Google Sheet en tu cuenta.
+            Requiere tener Google Drive conectado en la sección de Conexiones.
+          </p>
+          <div id="backup-status" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--text-muted);">
+            <span style="color:#94a3b8;">Último backup automático:</span>
+            <strong id="backup-last" style="color:var(--text-main);margin-left:6px;">Pendiente — activa Google Drive primero</strong>
+          </div>
+          <button id="btn-backup-now" type="button" onclick="window.runBackupNow?.()"
+            style="padding:10px 20px;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.35);color:var(--accent-cyan);border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;">
+            <i data-lucide="RefreshCw" style="width:16px;height:16px;"></i> Backup ahora (manual)
+          </button>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:8px;">
+            ℹ️ Próximamente: la lógica de sync se activa al conectar Google. Disponible desde Fase 2 del roadmap.
+          </div>
+        </div>
+
         <!-- Importación masiva de nodos -->
         <div class="settings-card">
           <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">📋 Importación Masiva de Nodos</h2>

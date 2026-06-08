@@ -473,20 +473,35 @@ loadSystemSettings()
   document.getElementById('cronica-date')?.setAttribute('value', new Date().toISOString().split('T')[0])
   drainOfflineQueue()
   updateOfflineBar()
-  // mvInit puede no estar declarado todavía si se carga después. Lo llamamos
-  // cuando esté disponible (sin bloquear init).
-  if (typeof window.mvInit === 'function') {
-    try { window.mvInit() } catch (e) { console.warn('[mvInit]', e) }
-  } else {
-    setTimeout(() => { try { window.mvInit?.() } catch {} }, 500)
-  }
+  // Pre-warm TC cache de Movimientos. Diferimos al próximo tick para que la
+  // implementación real (línea ~24090) ya esté en window cuando se ejecute.
+  setTimeout(() => { try { window.mvInit?.() } catch (e) { console.warn('[mvInit]', e) } }, 100)
 })()
 
-// Stub temprano para mvInit/mvFetchTcAndRender — se reemplazan más adelante.
-// Evita ReferenceErrors cuando la app intenta llamarlos antes de que esté listo
-// el módulo de Movimientos (lo que provocaba un loop de toasts en navegación).
+// Stub temprano para mvInit/mvFetchTcAndRender. El módulo Movimientos los
+// sobrescribe en línea ~24090 con la implementación real (depende de mucho
+// estado interno). El init de la app llama mvInit() al arrancar para pre-warm
+// del cache de TC; con setTimeout(0) lo dejamos al final del event loop,
+// cuando ya están todas las funciones del archivo asignadas.
 if (typeof window.mvInit !== 'function') window.mvInit = () => {}
 if (typeof window.mvFetchTcAndRender !== 'function') window.mvFetchTcAndRender = () => {}
+
+// ── Backup manual a Sheets (stub — implementación real en Fase 2) ──────────
+window.runBackupNow = async () => {
+  const btn = document.getElementById('btn-backup-now')
+  const lastEl = document.getElementById('backup-last')
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sincronizando…' }
+  try {
+    // TODO Fase 2: llamar /api/cron-backup con auth de usuario + escribir a Sheets
+    await new Promise(r => setTimeout(r, 800))
+    if (lastEl) lastEl.textContent = 'Pendiente — Drive aún no conectado (Fase 2)'
+    showToast?.('ℹ️ Backup disponible cuando conectes Google Drive')
+  } catch (e) {
+    showToast?.('❌ ' + e.message)
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="RefreshCw" style="width:16px;height:16px;"></i> Backup ahora (manual)' }
+  }
+}
 
 // ── Global error handler — toast en pantalla en vez de crash silencioso ─────────
 window.onerror = (msg, _src, line, _col, err) => {
