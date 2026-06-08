@@ -2631,6 +2631,29 @@ nav#sidebar .nav-items {
       <!-- ── Panel: Datos ── -->
       <div id="cfg-panel-datos" class="cfg-panel">
 
+        <!-- ── Export JSON completo ─────────────────────────────────── -->
+        <div class="settings-card" style="margin-bottom:20px;">
+          <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">📦 Exportar todo (JSON)</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;">
+            Descarga un archivo <code style="background:rgba(255,255,255,0.04);padding:1px 6px;border-radius:4px;">.json</code> con TODOS tus datos:
+            nodos, inmuebles, links, reportes, documentos, interacciones. Útil como respaldo manual o para migrar a otra cuenta.
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button id="btn-export-json" type="button"
+              style="padding:10px 20px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.35);color:#4ade80;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;">
+              ⬇ Descargar backup completo (.json)
+            </button>
+            <button id="btn-export-ical" type="button"
+              style="padding:10px 20px;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.35);color:#60a5fa;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;">
+              📅 Exportar Agenda (.ics)
+            </button>
+          </div>
+          <div id="export-json-status" style="font-size:11px;color:var(--text-dim);margin-top:10px;"></div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:6px;line-height:1.5;">
+            El <code style="background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:4px;">.ics</code> es estándar iCalendar — impórtalo a Apple Calendar, Outlook, Mozilla Thunderbird o cualquier app de calendario.
+          </div>
+        </div>
+
         <!-- ── Backup a Google Sheets ─────────────────────────────────── -->
         <div class="settings-card" style="margin-bottom:20px;">
           <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">📊 Backup a Google Sheets</h2>

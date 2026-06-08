@@ -1,16 +1,49 @@
 {
   "name": "Nexus OS",
   "short_name": "Nexus",
-  "description": "Tu sistema operativo personal — tareas, finanzas y notas unificadas",
+  "description": "Tu sistema operativo personal — tareas, finanzas, inmuebles e IA unificados",
   "start_url": "/app.html",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#00f0ff",
+  "background_color": "#0a0e1f",
+  "theme_color": "#22d3ee",
   "orientation": "any",
   "icons": [
     { "src": "/nexus-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "/nexus-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
-  "categories": ["productivity", "finance", "utilities"],
-  "lang": "es"
+  "categories": ["productivity", "finance", "utilities", "business"],
+  "lang": "es",
+  "shortcuts": [
+    {
+      "name": "Captar inmueble",
+      "short_name": "+ Inmueble",
+      "url": "/app.html?action=new-property",
+      "description": "Abrir formulario rápido de captación de propiedad",
+      "icons": [{ "src": "/nexus-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Nueva nota",
+      "short_name": "+ Nota",
+      "url": "/app.html?action=new-note",
+      "description": "Crear nota rápida",
+      "icons": [{ "src": "/nexus-icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Buscar",
+      "short_name": "Buscar",
+      "url": "/app.html?action=spotlight",
+      "description": "Abrir Spotlight Search",
+      "icons": [{ "src": "/nexus-icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "share_target": {
+    "action": "/app.html",
+    "method": "GET",
+    "params": {
+      "title": "shared_title",
+      "text":  "shared_text",
+      "url":   "shared_url"
+    }
+  }
 }

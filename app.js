@@ -4,6 +4,9 @@ import { track } from './src/telemetry.js'
 import './src/spotlight-search.js'
 import './src/email-n8n.js'
 import './src/push-notifications.js'
+import './src/pwa-handlers.js'
+import './src/backup-export.js'
+import './src/ical-export.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -13476,6 +13479,53 @@ window.switchCfgTab = function(panelId, btn) {
   if (btn)   btn.classList.add('active')
   if (panelId === 'conexiones') { _initGoogleConnector(); _initN8nEmailConnector(); _initPushConnector() }
   if (panelId === 'uso') _initUsoTab()
+  if (panelId === 'datos') _initDatosTab()
+}
+
+function _initDatosTab() {
+  const btn = document.getElementById('btn-export-json')
+  const btnIcal = document.getElementById('btn-export-ical')
+  const statusEl = document.getElementById('export-json-status')
+
+  if (btn && !btn.dataset.wired) {
+    btn.dataset.wired = '1'
+    btn.onclick = async () => {
+      btn.disabled = true
+      const orig = btn.textContent
+      btn.textContent = '⏳ Generando…'
+      try {
+        const result = await window.nexusBackup.export()
+        if (statusEl) statusEl.innerHTML = `✅ Descargado: <code style="color:#4ade80;">${result.filename}</code> · ${result.counts.nodes} nodos · ${result.counts.properties} inmuebles · ${result.counts.property_reports} reportes`
+        showToast?.('✓ Backup descargado')
+      } catch (e) {
+        if (statusEl) statusEl.innerHTML = `❌ ${e.message}`
+        showToast?.('❌ ' + e.message)
+      } finally {
+        btn.disabled = false
+        btn.textContent = orig
+      }
+    }
+  }
+
+  if (btnIcal && !btnIcal.dataset.wired) {
+    btnIcal.dataset.wired = '1'
+    btnIcal.onclick = async () => {
+      btnIcal.disabled = true
+      const orig = btnIcal.textContent
+      btnIcal.textContent = '⏳ Generando…'
+      try {
+        const result = await window.nexusICal.export()
+        if (statusEl) statusEl.innerHTML = `✅ <code style="color:#60a5fa;">${result.filename}</code> — ${result.eventsCount} eventos exportados`
+        showToast?.('✓ Agenda exportada')
+      } catch (e) {
+        if (statusEl) statusEl.innerHTML = `❌ ${e.message}`
+        showToast?.('❌ ' + e.message)
+      } finally {
+        btnIcal.disabled = false
+        btnIcal.textContent = orig
+      }
+    }
+  }
 }
 
 // ── Conector Push Notifications ─────────────────────────────────────────────
