@@ -6619,60 +6619,69 @@ function fixLayoutDOM() {
 
       /* ═══ Mobile overrides — vencer al !important global de arriba ═══ */
       @media (max-width: 768px) {
-        /* Drawer slim de SOLO iconos. Ancho ultra-compacto, items centrados */
+        /* Drawer estilo tab bar iOS: icono + label corto debajo.
+           Más útil visualmente que solo iconos, más denso que solo texto. */
         nav#sidebar {
-          width: 48px !important;
-          max-width: 48px !important;
-          padding: 56px 0 8px !important;
+          width: 76px !important;
+          max-width: 76px !important;
+          padding: 48px 0 8px !important;
           overflow-x: hidden !important;
           background: var(--bg-deep, #0a0e1f) !important;
         }
         nav#sidebar .nav-logo {
           justify-content: center !important;
-          padding: 0 0 16px !important;
-          margin-bottom: 12px !important;
+          padding: 0 0 8px !important;
+          margin-bottom: 4px !important;
           gap: 0 !important;
         }
-        /* Logo: ocultar texto, dejar solo el ícono hex */
         nav#sidebar .nav-logo > *:not(.logo-hex):not(.nav-logo-icon) { display: none !important; }
         nav#sidebar .nav-items, nav#sidebar .nav-items > * {
           width: 100% !important;
           min-width: 0 !important;
           box-sizing: border-box !important;
         }
-        /* Botones nav-item: solo el icono, centrado, sin label */
+        /* Botones: icono arriba (centrado) + label corto debajo */
         nav#sidebar .nav-item {
-          font-size: 0 !important;   /* oculta el text node después del span */
-          padding: 8px 0 !important;
+          font-size: 9.5px !important;
+          font-weight: 600 !important;
+          padding: 8px 2px 6px !important;
           text-align: center !important;
           display: flex !important;
+          flex-direction: column !important;
           align-items: center !important;
           justify-content: center !important;
-          border-radius: 8px !important;
+          gap: 4px !important;
+          border-radius: 10px !important;
           margin: 2px 4px !important;
-          min-height: 40px !important;
+          min-height: auto !important;
+          line-height: 1.15 !important;
+          word-break: break-word !important;
+          overflow-wrap: break-word !important;
+          letter-spacing: 0 !important;
         }
         nav#sidebar .nav-item .nav-icon {
-          font-size: 18px !important;
-          width: 18px !important;
-          height: 18px !important;
+          font-size: 19px !important;
+          width: 19px !important;
+          height: 19px !important;
           margin: 0 !important;
+          flex-shrink: 0 !important;
         }
         nav#sidebar .nav-item .nav-icon i,
         nav#sidebar .nav-item .nav-icon svg {
-          width: 18px !important;
-          height: 18px !important;
+          width: 19px !important;
+          height: 19px !important;
         }
-        /* Tooltip nativo del data-tip al mantener pulsado */
+        /* Tooltip con nombre completo al mantener pulsado (cuando el label se trunca) */
         nav#sidebar .nav-item[data-tip]::after {
           content: attr(data-tip);
           position: absolute;
-          left: 52px;
+          left: 80px;
           background: rgba(0,0,0,0.92);
           color: #e8f0f9;
           padding: 6px 10px;
           border-radius: 8px;
           font-size: 12px;
+          font-weight: 500;
           white-space: nowrap;
           pointer-events: none;
           opacity: 0;
@@ -6680,8 +6689,7 @@ function fixLayoutDOM() {
           box-shadow: 0 4px 14px rgba(0,0,0,0.5);
           z-index: 9200;
         }
-        nav#sidebar .nav-item[data-tip]:active::after,
-        nav#sidebar .nav-item[data-tip]:focus::after { opacity: 1; }
+        nav#sidebar .nav-item[data-tip]:active::after { opacity: 1; }
         /* Sección user-info / logout abajo: compacta */
         nav#sidebar .user-info, nav#sidebar .logout-btn {
           font-size: 0 !important;
