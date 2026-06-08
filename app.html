@@ -1435,10 +1435,74 @@ nav#sidebar .nav-items {
         overflow-x: hidden !important;
       }
 
-      /* Headers de vistas más compactos */
-      .view-header h1, .view-title {
+      /* ── Densidad móvil: elementos puramente visuales más pequeños ─────
+         Botones/inputs (interactivos) mantienen su tamaño en otra regla.
+         Aquí reducimos lo que es estético: títulos, números grandes,
+         iconos decorativos, paddings de cards. */
+
+      /* Headers de vista */
+      .view-header h1, .view-title, h1 {
         font-size: 20px !important;
+        margin-bottom: 12px !important;
+        line-height: 1.2 !important;
+      }
+      .view-header h2, h2 { font-size: 16px !important; }
+      .view-header h3, h3 { font-size: 14px !important; }
+
+      /* Números grandes de KPIs/balance (estilo dashboard) */
+      [style*="font-size:32px"], [style*="font-size: 32px"],
+      [style*="font-size:36px"], [style*="font-size: 36px"],
+      [style*="font-size:40px"], [style*="font-size: 40px"],
+      [style*="font-size:48px"], [style*="font-size: 48px"] {
+        font-size: 22px !important;
+      }
+      [style*="font-size:28px"], [style*="font-size: 28px"] {
+        font-size: 20px !important;
+      }
+      [style*="font-size:24px"], [style*="font-size: 24px"] {
+        font-size: 18px !important;
+      }
+
+      /* Iconos decorativos enormes (ej. empty state 64px+) */
+      [style*="font-size:64px"], [style*="font-size: 64px"],
+      [style*="font-size:56px"], [style*="font-size: 56px"],
+      [style*="font-size:72px"], [style*="font-size: 72px"] {
+        font-size: 36px !important;
+      }
+
+      /* Cards: padding compacto */
+      .settings-card, .card, [class*="card"] {
+        padding: 12px !important;
+      }
+      /* Reduce margins/gaps verticales */
+      [style*="margin-bottom:24px"], [style*="margin-bottom: 24px"] {
         margin-bottom: 14px !important;
+      }
+      [style*="margin-bottom:32px"], [style*="margin-bottom: 32px"] {
+        margin-bottom: 16px !important;
+      }
+      [style*="margin-bottom:40px"], [style*="margin-bottom: 40px"] {
+        margin-bottom: 20px !important;
+      }
+      /* Padding interno de secciones */
+      [style*="padding:24px"], [style*="padding: 24px"] {
+        padding: 12px !important;
+      }
+      [style*="padding:20px"], [style*="padding: 20px"] {
+        padding: 12px !important;
+      }
+
+      /* Labels y placeholders más compactos */
+      label { font-size: 12px !important; }
+
+      /* Excepción: botones, inputs y áreas clickables — mantienen tamaño */
+      button[style*="font-size:32px"], button[style*="font-size: 32px"],
+      button[style*="font-size:40px"], button[style*="font-size: 40px"] {
+        font-size: inherit !important;
+      }
+      .btn-primary, .btn-secondary, .btn-outline, .btn-share,
+      button.form-submit, input, select, textarea {
+        font-size: 14px !important;
       }
 
       /* Modales full-screen en móvil — solo el CONTENEDOR top-level del modal
