@@ -67,15 +67,26 @@ function _mapsUrl(p) {
   return addr ? `https://www.google.com/maps/search/${encodeURIComponent(addr)}` : null
 }
 
+// Construye URL de imagen estática del mapa (OSM staticmap gratis, sin token)
+function _mapStaticUrl(p) {
+  if (!p.lat || !p.lng) return null
+  // staticmap.openstreetmap.de — gratis, sin token, marker rojo en el pin
+  return `https://staticmap.openstreetmap.de/staticmap.php?center=${p.lat},${p.lng}&zoom=15&size=600x300&markers=${p.lat},${p.lng},red-pushpin&maptype=mapnik`
+}
+
 async function _loadImg(url) {
   if (!url) return ''
   // Skip URLs that are obviously not images (video players, maps, etc.)
   if (/youtube\.com|youtu\.be|maps\.google|vimeo\.com|tiktok\.com|instagram\.com|facebook\.com|google\.com\/maps/i.test(url)) return ''
+  return _loadImgRaw(url)
+}
+
+// Carga cualquier URL como dataURL (sin filtros). Útil para mapas estáticos OSM.
+async function _loadImgRaw(url) {
+  if (!url) return ''
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout?.(10000) })
+    const res = await fetch(url, { signal: AbortSignal.timeout?.(15000) })
     if (!res.ok) return ''
-    const ct = res.headers.get('content-type') || ''
-    if (!ct.includes('image/') && !ct.includes('octet-stream')) return ''
     const blob = await res.blob()
     return new Promise(resolve => {
       const reader = new FileReader()
@@ -503,25 +514,45 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
     prop.amueblado        && 'Amueblado',
   ].filter(Boolean)
 
-  if (servList.length) {
-    const labelW = 22
-    _t(doc, 'Servicios', MX, y + 4.5, { size: 7, w: 'bold', color: C.sky })
-    const sl = doc.splitTextToSize(servList.join(' · '), W - MX * 2 - labelW)[0]
-    _t(doc, sl, MX + labelW, y + 4.5, { size: 7.5, color: C.t700 })
-    y += 8
+  // Render servicios/amenidades como chips visuales en una grilla
+  const renderChips = (label, items, color) => {
+    if (!items.length) return
+    if (y + 14 > H - 22) { doc.addPage(); doc.setFillColor(...C.sky); doc.rect(0, 0, W, 2, 'F'); y = 14 }
+    _t(doc, label.toUpperCase(), MX, y + 4.5, { size: 8, w: 'bold', color })
+    doc.setFillColor(...color)
+    doc.rect(MX, y + 6, 22, 0.7, 'F')
+    y += 11
+    // Layout: chips de altura 6mm con padding
+    const padX = 3, padY = 2
+    const chipH = 6
+    let cx = MX, cy = y
+    doc.setFontSize(8)
+    items.forEach(item => {
+      const w = doc.getTextWidth(item) + padX * 2
+      if (cx + w > W - MX) { cx = MX; cy += chipH + 2 }
+      if (cy + chipH > H - 22) {
+        doc.addPage(); doc.setFillColor(...C.sky); doc.rect(0, 0, W, 2, 'F')
+        _t(doc, label + ' (cont.)', MX, 9, { size: 7.5, color: C.t500 })
+        _hline(doc, MX, 12, W - MX, C.s200, 0.2)
+        cy = 16; cx = MX
+      }
+      // Chip fondo
+      doc.setFillColor(color[0], color[1], color[2])
+      doc.setDrawColor(color[0], color[1], color[2])
+      doc.roundedRect(cx, cy, w, chipH, 1.5, 1.5, 'FD')
+      // Texto blanco arriba
+      _t(doc, item, cx + padX, cy + chipH - 1.8, { size: 8, color: [255,255,255], w: 'bold' })
+      cx += w + 2
+    })
+    y = cy + chipH + 4
   }
 
-  if (amenList.length) {
-    const labelW = 22
-    _t(doc, 'Amenidades', MX, y + 4.5, { size: 7, w: 'bold', color: C.sky })
-    const al = doc.splitTextToSize(amenList.join(' · '), W - MX * 2 - labelW)[0]
-    _t(doc, al, MX + labelW, y + 4.5, { size: 7.5, color: C.t700 })
-    y += 8
-  }
+  if (servList.length) renderChips('SERVICIOS', servList, [16, 138, 152])
+  if (amenList.length) renderChips('AMENIDADES', amenList, [80, 102, 200])
 
   if (servList.length || amenList.length) {
     _hline(doc, MX, y, W - MX, C.s200, 0.2)
-    y += 5
+    y += 4
   }
 
   // Helper local: imprime texto largo con auto-pagebreak respetando footer
@@ -599,14 +630,46 @@ export async function pdfFichaCaptacion(prop, emisor = {}) {
     y += 8
   }
 
+  // ── Thumbnail de mapa estático (OSM) ──────────────────────────────────────
+  const mapStatic = _mapStaticUrl(prop)
+  if (mapStatic) {
+    if (y + 50 > H - 22) { doc.addPage(); doc.setFillColor(...C.sky); doc.rect(0,0,W,2,'F'); y = 14 }
+    _t(doc, 'UBICACION EN MAPA', MX, y + 4.5, { size: 8, w: 'bold', color: C.sky })
+    doc.setFillColor(...C.sky)
+    doc.rect(MX, y + 6, 32, 0.7, 'F')
+    y += 11
+    try {
+      const mapImg = await _loadImgRaw(mapStatic)
+      if (mapImg) {
+        const mapW = W - MX * 2
+        const mapH = 45
+        doc.addImage(mapImg, 'PNG', MX, y, mapW, mapH)
+        // overlay link clicable encima del mapa
+        if (mapUrl) doc.link(MX, y, mapW, mapH, { url: mapUrl })
+        y += mapH + 3
+        _t(doc, 'Click sobre el mapa para abrir en Google Maps', MX, y, { size: 6.5, color: C.t400 })
+        y += 6
+      }
+    } catch (e) { console.warn('[pdf] map img', e) }
+  }
+
   // ── CTAs con icono + hipervínculos — mapa primero, video al final ────────
+  // Tomamos también los property_links si vienen en prop._links
+  const linksArr = Array.isArray(prop._links) ? prop._links : []
+  const isUrl = s => /^https?:\/\//i.test(String(s||''))
+  const linkUrl = l => isUrl(l.url) ? l.url : (isUrl(l.label) ? l.label : l.url)
   const ctas = [
-    mapUrl                && { lbl: 'Ver en mapa',       url: mapUrl,                 icon: 'MAPA'   },
-    prop.tour_url         && { lbl: 'Tour virtual 360',  url: prop.tour_url,          icon: '360 VR' },
-    prop.album_fotos_url  && { lbl: 'Galeria fotos',     url: prop.album_fotos_url,   icon: 'FOTOS'  },
-    prop.drive_folder_url && { lbl: 'Ver carpeta',       url: prop.drive_folder_url,  icon: 'DRIVE'  },
-    prop.video_url        && { lbl: 'Ver video',         url: prop.video_url,         icon: 'VIDEO'  },
-  ].filter(Boolean)
+    mapUrl && { lbl: 'Ver en mapa', url: mapUrl, icon: 'MAPA' },
+    ...linksArr.filter(l => l.tipo === 'video').map(l   => ({ lbl: 'Video',  url: linkUrl(l), icon: 'VIDEO' })),
+    ...linksArr.filter(l => l.tipo === 'tour').map(l    => ({ lbl: 'Tour 360', url: linkUrl(l), icon: '360 VR' })),
+    ...linksArr.filter(l => l.tipo === 'foto').map(l    => ({ lbl: 'Album',  url: linkUrl(l), icon: 'FOTOS' })),
+    ...linksArr.filter(l => l.tipo === 'archivo').map(l => ({ lbl: 'Archivo', url: linkUrl(l), icon: 'DRIVE' })),
+    // Legacy single fields como fallback si no hay nada en property_links
+    !linksArr.length && prop.tour_url         && { lbl: 'Tour 360',     url: prop.tour_url,          icon: '360 VR' },
+    !linksArr.length && prop.album_fotos_url  && { lbl: 'Galeria fotos', url: prop.album_fotos_url,  icon: 'FOTOS'  },
+    !linksArr.length && prop.drive_folder_url && { lbl: 'Carpeta',      url: prop.drive_folder_url,  icon: 'DRIVE'  },
+    !linksArr.length && prop.video_url        && { lbl: 'Video',        url: prop.video_url,         icon: 'VIDEO'  },
+  ].filter(Boolean).filter(c => c.url).slice(0, 8)
 
   if (ctas.length) {
     // Asegurar espacio (CTA box mide 14mm de alto)

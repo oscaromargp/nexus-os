@@ -11,7 +11,7 @@
 // Resp: { report_id, generated_at } | { error }
 
 import { createClient } from '@supabase/supabase-js'
-import { buildReportPrompt, getProposito } from '../src/lib/report-prompt.js'
+import { buildReportPrompt, getProposito } from './_lib/report-prompt.js'
 
 const GEMINI_MODEL = 'gemini-1.5-flash'
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`

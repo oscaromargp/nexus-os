@@ -185,6 +185,7 @@
 
     let _currentFotos = []
     let _currentIdx   = 0
+    let _currentLinks = []
     let _prop         = null
 
     function esc(s)  { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
@@ -211,6 +212,139 @@
         headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer '+SUPABASE_KEY }
       })
       return (await res.json())?.[0] || null
+    }
+
+    async function fetchPropLinks(propId) {
+      try {
+        const r = await fetch(
+          `${SUPABASE_URL}/rest/v1/property_links?property_id=eq.${propId}&order=orden.asc&select=*`,
+          { headers: { apikey: SUPABASE_KEY, Authorization: 'Bearer '+SUPABASE_KEY } }
+        )
+        return (await r.json()) || []
+      } catch { return [] }
+    }
+
+    // Convierte un valor (puede ser URL o texto random) en una URL utilizable
+    function safeUrl(s) {
+      if (!s) return null
+      const t = String(s).trim()
+      if (/^https?:\/\//i.test(t)) return t
+      return null
+    }
+
+    // Detecta YouTube ID en url o devuelve null
+    function ytId(u) {
+      if (!u) return null
+      const s = String(u)
+      const m = s.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/))([a-zA-Z0-9_-]{11})/)
+      return m ? m[1] : null
+    }
+    function ytThumb(id) { return `https://img.youtube.com/vi/${id}/hqdefault.jpg` }
+
+    // Construye el bloque de multimedia con todos los links agrupados por tipo
+    function renderMultimediaBlock(links, p) {
+      if (!links?.length && !p.video_url && !p.album_fotos_url && !p.tour_url && !p.drive_folder_url) return ''
+      const norm = links.map(l => {
+        const url = safeUrl(l.url) || safeUrl(l.label) // tolera la inversión url/label
+        const label = safeUrl(l.url) ? (l.label || '') : (l.label && !safeUrl(l.label) ? l.label : '')
+        return { tipo: l.tipo || 'otro', url, label: label || l.label || '' }
+      }).filter(l => l.url)
+
+      // legacy single fields → tratamos como link extra si existen y no están repetidos
+      const legacy = [
+        p.video_url        && { tipo:'video',   url: safeUrl(p.video_url),        label: '' },
+        p.album_fotos_url  && { tipo:'foto',    url: safeUrl(p.album_fotos_url),  label: '' },
+        p.tour_url         && { tipo:'tour',    url: safeUrl(p.tour_url),         label: '' },
+        p.drive_folder_url && { tipo:'archivo', url: safeUrl(p.drive_folder_url), label: '' },
+      ].filter(Boolean).filter(l => l.url)
+      legacy.forEach(l => { if (!norm.some(x => x.url === l.url)) norm.push(l) })
+
+      const byTipo = { video: [], foto: [], tour: [], archivo: [], otro: [] }
+      norm.forEach(l => { (byTipo[l.tipo] || byTipo.otro).push(l) })
+
+      const blocks = []
+
+      // Videos (con thumbnail YouTube si aplica)
+      if (byTipo.video.length) {
+        blocks.push(`
+          <div class="section">
+            <div class="section-title">🎥 Videos</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+              ${byTipo.video.map(v => {
+                const yt = ytId(v.url)
+                const thumb = yt ? ytThumb(yt) : null
+                return `
+                  <a href="${esc(v.url)}" target="_blank" rel="noopener"
+                    style="position:relative;display:block;border-radius:10px;overflow:hidden;background:#000;text-decoration:none;border:1px solid rgba(255,255,255,0.08);">
+                    ${thumb ? `<img src="${thumb}" alt="Video" style="width:100%;height:130px;object-fit:cover;"/>` :
+                      `<div style="width:100%;height:130px;display:flex;align-items:center;justify-content:center;background:rgba(220,38,38,0.12);font-size:36px;">🎥</div>`}
+                    <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.25);">
+                      <div style="background:rgba(220,38,38,0.92);color:#fff;border-radius:999px;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:18px;">▶</div>
+                    </div>
+                    ${v.label ? `<div style="position:absolute;bottom:0;left:0;right:0;padding:6px 10px;background:linear-gradient(to top,rgba(0,0,0,0.85),transparent);font-size:11px;color:#fff;font-weight:600;">${esc(v.label)}</div>` : ''}
+                  </a>`
+              }).join('')}
+            </div>
+          </div>`)
+      }
+
+      // Tours 360°
+      if (byTipo.tour.length) {
+        blocks.push(`
+          <div class="section">
+            <div class="section-title">🌐 Tours 360°</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
+              ${byTipo.tour.map(t => `
+                <a href="${esc(t.url)}" target="_blank" rel="noopener"
+                  style="display:flex;align-items:center;gap:10px;padding:14px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);border-radius:10px;color:#a78bfa;text-decoration:none;font-size:13px;font-weight:600;">
+                  <span style="font-size:24px;">🌐</span>
+                  <div style="flex:1;min-width:0;">
+                    <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.label || 'Abrir tour 360°')}</div>
+                    <div style="font-size:10px;color:#7c3aed;opacity:0.7;margin-top:2px;">Vista inmersiva ↗</div>
+                  </div>
+                </a>`).join('')}
+            </div>
+          </div>`)
+      }
+
+      // Álbumes de fotos externos
+      if (byTipo.foto.length) {
+        blocks.push(`
+          <div class="section">
+            <div class="section-title">📷 Álbumes</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;">
+              ${byTipo.foto.map(t => `
+                <a href="${esc(t.url)}" target="_blank" rel="noopener"
+                  style="display:flex;align-items:center;gap:10px;padding:14px;background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.25);border-radius:10px;color:#fbbf24;text-decoration:none;font-size:13px;font-weight:600;">
+                  <span style="font-size:24px;">📷</span>
+                  <div style="flex:1;min-width:0;">
+                    <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.label || 'Abrir álbum')}</div>
+                    <div style="font-size:10px;color:#d97706;opacity:0.7;margin-top:2px;">Galería externa ↗</div>
+                  </div>
+                </a>`).join('')}
+            </div>
+          </div>`)
+      }
+
+      // Archivos / docs
+      const archivosYOtros = [...byTipo.archivo, ...byTipo.otro]
+      if (archivosYOtros.length) {
+        blocks.push(`
+          <div class="section">
+            <div class="section-title">📁 Archivos y documentos</div>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              ${archivosYOtros.map(t => `
+                <a href="${esc(t.url)}" target="_blank" rel="noopener"
+                  style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.2);border-radius:8px;color:#60a5fa;text-decoration:none;font-size:13px;">
+                  <span style="font-size:18px;">📄</span>
+                  <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(t.label || t.url)}</span>
+                  <span style="font-size:11px;opacity:0.6;">↗</span>
+                </a>`).join('')}
+            </div>
+          </div>`)
+      }
+
+      return blocks.join('')
     }
 
     // ── Calculadora hipotecaria ──────────────────────────────────────────────
@@ -283,12 +417,55 @@
       const agEmail   = new URLSearchParams(location.search).get('ag_email')  || ''
       const agAgencia = new URLSearchParams(location.search).get('ag_agencia')|| 'Nexus OS Inmobiliario'
 
-      // OG tags
-      document.title = title+' — Nexus OS'
-      document.getElementById('og-title').content       = title+' · '+precio
-      document.getElementById('og-description').content = [ubicCity, ops.join('/').toUpperCase(), precio].filter(Boolean).join(' · ')
+      // ── SEO + Open Graph dinámicos ───────────────────────────────────────
+      const seoTitle = p.seo_title || (title + ' · ' + precio)
+      const seoDesc  = p.seo_description ||
+        [ubicCity, ops.join('/').toUpperCase(), precio, p.descripcion?.slice(0, 140)].filter(Boolean).join(' · ')
+      const ogImg = (fotos[0]?.url || fotos[0]?.thumb_url) ||
+        (_currentLinks.find(l => l.tipo === 'foto')?.url || '')
+
+      document.title = seoTitle + ' — Nexus OS'
+      document.getElementById('og-title').content       = seoTitle
+      document.getElementById('og-description').content = seoDesc
       document.getElementById('og-url').content         = location.href
-      if (fotos[0]) document.getElementById('og-image').content = fotos[0].url||fotos[0].thumb_url||''
+      if (ogImg) document.getElementById('og-image').content = ogImg
+
+      const setMeta = (name, content, isProp = false) => {
+        const attr = isProp ? 'property' : 'name'
+        let el = document.querySelector(`meta[${attr}="${name}"]`)
+        if (!el) { el = document.createElement('meta'); el.setAttribute(attr, name); document.head.appendChild(el) }
+        el.setAttribute('content', content)
+      }
+      setMeta('description', seoDesc)
+      if (p.seo_keywords) setMeta('keywords', p.seo_keywords)
+      setMeta('twitter:card', 'summary_large_image')
+      setMeta('twitter:title', seoTitle)
+      setMeta('twitter:description', seoDesc)
+      if (ogImg) setMeta('twitter:image', ogImg)
+      setMeta('og:type', 'product', true)
+      setMeta('og:site_name', 'Nexus OS Inmobiliario', true)
+      if (p.precio_venta) setMeta('product:price:amount', String(p.precio_venta), true)
+      setMeta('product:price:currency', p.moneda || 'MXN', true)
+
+      // JSON-LD Schema.org — boost SEO
+      const jsonLd = {
+        '@context': 'https://schema.org',
+        '@type': 'Product',
+        name: seoTitle,
+        description: seoDesc,
+        image: ogImg || undefined,
+        offers: p.precio_venta ? {
+          '@type': 'Offer',
+          price: p.precio_venta,
+          priceCurrency: p.moneda || 'MXN',
+          availability: 'https://schema.org/InStock',
+        } : undefined,
+        category: TIPO_NAMES[tipo] || tipo,
+      }
+      const ldScript = document.createElement('script')
+      ldScript.type = 'application/ld+json'
+      ldScript.textContent = JSON.stringify(jsonLd)
+      document.head.appendChild(ldScript)
 
       const specs = [
         p.recamaras        ? `<span class="spec-pill">🛏 ${p.recamaras} rec.</span>`                                : '',
@@ -422,25 +599,8 @@
                 </a>` : ''}
             </div>
 
-            <!-- ═══ VIDEO (después del mapa) ═══════════════════════════════ -->
-            ${videoYT ? `
-              <div class="section" style="background:rgba(220,38,38,0.04);border:1px solid rgba(220,38,38,0.15);border-radius:14px;padding:16px;">
-                <div class="section-title" style="color:#fca5a5;">▶ Video recorrido</div>
-                <div class="yt-embed">
-                  <iframe src="https://www.youtube.com/embed/${videoYT}?rel=0&modestbranding=1"
-                    title="Video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowfullscreen></iframe>
-                </div>
-              </div>` : (p.video_url ? `
-              <div class="section" style="background:rgba(220,38,38,0.04);border:1px solid rgba(220,38,38,0.15);border-radius:14px;padding:16px;">
-                <div class="section-title" style="color:#fca5a5;">▶ Video recorrido</div>
-                <a href="${esc(p.video_url)}" target="_blank" rel="noopener"
-                  style="display:inline-flex;align-items:center;gap:7px;padding:11px 18px;
-                  background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.3);color:#fca5a5;
-                  border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;">
-                  ▶ Ver video del inmueble
-                </a>
-              </div>` : '')}
+            <!-- ═══ MULTIMEDIA (videos, tours 360, álbumes, archivos) ═══ -->
+            ${renderMultimediaBlock(_currentLinks, p)}
 
             <!-- Folio -->
             <div style="font-size:11px;color:#4b5563;margin-top:24px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.05);text-align:center;">
@@ -477,8 +637,8 @@
               </button>
             </div>
 
-            <!-- Calculadora hipotecaria -->
-            ${p.precio_venta ? `
+            <!-- Calculadora hipotecaria (solo si p.mostrar_hipoteca y hay precio_venta) -->
+            ${p.precio_venta && p.mostrar_hipoteca !== false ? `
               <div class="card">
                 <div class="card-title">🏦 Calculadora hipotecaria</div>
                 <label style="font-size:11px;color:#64748b;display:block;margin-bottom:4px;">Precio ($)</label>
@@ -588,8 +748,9 @@
         return
       }
       try {
-        const prop = await fetchProp(id)
+        const [prop, links] = await Promise.all([fetchProp(id), fetchPropLinks(id)])
         if (!prop) throw new Error('Propiedad no disponible o retirada')
+        _currentLinks = links || []
         render(prop)
       } catch(e) {
         document.getElementById('root').innerHTML =

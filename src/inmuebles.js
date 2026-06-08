@@ -1145,6 +1145,28 @@ export function openPropModal(id = null) {
               style="accent-color:#22d3ee;width:15px;height:15px;"/>
             Mostrar ubicación exacta en fichas públicas (desmarca para ocultar el pin exacto)
           </label>
+          <!-- Mostrar calculadora hipotecaria -->
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:#94a3b8;margin-top:8px;">
+            <input type="checkbox" id="prop-mostrar-hipoteca" ${(prop?.mostrar_hipoteca !== false)?'checked':''}
+              style="accent-color:#22d3ee;width:15px;height:15px;"/>
+            Mostrar calculadora hipotecaria en la ficha pública (desmarca para operaciones de contado o terrenos sin financiamiento)
+          </label>
+        </div>
+
+        <!-- ── Sección: SEO (opcional) ── -->
+        <div style="margin-bottom:22px;">
+          <div style="font-size:11px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;display:flex;align-items:center;gap:6px;">
+            🔎 SEO &amp; Compartir en redes <span style="font-weight:400;color:#64748b;text-transform:none;">(opcional)</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;margin-bottom:10px;line-height:1.6;">
+            Personaliza cómo se ve la ficha pública en buscadores y cuando alguien comparte el link en WhatsApp/Facebook/Twitter. Si los dejas vacíos, se generan automáticamente desde el título y descripción.
+          </div>
+          ${_field('prop-seo-title','Título SEO','text',val('seo_title'),'Lote 034 La Ventana BCS · 1,200 m² frente a playa $850K USD')}
+          <div style="font-size:10px;color:#475569;margin:-6px 0 10px;">Ideal 60-70 caracteres. Aparece en Google y como título del link compartido.</div>
+          ${_field('prop-seo-desc','Descripción SEO','text',val('seo_description'),'Inversión patrimonial en zona kiteboarding, vista al Cerralvo, 1,200 m², agua y luz disponibles…')}
+          <div style="font-size:10px;color:#475569;margin:-6px 0 10px;">Ideal 150-160 caracteres. Aparece debajo del título en Google.</div>
+          ${_field('prop-seo-keywords','Keywords (separadas por coma)','text',val('seo_keywords'),'terreno la ventana, lote bcs, inversión inmobiliaria, kiteboarding')}
+          <div style="font-size:10px;color:#475569;margin:-6px 0 4px;">Palabras clave que describen este inmueble (pueblo, deporte, tipo de inversor objetivo, etc.).</div>
         </div>
 
         <!-- ── Sección: Dimensiones ── -->
@@ -1450,6 +1472,36 @@ export async function openPropDetail(id) {
     const docsEl = document.getElementById('dpanel-docs')
     if (docsEl && docsEl.dataset.propId === id) docsEl.innerHTML = renderDocumentos(id)
   })
+  // Cargar property_links y meterlos en el panel info bajo "Multimedia"
+  fetchLinksFor(id).then(links => {
+    const mount = document.getElementById(`dlinks-${id}`)
+    if (!mount) return
+    if (!links?.length) {
+      mount.innerHTML = `<div style="font-size:12px;color:#475569;padding:8px 0;">Sin links adjuntos</div>`
+      return
+    }
+    const ICON = { video:'🎥', foto:'📷', tour:'🌐', archivo:'📁', otro:'🔗' }
+    mount.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;">
+        ${links.map(l => {
+          // Tolerar inversión url/label que el usuario haya hecho
+          const isUrl = s => /^https?:\/\//i.test(String(s||''))
+          const url = isUrl(l.url) ? l.url : (isUrl(l.label) ? l.label : l.url)
+          const label = isUrl(l.url) ? (l.label||'') : (isUrl(l.label) ? l.url : (l.label||''))
+          return `
+            <a href="${_esc(url)}" target="_blank" rel="noopener"
+              style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:rgba(255,255,255,0.04);
+              border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:#cbd5e1;text-decoration:none;font-size:12px;">
+              <span style="font-size:18px;">${ICON[l.tipo]||'🔗'}</span>
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                ${_esc(label || l.tipo)}
+              </span>
+              <span style="font-size:10px;opacity:0.6;">↗</span>
+            </a>`
+        }).join('')}
+      </div>
+    `
+  })
   loadInteractions(id).then(() => {
     const el = document.getElementById(`inter-list-${id}`)
     if (el) el.outerHTML = _renderHistorial(id).match(/id="inter-list-[^"]+">[\s\S]*?<\/div>/)?.[0] || ''
@@ -1688,6 +1740,12 @@ export async function openPropDetail(id) {
               <button onclick="const el=document.getElementById('desc-text-${p.id}');const exp=el.style.webkitLineClamp==='unset';el.style.webkitLineClamp=exp?'4':'unset';this.textContent=exp?'Ver más ▾':'Ver menos ▴'"
                 style="background:none;border:none;color:#22d3ee;font-size:12px;cursor:pointer;padding:4px 0;margin-top:4px;">Ver más ▾</button>
             </div>` : ''}
+
+          <!-- Multimedia links (cargados async desde property_links) -->
+          <div style="margin-bottom:16px;">
+            <div style="font-size:10px;font-weight:700;color:#22d3ee;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Multimedia adjunta</div>
+            <div id="dlinks-${p.id}" style="font-size:12px;color:#475569;">Cargando…</div>
+          </div>
 
           <!-- Atributos enriquecidos: vista/orientación/régimen/uso suelo/clave catastral -->
           ${(p.vista||p.orientacion||p.regimen_propiedad||p.uso_suelo||p.estatus_obra||p.clave_catastral||p.topografia) ? `
@@ -1952,6 +2010,10 @@ export async function saveProp(id) {
     estatus_obra:      gv('prop-estatus-obra'),
     clave_catastral:   gv('prop-clave-catastral'),
     show_exact_location: g('prop-show-pin') ? g('prop-show-pin').checked : true,
+    mostrar_hipoteca:    g('prop-mostrar-hipoteca') ? g('prop-mostrar-hipoteca').checked : true,
+    seo_title:           gv('prop-seo-title'),
+    seo_description:     gv('prop-seo-desc'),
+    seo_keywords:        gv('prop-seo-keywords'),
     uso_suelo:         gv('prop-uso-suelo'),
     topografia:        gv('prop-topografia'),
     // Industrial
@@ -2470,7 +2532,9 @@ window.propExportPDF = async (propId) => {
   const btn = document.querySelector(`button[onclick*="propExportPDF('${propId}')"]`)
   if (btn) { btn.textContent = '⏳ Generando...'; btn.disabled = true }
   try {
-    await pdfFichaCaptacion(p, emisor)
+    // Carga property_links y los inyecta al objeto del inmueble para que el PDF los use
+    const links = await fetchLinksFor(p.id)
+    await pdfFichaCaptacion({ ...p, _links: links }, emisor)
   } catch (err) {
     console.error('[inmuebles] propExportPDF:', err)
     window.showToast?.('❌ Error al generar PDF: ' + err.message)
