@@ -66,6 +66,7 @@ async function fetchOverpass(lat, lng, radius) {
       'User-Agent': 'NexusOS/1.0 (https://nexus-os-chi.vercel.app)',
     },
     body: 'data=' + encodeURIComponent(query),
+    signal: AbortSignal.timeout(6000),
   })
   let data
   if (!r.ok) {
@@ -78,6 +79,7 @@ async function fetchOverpass(lat, lng, radius) {
         'User-Agent': 'NexusOS/1.0 (https://nexus-os-chi.vercel.app)',
       },
       body: 'data=' + encodeURIComponent(query),
+      signal: AbortSignal.timeout(6000),
     })
     if (!r2.ok) throw new Error('Overpass ' + r.status + ' / mirror ' + r2.status)
     data = await r2.json()
@@ -120,7 +122,7 @@ async function fetchClima(lat, lng) {
   const start = new Date(end.getFullYear() - 5, 0, 1)
   const fmt = d => d.toISOString().slice(0, 10)
   const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${fmt(start)}&end_date=${fmt(end)}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto`
-  const r = await fetch(url)
+  const r = await fetch(url, { signal: AbortSignal.timeout(6000) })
   if (!r.ok) throw new Error('Open-Meteo ' + r.status)
   const data = await r.json()
   const daily = data.daily || {}
@@ -144,7 +146,10 @@ async function fetchClima(lat, lng) {
 
 async function fetchUbicacion(lat, lng) {
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=es-MX&zoom=14`
-  const r = await fetch(url, { headers: { 'User-Agent': 'NexusOS/1.0' } })
+  const r = await fetch(url, {
+    headers: { 'User-Agent': 'NexusOS/1.0' },
+    signal: AbortSignal.timeout(5000),
+  })
   if (!r.ok) return null
   const d = await r.json()
   const a = d.address || {}

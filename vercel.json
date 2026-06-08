@@ -2,6 +2,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "functions": {
+    "api/generate-report.js": { "maxDuration": 60 },
+    "api/property-context.js": { "maxDuration": 30 }
+  },
   "rewrites": [
     { "source": "/app",            "destination": "/app.html" },
     { "source": "/reset-password", "destination": "/reset-password.html" },
