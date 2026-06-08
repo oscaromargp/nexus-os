@@ -2416,6 +2416,9 @@ nav#sidebar .nav-items {
         <button class="cfg-tab" onclick="switchCfgTab('feedback',this)">
           <span class="cfg-tab-icon">💬</span>Feedback
         </button>
+        <button class="cfg-tab" onclick="switchCfgTab('uso',this)">
+          <span class="cfg-tab-icon">📊</span>Uso
+        </button>
       </div>
 
       <!-- ── Panel: Perfil ── -->
@@ -2705,6 +2708,25 @@ nav#sidebar .nav-items {
             <button id="btn-delete-account" class="nav-item" style="width:100%;justify-content:center;border:1px solid rgba(239,68,68,0.3);color:#f87171;">
               ⚠ Eliminar Cuenta Permanentemente
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Panel: Uso (Telemetría privada) ── -->
+      <div id="cfg-panel-uso" class="cfg-panel">
+        <div class="settings-card" style="margin-bottom:20px;">
+          <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">📊 Uso de la App</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin:0 0 16px;">
+            Métricas privadas — solo tú las ves, vivirán en tu Supabase. Te ayudan a saber qué módulos usas más.
+          </p>
+          <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-main);cursor:pointer;margin-bottom:14px;">
+            <input type="checkbox" id="telemetry-enabled" checked
+              onchange="window.nexusTelemetry?.setTelemetryEnabled?.(this.checked)"
+              style="accent-color:var(--accent-cyan);width:18px;height:18px;"/>
+            Telemetría activa
+          </label>
+          <div id="uso-stats-mount">
+            <div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px;">Cargando estadísticas…</div>
           </div>
         </div>
       </div>

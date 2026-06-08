@@ -213,6 +213,7 @@ export async function openReportModal(propertyOrId) {
         return
       }
       window.showToast?.('✨ Reporte generado — abriendo…')
+      try { window.nexusTrack?.('action:report_generate', { property_id: property.id, proposito: propValue }) } catch {}
       overlay.remove()
       window.open(`/reporte?id=${data.report_id}`, '_blank')
     } catch (e) {

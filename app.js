@@ -1,5 +1,6 @@
 import Fuse from 'fuse.js'
 import { supabase } from './src/supabase.js'
+import { track } from './src/telemetry.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -550,6 +551,7 @@ window.onerror = (msg, _src, line, _col, err) => {
   console.error('[nexus:error]', text, 'línea', line)
   // Silenciar errores cosméticos conocidos que se generaban en loop
   if (/mvInit is not a function/i.test(text)) return false
+  try { track('error:client', { message: text, line, stack: err?.stack?.slice(0, 500) }) } catch {}
   showToast(`⚠️ ${text}`)
   return false
 }
@@ -557,6 +559,7 @@ window.onunhandledrejection = (e) => {
   const text = (e.reason?.message || String(e.reason)).slice(0, 120)
   console.error('[nexus:rejection]', text)
   if (/mvInit is not a function/i.test(text)) return
+  try { track('error:rejection', { message: text }) } catch {}
   showToast(`⚠️ ${text}`)
 }
 
@@ -6517,6 +6520,8 @@ document.querySelectorAll('.nav-item:not(#btn-logout)').forEach(btn => {
 })
 
 window.switchView = function(viewName) {
+  // Telemetría: cierra el módulo previo y abre el nuevo
+  try { window.trackViewChange?.(viewName) } catch {}
   document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'))
   const navBtn = document.querySelector(`.nav-item[data-view="${viewName}"]`)
   if (navBtn) navBtn.classList.add('active')
@@ -13467,6 +13472,118 @@ window.switchCfgTab = function(panelId, btn) {
   if (panel) panel.classList.add('active')
   if (btn)   btn.classList.add('active')
   if (panelId === 'conexiones') _initGoogleConnector()
+  if (panelId === 'uso') _initUsoTab()
+}
+
+// ── Tab Uso (Telemetría privada) ─────────────────────────────────────────────
+async function _initUsoTab() {
+  const cb = document.getElementById('telemetry-enabled')
+  if (cb) cb.checked = window.nexusTelemetry?.isTelemetryEnabled?.() ?? true
+  const mount = document.getElementById('uso-stats-mount')
+  if (!mount) return
+  if (localStorage.getItem('nexus_admin_bypass') === 'true') {
+    mount.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">
+      🛟 Modo demo activo — la telemetría se omite. Inicia sesión real para registrar uso.
+    </div>`
+    return
+  }
+  mount.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text-muted);font-size:13px;">Cargando estadísticas…</div>`
+  try {
+    // Última semana
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data, error } = await supabase
+      .from('usage_events')
+      .select('event,module,created_at,props')
+      .gte('created_at', since)
+      .order('created_at', { ascending: false })
+      .limit(2000)
+    if (error) throw error
+    const events = data || []
+
+    // Agregaciones
+    const byModule = {}
+    const byEvent = {}
+    let errors = 0
+    let captureCount = 0
+    let reportCount = 0
+    let timeByModule = {}
+    events.forEach(e => {
+      byEvent[e.event] = (byEvent[e.event] || 0) + 1
+      if (e.module) byModule[e.module] = (byModule[e.module] || 0) + 1
+      if (e.event.startsWith('error:')) errors++
+      if (e.event === 'action:property_capture') captureCount++
+      if (e.event === 'action:report_generate') reportCount++
+      if (e.event === 'time:module_close' && e.module && e.props?.duration_ms) {
+        timeByModule[e.module] = (timeByModule[e.module] || 0) + Math.floor(e.props.duration_ms / 1000)
+      }
+    })
+    const topModules = Object.entries(byModule).sort((a, b) => b[1] - a[1]).slice(0, 8)
+    const topEvents = Object.entries(byEvent).sort((a, b) => b[1] - a[1]).slice(0, 6)
+    const topTimes = Object.entries(timeByModule).sort((a, b) => b[1] - a[1]).slice(0, 5)
+
+    const fmtTime = s => s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'
+
+    mount.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:20px;">
+        <div style="background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.2);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Total eventos</div>
+          <div style="font-size:22px;font-weight:800;color:var(--accent-cyan);margin-top:4px;">${events.length}</div>
+          <div style="font-size:10px;color:var(--text-dim);">últimos 7 días</div>
+        </div>
+        <div style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Inmuebles captados</div>
+          <div style="font-size:22px;font-weight:800;color:#4ade80;margin-top:4px;">${captureCount}</div>
+        </div>
+        <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.2);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Reportes IA</div>
+          <div style="font-size:22px;font-weight:800;color:#facc15;margin-top:4px;">${reportCount}</div>
+        </div>
+        <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:12px;text-align:center;">
+          <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Errores</div>
+          <div style="font-size:22px;font-weight:800;color:#f87171;margin-top:4px;">${errors}</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:18px;">
+        <h3 style="font-size:12px;color:var(--accent-cyan);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">🏆 Módulos más usados</h3>
+        ${topModules.length === 0 ? '<div style="color:var(--text-muted);font-size:13px;padding:10px;">Sin datos aún. Usa la app y vuelve aquí.</div>' : topModules.map(([m, c]) => {
+          const max = topModules[0][1]
+          const pct = Math.round((c / max) * 100)
+          return `
+            <div style="margin-bottom:6px;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;">
+                <span style="color:var(--text-main);text-transform:capitalize;">${m}</span>
+                <span style="color:var(--text-muted);">${c}</span>
+              </div>
+              <div style="height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;">
+                <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,var(--accent-cyan),#0891b2);"></div>
+              </div>
+            </div>`
+        }).join('')}
+      </div>
+
+      ${topTimes.length > 0 ? `
+      <div style="margin-bottom:18px;">
+        <h3 style="font-size:12px;color:var(--accent-cyan);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">⏱ Tiempo por módulo</h3>
+        ${topTimes.map(([m, s]) => `
+          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px;">
+            <span style="color:var(--text-main);text-transform:capitalize;">${m}</span>
+            <span style="color:#a78bfa;font-family:monospace;">${fmtTime(s)}</span>
+          </div>`).join('')}
+      </div>` : ''}
+
+      <div>
+        <h3 style="font-size:12px;color:var(--accent-cyan);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">📋 Eventos más comunes</h3>
+        ${topEvents.map(([e, c]) => `
+          <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;font-family:monospace;">
+            <span style="color:var(--text-secondary);">${e}</span>
+            <span style="color:var(--text-muted);">${c}</span>
+          </div>`).join('')}
+      </div>
+    `
+  } catch (err) {
+    mount.innerHTML = `<div style="padding:20px;color:#f87171;font-size:13px;">Error: ${err.message}</div>`
+  }
 }
 
 // ── Conector Google Drive ───────────────────────────────────────────────────

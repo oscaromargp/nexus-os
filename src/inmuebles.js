@@ -2070,6 +2070,7 @@ export async function saveProp(id) {
   renderInmuebles()
   if (typeof window.showToast === 'function')
     window.showToast(id ? '✅ Propiedad actualizada' : '✅ Propiedad captada')
+  try { window.nexusTrack?.(id ? 'action:property_update' : 'action:property_capture', { tipo, folio: payload.folio_interno }) } catch {}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
