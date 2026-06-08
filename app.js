@@ -471,19 +471,34 @@ loadSystemSettings()
   document.getElementById('cronica-date')?.setAttribute('value', new Date().toISOString().split('T')[0])
   drainOfflineQueue()
   updateOfflineBar()
-  window.mvInit()  // pre-warm TC cache for Movimientos
+  // mvInit puede no estar declarado todavía si se carga después. Lo llamamos
+  // cuando esté disponible (sin bloquear init).
+  if (typeof window.mvInit === 'function') {
+    try { window.mvInit() } catch (e) { console.warn('[mvInit]', e) }
+  } else {
+    setTimeout(() => { try { window.mvInit?.() } catch {} }, 500)
+  }
 })()
+
+// Stub temprano para mvInit/mvFetchTcAndRender — se reemplazan más adelante.
+// Evita ReferenceErrors cuando la app intenta llamarlos antes de que esté listo
+// el módulo de Movimientos (lo que provocaba un loop de toasts en navegación).
+if (typeof window.mvInit !== 'function') window.mvInit = () => {}
+if (typeof window.mvFetchTcAndRender !== 'function') window.mvFetchTcAndRender = () => {}
 
 // ── Global error handler — toast en pantalla en vez de crash silencioso ─────────
 window.onerror = (msg, _src, line, _col, err) => {
   const text = (err?.message || String(msg)).slice(0, 120)
   console.error('[nexus:error]', text, 'línea', line)
+  // Silenciar errores cosméticos conocidos que se generaban en loop
+  if (/mvInit is not a function/i.test(text)) return false
   showToast(`⚠️ ${text}`)
   return false
 }
 window.onunhandledrejection = (e) => {
   const text = (e.reason?.message || String(e.reason)).slice(0, 120)
   console.error('[nexus:rejection]', text)
+  if (/mvInit is not a function/i.test(text)) return
   showToast(`⚠️ ${text}`)
 }
 

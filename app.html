@@ -1441,17 +1441,20 @@ nav#sidebar .nav-items {
         margin-bottom: 14px !important;
       }
 
-      /* Modales full-screen en móvil */
+      /* Modales full-screen en móvil — solo el CONTENEDOR top-level del modal
+         (hijo directo del overlay). NO aplicar a cualquier div dentro del modal
+         porque rompe headers/sections que también son <div>. */
       #auth-modal .modal-box,
-      .modal-overlay > div,
-      [id$="-modal"] > div,
-      [id$="-overlay"] > div {
+      .modal-overlay > .modal-box,
+      [id$="-overlay"] > div:first-child,
+      [id$="-modal-overlay"] > div:first-child {
         max-width: 100vw !important;
         max-height: 100vh !important;
         width: 100% !important;
-        height: 100% !important;
+        height: 100vh !important;
         border-radius: 0 !important;
         margin: 0 !important;
+        overflow-y: auto !important;
       }
 
       /* Forms: todas las columnas a 1 en móvil */
