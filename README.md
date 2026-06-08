@@ -10,12 +10,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.5.0-green?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.6.0-purple?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/mobile-PWA%20ready-22d3ee?style=for-the-badge" alt="Mobile PWA"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
   <img src="https://img.shields.io/badge/deploy-Vercel-black?style=for-the-badge&logo=vercel" alt="Deploy Vercel"/>
   <img src="https://img.shields.io/badge/PRs-welcome-orange?style=for-the-badge" alt="PRs Welcome"/>
-  <img src="https://img.shields.io/badge/made%20with-❤️-red?style=for-the-badge" alt="Made with love"/>
 </p>
 
 <p align="center">
@@ -30,6 +30,26 @@
   <a href="#-deploy">Deploy</a> •
   <a href="#-contacto">Contacto</a>
 </p>
+
+---
+
+## 🆕 Novedades v2.6.0 — Mobile First
+
+**A un paso del APK.** La app se reescribió pensando en tu cel:
+
+| Feature | Detalle |
+|---|---|
+| 📱 **PWA Instalable** | Banner "Instalar Nexus OS" en Chrome/Safari. Queda como app nativa en home screen. Sin tiendas. |
+| 🔍 **Search ⌘+K global** | Fuzzy search en TODOS los nodos + propiedades. Atajo de teclado o botón flotante en cel. |
+| 🔔 **Push Notifications** | Web Push API + VAPID — estándar W3C. Sin Firebase, sin OneSignal. |
+| ✉ **Emails vía n8n** | Tu propio n8n + SMTP. Sin Resend, sin lock-in. |
+| 📦 **BYOS Storage** | Bring Your Own Storage: Drive, Dropbox, Nextcloud, S3 propio. |
+| ✨ **Reportes IA Geomarketing** | POIs + clima + PESTEL/FODA con Gemini + OpenStreetMap + INEGI. |
+| 📊 **Telemetría Privada** | Métricas de uso en TU Supabase. Nadie más las ve. |
+| 🎨 **Design Tokens** | Sistema centralizado. Base para white-labeling futuro. |
+| 🌟 **Reportes por inmueble** | Historial de reportes por propiedad con presentador personalizado. |
+| 🗺 **Mapa Leaflet picker** | Para terrenos sin dirección clara. Geocoding inverso automático. |
+| 🏷 **OG dinámico + JSON-LD** | Cuando compartes una propiedad en redes, sale título, imagen y precio reales. |
 
 ---
 
