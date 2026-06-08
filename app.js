@@ -424,6 +424,47 @@ function _normNode(n) {
 // ─────────────────────────────────────────
 fixLayoutDOM()   // Run BEFORE async IIFE — DOM is ready at module parse time
 
+// ── Labels cortos para drawer móvil ────────────────────────────────────────
+// Algunos nombres ("Cotizaciones y Ventas", "Agenda Financiera") son demasiado
+// largos para el drawer de 76px. Los reemplazamos por versiones cortas SOLO
+// para el text node que va junto al span.nav-icon dentro de cada button.
+;(() => {
+  const SHORT = {
+    'feed':         'Inicio',
+    'kanban':       'Kanban',
+    'calendar':     'Crónica',
+    'agenda':       'Agenda',
+    'cotizaciones': 'Ventas',
+    'tags':         'Tags',
+    'movimientos':  'Movs.',
+    'inmuebles':    'Inmuebles',
+    'finance':      'Finanzas',
+    'notes':        'Notas',
+    'proyectos':    'Proyectos',
+    'contacts':     'Contactos',
+    'herramientas': 'Tools',
+    'settings':     'Config',
+    'ayuda':        'Ayuda',
+  }
+  document.querySelectorAll('nav#sidebar .nav-item[data-view]').forEach(btn => {
+    const view = btn.dataset.view
+    const short = SHORT[view]
+    if (!short) return
+    // Guarda el label largo en data-long y reemplaza el text node por el corto.
+    // El icon span queda intacto.
+    const iconSpan = btn.querySelector('.nav-icon')
+    if (!iconSpan) return
+    // Borra todos los nodos de texto después del icon span y agrega uno con short
+    let node = iconSpan.nextSibling
+    while (node) {
+      const next = node.nextSibling
+      if (node.nodeType === 3) node.remove() // text node
+      node = next
+    }
+    btn.appendChild(document.createTextNode(short))
+  })
+})()
+
 ;(async () => {
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
      currentUser = { id: 'admin-uuid-bypass', email: 'admin@nexus.os (Simulado)' }
@@ -6642,23 +6683,27 @@ function fixLayoutDOM() {
         }
         /* Botones: icono arriba (centrado) + label corto debajo */
         nav#sidebar .nav-item {
-          font-size: 9.5px !important;
+          font-size: 9px !important;
           font-weight: 600 !important;
-          padding: 8px 2px 6px !important;
+          padding: 8px 4px 8px !important;
           text-align: center !important;
           display: flex !important;
           flex-direction: column !important;
           align-items: center !important;
-          justify-content: center !important;
-          gap: 4px !important;
+          justify-content: flex-start !important;
+          gap: 5px !important;
           border-radius: 10px !important;
           margin: 2px 4px !important;
-          min-height: auto !important;
-          line-height: 1.15 !important;
+          min-height: 60px !important;
+          line-height: 1.18 !important;
           word-break: break-word !important;
-          overflow-wrap: break-word !important;
+          overflow-wrap: anywhere !important;
           letter-spacing: 0 !important;
+          width: calc(100% - 8px) !important;
+          box-sizing: border-box !important;
+          overflow: visible !important;
         }
+        /* Labels demasiado largos → versión corta (JS los renombra al cargar) */
         nav#sidebar .nav-item .nav-icon {
           font-size: 19px !important;
           width: 19px !important;
@@ -6705,11 +6750,10 @@ function fixLayoutDOM() {
         nav#sidebar {
           position: fixed !important;
           top: 0 !important; left: 0 !important; bottom: 0 !important;
-          width: 80vw !important; max-width: 320px !important;
+          /* width/max-width los define el bloque de drawer slim de arriba */
           z-index: 9100 !important;
           transform: translateX(-100%) !important;
           transition: transform 0.28s cubic-bezier(0.4,0,0.2,1) !important;
-          padding-top: 60px !important;
           box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4) !important;
           overflow-y: auto !important;
           grid-area: auto !important;
