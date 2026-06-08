@@ -6606,9 +6606,9 @@ function fixLayoutDOM() {
       @media (max-width: 768px) {
         /* Drawer slim de SOLO iconos. Ancho compacto, items centrados */
         nav#sidebar {
-          width: 72px !important;
-          max-width: 72px !important;
-          padding: 60px 0 16px !important;
+          width: 56px !important;
+          max-width: 56px !important;
+          padding: 56px 0 12px !important;
           overflow-x: hidden !important;
         }
         nav#sidebar .nav-logo {
@@ -6627,31 +6627,31 @@ function fixLayoutDOM() {
         /* Botones nav-item: solo el icono, centrado, sin label */
         nav#sidebar .nav-item {
           font-size: 0 !important;   /* oculta el text node después del span */
-          padding: 14px 8px !important;
+          padding: 10px 4px !important;
           text-align: center !important;
           display: flex !important;
           align-items: center !important;
           justify-content: center !important;
-          border-radius: 12px !important;
-          margin: 4px 8px !important;
-          min-height: 48px !important;
+          border-radius: 10px !important;
+          margin: 3px 6px !important;
+          min-height: 44px !important;
         }
         nav#sidebar .nav-item .nav-icon {
-          font-size: 22px !important;
-          width: 22px !important;
-          height: 22px !important;
+          font-size: 20px !important;
+          width: 20px !important;
+          height: 20px !important;
           margin: 0 !important;
         }
         nav#sidebar .nav-item .nav-icon i,
         nav#sidebar .nav-item .nav-icon svg {
-          width: 22px !important;
-          height: 22px !important;
+          width: 20px !important;
+          height: 20px !important;
         }
         /* Tooltip nativo del data-tip al mantener pulsado */
         nav#sidebar .nav-item[data-tip]::after {
           content: attr(data-tip);
           position: absolute;
-          left: 76px;
+          left: 60px;
           background: rgba(0,0,0,0.92);
           color: #e8f0f9;
           padding: 6px 10px;
