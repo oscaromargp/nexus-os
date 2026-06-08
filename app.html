@@ -1618,7 +1618,90 @@ nav#sidebar .nav-items {
     🔍
   </button>
   <div id="mobile-nav-backdrop" onclick="document.body.classList.remove('mobile-nav-open')"></div>
-  <style>@media (max-width:768px){#mobile-search-btn{display:flex !important}}</style>
+
+  <!-- Bottom Tab Bar iOS-style (solo móvil) — 5 módulos top + más en drawer -->
+  <nav id="mobile-tabbar" aria-label="Navegación inferior">
+    <button class="mtab" data-view="feed"      onclick="window.switchView?.('feed')">      <span class="mtab-i">⊞</span><span class="mtab-l">Inicio</span></button>
+    <button class="mtab" data-view="inmuebles" onclick="window.switchView?.('inmuebles')"> <span class="mtab-i">🏢</span><span class="mtab-l">Inmuebles</span></button>
+    <button class="mtab mtab-fab" onclick="window.openSpotlight?.()" aria-label="Buscar">  <span style="font-size:18px;">🔍</span></button>
+    <button class="mtab" data-view="finance"   onclick="window.switchView?.('finance')">    <span class="mtab-i">💰</span><span class="mtab-l">Finanzas</span></button>
+    <button class="mtab mtab-more" onclick="document.body.classList.add('mobile-nav-open')"><span class="mtab-i">≡</span><span class="mtab-l">Más</span></button>
+  </nav>
+
+  <style>
+    #mobile-tabbar { display: none; }
+    @media (max-width:768px){
+      #mobile-search-btn { display:flex !important; }
+      #mobile-tabbar {
+        display: flex;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        height: 58px;
+        background: rgba(10, 14, 31, 0.95);
+        backdrop-filter: blur(14px);
+        border-top: 1px solid rgba(255,255,255,0.06);
+        z-index: 9050;
+        padding: 4px 4px calc(4px + env(safe-area-inset-bottom)) 4px;
+        align-items: stretch;
+        justify-content: space-around;
+      }
+      #mobile-tabbar .mtab {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: #64748b;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        font-size: 9px;
+        font-weight: 600;
+        transition: color 0.15s, transform 0.1s;
+        padding: 4px 2px;
+        border-radius: 10px;
+      }
+      #mobile-tabbar .mtab:active { transform: scale(0.92); }
+      #mobile-tabbar .mtab.active { color: #22d3ee; }
+      #mobile-tabbar .mtab .mtab-i { font-size: 18px; line-height: 1; }
+      #mobile-tabbar .mtab .mtab-l { font-size: 9px; }
+      #mobile-tabbar .mtab-fab {
+        flex: 0 0 56px;
+        background: linear-gradient(135deg, #22d3ee, #0891b2);
+        color: #0a0e1f;
+        border-radius: 50%;
+        margin: -16px 4px 0;
+        height: 56px;
+        width: 56px;
+        box-shadow: 0 6px 20px rgba(34,211,238,0.4);
+      }
+      /* Más espacio bottom en main para no tapar contenido con tabbar */
+      main, #main-scroll {
+        padding-bottom: calc(70px + env(safe-area-inset-bottom)) !important;
+      }
+      /* Spotlight container más alto para no tapar tabbar */
+      #spotlight-container {
+        bottom: calc(66px + env(safe-area-inset-bottom)) !important;
+      }
+    }
+  </style>
+  <script>
+    // Resalta el tab activo cuando cambias de vista
+    (function(){
+      const sync = () => {
+        document.querySelectorAll('#mobile-tabbar .mtab[data-view]').forEach(b => {
+          const active = document.querySelector(`.nav-item[data-view="${b.dataset.view}"]`)?.classList.contains('active')
+          b.classList.toggle('active', !!active)
+        })
+      }
+      const observer = new MutationObserver(sync)
+      window.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.nav-item').forEach(b => observer.observe(b, { attributes: true, attributeFilter: ['class'] }))
+        sync()
+      })
+    })()
+  </script>
   <script>
     // Cierra el drawer al hacer click en cualquier nav-item
     document.addEventListener('click', (e) => {
