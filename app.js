@@ -1,6 +1,9 @@
 import Fuse from 'fuse.js'
 import { supabase } from './src/supabase.js'
 import { track } from './src/telemetry.js'
+import './src/spotlight-search.js'
+import './src/email-n8n.js'
+import './src/push-notifications.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -13471,8 +13474,118 @@ window.switchCfgTab = function(panelId, btn) {
   const panel = document.getElementById(`cfg-panel-${panelId}`)
   if (panel) panel.classList.add('active')
   if (btn)   btn.classList.add('active')
-  if (panelId === 'conexiones') _initGoogleConnector()
+  if (panelId === 'conexiones') { _initGoogleConnector(); _initN8nEmailConnector(); _initPushConnector() }
   if (panelId === 'uso') _initUsoTab()
+}
+
+// ── Conector Push Notifications ─────────────────────────────────────────────
+async function _initPushConnector() {
+  const statusEl = document.getElementById('conn-push-status')
+  const btn      = document.getElementById('conn-push-btn')
+  const testBtn  = document.getElementById('conn-push-test')
+  if (!statusEl || !btn) return
+  if (btn.dataset.wired) return
+  btn.dataset.wired = '1'
+
+  const refresh = async () => {
+    if (!(await window.nexusPush.isSupported())) {
+      statusEl.innerHTML = '⚠️ <span style="color:#fbbf24;">No soportado en este navegador</span>'
+      btn.style.display = 'none'
+      return
+    }
+    const sub = await window.nexusPush.getCurrentSubscription()
+    if (sub) {
+      statusEl.innerHTML = '✅ <span style="color:#4ade80;">Activadas</span>'
+      btn.textContent = 'Desactivar'
+      btn.style.background = 'rgba(239,68,68,0.1)'
+      btn.style.borderColor = 'rgba(239,68,68,0.35)'
+      btn.style.color = '#f87171'
+      testBtn.style.display = ''
+    } else {
+      const perm = await window.nexusPush.permission()
+      statusEl.innerHTML = perm === 'denied'
+        ? '🚫 <span style="color:#f87171;">Bloqueadas por el navegador</span>'
+        : '⚪ <span style="color:var(--text-muted);">Inactivas</span> — activa para recibir avisos'
+      btn.textContent = 'Activar'
+      btn.style.background = 'rgba(167,139,250,0.12)'
+      btn.style.borderColor = 'rgba(167,139,250,0.35)'
+      btn.style.color = '#a78bfa'
+      testBtn.style.display = 'none'
+    }
+  }
+  await refresh()
+
+  btn.onclick = async () => {
+    btn.disabled = true
+    try {
+      const sub = await window.nexusPush.getCurrentSubscription()
+      if (sub) { await window.nexusPush.unsubscribe(); showToast?.('🔕 Notificaciones desactivadas') }
+      else     { await window.nexusPush.subscribe();   showToast?.('🔔 Notificaciones activadas') }
+      await refresh()
+    } catch (e) { showToast?.('❌ ' + e.message) }
+    finally { btn.disabled = false }
+  }
+
+  testBtn.onclick = async () => {
+    testBtn.disabled = true
+    testBtn.textContent = '⏳ Enviando…'
+    try {
+      // Para test rápido: muestra notif local sin pasar por backend
+      const reg = await navigator.serviceWorker.ready
+      await reg.showNotification('🚀 Nexus OS', {
+        body: 'Notificaciones funcionando.',
+        icon: '/nexus-icon-192.png',
+        vibrate: [80, 40, 80],
+      })
+      showToast?.('Notificación enviada')
+    } catch (e) { showToast?.('❌ ' + e.message) }
+    finally { testBtn.textContent = '🔔 Test'; testBtn.disabled = false }
+  }
+}
+
+// ── Conector n8n Email ──────────────────────────────────────────────────────
+function _initN8nEmailConnector() {
+  const statusEl = document.getElementById('conn-n8n-email-status')
+  const urlInput = document.getElementById('conn-n8n-email-url')
+  const saveBtn  = document.getElementById('conn-n8n-email-save')
+  const testBtn  = document.getElementById('conn-n8n-email-test')
+  if (!statusEl || !urlInput) return
+  if (saveBtn?.dataset.wired) return
+  if (saveBtn) saveBtn.dataset.wired = '1'
+
+  const current = window.nexusEmail?.getWebhook?.() || ''
+  urlInput.value = current
+  statusEl.innerHTML = current
+    ? '✅ <span style="color:#4ade80;">Configurado</span>'
+    : '⚪ <span style="color:var(--text-muted);">No configurado</span> — pega tu URL de webhook abajo'
+
+  if (saveBtn) saveBtn.onclick = () => {
+    try {
+      window.nexusEmail?.setWebhook?.(urlInput.value)
+      statusEl.innerHTML = urlInput.value
+        ? '✅ <span style="color:#4ade80;">Configurado</span>'
+        : '⚪ <span style="color:var(--text-muted);">Borrado</span>'
+      showToast?.('✓ Webhook guardado')
+    } catch (e) { showToast?.('❌ ' + e.message) }
+  }
+
+  if (testBtn) testBtn.onclick = async () => {
+    const url = urlInput.value || window.nexusEmail?.getWebhook?.()
+    if (!url) { showToast?.('Pega primero la URL del webhook'); return }
+    const email = prompt('¿A qué email envío el test?')
+    if (!email) return
+    testBtn.textContent = '⏳ Enviando…'
+    testBtn.disabled = true
+    try {
+      await window.nexusEmail?.test?.(email)
+      showToast?.('✓ Email de test enviado a ' + email)
+    } catch (e) {
+      showToast?.('❌ ' + e.message)
+    } finally {
+      testBtn.textContent = '✉ Test'
+      testBtn.disabled = false
+    }
+  }
 }
 
 // ── Tab Uso (Telemetría privada) ─────────────────────────────────────────────
