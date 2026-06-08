@@ -488,10 +488,63 @@
     /* ── LANDING RESPONSIVE MÓVIL (≤768px) ──────────────────────────────── */
     /* ═══════════════════════════════════════════════════════════════════ */
     @media (max-width: 768px) {
-      /* Navbar más compacta */
-      #navbar { padding: 12px 0; }
-      .nav-inner { padding: 0 14px !important; }
-      .nav-logo { font-size: 16px !important; }
+      /* CRITICAL: el contenido NO debe poder ser más ancho que el viewport */
+      html, body {
+        max-width: 100vw !important;
+        overflow-x: hidden !important;
+        width: 100% !important;
+      }
+      /* Cualquier hijo directo se constriñe al viewport */
+      body > * { max-width: 100vw; }
+
+      /* Navbar fija debe ocupar viewport real */
+      #navbar { padding: 12px 0; width: 100vw !important; left: 0; right: 0; }
+      .nav-inner {
+        padding: 0 14px !important;
+        max-width: 100vw !important;
+        display: flex !important;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .nav-logo { font-size: 16px !important; flex-shrink: 0; }
+
+      /* Chips largos: permite wrap y rompe palabras larguísimas */
+      .label-chip {
+        max-width: 100% !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+        font-size: 11px !important;
+        padding: 5px 10px !important;
+      }
+
+      /* Subtítulo hero: el max-width inline 580 mata el layout móvil */
+      .hero-subtitle {
+        max-width: 100% !important;
+        width: 100% !important;
+        font-size: 15px !important;
+      }
+
+      /* Contenedor general: clamp a viewport */
+      .container, #hero .container, section .container {
+        width: 100% !important;
+        max-width: 100vw !important;
+        box-sizing: border-box;
+      }
+      /* Hero-grid en móvil: 1 columna forzada con min-width 0 en hijos para que no se estiren */
+      .hero-grid {
+        width: 100% !important;
+        grid-template-columns: 1fr !important;
+        min-width: 0 !important;
+      }
+      .hero-grid > * { min-width: 0 !important; max-width: 100% !important; }
+
+      /* H1 con clamp: garantizamos que NO exceda el contenedor */
+      h1, .hero-title { max-width: 100% !important; }
+      h1 span, .hero-title span { max-width: 100% !important; }
+
+      /* Cualquier párrafo larguísimo en mobile, break-word */
+      p { word-break: break-word; overflow-wrap: break-word; }
 
       /* Modal de auth: full-screen en cel */
       #auth-modal { padding: 0; }

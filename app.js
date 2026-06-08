@@ -1583,8 +1583,13 @@ function showEnrichPrompt(id, name) {
 
 function showDemoBanner() {
   const banner = document.createElement('div')
-  banner.style.cssText = 'position:fixed; top:0; left:var(--sidebar-width); right:var(--widget-width); background:rgba(234,179,8,0.2); color:#eab308; font-size:10px; font-weight:800; text-align:center; padding:4px; z-index:1000; border-bottom:1px solid rgba(234,179,8,0.3); backdrop-filter:blur(10px);'
-  banner.innerHTML = 'MODO DEMO OPERATIVO — LOS CAMBIOS SON LOCALES'
+  banner.id = 'demo-banner'
+  // En móvil, el banner ocupa todo el ancho. En desktop respeta sidebar/widgets
+  const isMobile = window.matchMedia('(max-width:768px)').matches
+  banner.style.cssText = isMobile
+    ? 'position:fixed; top:0; left:0; right:0; background:rgba(234,179,8,0.2); color:#eab308; font-size:10px; font-weight:800; text-align:center; padding:4px 64px 4px 56px; z-index:1000; border-bottom:1px solid rgba(234,179,8,0.3); backdrop-filter:blur(10px); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;'
+    : 'position:fixed; top:0; left:var(--sidebar-width); right:var(--widget-width); background:rgba(234,179,8,0.2); color:#eab308; font-size:10px; font-weight:800; text-align:center; padding:4px; z-index:1000; border-bottom:1px solid rgba(234,179,8,0.3); backdrop-filter:blur(10px);'
+  banner.innerHTML = 'MODO DEMO — CAMBIOS LOCALES'
   document.body.appendChild(banner)
 }
 
@@ -6578,6 +6583,53 @@ function fixLayoutDOM() {
       }
       body.side-collapsed #spotlight-container {
         right: 40px !important;
+      }
+
+      /* ═══ Mobile overrides — vencer al !important global de arriba ═══ */
+      @media (max-width: 768px) {
+        /* Nav items deben ocupar todo el ancho del drawer */
+        nav#sidebar .nav-items, nav#sidebar .nav-items > * {
+          width: 100% !important;
+          min-width: 0 !important;
+          max-width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        nav#sidebar .nav-item {
+          white-space: normal !important;
+          text-align: left !important;
+          padding: 12px 14px !important;
+          font-size: 14px !important;
+        }
+        nav#sidebar .nav-logo, nav#sidebar > * {
+          padding-left: 14px !important;
+          padding-right: 14px !important;
+        }
+        nav#sidebar { overflow-x: hidden !important; }
+        aside#widgets-sidebar { display: none !important; }
+        #nexus-layout {
+          padding-right: 0 !important;
+          grid-template-columns: 1fr !important;
+          grid-template-areas: "main" !important;
+        }
+        nav#sidebar {
+          position: fixed !important;
+          top: 0 !important; left: 0 !important; bottom: 0 !important;
+          width: 80vw !important; max-width: 320px !important;
+          z-index: 9100 !important;
+          transform: translateX(-100%) !important;
+          transition: transform 0.28s cubic-bezier(0.4,0,0.2,1) !important;
+          padding-top: 60px !important;
+          box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4) !important;
+          overflow-y: auto !important;
+          grid-area: auto !important;
+        }
+        body.mobile-nav-open nav#sidebar { transform: translateX(0) !important; }
+        #toggle-side, #toggle-nav { display: none !important; }
+        #spotlight-container {
+          left: 14px !important;
+          right: 14px !important;
+          width: auto !important;
+        }
       }
     `
     document.head.appendChild(s)
