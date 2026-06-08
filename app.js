@@ -427,7 +427,9 @@ fixLayoutDOM()   // Run BEFORE async IIFE — DOM is ready at module parse time
 ;(async () => {
   if (localStorage.getItem('nexus_admin_bypass') === 'true') {
      currentUser = { id: 'admin-uuid-bypass', email: 'admin@nexus.os (Simulado)' }
-     document.getElementById('user-email').textContent = currentUser.email
+     const _setEmail = el => { if (el) el.textContent = currentUser.email }
+     _setEmail(document.getElementById('user-email'))
+     _setEmail(document.getElementById('cfg-user-email'))
      if (allNodes.length === 0) {
        const now = new Date().toISOString()
        allNodes = [
