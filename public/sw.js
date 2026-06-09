@@ -1,4 +1,4 @@
-const CACHE = 'nexus-os-v3'
+const CACHE = 'nexus-os-v4'
 const PRECACHE = ['/', '/app.html', '/index.html', '/reset-password.html']
 
 self.addEventListener('install', e => {
@@ -41,6 +41,21 @@ self.addEventListener('fetch', e => {
   // Skip Supabase API calls — never cache those
   if (e.request.url.includes('supabase.co')) return
   if (e.request.method !== 'GET') return
+  const url = e.request.url
+  // HTML pages: network-first para que cambios en app.html lleguen rápido
+  if (url.endsWith('.html') || url.endsWith('/') || url.includes('/app') || url.includes('/propiedad')) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res && res.status === 200 && res.type === 'basic') {
+          const clone = res.clone()
+          caches.open(CACHE).then(c => c.put(e.request, clone))
+        }
+        return res
+      }).catch(() => caches.match(e.request))
+    )
+    return
+  }
+  // Demás (JS, CSS, imgs): cache-first
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {

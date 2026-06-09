@@ -8,6 +8,7 @@ import './src/pwa-handlers.js'
 import './src/backup-export.js'
 import './src/ical-export.js'
 import './src/shortcuts-help.js'
+import './src/drive-backup.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -535,21 +536,59 @@ loadSystemSettings()
 if (typeof window.mvInit !== 'function') window.mvInit = () => {}
 if (typeof window.mvFetchTcAndRender !== 'function') window.mvFetchTcAndRender = () => {}
 
-// ── Backup manual a Sheets (stub — implementación real en Fase 2) ──────────
+// ── Backup manual a Google Drive ─────────────────────────────────────────
 window.runBackupNow = async () => {
   const btn = document.getElementById('btn-backup-now')
   const lastEl = document.getElementById('backup-last')
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Sincronizando…' }
   try {
-    // TODO Fase 2: llamar /api/cron-backup con auth de usuario + escribir a Sheets
-    await new Promise(r => setTimeout(r, 800))
-    if (lastEl) lastEl.textContent = 'Pendiente — Drive aún no conectado (Fase 2)'
-    showToast?.('ℹ️ Backup disponible cuando conectes Google Drive')
+    if (!window.nexusDriveBackup) throw new Error('Módulo no cargado')
+    const result = await window.nexusDriveBackup.run({
+      onProgress: (msg) => { if (btn) btn.textContent = msg }
+    })
+    if (lastEl) lastEl.innerHTML = `<strong style="color:#4ade80;">✓ ${result.folder}</strong> · ${result.total_rows} filas`
+    showToast?.(`✓ Backup completo: ${result.total_rows} filas`)
+    // Refresca lista de historial si está visible
+    window.renderBackupHistory?.()
   } catch (e) {
     showToast?.('❌ ' + e.message)
+    if (lastEl) lastEl.innerHTML = `<span style="color:#f87171;">${e.message}</span>`
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="RefreshCw" style="width:16px;height:16px;"></i> Backup ahora (manual)' }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="RefreshCw" style="width:16px;height:16px;"></i> Backup a Drive ahora' }
   }
+}
+
+// Refresca lista de historial de backups (llamado al entrar al panel Datos)
+window.renderBackupHistory = async () => {
+  const el = document.getElementById('backup-history')
+  if (!el) return
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+  const { data: runs } = await supabase
+    .from('backup_runs')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('ran_at', { ascending: false })
+    .limit(10)
+  if (!runs?.length) {
+    el.innerHTML = '<div style="font-size:11px;color:var(--text-dim);text-align:center;padding:14px;">Sin backups registrados aún</div>'
+    return
+  }
+  el.innerHTML = runs.map(r => {
+    const date = new Date(r.ran_at).toLocaleString('es-MX', { dateStyle:'medium', timeStyle:'short' })
+    const counts = r.counts || {}
+    const driveLink = r.folder_drive_id ? `https://drive.google.com/drive/folders/${r.folder_drive_id}` : null
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:8px;margin-bottom:6px;">
+        <span style="font-size:18px;">📦</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:600;color:var(--text-main);">${r.folder_name}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${date} · ${r.total_rows || 0} filas</div>
+        </div>
+        ${driveLink ? `<a href="${driveLink}" target="_blank" rel="noopener" style="font-size:10px;color:#22d3ee;text-decoration:none;padding:4px 8px;border-radius:5px;background:rgba(34,211,238,0.08);">↗ Abrir</a>` : ''}
+      </div>
+    `
+  }).join('')
 }
 
 // ── Global error handler — toast en pantalla en vez de crash silencioso ─────────
@@ -13484,6 +13523,9 @@ window.switchCfgTab = function(panelId, btn) {
 }
 
 function _initDatosTab() {
+  // Refresca historial de backups al entrar al panel
+  if (typeof window.renderBackupHistory === 'function') window.renderBackupHistory()
+
   const btn = document.getElementById('btn-export-json')
   const btnIcal = document.getElementById('btn-export-ical')
   const statusEl = document.getElementById('export-json-status')

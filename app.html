@@ -2672,23 +2672,35 @@ nav#sidebar .nav-items {
           </div>
         </div>
 
-        <!-- ── Backup a Google Sheets ─────────────────────────────────── -->
+        <!-- ── Backup a Google Drive ──────────────────────────────────── -->
         <div class="settings-card" style="margin-bottom:20px;">
-          <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">📊 Backup a Google Sheets</h2>
+          <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">📦 Backup a Google Drive</h2>
           <p style="font-size:12px;color:var(--text-muted);margin:0 0 14px;">
-            Tus inmuebles, finanzas y contactos se sincronizan automáticamente cada 24h a un Google Sheet en tu cuenta.
-            Requiere tener Google Drive conectado en la sección de Conexiones.
+            Sube un snapshot completo (inmuebles, finanzas, contactos, reportes) a una carpeta
+            <code style="background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:4px;">Nexus OS / Backups / [fecha]</code>
+            en tu Google Drive. Se conserva el historial de los <strong>últimos 30 backups</strong>;
+            los más viejos se borran automáticamente.
           </p>
           <div id="backup-status" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--text-muted);">
-            <span style="color:#94a3b8;">Último backup automático:</span>
-            <strong id="backup-last" style="color:var(--text-main);margin-left:6px;">Pendiente — activa Google Drive primero</strong>
+            <span style="color:#94a3b8;">Último backup:</span>
+            <strong id="backup-last" style="color:var(--text-main);margin-left:6px;">—</strong>
           </div>
           <button id="btn-backup-now" type="button" onclick="window.runBackupNow?.()"
             style="padding:10px 20px;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.35);color:var(--accent-cyan);border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:8px;">
-            <i data-lucide="RefreshCw" style="width:16px;height:16px;"></i> Backup ahora (manual)
+            📦 Backup a Drive ahora
           </button>
           <div style="font-size:11px;color:var(--text-dim);margin-top:8px;">
-            ℹ️ Próximamente: la lógica de sync se activa al conectar Google. Disponible desde Fase 2 del roadmap.
+            ℹ️ Requiere haber conectado Google Drive en
+            <a href="#" onclick="window.switchCfgTab?.('conexiones',document.querySelector('.cfg-tab:nth-child(4)'));return false;" style="color:var(--accent-cyan);">🔗 Conexiones</a>.
+            Backups automáticos diarios cuando OAuth esté completo en el cron server-side.
+          </div>
+
+          <!-- Historial -->
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.05);">
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">📋 Historial reciente</div>
+            <div id="backup-history" style="display:flex;flex-direction:column;gap:4px;">
+              <div style="font-size:11px;color:var(--text-dim);text-align:center;padding:10px;">Cargando…</div>
+            </div>
           </div>
         </div>
 
