@@ -1710,7 +1710,7 @@ export async function openPropDetail(id) {
 
         <!-- ── TABS ──────────────────────────────────────────────────────── -->
         <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:18px;overflow-x:auto;scrollbar-width:none;">
-          ${[['info','📋 Info'],['galeria','🖼 Galería'+(fotos.length?` (${fotos.length})`:'')],['crm','📞 CRM'],['docs','📄 Docs'],['reportes','🌟 Reportes']].map(([tab,label])=>`
+          ${[['info','📋 Info'],['galeria','🖼 Galería'+(fotos.length?` (${fotos.length})`:'')],['crm','📞 CRM'],['leads','📩 Leads'],['docs','📄 Docs'],['reportes','🌟 Reportes']].map(([tab,label])=>`
             <button onclick="propDetailTab('${tab}','${p.id}')" id="dtab-${tab}"
               style="padding:10px 14px;border:none;background:transparent;cursor:pointer;font-size:12px;font-weight:600;
               color:${tab==='info'?'#22d3ee':'#64748b'};border-bottom:2px solid ${tab==='info'?'#22d3ee':'transparent'};
@@ -1875,6 +1875,11 @@ export async function openPropDetail(id) {
         <!-- ── TAB DOCS ───────────────────────────────────────────────────── -->
         <div id="dpanel-docs" data-prop-id="${p.id}" style="display:none;">
           <div style="text-align:center;padding:20px;color:#475569;font-size:13px;">Cargando documentos…</div>
+        </div>
+
+        <!-- ── TAB LEADS ──────────────────────────────────────────────────── -->
+        <div id="dpanel-leads" data-prop-id="${p.id}" style="display:none;">
+          <div style="text-align:center;padding:20px;color:#475569;font-size:13px;">Cargando leads…</div>
         </div>
 
         <!-- ── TAB REPORTES ───────────────────────────────────────────────── -->
@@ -2340,7 +2345,7 @@ window.propWhatsApp = (id) => {
 // ─── Handlers modal de detalle ────────────────────────────────────────────────
 
 window.propDetailTab = (tab, propId) => {
-  ;['info', 'galeria', 'crm', 'docs', 'reportes'].forEach(p => {
+  ;['info', 'galeria', 'crm', 'leads', 'docs', 'reportes'].forEach(p => {
     const panel = document.getElementById('dpanel-' + p)
     const btn   = document.getElementById('dtab-' + p)
     const active = p === tab
@@ -2351,6 +2356,69 @@ window.propDetailTab = (tab, propId) => {
     }
   })
   if (tab === 'reportes') _loadReportesPanel(propId)
+  if (tab === 'leads') _loadLeadsPanel(propId)
+}
+
+async function _loadLeadsPanel(propId) {
+  const el = document.getElementById('dpanel-leads')
+  if (!el) return
+  const { data, error } = await supabase
+    .from('property_leads')
+    .select('*')
+    .eq('property_id', propId)
+    .order('created_at', { ascending: false })
+  if (error) {
+    el.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:12px;">Error: ${_esc(error.message)}</div>`
+    return
+  }
+  const leads = data || []
+  if (!leads.length) {
+    el.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;color:#64748b;font-size:13px;">
+        <div style="font-size:48px;margin-bottom:12px;opacity:0.4;">📩</div>
+        Aún no hay solicitudes de información para este inmueble.<br>
+        <span style="font-size:11px;color:#475569;">Cuando alguien llene el formulario en la ficha pública, aparecerá aquí.</span>
+      </div>`
+    return
+  }
+  const STATUS_LABELS = {
+    nuevo:'🆕 Nuevo', contactado:'✓ Contactado', negociacion:'💬 Negociación',
+    cerrado:'🎉 Cerrado', descartado:'🗑 Descartado',
+  }
+  const STATUS_COLORS = {
+    nuevo:'#22d3ee', contactado:'#a78bfa', negociacion:'#facc15',
+    cerrado:'#4ade80', descartado:'#64748b',
+  }
+  el.innerHTML = `
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;">${leads.length} solicitud${leads.length===1?'':'es'} de información</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${leads.map(l => `
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px 14px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:160px;">
+              <div style="font-size:14px;font-weight:700;color:#f1f5f9;">${_esc(l.nombre)}</div>
+              <div style="font-size:11px;color:#64748b;margin-top:2px;">
+                ${new Date(l.created_at).toLocaleString('es-MX', { dateStyle:'medium', timeStyle:'short' })}
+              </div>
+            </div>
+            <select onchange="propLeadStatus('${l.id}','${propId}',this.value)"
+              style="padding:5px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:${STATUS_COLORS[l.status]||'#94a3b8'};font-size:11px;font-weight:600;">
+              ${Object.entries(STATUS_LABELS).map(([k,v])=>`<option value="${k}" ${l.status===k?'selected':''}>${v}</option>`).join('')}
+            </select>
+          </div>
+          <div style="display:flex;gap:14px;font-size:12px;color:#cbd5e1;flex-wrap:wrap;margin-bottom:6px;">
+            ${l.telefono ? `<a href="tel:${_esc(l.telefono)}" style="color:#4ade80;text-decoration:none;">📞 ${_esc(l.telefono)}</a>` : ''}
+            ${l.telefono ? `<a href="https://wa.me/52${l.telefono.replace(/\\D/g,'')}" target="_blank" style="color:#22d3ee;text-decoration:none;">💬 WhatsApp</a>` : ''}
+            ${l.email ? `<a href="mailto:${_esc(l.email)}" style="color:#a78bfa;text-decoration:none;">✉ ${_esc(l.email)}</a>` : ''}
+          </div>
+          ${l.mensaje ? `<div style="font-size:12px;color:#94a3b8;font-style:italic;background:rgba(255,255,255,0.02);border-left:2px solid rgba(34,211,238,0.4);padding:6px 10px;margin-top:6px;border-radius:4px;">${_esc(l.mensaje)}</div>` : ''}
+        </div>`).join('')}
+    </div>`
+}
+
+window.propLeadStatus = async (leadId, propId, newStatus) => {
+  await supabase.from('property_leads').update({ status: newStatus }).eq('id', leadId)
+  window.showToast?.('✓ Estado actualizado')
 }
 
 async function _loadReportesPanel(propId) {

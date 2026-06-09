@@ -7,6 +7,7 @@ import './src/push-notifications.js'
 import './src/pwa-handlers.js'
 import './src/backup-export.js'
 import './src/ical-export.js'
+import './src/shortcuts-help.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'

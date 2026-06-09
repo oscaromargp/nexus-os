@@ -365,6 +365,54 @@
     }
     window.calcMort = calcMort
 
+    // Lead capture submit
+    window.submitLead = async function(e) {
+      e.preventDefault()
+      const propId = new URLSearchParams(location.search).get('id')
+      if (!propId) return false
+      const btn = document.getElementById('lead-submit')
+      const statusEl = document.getElementById('lead-status')
+      const nombre = document.getElementById('lead-nombre').value.trim()
+      const tel = document.getElementById('lead-tel').value.trim()
+      const email = document.getElementById('lead-email').value.trim()
+      const mensaje = document.getElementById('lead-mensaje').value.trim()
+      const captcha = document.getElementById('lead-captcha').value
+
+      if (!nombre) { statusEl.innerHTML = '<span style="color:#f87171;">Por favor escribe tu nombre</span>'; return false }
+      if (!tel && !email) { statusEl.innerHTML = '<span style="color:#f87171;">Necesitamos teléfono o email para contactarte</span>'; return false }
+
+      btn.disabled = true
+      btn.textContent = '⏳ Enviando…'
+      statusEl.textContent = ''
+
+      try {
+        const r = await fetch('/api/lead-capture', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ property_id: propId, nombre, telefono: tel, email, mensaje, captcha }),
+        })
+        const data = await r.json()
+        if (!r.ok) {
+          statusEl.innerHTML = '<span style="color:#f87171;">' + (data.error || 'Error al enviar') + '</span>'
+          btn.disabled = false
+          btn.textContent = '📩 Enviar solicitud'
+          return false
+        }
+        // Success — reemplaza el form con mensaje de gracias
+        document.getElementById('lead-form').innerHTML =
+          '<div style="text-align:center;padding:24px 14px;">' +
+          '<div style="font-size:42px;margin-bottom:10px;">✅</div>' +
+          '<div style="font-size:15px;font-weight:700;color:#22d3ee;margin-bottom:6px;">¡Gracias, ' + esc(nombre.split(' ')[0]) + '!</div>' +
+          '<div style="font-size:13px;color:#94a3b8;line-height:1.5;">Tu solicitud llegó. Te contactaremos lo antes posible.</div>' +
+          '</div>'
+      } catch (err) {
+        statusEl.innerHTML = '<span style="color:#f87171;">' + err.message + '</span>'
+        btn.disabled = false
+        btn.textContent = '📩 Enviar solicitud'
+      }
+      return false
+    }
+
     // ── Galería ──────────────────────────────────────────────────────────────
     function galleryJump(idx) {
       if (!_currentFotos.length) return
@@ -637,6 +685,31 @@
               </button>
             </div>
 
+            <!-- Lead capture form -->
+            <div class="card" style="background:linear-gradient(135deg,rgba(34,211,238,0.06),rgba(34,211,238,0.02));border-color:rgba(34,211,238,0.3);">
+              <div class="card-title">📩 Solicitar información</div>
+              <form id="lead-form" onsubmit="return submitLead(event)" style="display:flex;flex-direction:column;gap:9px;">
+                <input type="text" id="lead-nombre" required placeholder="Tu nombre *"
+                  style="padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:14px;outline:none;"/>
+                <input type="tel" id="lead-tel" placeholder="Teléfono (con LADA)"
+                  style="padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:14px;outline:none;"/>
+                <input type="email" id="lead-email" placeholder="Email"
+                  style="padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:14px;outline:none;"/>
+                <textarea id="lead-mensaje" rows="3" placeholder="Cuéntanos qué buscas (opcional)…"
+                  style="padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:14px;resize:vertical;outline:none;font-family:inherit;"></textarea>
+                <!-- honeypot anti-bot -->
+                <input type="text" id="lead-captcha" name="captcha" tabindex="-1" autocomplete="off"
+                  style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true"/>
+                <button type="submit" id="lead-submit"
+                  style="padding:12px;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#0d0f1f;border:none;border-radius:8px;font-weight:800;font-size:14px;cursor:pointer;">
+                  📩 Enviar solicitud
+                </button>
+                <div id="lead-status" style="font-size:12px;color:#64748b;text-align:center;min-height:14px;">
+                  Te contactaremos lo antes posible
+                </div>
+              </form>
+            </div>
+
             <!-- Calculadora hipotecaria (solo si p.mostrar_hipoteca y hay precio_venta) -->
             ${p.precio_venta && p.mostrar_hipoteca !== false ? `
               <div class="card">
@@ -700,8 +773,9 @@
       // Activar CTA mobile
       document.getElementById('cta-bar').style.display = 'flex'
 
-      // Configurar WhatsApp
-      const waMsg = encodeURIComponent(`¡Hola! Vi esta propiedad:\n\n🏠 *${title}*\n💰 ${precio}\n📍 ${ubicCity}\n\n${location.href}`)
+      // Configurar WhatsApp (mensaje rico al agente)
+      const waMsgPlain = `¡Hola! Vi esta propiedad:\n\n🏠 *${title}*\n💰 ${precio}\n📍 ${ubicCity}\n\n${location.href}`
+      const waMsg = encodeURIComponent(waMsgPlain)
       const waTel = agTel || p.dueno_telefono || ''
       const waUrl = waTel
         ? `https://wa.me/52${waTel.replace(/\D/g,'')}?text=${waMsg}`
@@ -712,11 +786,35 @@
         if (b) b.onclick = () => window.open(waUrl, '_blank')
       })
 
+      // Web Share API nativa (móviles modernos): comparte directamente al sistema
+      // Si el browser la soporta, intercepta el click de WhatsApp para usarla
+      const tryNativeShare = async (e) => {
+        if (navigator.share) {
+          e.preventDefault()
+          try {
+            await navigator.share({
+              title: title + ' · ' + precio,
+              text: waMsgPlain,
+              url: location.href,
+            })
+            return true
+          } catch (err) {
+            // Usuario canceló o no soportado para este contenido — caer a WhatsApp web
+          }
+        }
+        return false
+      }
+
       // Share WA + FB
       const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(location.href)}`
       const shareWa = document.getElementById('btn-share-wa')
       const shareFb = document.getElementById('btn-share-fb')
-      if (shareWa) shareWa.href = `https://api.whatsapp.com/send?text=${waMsg}`
+      if (shareWa) {
+        shareWa.href = `https://api.whatsapp.com/send?text=${waMsg}`
+        shareWa.addEventListener('click', async (e) => {
+          if (await tryNativeShare(e)) return
+        })
+      }
       if (shareFb) shareFb.href = fbUrl
 
       // Copy link
