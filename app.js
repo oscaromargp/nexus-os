@@ -13802,24 +13802,24 @@ async function _initGoogleConnector() {
 
   const refresh = async () => {
     const { data: { session } } = await supabase.auth.getSession()
-    // ✅ CHECK CORRECTO: identidad Google linkeada al user (persiste entre recargas)
     const googleIdentity = session?.user?.identities?.find(i => i.provider === 'google')
     const hasGoogleLinked = !!googleIdentity
-    const hasFreshToken = !!session?.provider_token
+    // Token usable = el de la sesión (right after sign-in) O el persistido en localStorage
+    const hasUsableToken = !!session?.provider_token || (await (window.nexusDrive?.hasAccess?.()) === true)
     const googleEmail = googleIdentity?.identity_data?.email || session?.user?.email
 
     if (hasGoogleLinked) {
-      const tokenLabel = hasFreshToken
+      const tokenLabel = hasUsableToken
         ? ' · <span style="color:#22d3ee;">token activo</span>'
-        : ' · <span style="color:#facc15;">token expirado (re-autoriza para subir fotos)</span>'
+        : ' · <span style="color:#facc15;">token expirado</span>'
       statusEl.innerHTML = `✅ <span style="color:#4ade80;">Conectado</span> como <strong style="color:var(--text-main);">${googleEmail}</strong>${tokenLabel}`
-      btn.textContent = hasFreshToken ? 'Desconectar' : 'Refrescar'
-      btn.style.background = hasFreshToken ? 'rgba(239,68,68,0.1)' : 'rgba(250,204,21,0.12)'
-      btn.style.borderColor = hasFreshToken ? 'rgba(239,68,68,0.35)' : 'rgba(250,204,21,0.35)'
-      btn.style.color = hasFreshToken ? '#f87171' : '#facc15'
-      btn.dataset.action = hasFreshToken ? 'disconnect' : 'refresh'
+      btn.textContent = hasUsableToken ? 'Desconectar' : 'Refrescar token'
+      btn.style.background = hasUsableToken ? 'rgba(239,68,68,0.1)' : 'rgba(250,204,21,0.12)'
+      btn.style.borderColor = hasUsableToken ? 'rgba(239,68,68,0.35)' : 'rgba(250,204,21,0.35)'
+      btn.style.color = hasUsableToken ? '#f87171' : '#facc15'
+      btn.dataset.action = hasUsableToken ? 'disconnect' : 'refresh'
     } else {
-      statusEl.innerHTML = '⚪ <span style="color:var(--text-muted);">No conectado</span> — conecta para subir fotos de inmuebles a tu Drive'
+      statusEl.innerHTML = '⚪ <span style="color:var(--text-muted);">No conectado</span> — conecta para subir fotos y backup a tu Drive'
       btn.textContent = 'Conectar Google Drive'
       btn.style.background = 'rgba(34,211,238,0.12)'
       btn.style.borderColor = 'rgba(34,211,238,0.35)'

@@ -15,22 +15,84 @@ import { supabase } from './supabase.js'
 
 const DRIVE_API     = 'https://www.googleapis.com/drive/v3'
 const DRIVE_UPLOAD  = 'https://www.googleapis.com/upload/drive/v3/files'
+const TOKEN_STORAGE_KEY = 'nx_google_provider_token'
+const TOKEN_EXPIRY_KEY  = 'nx_google_provider_token_expiry'
 
 let _cachedToken = null
 
-async function getProviderToken() {
-  if (_cachedToken) return _cachedToken
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('No hay sesión activa')
-  const token = session.provider_token
-  if (!token) {
-    throw new Error('No tienes Google Drive conectado. Cierra sesión y entra con "Continuar con Google".')
-  }
-  _cachedToken = token
-  return token
+// ─── Persistencia del provider_token ───────────────────────────────────────
+// Supabase NO persiste provider_token entre recargas — solo dura el momento
+// del sign-in/link. Por eso lo capturamos y guardamos en localStorage cuando
+// está disponible, y lo leemos desde ahí en siguientes peticiones.
+
+function _saveTokenToStorage(token, expiresIn = 3600) {
+  if (!token) return
+  try {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token)
+    localStorage.setItem(TOKEN_EXPIRY_KEY, String(Date.now() + expiresIn * 1000))
+    _cachedToken = token
+  } catch (e) { console.warn('[drive-storage] save token', e) }
 }
 
-export function clearTokenCache() { _cachedToken = null }
+function _readTokenFromStorage() {
+  try {
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY)
+    const expiry = parseInt(localStorage.getItem(TOKEN_EXPIRY_KEY) || '0', 10)
+    if (!token) return null
+    // Si expiró (con margen de 60s), no lo devolvemos
+    if (expiry && Date.now() > expiry - 60000) {
+      console.log('[drive-storage] stored token expired')
+      return null
+    }
+    return token
+  } catch { return null }
+}
+
+function _clearTokenFromStorage() {
+  try {
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+    localStorage.removeItem(TOKEN_EXPIRY_KEY)
+    _cachedToken = null
+  } catch {}
+}
+
+// Listener: cada vez que cambia la sesión, captura el provider_token si viene
+if (typeof window !== 'undefined') {
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session?.provider_token) {
+      console.log('[drive-storage] capturado provider_token (event:', event, ')')
+      _saveTokenToStorage(session.provider_token, session.expires_in || 3600)
+    }
+    if (event === 'SIGNED_OUT') _clearTokenFromStorage()
+  })
+  // También al cargar: si la sesión actual TIENE provider_token, guárdalo
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session?.provider_token) {
+      _saveTokenToStorage(session.provider_token, session.expires_in || 3600)
+    }
+  })
+}
+
+async function getProviderToken() {
+  // 1) Cache en memoria
+  if (_cachedToken) return _cachedToken
+  // 2) localStorage (sobrevive a recargas)
+  const stored = _readTokenFromStorage()
+  if (stored) { _cachedToken = stored; return stored }
+  // 3) Sesión actual (último intento)
+  const { data: { session } } = await supabase.auth.getSession()
+  if (session?.provider_token) {
+    _saveTokenToStorage(session.provider_token, session.expires_in || 3600)
+    return session.provider_token
+  }
+  // No hay token: identidad puede estar linkeada pero token vencido
+  throw new Error('Token de Google expirado o no disponible. Ve a Configuración → Conexiones → "Refrescar".')
+}
+
+export function clearTokenCache() {
+  _cachedToken = null
+  _clearTokenFromStorage()
+}
 
 async function driveFetch(url, options = {}) {
   const token = await getProviderToken()
@@ -157,10 +219,23 @@ export function driveDirectImageUrl(fileIdOrUrl) {
   return `https://drive.google.com/thumbnail?id=${id}&sz=w2000`
 }
 
-// Estado actual: ¿el usuario tiene token Google?
+// Expone helper en window para que app.js pueda usarlo sin import circular
+if (typeof window !== 'undefined') {
+  window.nexusDrive = window.nexusDrive || {}
+  window.nexusDrive.hasAccess = () => hasDriveAccess()
+}
+
+// Estado actual: ¿el usuario tiene token Google usable?
 export async function hasDriveAccess() {
   try {
+    // 1) Token en localStorage no expirado
+    if (_readTokenFromStorage()) return true
+    // 2) Sesión actual con provider_token
     const { data: { session } } = await supabase.auth.getSession()
-    return !!session?.provider_token
+    if (session?.provider_token) {
+      _saveTokenToStorage(session.provider_token, session.expires_in || 3600)
+      return true
+    }
+    return false
   } catch { return false }
 }
