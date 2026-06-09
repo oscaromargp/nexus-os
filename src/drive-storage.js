@@ -76,17 +76,20 @@ if (typeof window !== 'undefined') {
 async function getProviderToken() {
   // 1) Cache en memoria
   if (_cachedToken) return _cachedToken
-  // 2) localStorage (sobrevive a recargas)
+  // 2) Token GIS (Google Identity Services — preferido, persistente)
+  const gisToken = window.nexusGIS?.read?.()
+  if (gisToken) { _cachedToken = gisToken; return gisToken }
+  // 3) localStorage legacy de drive-storage
   const stored = _readTokenFromStorage()
   if (stored) { _cachedToken = stored; return stored }
-  // 3) Sesión actual (último intento)
+  // 4) Sesión actual de Supabase (último intento)
   const { data: { session } } = await supabase.auth.getSession()
   if (session?.provider_token) {
     _saveTokenToStorage(session.provider_token, session.expires_in || 3600)
     return session.provider_token
   }
-  // No hay token: identidad puede estar linkeada pero token vencido
-  throw new Error('Token de Google expirado o no disponible. Ve a Configuración → Conexiones → "Refrescar".')
+  // No hay token
+  throw new Error('Token de Google expirado o no disponible. Ve a Configuración → Conexiones → "Conectar Google Drive".')
 }
 
 export function clearTokenCache() {
@@ -228,9 +231,11 @@ if (typeof window !== 'undefined') {
 // Estado actual: ¿el usuario tiene token Google usable?
 export async function hasDriveAccess() {
   try {
-    // 1) Token en localStorage no expirado
+    // 1) Token GIS (preferido)
+    if (window.nexusGIS?.read?.()) return true
+    // 2) Token legacy en localStorage
     if (_readTokenFromStorage()) return true
-    // 2) Sesión actual con provider_token
+    // 3) Sesión actual con provider_token
     const { data: { session } } = await supabase.auth.getSession()
     if (session?.provider_token) {
       _saveTokenToStorage(session.provider_token, session.expires_in || 3600)
