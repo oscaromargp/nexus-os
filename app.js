@@ -13760,34 +13760,57 @@ async function _initGoogleConnector() {
 
   const refresh = async () => {
     const { data: { session } } = await supabase.auth.getSession()
-    const hasGoogle = !!session?.provider_token
-    const googleEmail =
-      session?.user?.identities?.find(i => i.provider === 'google')?.identity_data?.email
-      || (hasGoogle ? session?.user?.email : null)
+    // ✅ CHECK CORRECTO: identidad Google linkeada al user (persiste entre recargas)
+    const googleIdentity = session?.user?.identities?.find(i => i.provider === 'google')
+    const hasGoogleLinked = !!googleIdentity
+    const hasFreshToken = !!session?.provider_token
+    const googleEmail = googleIdentity?.identity_data?.email || session?.user?.email
 
-    if (hasGoogle) {
-      statusEl.innerHTML = `✅ <span style="color:#4ade80;">Conectado</span>${googleEmail ? ' como <strong style="color:var(--text-main);">' + googleEmail + '</strong>' : ''}`
-      btn.textContent = 'Desconectar'
-      btn.style.background = 'rgba(239,68,68,0.1)'
-      btn.style.borderColor = 'rgba(239,68,68,0.35)'
-      btn.style.color = '#f87171'
+    if (hasGoogleLinked) {
+      const tokenLabel = hasFreshToken
+        ? ' · <span style="color:#22d3ee;">token activo</span>'
+        : ' · <span style="color:#facc15;">token expirado (re-autoriza para subir fotos)</span>'
+      statusEl.innerHTML = `✅ <span style="color:#4ade80;">Conectado</span> como <strong style="color:var(--text-main);">${googleEmail}</strong>${tokenLabel}`
+      btn.textContent = hasFreshToken ? 'Desconectar' : 'Refrescar'
+      btn.style.background = hasFreshToken ? 'rgba(239,68,68,0.1)' : 'rgba(250,204,21,0.12)'
+      btn.style.borderColor = hasFreshToken ? 'rgba(239,68,68,0.35)' : 'rgba(250,204,21,0.35)'
+      btn.style.color = hasFreshToken ? '#f87171' : '#facc15'
+      btn.dataset.action = hasFreshToken ? 'disconnect' : 'refresh'
     } else {
       statusEl.innerHTML = '⚪ <span style="color:var(--text-muted);">No conectado</span> — conecta para subir fotos de inmuebles a tu Drive'
       btn.textContent = 'Conectar Google Drive'
       btn.style.background = 'rgba(34,211,238,0.12)'
       btn.style.borderColor = 'rgba(34,211,238,0.35)'
       btn.style.color = 'var(--accent-cyan)'
+      btn.dataset.action = 'connect'
     }
   }
 
   btn.onclick = async () => {
+    const action = btn.dataset.action
     const { data: { session } } = await supabase.auth.getSession()
-    const isConnected = !!session?.provider_token
-    if (isConnected) {
+
+    // ── REFRESH: re-autoriza para obtener provider_token nuevo ──
+    if (action === 'refresh') {
+      const opts = {
+        redirectTo: window.location.origin + '/app.html#settings-conexiones',
+        scopes: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+        queryParams: { access_type: 'offline', prompt: 'consent' },
+      }
+      try {
+        if (typeof supabase.auth.reauthenticate === 'function') {
+          await supabase.auth.reauthenticate()
+        }
+      } catch {}
+      // Vuelve a hacer link Google con consentimiento (te da token nuevo)
+      const { error } = await supabase.auth.linkIdentity({ provider: 'google', options: opts })
+      if (error) window.showToast?.('❌ ' + error.message)
+      return
+    }
+
+    // ── DISCONNECT ──
+    if (action === 'disconnect') {
       if (!confirm('¿Desconectar Google Drive? Las fotos futuras se guardarán en Supabase Storage hasta que vuelvas a conectar.')) return
-      // Cierra sesión completa y deja al usuario que vuelva a entrar SIN Google (con email/pass)
-      // Esto es lo más seguro porque borra el provider_token.
-      // Alternativa más amigable cuando linkIdentity esté disponible: unlinkIdentity.
       try {
         if (typeof supabase.auth.unlinkIdentity === 'function' && session?.user?.identities) {
           const googleId = session.user.identities.find(i => i.provider === 'google')
@@ -13802,7 +13825,6 @@ async function _initGoogleConnector() {
       } catch (e) {
         console.warn('unlinkIdentity falló, cae a signOut:', e.message)
       }
-      // Fallback: cierra sesión completa
       await supabase.auth.signOut()
       window.location.href = '/'
       return
