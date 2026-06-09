@@ -1,0 +1,176 @@
+{
+  "name": "Nexus — Etapa 3: WhatsApp Cloud API al recibir lead",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nexus-lead-whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook (Nexus → lead_new)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "nexus-lead-whatsapp"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "lead_nombre",    "value": "={{ $json.body.data.nombre || 'amigo/a' }}" },
+            { "name": "lead_telefono",  "value": "={{ String($json.body.data.telefono || '').replace(/\\D/g, '') }}" },
+            { "name": "lead_mensaje",   "value": "={{ $json.body.data.mensaje || '' }}" },
+            { "name": "inmueble_titulo","value": "={{ $json.body.data.property?.titulo || 'el inmueble' }}" },
+            { "name": "inmueble_folio", "value": "={{ $json.body.data.property?.folio_interno || '' }}" },
+            { "name": "inmueble_url",   "value": "={{ 'https://nexus-os-chi.vercel.app/propiedad?id=' + ($json.body.data.property?.id || '') }}" },
+            { "name": "inmueble_precio","value": "={{ $json.body.data.property?.precio_venta ? '$' + Number($json.body.data.property.precio_venta).toLocaleString('es-MX') + ' MXN' : 'A consultar' }}" }
+          ]
+        }
+      },
+      "id": "set-vars",
+      "name": "Extract vars",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.lead_telefono }}",
+              "operation": "regex",
+              "value2": "^[0-9]{10,15}$"
+            }
+          ]
+        }
+      },
+      "id": "check-tel",
+      "name": "¿Tel válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v18.0/{{ $env.WA_PHONE_NUMBER_ID }}/messages",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "messaging_product", "value": "whatsapp" },
+            { "name": "to", "value": "=52{{ $json.lead_telefono }}" },
+            { "name": "type", "value": "text" },
+            {
+              "name": "text",
+              "value": "={ \"body\": \"¡Hola \" + $json.lead_nombre + \"! 👋\\n\\nGracias por interesarte en *\" + $json.inmueble_titulo + \"*.\\n\\n📍 Ficha completa: \" + $json.inmueble_url + \"\\n💰 \" + $json.inmueble_precio + \"\\n\\nTe contactaré en breve para coordinar visita. ¿Hay algún horario que te acomode mejor?\\n\\n— Tu agente Nexus OS\" }"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "wa-send-cliente",
+      "name": "WA → cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 240],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZA_CON_TU_WA_TOKEN",
+          "name": "WhatsApp Cloud API Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v18.0/{{ $env.WA_PHONE_NUMBER_ID }}/messages",
+        "method": "POST",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "messaging_product", "value": "whatsapp" },
+            { "name": "to", "value": "={{ $env.AGENT_PHONE }}" },
+            { "name": "type", "value": "text" },
+            {
+              "name": "text",
+              "value": "={ \"body\": \"📩 *Nuevo lead Nexus*\\n\\n🏠 \" + $json.inmueble_titulo + \" (\" + $json.inmueble_folio + \")\\n\\n👤 \" + $json.lead_nombre + \"\\n📞 \" + $json.lead_telefono + \"\\n\\n💬 \" + $json.lead_mensaje + \"\\n\\nResponder: https://wa.me/52\" + $json.lead_telefono }"
+            }
+          ]
+        }
+      },
+      "id": "wa-send-agente",
+      "name": "WA → tú (agente)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 360],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZA_CON_TU_WA_TOKEN",
+          "name": "WhatsApp Cloud API Bearer"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"wa_sent\": true }"
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": false, \"reason\": \"invalid_phone\" }"
+      },
+      "id": "respond-skip",
+      "name": "Respond skip",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 460]
+    }
+  ],
+  "connections": {
+    "Webhook (Nexus → lead_new)": { "main": [[{ "node": "Extract vars", "type": "main", "index": 0 }]] },
+    "Extract vars": { "main": [[{ "node": "¿Tel válido?", "type": "main", "index": 0 }]] },
+    "¿Tel válido?": {
+      "main": [
+        [
+          { "node": "WA → cliente", "type": "main", "index": 0 },
+          { "node": "WA → tú (agente)", "type": "main", "index": 0 }
+        ],
+        [{ "node": "Respond skip", "type": "main", "index": 0 }]
+      ]
+    },
+    "WA → cliente": { "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]] },
+    "WA → tú (agente)": { "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_setup_notes": {
+    "antes_de_activar": [
+      "1. Crea cuenta dev en https://developers.facebook.com",
+      "2. My Apps → Create App tipo Business → agrega WhatsApp product",
+      "3. Te dará un test phone number gratuito + tu PHONE_NUMBER_ID",
+      "4. Business Settings → System Users → Create 'n8n-bot'",
+      "5. Asigna asset: WhatsApp Business Account",
+      "6. Generate New Token PERMANENTE → scope 'whatsapp_business_messaging'",
+      "7. En n8n → Credentials → New → Header Auth: nombre 'Authorization' valor 'Bearer TU_TOKEN'",
+      "8. En el workflow → setea env vars (Settings ⚙ del workflow):",
+      "   - WA_PHONE_NUMBER_ID (de Meta)",
+      "   - AGENT_PHONE (tu tel formato 52XXXXXXXXXX SIN +)",
+      "9. Save & Activate",
+      "10. Copia URL del webhook → pega en Nexus → Conexiones → 📩 Nuevo lead"
+    ],
+    "scope_de_test_inicial": "Meta solo deja mandar WA a números que tú agregas como 'recipient' en su dashboard. Para producción real, verifica tu cuenta de empresa.",
+    "alternativas_si_meta_es_lio": "Si no quieres lidiar con Meta, considera evolution-api self-hosted o 360dialog (~$5/mes)"
+  }
+}

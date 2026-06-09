@@ -1,0 +1,80 @@
+{
+  "name": "Nexus — Etapa 2: Email vía SMTP",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nexus-email-smtp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook (Nexus → email)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "nexus-email-smtp"
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@tudominio.com",
+        "toEmail": "={{ Array.isArray($json.body.to) ? $json.body.to.join(',') : $json.body.to }}",
+        "subject": "={{ $json.body.subject }}",
+        "emailFormat": "both",
+        "text": "={{ $json.body.text || '' }}",
+        "html": "={{ $json.body.html || '' }}",
+        "options": {
+          "replyTo": "={{ $json.body.reply_to || '' }}"
+        }
+      },
+      "id": "smtp-send",
+      "name": "SMTP Send",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [460, 300],
+      "credentials": {
+        "smtp": {
+          "id": "REEMPLAZA_CON_TU_SMTP",
+          "name": "SMTP Nexus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"sent_to\": $('Webhook (Nexus → email)').item.json.body.to }",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 300]
+    }
+  ],
+  "connections": {
+    "Webhook (Nexus → email)": {
+      "main": [[{ "node": "SMTP Send", "type": "main", "index": 0 }]]
+    },
+    "SMTP Send": {
+      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_setup_notes": {
+    "smtp_providers_recomendados": {
+      "brevo": "300 emails/día gratis. https://www.brevo.com — server: smtp-relay.brevo.com:587",
+      "sendgrid": "100/día gratis. server: smtp.sendgrid.net:587 user: apikey pass: tu_api_key",
+      "tu_hosting": "HostGator/cPanel suelen incluir SMTP. user: tu@dominio.com pass: tu_password server: mail.dominio.com:465",
+      "gmail_no_recomendado": "Gmail bloquea SMTP de apps por seguridad; usa Brevo mejor"
+    },
+    "antes_de_activar": [
+      "1. Consigue credenciales SMTP (Brevo es lo más fácil/gratis).",
+      "2. En n8n → Credentials → New → SMTP → pega host/user/pass/port",
+      "3. Edita el nodo SMTP Send → selecciona la credencial",
+      "4. Cambia fromEmail por tu email verificado",
+      "5. Save & Activate",
+      "6. Copia URL del webhook → pégala en Conexiones → 'Email vía n8n' (campo existente)"
+    ]
+  }
+}

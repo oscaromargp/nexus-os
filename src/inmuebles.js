@@ -2101,6 +2101,12 @@ export async function saveProp(id) {
     catch (e) { console.error('[inmuebles] persistLinks', e) }
   }
 
+  // Dispatch evento n8n (fire-and-forget, no bloquea UI)
+  try {
+    const eventName = id ? 'property_updated' : 'property_created'
+    window.nexusN8n?.dispatch?.(eventName, { property: { ...payload, id: savedId } })
+  } catch {}
+
   closePropModal()
   await loadProperties()
   renderInmuebles()

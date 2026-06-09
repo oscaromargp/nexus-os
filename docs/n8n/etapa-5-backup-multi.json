@@ -1,0 +1,132 @@
+{
+  "name": "Nexus — Etapa 5: Backup multi-destino (Drive + Dropbox + S3)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nexus-backup-multi",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook",
+      "name": "Webhook (Nexus → backup_completed)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "nexus-backup-multi"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/properties?user_id=eq.{{ $json.body.data.user_id }}&select=*",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        }
+      },
+      "id": "fetch-data",
+      "name": "Fetch snapshot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "data",
+        "binaryPropertyName": "snapshot",
+        "options": {
+          "fileName": "=nexus-backup-{{ $now.format('yyyy-MM-dd') }}.json",
+          "mimeType": "application/json"
+        }
+      },
+      "id": "to-binary",
+      "name": "JSON → binary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "path": "=/Nexus OS/Backups/{{ $now.format('yyyy-MM-dd') }}.json",
+        "binaryData": true,
+        "binaryPropertyName": "snapshot"
+      },
+      "id": "dropbox-upload",
+      "name": "Upload Dropbox",
+      "type": "n8n-nodes-base.dropbox",
+      "typeVersion": 2,
+      "position": [900, 200],
+      "credentials": {
+        "dropboxApi": {
+          "id": "REEMPLAZA_CON_TU_DROPBOX",
+          "name": "Dropbox Nexus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "={{ $env.S3_BUCKET }}",
+        "fileName": "=nexus-backup/{{ $now.format('yyyy-MM-dd') }}.json",
+        "binaryData": true,
+        "binaryPropertyName": "snapshot"
+      },
+      "id": "s3-upload",
+      "name": "Upload S3",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 2,
+      "position": [900, 400],
+      "credentials": {
+        "aws": {
+          "id": "REEMPLAZA_CON_TU_AWS",
+          "name": "AWS Nexus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"destinations\": [\"dropbox\", \"s3\"] }"
+      },
+      "id": "respond",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Webhook (Nexus → backup_completed)": { "main": [[{ "node": "Fetch snapshot", "type": "main", "index": 0 }]] },
+    "Fetch snapshot": { "main": [[{ "node": "JSON → binary", "type": "main", "index": 0 }]] },
+    "JSON → binary": {
+      "main": [
+        [
+          { "node": "Upload Dropbox", "type": "main", "index": 0 },
+          { "node": "Upload S3", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Upload Dropbox": { "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]] },
+    "Upload S3": { "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_setup_notes": {
+    "antes_de_activar": [
+      "1. Dropbox: https://www.dropbox.com/developers → App console → Create app",
+      "   - Scoped access, full Dropbox",
+      "   - Genera Access Token (long-lived)",
+      "   - En n8n → Credentials → Dropbox OAuth2 → pega token",
+      "2. S3 / Backblaze B2 (más barato):",
+      "   - https://www.backblaze.com/b2/cloud-storage.html — 10GB gratis",
+      "   - O AWS S3 console → Create bucket → IAM user con S3FullAccess",
+      "3. Setea env vars en Settings ⚙:",
+      "   SUPABASE_URL, SUPABASE_SERVICE_KEY, S3_BUCKET",
+      "4. Save & Activate",
+      "5. Copia URL → pégala en Nexus → Conexiones → 📦 Backup completado"
+    ]
+  }
+}

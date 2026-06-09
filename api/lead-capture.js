@@ -99,6 +99,37 @@ export default async function handler(req, res) {
       })
     } catch (e) { console.warn('[lead-capture] push', e.message) }
 
+    // Dispatch a webhook n8n del owner (si configurado)
+    // Lo leemos de user_metadata.n8n_webhooks.lead_new
+    try {
+      const { data: userData } = await sb.auth.admin.getUserById(prop.user_id)
+      const webhookUrl = userData?.user?.user_metadata?.n8n_webhooks?.lead_new
+      if (webhookUrl) {
+        fetch(webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'lead_new',
+            timestamp: new Date().toISOString(),
+            source: 'nexus-os',
+            data: {
+              lead_id: lead.id,
+              nombre: nombre.trim(),
+              telefono: telefono?.trim() || null,
+              email: email?.trim() || null,
+              mensaje: mensaje?.trim() || null,
+              property: {
+                id: prop.id,
+                titulo: prop.titulo,
+                folio_interno: prop.folio_interno,
+                precio_venta: prop.precio_venta,
+              },
+            },
+          }),
+        }).catch(e => console.warn('[lead-capture] n8n dispatch', e.message))
+      }
+    } catch (e) { console.warn('[lead-capture] n8n lookup', e.message) }
+
     res.status(200).json({
       ok: true,
       lead_id: lead.id,

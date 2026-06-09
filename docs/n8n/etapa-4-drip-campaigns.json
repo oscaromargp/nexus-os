@@ -1,0 +1,145 @@
+{
+  "name": "Nexus — Etapa 4: Drip campaigns email (cron diario)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 9 * * *" }] }
+      },
+      "id": "cron-trigger",
+      "name": "Cron 9am diario",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/property_leads?status=eq.nuevo&select=*,properties(titulo,folio_interno)",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        }
+      },
+      "id": "fetch-leads",
+      "name": "Fetch leads activos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data",
+        "options": {}
+      },
+      "id": "split-leads",
+      "name": "Split leads",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "lead_id", "value": "={{ $json.id }}" },
+            { "name": "nombre",  "value": "={{ $json.nombre || 'amigo/a' }}" },
+            { "name": "email",   "value": "={{ $json.email || '' }}" },
+            { "name": "inmueble","value": "={{ $json.properties?.titulo || 'tu inmueble' }}" },
+            { "name": "dias_inactivo", "value": "={{ Math.floor((Date.now() - new Date($json.created_at).getTime()) / 86400000) }}" }
+          ]
+        }
+      },
+      "id": "calc-vars",
+      "name": "Calc días",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            { "outputKey": "dia3",  "conditions": { "string": [{ "value1": "={{ $json.dias_inactivo }}", "operation": "equal", "value2": "3" }] }, "renameOutput": true },
+            { "outputKey": "dia7",  "conditions": { "string": [{ "value1": "={{ $json.dias_inactivo }}", "operation": "equal", "value2": "7" }] }, "renameOutput": true },
+            { "outputKey": "dia14", "conditions": { "string": [{ "value1": "={{ $json.dias_inactivo }}", "operation": "equal", "value2": "14" }] }, "renameOutput": true }
+          ]
+        }
+      },
+      "id": "switch-day",
+      "name": "Switch por edad",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@tudominio.com",
+        "toEmail": "={{ $json.email }}",
+        "subject": "=Hola {{ $json.nombre }}, ¿sigues interesado en {{ $json.inmueble }}?",
+        "emailFormat": "html",
+        "html": "=<div style='font-family:Arial;padding:20px;'><h2>Hola {{ $json.nombre }} 👋</h2><p>Vi que hace unos días preguntaste por <strong>{{ $json.inmueble }}</strong>.</p><p>¿Sigues interesado/a? Si necesitas más información o quieres agendar una visita, solo respóndeme este correo.</p><p>Quedo atento a tus comentarios.</p><p style='color:#888;font-size:12px;margin-top:30px;'>Tu agente Nexus OS</p></div>"
+      },
+      "id": "email-dia3",
+      "name": "Email día 3",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@tudominio.com",
+        "toEmail": "={{ $json.email }}",
+        "subject": "=Hay nuevas propiedades en la zona que podrían interesarte",
+        "emailFormat": "html",
+        "html": "=<div style='font-family:Arial;padding:20px;'><h2>Hola {{ $json.nombre }} 👋</h2><p>Han llegado a mi cartera <strong>nuevas propiedades</strong> que se parecen a la que viste:</p><p>📍 <strong>{{ $json.inmueble }}</strong></p><p>Si quieres echarles un ojo, te puedo armar una selección personalizada. Responde este correo y conversamos.</p><p style='color:#888;font-size:12px;margin-top:30px;'>Tu agente Nexus OS</p></div>"
+      },
+      "id": "email-dia7",
+      "name": "Email día 7",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "no-reply@tudominio.com",
+        "toEmail": "={{ $json.email }}",
+        "subject": "=Última oportunidad — ¿cerramos tu búsqueda?",
+        "emailFormat": "html",
+        "html": "=<div style='font-family:Arial;padding:20px;'><h2>Hola {{ $json.nombre }} 👋</h2><p>Han pasado 2 semanas desde que viste <strong>{{ $json.inmueble }}</strong>.</p><p>Cuéntame, ¿qué te impidió decidir?</p><ul><li>¿Precio?</li><li>¿Ubicación?</li><li>¿Financiamiento?</li><li>¿Ya elegiste otra?</li></ul><p>Tu feedback me ayuda a buscarte algo mejor — o cerrar tu búsqueda si ya no aplica.</p><p style='color:#888;font-size:12px;margin-top:30px;'>Tu agente Nexus OS</p></div>"
+      },
+      "id": "email-dia14",
+      "name": "Email día 14",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 400]
+    }
+  ],
+  "connections": {
+    "Cron 9am diario": { "main": [[{ "node": "Fetch leads activos", "type": "main", "index": 0 }]] },
+    "Fetch leads activos": { "main": [[{ "node": "Split leads", "type": "main", "index": 0 }]] },
+    "Split leads": { "main": [[{ "node": "Calc días", "type": "main", "index": 0 }]] },
+    "Calc días": { "main": [[{ "node": "Switch por edad", "type": "main", "index": 0 }]] },
+    "Switch por edad": {
+      "main": [
+        [{ "node": "Email día 3", "type": "main", "index": 0 }],
+        [{ "node": "Email día 7", "type": "main", "index": 0 }],
+        [{ "node": "Email día 14", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_setup_notes": {
+    "antes_de_activar": [
+      "1. En Settings ⚙ del workflow → env vars:",
+      "   SUPABASE_URL = https://xhgssulypohbrbqbxdjc.supabase.co",
+      "   SUPABASE_SERVICE_KEY = (la service_role key que ya tienes)",
+      "2. Configura los 3 nodos Email Send con tu SMTP (mismo que etapa 2).",
+      "3. Cambia fromEmail por tu email verificado.",
+      "4. Save & Activate.",
+      "NO REQUIERE WEBHOOK desde Nexus — corre solo cada día a las 9am."
+    ]
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "name": "Nexus — Etapa 1: Notificación Telegram al recibir lead",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nexus-lead-telegram",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook (Nexus → lead_new)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "nexus-lead-telegram"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "nombre",    "value": "={{ $json.body.data.nombre || 'Sin nombre' }}" },
+            { "name": "telefono",  "value": "={{ $json.body.data.telefono || '—' }}" },
+            { "name": "email",     "value": "={{ $json.body.data.email || '—' }}" },
+            { "name": "mensaje",   "value": "={{ $json.body.data.mensaje || '—' }}" },
+            { "name": "inmueble",  "value": "={{ $json.body.data.property?.titulo || 'Inmueble' }}" },
+            { "name": "folio",     "value": "={{ $json.body.data.property?.folio_interno || '' }}" },
+            { "name": "lead_id",   "value": "={{ $json.body.data.lead_id || '' }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-vars",
+      "name": "Extract vars",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "=📩 *Nuevo lead Nexus OS*\n\n🏠 *{{ $json.inmueble }}* ({{ $json.folio }})\n\n👤 *{{ $json.nombre }}*\n📞 {{ $json.telefono }}\n✉ {{ $json.email }}\n\n💬 _{{ $json.mensaje }}_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-send",
+      "name": "Telegram → tú",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [680, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "REEMPLAZA_CON_TU_CREDENCIAL",
+          "name": "Telegram Bot Nexus"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"ok\": true, \"notified\": true }",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Webhook (Nexus → lead_new)": {
+      "main": [[{ "node": "Extract vars", "type": "main", "index": 0 }]]
+    },
+    "Extract vars": {
+      "main": [[{ "node": "Telegram → tú", "type": "main", "index": 0 }]]
+    },
+    "Telegram → tú": {
+      "main": [[{ "node": "Respond OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "_setup_notes": {
+    "antes_de_activar": [
+      "1. Crea bot con @BotFather en Telegram → guarda el TOKEN",
+      "2. Habla con @userinfobot → guarda tu CHAT_ID",
+      "3. En n8n → Credentials → New → Telegram Bot API → pega TOKEN",
+      "4. Edita el nodo Telegram → selecciona la credencial nueva",
+      "5. Cambia chatId por tu CHAT_ID directo (o agrega como env var)",
+      "6. Save & Activate workflow",
+      "7. Copia la URL del webhook trigger (terminará en /nexus-lead-telegram)",
+      "8. Pégala en Nexus → Configuración → Conexiones → 📩 Nuevo lead"
+    ]
+  }
+}

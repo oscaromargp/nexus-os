@@ -10,6 +10,7 @@ import './src/ical-export.js'
 import './src/shortcuts-help.js'
 import './src/drive-backup.js'
 import './src/google-gis.js'
+import './src/n8n-webhooks.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -13518,7 +13519,10 @@ window.switchCfgTab = function(panelId, btn) {
   const panel = document.getElementById(`cfg-panel-${panelId}`)
   if (panel) panel.classList.add('active')
   if (btn)   btn.classList.add('active')
-  if (panelId === 'conexiones') { _initGoogleConnector(); _initN8nEmailConnector(); _initPushConnector() }
+  if (panelId === 'conexiones') {
+    _initGoogleConnector(); _initN8nEmailConnector(); _initPushConnector();
+    _initN8nEventsConnector()
+  }
   if (panelId === 'uso') _initUsoTab()
   if (panelId === 'datos') _initDatosTab()
 }
@@ -13634,6 +13638,53 @@ async function _initPushConnector() {
       showToast?.('Notificación enviada')
     } catch (e) { showToast?.('❌ ' + e.message) }
     finally { testBtn.textContent = '🔔 Test'; testBtn.disabled = false }
+  }
+}
+
+// ── Conector n8n Webhooks por evento ────────────────────────────────────────
+function _initN8nEventsConnector() {
+  const list = document.getElementById('n8n-events-list')
+  if (!list || list.dataset.wired) return
+  list.dataset.wired = '1'
+
+  const events = window.nexusN8n?.all?.() || []
+  list.innerHTML = events.map(e => `
+    <div style="background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.05);border-radius:8px;padding:10px 12px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:140px;">
+          <div style="font-size:12px;font-weight:700;color:var(--text-main);">${e.label}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${e.desc}</div>
+        </div>
+        <span id="evt-status-${e.id}" style="font-size:10px;padding:3px 8px;border-radius:5px;${e.url ? 'background:rgba(74,222,128,0.15);color:#4ade80;' : 'background:rgba(255,255,255,0.05);color:var(--text-dim);'}">
+          ${e.url ? '✓ activo' : 'inactivo'}
+        </span>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <input id="evt-url-${e.id}" type="url" value="${e.url || ''}"
+          placeholder="https://n8n.zxyw.site/webhook/..."
+          style="flex:1;min-width:0;padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;color:var(--text-main);font-size:11px;font-family:monospace;"/>
+        <button onclick="_saveEvtUrl('${e.id}')"
+          style="padding:6px 10px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;">Guardar</button>
+        ${e.url ? `<button onclick="_testEvtUrl('${e.id}')"
+          style="padding:6px 10px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:6px;cursor:pointer;font-size:11px;">Test</button>` : ''}
+      </div>
+    </div>
+  `).join('')
+
+  window._saveEvtUrl = (eventId) => {
+    const input = document.getElementById('evt-url-' + eventId)
+    if (!input) return
+    window.nexusN8n.set(eventId, input.value)
+    list.dataset.wired = ''
+    _initN8nEventsConnector()
+    showToast?.('✓ Webhook guardado')
+  }
+
+  window._testEvtUrl = async (eventId) => {
+    try {
+      const r = await window.nexusN8n.dispatch(eventId, { test: true, sent_at: new Date().toISOString() })
+      showToast?.(r.ok ? '✓ Test enviado' : '❌ ' + (r.error || r.reason || 'Falló'))
+    } catch (e) { showToast?.('❌ ' + e.message) }
   }
 }
 

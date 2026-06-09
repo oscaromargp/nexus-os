@@ -141,6 +141,18 @@ export async function runDriveBackup({ onProgress } = {}) {
   try { window.nexusTrack?.('action:drive_backup', data.manifest.counts) } catch {}
 
   update(`✅ Backup completo: ${totalRows} filas en ${BACKUP_ROOT}/${dateStr}`)
+
+  // Dispatch evento n8n
+  try {
+    window.nexusN8n?.dispatch?.('backup_completed', {
+      folder: `${BACKUP_ROOT}/${dateStr}`,
+      folder_drive_id: folderId,
+      counts: data.manifest.counts,
+      total_rows: totalRows,
+      user_id: data.manifest.user.id,
+    })
+  } catch {}
+
   return {
     ok: true,
     folder: `${BACKUP_ROOT}/${dateStr}`,
