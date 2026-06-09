@@ -17,6 +17,7 @@ import { loadMxLocations, renderEstadoMunicipioSelects } from './mx-locations.js
 import { openMapPicker } from './map-picker.js'
 import { loadLinksFor, renderLinksBlock, persistLinks, fetchLinksFor } from './property-links.js'
 import './report-modal.js'
+import './property-compare.js'
 import { ensureNexusFolder, uploadToDrive, hasDriveAccess, driveDirectImageUrl } from './drive-storage.js'
 
 // ─── Estado del módulo ────────────────────────────────────────────────────────
@@ -338,7 +339,7 @@ export function renderInmuebles() {
           </button>
         </div>
         ${_inmTab === 'propiedades' ? `
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <div style="display:flex;background:rgba(255,255,255,0.05);border-radius:8px;padding:2px;">
               <button onclick="propSetView('grid')"
                 style="padding:5px 12px;border-radius:6px;border:none;cursor:pointer;font-size:12px;font-weight:600;
@@ -349,6 +350,12 @@ export function renderInmuebles() {
                 background:${_propView==='lista'?'rgba(34,211,238,0.15)':'transparent'};
                 color:${_propView==='lista'?'#22d3ee':'#7a8899'};">☰ Lista</button>
             </div>
+            <button onclick="togglePropertySelectionMode()"
+              title="Activa selección múltiple para comparar"
+              style="padding:7px 12px;background:${window.isPropertySelectionActive?.() ? 'rgba(167,139,250,0.18)' : 'rgba(167,139,250,0.06)'};border:1px solid rgba(167,139,250,0.3);
+              color:#a78bfa;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">
+              🔄 Comparar
+            </button>
             <button onclick="openPropModal()"
               style="padding:8px 18px;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#0d0f1f;
               font-weight:700;border:none;border-radius:10px;cursor:pointer;font-size:13px;display:flex;align-items:center;gap:6px;">
@@ -690,12 +697,15 @@ function _propCard(p) {
     return `<div style="position:absolute;top:8px;right:8px;background:rgba(34,211,238,0.15);color:#22d3ee;font-size:9px;font-weight:700;padding:2px 7px;border-radius:6px;border:1px solid rgba(34,211,238,0.3);">EXCLUSIVA</div>`
   })()
 
+  const isSelectMode = window.isPropertySelectionActive?.()
+  const isSelected = window.isPropertySelected?.(p.id)
   return `
-    <div style="background:rgba(14,20,34,0.95);border:1px solid rgba(255,255,255,0.07);border-radius:14px;
-    overflow:hidden;cursor:pointer;transition:transform 0.15s,box-shadow 0.15s;position:relative;"
+    <div style="background:rgba(14,20,34,0.95);border:1px solid ${isSelected?'rgba(167,139,250,0.5)':'rgba(255,255,255,0.07)'};border-radius:14px;
+    overflow:hidden;cursor:pointer;transition:transform 0.15s,box-shadow 0.15s;position:relative;${isSelected?'box-shadow:0 0 0 2px rgba(167,139,250,0.25);':''}"
     onmouseenter="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 32px rgba(0,0,0,0.4)'"
-    onmouseleave="this.style.transform='';this.style.boxShadow=''"
-    onclick="openPropDetail('${p.id}')">
+    onmouseleave="this.style.transform='';this.style.boxShadow='${isSelected?'0 0 0 2px rgba(167,139,250,0.25)':''}'"
+    onclick="${isSelectMode?`togglePropertySelection('${p.id}');event.stopPropagation();window.renderInmuebles?.()`:`openPropDetail('${p.id}')`}">
+    ${isSelectMode ? `<div style="position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;background:${isSelected?'#a78bfa':'rgba(0,0,0,0.6)'};border:2px solid ${isSelected?'#fff':'rgba(255,255,255,0.4)'};display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;z-index:2;">${isSelected?'✓':''}</div>` : ''}
 
       <!-- Imagen / placeholder -->
       <div style="position:relative;height:160px;background:linear-gradient(135deg,rgba(34,211,238,0.05),rgba(14,20,34,0.8));overflow:hidden;">
@@ -966,17 +976,26 @@ export function openPropModal(id = null) {
           </div>
           ${_field('prop-referencias','Referencias','text',val('referencias'),'Frente al parque, portón azul')}
 
-          <!-- Coordenadas + mapa picker -->
-          <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;">
+          <!-- Coordenadas + mapa picker + GPS auto -->
+          <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             ${_field('prop-lat','Latitud','number',val('lat'),'24.142600')}
             ${_field('prop-lng','Longitud','number',val('lng'),'-110.312800')}
+          </div>
+          <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <button type="button" onclick="propUseCurrentGPS()"
+              style="padding:10px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.35);
+              color:#4ade80;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;">
+              📍 Mi ubicación
+            </button>
             <button type="button" onclick="propOpenMapPicker()"
-              style="padding:9px 14px;background:rgba(34,211,238,0.15);border:1px solid rgba(34,211,238,0.35);
-              color:#22d3ee;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap;height:38px;">
-              📍 Ubicar en mapa
+              style="padding:10px;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.35);
+              color:#22d3ee;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;">
+              🗺 Ubicar en mapa
             </button>
           </div>
-          <div style="font-size:11px;color:#64748b;margin-top:4px;">Para terrenos sin dirección clara, usa el mapa para fijar el pin.</div>
+          <div style="font-size:11px;color:#64748b;margin-top:6px;">
+            <strong style="color:#4ade80;">Mi ubicación</strong>: usa GPS de tu cel y rellena dirección automáticamente. Ideal cuando estás parado frente al inmueble.
+          </div>
         </div>
 
         <!-- ── Sección: Precios ── -->
@@ -1332,15 +1351,27 @@ export function openPropModal(id = null) {
                 color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">+ Agregar</button>
             </div>
             <div style="font-size:11px;color:#475569;margin-bottom:10px;">💡 En Google Fotos: abre una foto → clic derecho → "Copiar dirección de imagen" → pega aquí. También funciona con Imgur, Cloudinary, etc.</div>
-            <!-- Subida de archivo -->
-            <div style="border:2px dashed rgba(34,211,238,0.15);border-radius:10px;padding:14px;text-align:center;margin-bottom:10px;cursor:pointer;"
-              onclick="document.getElementById('prop-foto-input').click()"
-              ondragover="event.preventDefault()" ondrop="propHandleDrop(event)">
-              <input type="file" id="prop-foto-input" multiple accept="image/*" style="display:none;"
-                onchange="propHandleFiles(this.files,'${prop?.id||''}')"/>
-              <div style="font-size:22px;margin-bottom:4px;opacity:0.4;">📷</div>
-              <div style="font-size:12px;color:#7a8899;">Arrastra o haz clic para subir desde dispositivo</div>
-              <div style="font-size:10px;color:#4b5563;margin-top:3px;">JPEG, PNG, WEBP · máx 5MB</div>
+            <!-- Subida de archivo: 2 botones (cámara + galería) -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+              <!-- Cámara directa: capture=environment fuerza cámara trasera en cel -->
+              <label for="prop-foto-camera"
+                style="border:2px dashed rgba(74,222,128,0.25);border-radius:10px;padding:14px 8px;text-align:center;cursor:pointer;background:rgba(74,222,128,0.04);">
+                <input type="file" id="prop-foto-camera" accept="image/*" capture="environment" style="display:none;"
+                  onchange="propHandleFiles(this.files,'${prop?.id||''}')"/>
+                <div style="font-size:24px;margin-bottom:4px;">📸</div>
+                <div style="font-size:11px;color:#4ade80;font-weight:600;">Tomar foto</div>
+                <div style="font-size:9px;color:#16a34a;margin-top:2px;">cámara directa</div>
+              </label>
+              <!-- Galería / archivo -->
+              <label for="prop-foto-input"
+                style="border:2px dashed rgba(34,211,238,0.18);border-radius:10px;padding:14px 8px;text-align:center;cursor:pointer;background:rgba(34,211,238,0.03);"
+                ondragover="event.preventDefault()" ondrop="propHandleDrop(event)">
+                <input type="file" id="prop-foto-input" multiple accept="image/*" style="display:none;"
+                  onchange="propHandleFiles(this.files,'${prop?.id||''}')"/>
+                <div style="font-size:24px;margin-bottom:4px;">🖼️</div>
+                <div style="font-size:11px;color:#22d3ee;font-weight:600;">Desde galería</div>
+                <div style="font-size:9px;color:#0891b2;margin-top:2px;">o arrastra · máx 5MB</div>
+              </label>
             </div>
             <!-- Fotos existentes -->
             <div id="prop-fotos-preview" style="display:flex;flex-wrap:wrap;gap:8px;">
@@ -2213,6 +2244,63 @@ window.openPropModal    = (id) => openPropModal(id)
 window.openPropDetail   = (id) => openPropDetail(id)
 window.closePropModal   = ()   => closePropModal()
 window.saveProp         = (id) => saveProp(id)
+
+// GPS directo: usa geolocalización del navegador + reverse geocoding
+window.propUseCurrentGPS = async () => {
+  const g = (id) => document.getElementById(id)
+  if (!navigator.geolocation) {
+    window.showToast?.('❌ GPS no disponible en este navegador')
+    return
+  }
+  window.showToast?.('📍 Obteniendo ubicación…')
+  try {
+    const pos = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      })
+    })
+    const lat = pos.coords.latitude
+    const lng = pos.coords.longitude
+    g('prop-lat').value = lat.toFixed(6)
+    g('prop-lng').value = lng.toFixed(6)
+
+    // Reverse geocode con Nominatim
+    try {
+      const r = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=es-MX&zoom=18`,
+        { headers: { 'User-Agent': 'NexusOS/1.0' } }
+      )
+      if (r.ok) {
+        const data = await r.json()
+        const a = data.address || {}
+        if (g('prop-calle') && !g('prop-calle').value && (a.road || a.pedestrian))
+          g('prop-calle').value = a.road || a.pedestrian
+        if (g('prop-colonia') && !g('prop-colonia').value && (a.suburb || a.neighbourhood))
+          g('prop-colonia').value = a.suburb || a.neighbourhood
+        if (g('prop-cp') && !g('prop-cp').value && a.postcode)
+          g('prop-cp').value = a.postcode
+        if (a.city || a.town || a.municipality) {
+          const mun = a.city || a.town || a.municipality
+          if (g('prop-municipio')) {
+            const opt = [...g('prop-municipio').options].find(o => o.value.toLowerCase() === mun.toLowerCase())
+            if (opt) g('prop-municipio').value = opt.value
+          }
+        }
+      }
+    } catch (e) { console.warn('[gps] reverse geocode', e) }
+
+    const acc = pos.coords.accuracy ? ` (±${Math.round(pos.coords.accuracy)}m)` : ''
+    window.showToast?.(`✓ Ubicación capturada${acc}`)
+  } catch (e) {
+    let msg = 'Error desconocido'
+    if (e.code === 1) msg = 'Permiso de ubicación denegado'
+    else if (e.code === 2) msg = 'No se pudo obtener ubicación'
+    else if (e.code === 3) msg = 'GPS timeout — intenta de nuevo'
+    window.showToast?.('❌ ' + msg)
+  }
+}
 
 // Map picker: abre overlay y llena lat/lng + (opcional) calle/colonia/municipio/cp si están vacíos
 window.propOpenMapPicker = async () => {
