@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.6.0-purple?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.7.0-purple?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/mobile-PWA%20ready-22d3ee?style=for-the-badge" alt="Mobile PWA"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
@@ -20,7 +20,8 @@
 
 <p align="center">
   <a href="#-acerca-del-proyecto">Acerca</a> •
-  <a href="#-novedades-v240">Novedades</a> •
+  <a href="#-novedades-v270--telegram-bot--ia-conversacional">Novedades</a> •
+  <a href="#-telegram-bot--nexus-en-tu-bolsillo">Bot Telegram</a> •
   <a href="#-características">Características</a> •
   <a href="#-vistas-del-sistema">Vistas</a> •
   <a href="#-demo">Demo</a> •
@@ -30,6 +31,232 @@
   <a href="#-deploy">Deploy</a> •
   <a href="#-contacto">Contacto</a>
 </p>
+
+---
+
+## 🆕 Novedades v2.7.0 — Telegram Bot + IA Conversacional
+
+**Tu Nexus OS ahora vive en Telegram.** Captura, consulta y opera tu CRM/finanzas/agenda desde el chat — sin abrir la app.
+
+| Feature | Detalle |
+|---|---|
+| 🤖 **Bot Telegram bidireccional** | Comandos `/resumen` `/leads` `/inmuebles` `/buscar` + parser semántico nativo (`+$400 @cuenta`, `#tarea p1 mañana`, `Juan #persona`, etc.) |
+| 💬 **IA conversacional con Gemini** | Pregunta en lenguaje natural ("¿qué inmuebles tengo en Querétaro debajo de 2M?"). El bot ve hasta 30 inmuebles + 15 leads y responde con análisis |
+| 📸 **Captura de inmueble por foto** | Mandas foto al bot con caption → sube a Supabase Storage → crea propiedad borrador → te manda link para terminar |
+| ☀️ **Resumen diario 8am** | Cron automático: total inmuebles, leads hoy/7d/total, próximas citas, leads fríos sin contactar |
+| 📩 **Notificación instantánea de leads** | Cualquier form de lead en `propiedad.html` te llega al instante con nombre, teléfono, mensaje y folio del inmueble |
+| 🔒 **Solo tú** | Auth por `chat_id` único — nadie más puede usar tu bot aunque sepa el handle |
+| 🧠 **Mismo parser que la app** | Todo lo que capturas por Telegram aparece en `nodes` table exactamente como si lo hubieras escrito en el Feed Central |
+
+### Stack de la integración
+
+| Capa | Tecnología |
+|---|---|
+| Bot | Telegram Bot API |
+| Orquestador | n8n (self-hosted) |
+| IA | Gemini 2.0 Flash |
+| DB | Supabase (PostgREST + Storage) |
+| Notificación de leads | Webhook desde `api/lead-capture.js` (server-side, vía `user_metadata.n8n_webhooks`) |
+
+📖 **Ver documentación completa abajo** → [Telegram Bot — Nexus en tu bolsillo](#-telegram-bot--nexus-en-tu-bolsillo)
+
+---
+
+## 🤖 Telegram Bot — Nexus en tu bolsillo
+
+### Qué puedes hacer
+
+#### 📊 Consultas rápidas
+
+| Comando | Resultado |
+|---|---|
+| `/resumen` | Stats: total inmuebles + leads hoy/7d/total |
+| `/leads` | Últimos 5 leads con nombre, contacto, inmueble y fecha |
+| `/inmuebles` | Últimos 5 inmuebles con precio, ubicación y folio |
+| `/buscar <texto>` | Busca por título o folio (ej: `/buscar querétaro`) |
+| `/ayuda` | Menú principal de ayuda |
+| `/ayuda-finanzas` | Tutorial completo de captura de finanzas |
+| `/ayuda-tareas` | Tutorial de tareas y agenda |
+| `/ayuda-personas` | Contactos, proyectos, cotizaciones, hábitos |
+| `/ayuda-inmuebles` | Captura por foto y comandos CRM |
+| `/ayuda-ia` | Preguntas en lenguaje natural |
+| `/ayuda-tips` | Trucos avanzados y workflows |
+
+#### ✏️ Captura semántica (mismo parser de la app)
+
+Escribe directo, sin comando. El bot detecta el tipo y guarda en `nodes`:
+
+```
+-$400 gasolina @bancomer #servicios       → 💸 gasto con cuenta y tag
++$15000 venta casa @hsbc                  → 💵 ingreso
+comprar cemento #tarea p1 mañana          → ✅ tarea alta para mañana
+Llamar Juan viernes #tarea                → ✅ tarea con fecha natural
+Juan Pérez #persona                       → 👤 contacto
+Casa Tulum #proyecto                      → 📁 proyecto
+#cotizacion $50000 @casatulum             → 📋 cotización vinculada
+- [x] Tomar agua #habito                  → 📝 hábito completado hoy
+Recordar comprar pan                      → 📝 nota libre
+```
+
+El bot responde con la categoría detectada (emoji + tipo + metadatos) y aparece en tu Nexus al refrescar.
+
+#### 📸 Captura de inmueble por foto
+
+1. Toma foto del inmueble con tu cel
+2. Envíala al bot
+3. En el **caption** escribe título y datos:
+   > "Casa Villa Magna 3rec 2.8M Querétaro"
+4. El bot:
+   - Sube la foto a Supabase Storage (`property-photos` bucket público)
+   - Crea propiedad con `status: 'borrador'`
+   - Asigna folio auto `BOT-XXXXXX`
+   - Te manda link directo para terminar de capturar en la app
+
+#### 💬 Preguntas en lenguaje natural (Gemini IA)
+
+Escribe sin `/` ni símbolos especiales:
+
+```
+¿cuántas casas tengo en Querétaro debajo de 2M?
+¿qué leads no he contestado hace más de 3 días?
+¿cuál es mi inmueble más caro?
+hazme un resumen ejecutivo de mi cartera
+¿qué inmuebles tengo en exclusiva?
+redacta mensaje para mandar a Juan que no contesta
+```
+
+El bot envía contexto (últimos 30 inmuebles + 15 leads) a Gemini 2.0 Flash y devuelve análisis conversacional.
+
+⚠️ Limitaciones: el bot **consulta**, no modifica datos por IA. Para mover/borrar usa los comandos directos o la app.
+
+#### 📩 Notificación automática de leads
+
+Cuando alguien llena el form de lead en cualquier `propiedad.html` pública, te llega al instante:
+
+> 📩 *Nuevo lead Nexus OS*
+> 🏠 *Casa Villa Magna* (NX-0042)
+> 👤 *Juan Pérez*
+> 📞 +52 555 1234567
+> ✉ juan@example.com
+> 💬 _Me interesa mucho, ¿se puede visitar este fin?_
+
+#### ☀️ Resumen diario 8am
+
+Sin que preguntes, cada mañana recibes:
+
+> ☀️ *Buenos días, Oscar*
+> 📊 Stats:
+> 🏠 Inmuebles: 42
+> 📩 Leads hoy: 3 · 7d: 18 · total: 247
+>
+> 📅 Próximas citas (7d):
+> • Notario casa Juárez — 10/06 11:00
+> • Visita Casa Tulum — 12/06 17:00
+>
+> 🥶 Leads sin contactar (+3d):
+> • María González (NX-0038) · 5d
+
+### Setup desde cero (15 minutos)
+
+#### 1. Crea bot en Telegram
+
+1. Abre Telegram → busca `@BotFather` → `/newbot`
+2. Sigue el flujo → guarda el **TOKEN**
+3. Habla con `@userinfobot` → guarda tu **CHAT_ID** numérico
+
+#### 2. Self-host n8n (o usa el tuyo)
+
+Si no tienes n8n, instálalo con Docker:
+
+```bash
+docker run -d --name n8n -p 5678:5678 \
+  -v ~/.n8n:/home/node/.n8n \
+  n8nio/n8n
+```
+
+Detrás de Cloudflare/Caddy/nginx con HTTPS — los webhooks de Telegram requieren TLS.
+
+#### 3. Importa los workflows
+
+En `docs/n8n/` están los templates JSON:
+- `etapa-1-telegram-lead.json` — notificación de leads
+- `etapa-2-email-smtp.json` — emails SMTP
+- `etapa-3-whatsapp-lead.json` — WhatsApp Cloud API
+- `etapa-4-drip-campaigns.json` — follow-up emails 3/7/14 días
+- `etapa-5-backup-multi.json` — backup multi-destino
+
+Para el bot bidireccional + cron 8am no hay template (son específicos del usuario). El código fuente del workflow está en este README más abajo o pídeselo a Claude.
+
+#### 4. Configura credenciales en n8n
+
+- **Telegram Bot API**: pega el TOKEN
+- **Variables inline en Code nodes** (n8n community no soporta `$vars`):
+  - `SUPABASE_URL` (tu instancia)
+  - `SUPABASE_SERVICE_KEY` (la `service_role`)
+  - `GEMINI_API_KEY`
+  - `USER_ID` (tu UUID de Supabase auth)
+  - `CHAT_ID` (tu ID Telegram)
+
+#### 5. Activa los workflows
+
+Cuando activas el workflow con **Telegram Trigger**, n8n auto-registra el webhook en Telegram. Verifica:
+
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+```
+
+#### 6. Conecta Nexus → bot (para notificación de leads)
+
+1. Abre Nexus → **Configuración → Conexiones → 📩 Nuevo lead**
+2. Pega la URL del webhook de tu workflow Etapa 1
+3. Guardar
+
+Esto persiste en `user_metadata.n8n_webhooks.lead_new` en Supabase — así `api/lead-capture.js` (que corre anónimo) puede leerlo y disparar.
+
+### Arquitectura
+
+```
+┌─────────────────────┐
+│  Telegram cliente   │ ← tu cel
+└──────────┬──────────┘
+           │ Bot API
+┌──────────▼──────────┐         ┌──────────────────┐
+│  Bot @web83737Bot   │────────►│  Telegram cloud  │
+└──────────┬──────────┘         └─────────┬────────┘
+           │                              │ webhook POST
+           │                    ┌─────────▼────────┐
+           │                    │   n8n trigger    │
+           │                    └─────────┬────────┘
+           │                              │
+           │                    ┌─────────▼────────┐
+           │                    │  Router (Code)   │
+           │                    │  • parser        │
+           │                    │  • cmd handler   │
+           │                    │  • Gemini call   │
+           │                    │  • Supabase query│
+           │                    └─────────┬────────┘
+           │                              │
+           │                    ┌─────────▼────────┐
+           │                    │   Supabase       │
+           │                    │   • nodes        │
+           │                    │   • properties   │
+           │                    │   • property_leads│
+           │                    │   • Storage      │
+           │                    └──────────────────┘
+           │
+┌──────────▼──────────┐
+│  propiedad.html     │ → /api/lead-capture → user_metadata → n8n webhook → Telegram
+│  (form de lead)     │
+└─────────────────────┘
+```
+
+### Seguridad
+
+- Auth por `chat_id` hardcoded — solo tu Telegram recibe respuestas
+- Service key de Supabase **inline** en el workflow (privado, en tu propio n8n)
+- Bot token solo tú lo conoces — Telegram lo trata como password
+- No expone endpoints públicos de Supabase
+- El bot **no elimina datos** por diseño (sin importar el comando)
 
 ---
 
