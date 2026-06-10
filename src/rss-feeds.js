@@ -517,10 +517,14 @@ function _openDraftModal(item, draft, projectId) {
     ${fieldHtml('Prompt imagen OG (para DALL-E / Midjourney)', draft.og_image_prompt, { long: true, minHeight: '70px', hint: 'Pega esto en tu generador favorito para crear la imagen del post' })}
 
     <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;">
-      <button id="dr-copy-all" style="flex:1;min-width:160px;padding:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">📋 Copiar todo en formato</button>
-      <button id="dr-save" style="flex:1;min-width:120px;padding:11px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#22c55e;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">💾 Guardar cambios</button>
+      <button id="dr-copy-all" style="flex:1;min-width:160px;padding:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">📋 Copiar todo</button>
+      <button id="dr-save" style="flex:1;min-width:120px;padding:11px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#22c55e;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">💾 Guardar</button>
       <button id="dr-regen" style="flex:1;min-width:140px;padding:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">🔄 Regenerar</button>
-      <button id="dr-publish" style="flex:1;min-width:140px;padding:11px;background:linear-gradient(135deg,#34d399,#22c55e);border:none;color:#000;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">🚀 Marcar publicado</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+      <button id="dr-wp-draft" style="flex:1;min-width:170px;padding:11px;background:rgba(33,117,155,0.15);border:1px solid rgba(33,117,155,0.4);color:#21759b;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">📰 Subir a WP (borrador)</button>
+      <button id="dr-wp-publish" style="flex:1;min-width:180px;padding:11px;background:linear-gradient(135deg,#21759b,#3b82f6);border:none;color:#fff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">🚀 Publicar a WordPress</button>
+      <button id="dr-mark-published" style="flex:1;min-width:160px;padding:11px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34d399;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">✓ Marcar publicado</button>
     </div>
     <div id="dr-feedback" style="margin-top:10px;font-size:12px;color:#9ca3af;text-align:center;min-height:18px;"></div>
   `
@@ -599,14 +603,35 @@ ${d.og_image_prompt}`
     await _openGenerateDraftModal(item, projectId)
   })
 
-  // publish
-  modal.querySelector('#dr-publish').addEventListener('click', async () => {
+  // mark published manualmente (sin WP API)
+  modal.querySelector('#dr-mark-published').addEventListener('click', async () => {
     const url = prompt('URL del post publicado (opcional):', '')
     try {
       await _api('update_item', { item_id: item.id, patch: { draft_content: JSON.stringify(readDraft()), status: 'published', blog_post_url: url || null } })
       cleanup()
       renderProjectRssTab(projectId)
     } catch (e) { feedback('Error: ' + e.message, '#f87171') }
+  })
+
+  // WordPress: subir como borrador
+  const wpPublish = async (wpStatus) => {
+    // Primero guardar cambios actuales
+    try { await _api('update_item', { item_id: item.id, patch: { draft_content: JSON.stringify(readDraft()) } }) }
+    catch (e) { feedback('Error guardando: ' + e.message, '#f87171'); return }
+    feedback('⏳ Subiendo a WordPress…', '#9ca3af')
+    try {
+      const r = await _api('publish_to_wordpress', { item_id: item.id, status: wpStatus })
+      feedback('✓ ' + (wpStatus === 'publish' ? 'Publicado' : 'Borrador creado') + ' en WP — ID ' + r.post.id)
+      window.open(r.post.url, '_blank')
+      setTimeout(() => { cleanup(); renderProjectRssTab(projectId) }, 1500)
+    } catch (e) {
+      feedback('Error WP: ' + e.message, '#f87171')
+    }
+  }
+  modal.querySelector('#dr-wp-draft').addEventListener('click', () => wpPublish('draft'))
+  modal.querySelector('#dr-wp-publish').addEventListener('click', () => {
+    if (!confirm('¿Publicar AHORA en WordPress? (no será borrador, queda visible al instante)')) return
+    wpPublish('publish')
   })
 }
 

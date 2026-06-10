@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.7.0-purple?style=for-the-badge" alt="Version"/>
+  <img src="https://img.shields.io/badge/version-2.8.0-purple?style=for-the-badge" alt="Version"/>
   <img src="https://img.shields.io/badge/mobile-PWA%20ready-22d3ee?style=for-the-badge" alt="Mobile PWA"/>
   <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="License"/>
   <img src="https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge" alt="Status"/>
@@ -20,7 +20,8 @@
 
 <p align="center">
   <a href="#-acerca-del-proyecto">Acerca</a> •
-  <a href="#-novedades-v270--telegram-bot--ia-conversacional">Novedades</a> •
+  <a href="#-novedades-v280--disparadores--rss--ia-editorial">Novedades</a> •
+  <a href="#-disparadores-y-rss--el-corazón-automatizado">Disparadores y RSS</a> •
   <a href="#-telegram-bot--nexus-en-tu-bolsillo">Bot Telegram</a> •
   <a href="#-características">Características</a> •
   <a href="#-vistas-del-sistema">Vistas</a> •
@@ -31,6 +32,162 @@
   <a href="#-deploy">Deploy</a> •
   <a href="#-contacto">Contacto</a>
 </p>
+
+---
+
+## 🆕 Novedades v2.8.0 — Disparadores + RSS + IA Editorial
+
+**Nexus se vuelve activo.** Hasta ahora capturabas y consultabas. Ahora también *te avisa*, *te acciona* y *te redacta*.
+
+| Feature | Detalle |
+|---|---|
+| 🎛️ **Módulo Disparadores (IFTTT-style)** | Galería de recetas pre-armadas que conectan Nexus con Telegram + n8n. Un toggle ON crea el workflow automático en n8n vía API — sin programar nada. Activa/desactiva/configura desde la app. |
+| ⏰ **9+ recetas listas** | ☀️ Resumen 8am · 🌙 Cierre jornada 9pm · 📩 Lead → Telegram · 🥶 Lead frío +3d · 💸 Gasto inusual · 📅 Exclusiva por vencer · 📦 Backup status · ⏰ Cita 1h antes · 🎂 Cumpleaños cliente · 📡 RSS contenido nuevo |
+| 📡 **Pestaña RSS en proyectos** | Tab nueva en cada proyecto: rastrea YouTube, Instagram, TikTok, Spotify, Twitter, Facebook, SoundCloud, Bandcamp, Twitch, WordPress, Google News y RSS directo. Pipeline editorial completo con 8 estados (pending/accepted/rejected/edited/scheduled/published/archived). |
+| 🤖 **Draft IA con Gemini** | 1 click en cualquier item RSS → Gemini 2.0 genera draft listo para blog: título SEO, H1, slug, meta description, excerpt, body markdown (200-400 palabras), tags, categoría sugerida, keywords focus y prompt para imagen OG. |
+| 🚀 **Auto-publish a WordPress** | Desde el draft → 1 click → publica a tu WP vía REST API + Application Password. Sin copy-paste. Opcional: subir como borrador para revisar. |
+| 📲 **Botones inline en Telegram** | Las notificaciones de contenido nuevo llegan con `[✓ Aceptar] [✗ Rechazar] [🤖 Draft IA] [👀 Ver]` — manejas el pipeline editorial desde el chat sin abrir la app. |
+
+### Stack agregado en v2.8
+
+| Capa | Tecnología |
+|---|---|
+| Orquestación | n8n REST API (workflows creados desde Nexus) |
+| IA editorial | Gemini 2.0 Flash con `responseMimeType: application/json` |
+| Tracker RSS | Self-host n8n con cron 15min + parser RSS/Atom propio |
+| Default RSS source | `rsshub.app` público (migrable a self-host) |
+| WordPress | REST API + Basic Auth con Application Password |
+| Telegram callbacks | inline_keyboard + callback_query handler en bot |
+
+📖 **Ver documentación completa abajo** → [Disparadores y RSS — el corazón automatizado](#-disparadores-y-rss--el-corazón-automatizado)
+
+---
+
+## 🎛️ Disparadores y RSS — el corazón automatizado
+
+### El módulo Disparadores
+
+Catálogo IFTTT-style accesible desde el sidebar (`🎛️ Disparadores`). Cada receta es un workflow n8n declarado en código y materializado en tu instancia n8n cuando lo activas.
+
+#### Catálogo inicial (v2.8)
+
+| Receta | Categoría | Trigger | Acción |
+|---|---|---|---|
+| ☀️ Resumen mañana | Cotidiano | Cron 8am (configurable) | Telegram con stats + pendientes + leads fríos + finanzas ayer |
+| 🌙 Cierre de jornada | Cotidiano | Cron 21pm (configurable) | Telegram con movimientos del día, leads atendidos, tareas completadas |
+| 📩 Lead nuevo → Telegram | CRM | Webhook desde `propiedad.html` | Telegram con datos del cliente y propiedad |
+| 🥶 Lead frío sin contactar | CRM | Cron diario | Telegram lista leads viejos sin movimiento (umbral configurable) |
+| 📅 Exclusiva por vencer | CRM | Cron diario | Telegram alerta de inmuebles con `exclusiva_fin` cercana (días config.) |
+| 💸 Gasto inusual | Finanzas | Cron diario | Telegram con gastos del día arriba de umbral configurable |
+| 🎂 Cumpleaños cliente hoy | CRM | Cron diario | Telegram lista contactos con `birthday` = hoy |
+| ⏰ Recordatorio de cita 1h antes | Cotidiano | Cron cada 15min | Telegram con título, hora y ubicación de tareas próximas |
+| 📦 Backup completado/falló | Sistema | Webhook desde Drive backup | Telegram confirmación o alerta |
+| 📡 Contenido nuevo en RSS | Contenido | Cron cada 15min (compartido) | Telegram con botones inline accept/reject/draft/view |
+
+#### Arquitectura
+
+```
+Usuario activa receta en UI
+       ↓
+POST /api/automations { action: 'enable', recipe_id, params }
+       ↓
+recipe.generateWorkflow(params, ctx)  ← genera JSON declarativo n8n
+       ↓
+POST n8n.zxyw.site/api/v1/workflows   ← crea workflow
+       ↓
+POST .../workflows/:id/activate       ← activa
+       ↓
+INSERT user_automations (recipe_id, n8n_workflow_id, params)
+       ↓
+✅ Workflow corre solo desde ahora
+```
+
+Schema Supabase:
+- `user_automations` — estado por usuario (UNIQUE owner_id, recipe_id)
+- `automation_runs` — log de ejecuciones
+
+### El módulo RSS por proyecto
+
+Cada proyecto tiene una pestaña nueva 📡 **RSS** (al lado de Resumen, Finanzas, Kanban, Notas, Wiki, Bitácora) donde registras *fuentes* y trabajas un *pipeline editorial*.
+
+#### Plataformas soportadas (12)
+
+🎬 YouTube · 📷 Instagram · 🎵 TikTok · 🟢 Spotify · 🐦 Twitter/X · 📘 Facebook · 🟠 SoundCloud · 🎶 Bandcamp · 🟣 Twitch · 📰 WordPress · 📡 Google News · 📰 RSS directo
+
+#### Pipeline de estados
+
+```
+🟡 pending → ✓ accepted → ✏️ edited → 📅 scheduled → 🚀 published
+                  ↓
+              ✗ rejected / 📦 archived
+```
+
+#### Flujo end-to-end "BN Records"
+
+1. **Registras fuentes** una vez: artistas que sigues + handles
+2. **Tracker n8n** corre cada 15 min: parsea RSS/Atom, deduplica, inserta items, **notifica Telegram con botones**
+3. **Desde el chat** decides accept/reject con un tap
+4. Si aceptas y pides **🤖 Draft IA** → Gemini genera el post completo en 10-30 segundos:
+   - Título SEO (50-60 chars con contador)
+   - H1
+   - Slug URL amigable
+   - Meta description (140-160 chars)
+   - Excerpt
+   - Body markdown 200-400 palabras
+   - Tags
+   - Categoría sugerida
+   - Keywords focus
+   - Prompt detallado para generar imagen OG
+5. **Modal de revisión** en Nexus permite editar inline, copiar por campo, copiar todo
+6. **🚀 Publicar a WordPress** — 1 click vía REST API:
+   - Si tienes Yoast/Rank Math, los meta SEO se pasan automáticamente
+   - Status: `draft` (revisar) o `publish` (visible al instante)
+   - URL del post se guarda en `project_rss_items.blog_post_url`
+
+#### Configuración WordPress (1 vez)
+
+1. WP Admin → Usuarios → Tu perfil → final → "Contraseñas de aplicación"
+2. Escribe nombre "Nexus OS" → Generar → copia el password
+3. Nexus → Configuración → Conexiones → 📰 WordPress → pega URL/usuario/app password
+4. Probar conexión ✓
+
+### Botones inline en Telegram
+
+Cuando llega contenido nuevo:
+
+```
+🎬 Bad Bunny publicó en YouTube
+DTMF - Official Video
+hace 2 minutos
+
+[✓ Aceptar]   [✗ Rechazar]
+[🤖 Draft IA] [👀 Ver fuente]
+```
+
+- **✓ Aceptar** → marca como aceptado y edita el mensaje a "✅ Aceptado"
+- **✗ Rechazar** → descartado
+- **🤖 Draft IA** → invoca Gemini directamente desde el bot (no necesitas abrir Nexus) y te manda el draft como nuevo mensaje
+- **👀 Ver fuente** → abre la URL original en tu navegador
+
+El bot escucha `callback_query` además de `message`, filtrado por tu `chat_id`.
+
+### Schema Supabase v2.8
+
+```
+user_automations          (id, owner_id, recipe_id, enabled, params, n8n_workflow_id, ...)
+automation_runs           (id, automation_id, status, detail, ran_at)
+project_rss_sources       (id, project_id, owner_id, platform, handle, feed_url, label,
+                           artist_name, enabled, last_check_at, last_seen_id, fail_count)
+project_rss_items         (id, source_id, project_id, owner_id, external_id, title, url,
+                           thumbnail, description, author, published_at, status, notes,
+                           scheduled_for, blog_post_url, draft_content)
+```
+
+### Env vars nuevas (Vercel)
+
+- `N8N_API_KEY` — JWT para crear/activar workflows en tu n8n
+- `N8N_BASE_URL` — default `https://n8n.zxyw.site`
+- `TELEGRAM_CHAT_ID` — tu chat_id de Telegram
 
 ---
 

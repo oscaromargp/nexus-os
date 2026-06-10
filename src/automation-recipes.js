@@ -464,21 +464,175 @@ return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: fal
     },
   },
 
-  // ── 7. RSS contenido nuevo (placeholder Fase 2) ───────────────────
+  // ── 7. RSS contenido nuevo (registrada como receta lite — el workflow vive aparte) ──
   {
     id: 'rss_new_content',
     name: '📡 Contenido nuevo en RSS',
-    desc: 'Cuando un artista/proyecto publique en YouTube, IG, TikTok o Spotify, te avisa con link directo. Configura las fuentes en cada proyecto → tab 📡 RSS.',
+    desc: 'Cuando un artista/proyecto publique en YouTube, IG, TikTok o Spotify, te avisa con link directo + botones [✓ Aceptar] [✗ Rechazar] [🤖 Draft IA]. Configura las fuentes en cada proyecto → tab 📡 RSS.',
     category: 'content',
     icon: '📡',
     color: '#34d399',
-    requiresPhase: 2,
+    paramsSchema: [],
+    generateWorkflow(params, ctx) {
+      // El workflow del tracker corre globalmente (no por usuario) — esta receta
+      // sólo informa al usuario que el sistema RSS ya está activo. Crea un
+      // workflow stub que no hace nada en n8n para mantener el registro.
+      return {
+        name: '[Nexus Auto] 📡 RSS tracker (info)',
+        nodes: [
+          {
+            parameters: { rule: { interval: [{ field:'cronExpression', expression: '0 0 1 1 *' }] } },
+            id: 'noop', name: 'Noop (info-only)',
+            type: 'n8n-nodes-base.scheduleTrigger', typeVersion: 1.2, position: [240, 300],
+          },
+        ],
+        connections: {},
+        settings: { executionOrder: 'v1' },
+      }
+    },
+  },
+
+  // ── 9. Cita en 1h → recordatorio ─────────────────────────────────
+  {
+    id: 'appointment_reminder',
+    name: '⏰ Recordatorio de cita 1h antes',
+    desc: 'Revisa cada 15 min tus tareas/citas (nodes kanban con due_date) y te recuerda 1h antes con datos de ubicación si están en la nota.',
+    category: 'daily',
+    icon: '⏰',
+    color: '#60a5fa',
     paramsSchema: [
-      { key: 'interval_minutes', label: 'Frecuencia (minutos)', type: 'number', min: 5, max: 120, default: 15 },
+      { key: 'minutes_ahead', label: 'Minutos de anticipación', type: 'number', min: 15, max: 240, default: 60 },
     ],
     generateWorkflow(params, ctx) {
-      // Implementado en Fase 2
-      return null
+      const { minutes_ahead = 60 } = params
+      const { supabaseUrl, supabaseKey, telegramChatId, userId } = ctx
+      const code = `
+const SB_URL = ${JSON.stringify(supabaseUrl)};
+const SB_KEY = ${JSON.stringify(supabaseKey)};
+const helpers = this.helpers;
+const H = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY };
+
+const ahead = ${minutes_ahead};
+// Ventana: items con due_date entre now+(ahead-7) y now+(ahead+8) min — 15min granularidad del cron
+const from = new Date(Date.now() + (ahead - 7) * 60000).toISOString();
+const to   = new Date(Date.now() + (ahead + 8) * 60000).toISOString();
+
+// nodes kanban con metadata.due_date en ese rango
+const all = await helpers.httpRequest({
+  method:'GET',
+  url: SB_URL + '/rest/v1/nodes?select=id,content,metadata&owner_id=eq.${userId}&type=eq.kanban&metadata->>due_date=gte.' + from.slice(0,10) + '&metadata->>due_date=lte.' + to.slice(0,10),
+  headers: H, json: true,
+});
+
+// Filtra por hora exacta si hay metadata.due_time
+const matches = all.filter(n => {
+  const dd = n.metadata?.due_date;
+  const dt = n.metadata?.due_time;
+  if (!dd) return false;
+  const iso = dd + (dt ? 'T' + dt : 'T09:00:00');
+  const d = new Date(iso);
+  return !isNaN(d) && d.getTime() >= new Date(from).getTime() && d.getTime() <= new Date(to).getTime();
+});
+
+if (!matches.length) return [{ json: { skip: true } }];
+
+const lines = ['⏰ *Cita en aproximadamente ' + ahead + ' min:*', ''];
+matches.forEach(m => {
+  const titulo = m.metadata?.label || m.content || '—';
+  const t = m.metadata?.due_time || '';
+  const loc = m.metadata?.location || '';
+  lines.push('• *' + titulo.slice(0,80) + '*' + (t ? ' · ' + t : ''));
+  if (loc) lines.push('  📍 ' + loc.slice(0,100));
+});
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: false } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] ⏰ Cita ' + minutes_ahead + 'min',
+        nodes: [
+          cronNode('cron', 'Cron 15min', [240, 300], '*/15 * * * *'),
+          codeNode('check', 'Check citas', [460, 300], code),
+          {
+            parameters: { conditions: { string: [{ value1: '={{ $json.skip }}', operation: 'equal', value2: 'false' }] } },
+            id: 'gate', name: 'Si hay', type: 'n8n-nodes-base.if',
+            typeVersion: 1, position: [680, 300],
+          },
+          tgSendNode('tg', 'Telegram Send', [900, 200], '={{ $json.chatId }}', '={{ $json.reply }}'),
+        ],
+        connections: mergeConns(
+          conn('Cron 15min', 'Check citas'),
+          conn('Check citas', 'Si hay'),
+          { 'Si hay': { main: [[{ node: 'Telegram Send', type: 'main', index: 0 }], []] } },
+        ),
+        settings: { executionOrder: 'v1' },
+      }
+    },
+  },
+
+  // ── 10. Cumpleaños cliente hoy ───────────────────────────────────
+  {
+    id: 'birthday_reminder',
+    name: '🎂 Cumpleaños cliente hoy',
+    desc: 'Cada mañana revisa tus contactos y te avisa si alguno cumple años hoy. Lee metadata.birthday (YYYY-MM-DD o MM-DD).',
+    category: 'crm',
+    icon: '🎂',
+    color: '#f472b6',
+    paramsSchema: [
+      { key: 'hour', label: 'Hora aviso (24h)', type: 'number', min: 0, max: 23, default: 9 },
+    ],
+    generateWorkflow(params, ctx) {
+      const { hour = 9 } = params
+      const { supabaseUrl, supabaseKey, telegramChatId, userId } = ctx
+      const code = `
+const SB_URL = ${JSON.stringify(supabaseUrl)};
+const SB_KEY = ${JSON.stringify(supabaseKey)};
+const helpers = this.helpers;
+const H = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY };
+
+const today = new Date();
+const mm = String(today.getMonth()+1).padStart(2,'0');
+const dd = String(today.getDate()).padStart(2,'0');
+
+const contacts = await helpers.httpRequest({
+  method:'GET',
+  url: SB_URL + '/rest/v1/nodes?select=id,content,metadata&owner_id=eq.${userId}&type=eq.contact',
+  headers: H, json: true,
+});
+
+const matches = contacts.filter(c => {
+  const b = c.metadata?.birthday || c.metadata?.fecha_nacimiento || '';
+  if (!b) return false;
+  return b.endsWith(mm + '-' + dd) || b === mm + '-' + dd;
+});
+
+if (!matches.length) return [{ json: { skip: true } }];
+
+const lines = ['🎂 *Cumpleaños hoy:*', ''];
+matches.forEach(c => {
+  const name = c.metadata?.name || c.metadata?.label || c.content || '—';
+  const phone = c.metadata?.phone || c.metadata?.telefono || '';
+  lines.push('• *' + name + '*' + (phone ? ' · 📞 ' + phone : ''));
+});
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: false } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 🎂 Cumpleaños',
+        nodes: [
+          cronNode('cron', 'Cron diario', [240, 300], `0 ${hour} * * *`),
+          codeNode('check', 'Check cumples', [460, 300], code),
+          {
+            parameters: { conditions: { string: [{ value1: '={{ $json.skip }}', operation: 'equal', value2: 'false' }] } },
+            id: 'gate', name: 'Si hay', type: 'n8n-nodes-base.if',
+            typeVersion: 1, position: [680, 300],
+          },
+          tgSendNode('tg', 'Telegram Send', [900, 200], '={{ $json.chatId }}', '={{ $json.reply }}'),
+        ],
+        connections: mergeConns(
+          conn('Cron diario', 'Check cumples'),
+          conn('Check cumples', 'Si hay'),
+          { 'Si hay': { main: [[{ node: 'Telegram Send', type: 'main', index: 0 }], []] } },
+        ),
+        settings: { executionOrder: 'v1' },
+      }
     },
   },
 

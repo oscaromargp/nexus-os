@@ -345,6 +345,88 @@ DEVUELVE *EXCLUSIVAMENTE* un objeto JSON con esta forma exacta (sin markdown fen
       return res.status(200).json({ ok: true, draft, item: updated })
     }
 
+    // ── PUBLISH TO WORDPRESS ─────────────────────────────────────
+    // Toma un item con draft_content (JSON con campos SEO) y lo publica al
+    // WordPress del usuario via REST API. Credenciales en user_metadata.wordpress.
+    if (action === 'publish_to_wordpress') {
+      const { item_id, status = 'draft' } = req.body  // status: 'draft'|'publish'
+      if (!item_id) return res.status(400).json({ error: 'item_id requerido' })
+
+      // Credenciales WP del user_metadata
+      const wpUrl = user.user_metadata?.wordpress?.url
+      const wpUser = user.user_metadata?.wordpress?.username
+      const wpPass = user.user_metadata?.wordpress?.app_password
+      if (!wpUrl || !wpUser || !wpPass) {
+        return res.status(400).json({ error: 'Configura tu WordPress en Configuración → Conexiones → 📰 WordPress.' })
+      }
+
+      const { data: item, error: iErr } = await admin
+        .from('project_rss_items')
+        .select('*')
+        .eq('id', item_id)
+        .eq('owner_id', userId)
+        .single()
+      if (iErr || !item) return res.status(404).json({ error: 'Item no encontrado' })
+      if (!item.draft_content) return res.status(400).json({ error: 'Item no tiene draft generado. Pulsa "🤖 Draft IA" primero.' })
+
+      let draft
+      try { draft = JSON.parse(item.draft_content) }
+      catch { return res.status(500).json({ error: 'draft_content inválido' }) }
+
+      // Construye payload WP (mínimo: title, content, status, slug, excerpt)
+      // El body es markdown — WP lo guarda y muestra; si quieres renderear, instala MD plugin.
+      const wpPayload = {
+        title:   draft.title_seo || draft.h1 || item.title || '(sin título)',
+        content: draft.body_markdown || '',
+        status,  // 'draft' | 'publish'
+        excerpt: draft.excerpt || '',
+        slug:    draft.slug || undefined,
+        meta:    {
+          // Algunos plugins SEO (Yoast/Rank Math) leen estos meta keys
+          _yoast_wpseo_title:    draft.title_seo,
+          _yoast_wpseo_metadesc: draft.meta_description,
+          rank_math_title:       draft.title_seo,
+          rank_math_description: draft.meta_description,
+        },
+      }
+
+      // POST a /wp-json/wp/v2/posts
+      const auth = Buffer.from(wpUser + ':' + wpPass).toString('base64')
+      let wpResp
+      try {
+        wpResp = await fetch(wpUrl.replace(/\/$/, '') + '/wp-json/wp/v2/posts', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Basic ' + auth,
+          },
+          body: JSON.stringify(wpPayload),
+        })
+      } catch (e) {
+        return res.status(502).json({ error: 'WordPress fetch fail: ' + e.message })
+      }
+
+      const wpJson = await wpResp.json().catch(() => ({}))
+      if (!wpResp.ok) {
+        return res.status(502).json({ error: 'WP ' + wpResp.status + ': ' + (wpJson.message || JSON.stringify(wpJson).slice(0, 200)) })
+      }
+
+      // Update item con URL del post
+      const postUrl = wpJson.link || (wpUrl + '/?p=' + wpJson.id)
+      await admin
+        .from('project_rss_items')
+        .update({
+          status: status === 'publish' ? 'published' : 'scheduled',
+          blog_post_url: postUrl,
+        })
+        .eq('id', item_id)
+
+      return res.status(200).json({
+        ok: true,
+        post: { id: wpJson.id, url: postUrl, status: wpJson.status },
+      })
+    }
+
     return res.status(400).json({ error: 'action no reconocida: ' + action })
   } catch (e) {
     console.error('[rss]', e)

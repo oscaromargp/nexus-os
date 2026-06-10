@@ -102,3 +102,90 @@ if (typeof window !== 'undefined') {
   // Auto-hidrata al cargar (best-effort)
   setTimeout(() => hydrateFromMetadata(), 1500)
 }
+
+// ── WordPress connector (F6) ─────────────────────────────────────
+export async function loadWordPressCreds() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    return user?.user_metadata?.wordpress || null
+  } catch { return null }
+}
+
+export async function saveWordPressCreds({ url, username, app_password }) {
+  if (!url || !username || !app_password) throw new Error('Faltan campos')
+  const cleanUrl = url.replace(/\/$/, '')
+  const { error } = await supabase.auth.updateUser({
+    data: { wordpress: { url: cleanUrl, username, app_password } },
+  })
+  if (error) throw error
+}
+
+export async function testWordPress() {
+  const creds = await loadWordPressCreds()
+  if (!creds) throw new Error('Guarda credenciales primero')
+  const auth = btoa(creds.username + ':' + creds.app_password)
+  const r = await fetch(creds.url + '/wp-json/wp/v2/users/me', {
+    headers: { Authorization: 'Basic ' + auth },
+  })
+  if (!r.ok) throw new Error('WP ' + r.status)
+  const j = await r.json()
+  return j.name || j.username || 'OK'
+}
+
+async function _initWpConnector() {
+  const elUrl  = document.getElementById('conn-wp-url')
+  const elUser = document.getElementById('conn-wp-user')
+  const elPass = document.getElementById('conn-wp-pass')
+  const elSave = document.getElementById('conn-wp-save')
+  const elTest = document.getElementById('conn-wp-test')
+  const elStat = document.getElementById('conn-wp-status')
+  if (!elUrl) return  // panel no cargado todavía
+
+  const creds = await loadWordPressCreds()
+  if (creds) {
+    elUrl.value = creds.url || ''
+    elUser.value = creds.username || ''
+    // No mostramos el app_password — campo vacío significa "conserva el actual"
+    elStat.textContent = '🟢 Conectado a ' + creds.url
+    elStat.style.color = '#22c55e'
+  } else {
+    elStat.textContent = '⚪ No conectado'
+  }
+
+  elSave.addEventListener('click', async () => {
+    const url = elUrl.value.trim()
+    const username = elUser.value.trim()
+    let app_password = elPass.value.trim()
+    if (!app_password && creds) app_password = creds.app_password  // conserva
+    try {
+      await saveWordPressCreds({ url, username, app_password })
+      elStat.textContent = '💾 Guardado'
+      elStat.style.color = '#22c55e'
+      elPass.value = ''
+    } catch (e) {
+      elStat.textContent = '⚠ Error: ' + e.message
+      elStat.style.color = '#f87171'
+    }
+  })
+
+  elTest.addEventListener('click', async () => {
+    elStat.textContent = '⏳ Probando…'
+    elStat.style.color = '#9ca3af'
+    try {
+      const who = await testWordPress()
+      elStat.textContent = '✓ Conectado como ' + who
+      elStat.style.color = '#22c55e'
+    } catch (e) {
+      elStat.textContent = '⚠ ' + e.message
+      elStat.style.color = '#f87171'
+    }
+  })
+}
+
+if (typeof window !== 'undefined') {
+  setTimeout(() => { try { _initWpConnector() } catch (e) { console.warn('[wp connector]', e) } }, 2000)
+  // Re-inicializa si el usuario navega a la tab de Conexiones después
+  document.addEventListener('click', (e) => {
+    if (e.target?.closest?.('.cfg-tab')) setTimeout(() => { try { _initWpConnector() } catch {} }, 200)
+  })
+}
