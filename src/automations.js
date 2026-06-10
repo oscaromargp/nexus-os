@@ -212,7 +212,7 @@ async function renderAutomations() {
   let html = `
     <div style="padding:20px; max-width:1200px; margin:0 auto;">
       <div style="margin-bottom:24px;">
-        <h2 style="font-size:24px; font-weight:800; margin:0 0 6px;">🎛️ Disparadores</h2>
+        <h2 style="font-size:24px; font-weight:800; margin:0 0 6px;">⚡ Flujos</h2>
         <p style="color:#9ca3af; font-size:14px; margin:0;">
           Recetas pre-armadas que conectan Nexus con Telegram, n8n y servicios externos.
           Activa con un toggle — sin programar.

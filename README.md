@@ -21,7 +21,7 @@
 <p align="center">
   <a href="#-acerca-del-proyecto">Acerca</a> •
   <a href="#-novedades-v280--disparadores--rss--ia-editorial">Novedades</a> •
-  <a href="#-disparadores-y-rss--el-corazón-automatizado">Disparadores y RSS</a> •
+  <a href="#-disparadores-y-rss--el-corazón-automatizado">Flujos y RSS</a> •
   <a href="#-telegram-bot--nexus-en-tu-bolsillo">Bot Telegram</a> •
   <a href="#-características">Características</a> •
   <a href="#-vistas-del-sistema">Vistas</a> •
@@ -35,13 +35,13 @@
 
 ---
 
-## 🆕 Novedades v2.8.0 — Disparadores + RSS + IA Editorial
+## 🆕 Novedades v2.8.0 — Flujos + RSS + IA Editorial
 
 **Nexus se vuelve activo.** Hasta ahora capturabas y consultabas. Ahora también *te avisa*, *te acciona* y *te redacta*.
 
 | Feature | Detalle |
 |---|---|
-| 🎛️ **Módulo Disparadores (IFTTT-style)** | Galería de recetas pre-armadas que conectan Nexus con Telegram + n8n. Un toggle ON crea el workflow automático en n8n vía API — sin programar nada. Activa/desactiva/configura desde la app. |
+| ⚡ **Módulo Flujos (IFTTT-style)** | Galería de recetas pre-armadas que conectan Nexus con Telegram + n8n. Un toggle ON crea el workflow automático en n8n vía API — sin programar nada. Activa/desactiva/configura desde la app. |
 | ⏰ **9+ recetas listas** | ☀️ Resumen 8am · 🌙 Cierre jornada 9pm · 📩 Lead → Telegram · 🥶 Lead frío +3d · 💸 Gasto inusual · 📅 Exclusiva por vencer · 📦 Backup status · ⏰ Cita 1h antes · 🎂 Cumpleaños cliente · 📡 RSS contenido nuevo |
 | 📡 **Pestaña RSS en proyectos** | Tab nueva en cada proyecto: rastrea YouTube, Instagram, TikTok, Spotify, Twitter, Facebook, SoundCloud, Bandcamp, Twitch, WordPress, Google News y RSS directo. Pipeline editorial completo con 8 estados (pending/accepted/rejected/edited/scheduled/published/archived). |
 | 🤖 **Draft IA con Gemini** | 1 click en cualquier item RSS → Gemini 2.0 genera draft listo para blog: título SEO, H1, slug, meta description, excerpt, body markdown (200-400 palabras), tags, categoría sugerida, keywords focus y prompt para imagen OG. |
@@ -59,15 +59,15 @@
 | WordPress | REST API + Basic Auth con Application Password |
 | Telegram callbacks | inline_keyboard + callback_query handler en bot |
 
-📖 **Ver documentación completa abajo** → [Disparadores y RSS — el corazón automatizado](#-disparadores-y-rss--el-corazón-automatizado)
+📖 **Ver documentación completa abajo** → [Flujos y RSS — el corazón automatizado](#-disparadores-y-rss--el-corazón-automatizado)
 
 ---
 
-## 🎛️ Disparadores y RSS — el corazón automatizado
+## ⚡ Flujos y RSS — el corazón automatizado
 
-### El módulo Disparadores
+### El módulo Flujos
 
-Catálogo IFTTT-style accesible desde el sidebar (`🎛️ Disparadores`). Cada receta es un workflow n8n declarado en código y materializado en tu instancia n8n cuando lo activas.
+Catálogo IFTTT-style accesible desde el sidebar (`⚡ Flujos`). Cada receta es un workflow n8n declarado en código y materializado en tu instancia n8n cuando lo activas.
 
 #### Catálogo inicial (v2.8)
 
