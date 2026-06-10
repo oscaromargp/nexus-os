@@ -16,6 +16,7 @@ import './src/n8n-webhooks.js'
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
 import { getTransactions, calcBalance, buildRunningBalance, currentPeriod } from './src/finance-engine.js'
 import { renderInmuebles, loadProperties, openPropModal, openPropDetail, closePropModal, saveProp, propHandleFiles, propHandleDrop } from './src/inmuebles.js'
+import { renderAutomations } from './src/automations.js'
 import Sortable from 'sortablejs'
 import {
   Chart, DoughnutController, ArcElement, Tooltip, Legend,
@@ -2446,6 +2447,7 @@ const VIEW_RENDER_MAP = {
   movimientos:  ()      => renderMovimientos(),
   cotizaciones: ()      => renderCotizaciones(),
   inmuebles:    ()      => renderInmuebles(),
+  automations:  ()      => { if (window.nexusAutomations?.render) window.nexusAutomations.render() },
   // Vistas adicionales — evitan que caigan al fallback costoso
   tags:         (nodes) => { if (typeof renderTagsView === 'function') renderTagsView(nodes) },
   herramientas: ()      => {},
