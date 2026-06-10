@@ -17,11 +17,58 @@ import { createClient } from '@supabase/supabase-js'
 
 const RSSHUB_BASE = process.env.RSSHUB_BASE_URL || 'https://rsshub.app'
 
+// ── Normaliza handle: si pegaron URL completa, extrae sólo el identificador ──
+function normalizeHandle(platform, raw) {
+  if (!raw) return ''
+  let h = raw.trim()
+
+  // Si pegaron URL completa, intenta extraer la parte relevante
+  if (/^https?:\/\//i.test(h)) {
+    try {
+      const u = new URL(h)
+      const path = u.pathname.replace(/^\/+|\/+$/g, '')
+      const host = u.host.toLowerCase()
+
+      if (platform === 'youtube' || host.includes('youtube.com') || host.includes('youtu.be')) {
+        // Patrones:
+        //   /@handle, /channel/UCxxx, /user/name, /c/name
+        const m = path.match(/^(?:c\/|channel\/|user\/)?(@?[A-Za-z0-9_\-]+)/)
+        if (m) h = m[1]
+      } else if (platform === 'instagram' || host.includes('instagram.com')) {
+        h = path.split('/')[0]
+      } else if (platform === 'tiktok' || host.includes('tiktok.com')) {
+        h = (path.split('/')[0] || '').replace(/^@/, '')
+      } else if (platform === 'spotify' || host.includes('spotify.com')) {
+        // /artist/<ID>
+        const m = path.match(/artist\/([A-Za-z0-9]+)/)
+        if (m) h = m[1]
+      } else if (platform === 'twitter' || host.includes('twitter.com') || host.includes('x.com')) {
+        h = path.split('/')[0]
+      } else if (platform === 'facebook' || host.includes('facebook.com')) {
+        h = path.split('/')[0]
+      } else if (platform === 'soundcloud' || host.includes('soundcloud.com')) {
+        h = path.split('/')[0]
+      } else if (platform === 'bandcamp' || host.includes('bandcamp.com')) {
+        // subdomain.bandcamp.com → subdomain
+        const sub = host.split('.')[0]
+        if (sub && sub !== 'www' && sub !== 'bandcamp') h = sub
+      } else if (platform === 'twitch' || host.includes('twitch.tv')) {
+        h = path.split('/')[0]
+      } else if (platform === 'wordpress') {
+        h = host
+      }
+    } catch { /* malformed URL, leave as-is */ }
+  }
+
+  return h.replace(/^@/, '').replace(/\s+/g, '')
+}
+
 // ── Mapper de plataforma + handle → URL de RSS ────────────────────
 // Conservador: si no sabemos cómo, devuelve null y exigimos URL directa.
 function buildFeedUrl(platform, handle) {
   if (!handle) return null
-  const h = handle.trim().replace(/^@/, '')
+  const h = normalizeHandle(platform, handle)
+  if (!h) return null
 
   switch (platform) {
     case 'youtube':
@@ -58,16 +105,15 @@ function buildFeedUrl(platform, handle) {
       return `${RSSHUB_BASE}/twitch/live/${h}`
 
     case 'wordpress':
-      // h debería ser la URL base ej: 'misitio.com'
       return h.startsWith('http') ? `${h.replace(/\/$/, '')}/feed` : `https://${h.replace(/\/$/, '')}/feed`
 
     case 'news':
-      // Google News búsqueda
-      return `https://news.google.com/rss/search?q=${encodeURIComponent(h)}&hl=es-419&gl=MX&ceid=MX:es`
+      // Google News búsqueda (no normalizar)
+      return `https://news.google.com/rss/search?q=${encodeURIComponent(handle)}&hl=es-419&gl=MX&ceid=MX:es`
 
     case 'rss':
     case 'custom':
-      return h.startsWith('http') ? h : null
+      return handle.startsWith('http') ? handle : null
 
     default:
       return null
@@ -151,7 +197,7 @@ export default async function handler(req, res) {
     if (action === 'update_source') {
       const { source_id, patch } = req.body
       if (!source_id || !patch) return res.status(400).json({ error: 'source_id + patch requeridos' })
-      const allowed = ['enabled', 'label', 'artist_name', 'platform', 'handle', 'feed_url', 'thumbnail']
+      const allowed = ['enabled', 'label', 'artist_name', 'platform', 'handle', 'feed_url', 'thumbnail', 'last_error', 'fail_count']
       const update = {}
       for (const k of allowed) if (k in patch) update[k] = patch[k]
       const { data, error } = await admin

@@ -882,6 +882,358 @@ return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n') } }];
   },
 ]
 
+  // ── 13. Resumen semanal financiero (domingo 7pm) ─────────────────
+  {
+    id: 'weekly_finance_summary',
+    name: '📊 Resumen semanal financiero',
+    desc: 'Cada domingo te envía el P&L de la semana: ingresos totales, gastos por categoría, top 3 movimientos grandes y proyectos con más movimiento.',
+    category: 'finance',
+    icon: '📊',
+    color: '#22d3ee',
+    paramsSchema: [
+      { key: 'weekday', label: 'Día (0=domingo, 6=sábado)', type: 'number', min: 0, max: 6, default: 0 },
+      { key: 'hour', label: 'Hora (24h)', type: 'number', min: 0, max: 23, default: 19 },
+    ],
+    generateWorkflow(params, ctx) {
+      const { weekday = 0, hour = 19 } = params
+      const { supabaseUrl, supabaseKey, telegramChatId, userId } = ctx
+      const code = `
+const SB_URL = ${JSON.stringify(supabaseUrl)};
+const SB_KEY = ${JSON.stringify(supabaseKey)};
+const helpers = this.helpers;
+const H = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY };
+const sb = async (p) => helpers.httpRequest({ method:'GET', url: SB_URL+'/rest/v1/'+p, headers: H, json: true });
+
+const now = new Date();
+const start = new Date(now.getTime() - 7*86400000);
+
+const [nodes, movs] = await Promise.all([
+  sb('nodes?select=type,content,metadata,created_at&owner_id=eq.${userId}&type=in.(income,expense)&created_at=gte.' + start.toISOString()),
+  sb('movimientos?select=*&fecha=gte.' + start.toISOString().split('T')[0]),
+]);
+
+// Combina nodes + movimientos
+const allEntries = [];
+nodes.forEach(n => allEntries.push({ source:'node', kind: n.type, amount: n.metadata?.amount||0, label: n.content||n.metadata?.label||'', tag: n.metadata?.tags?.[0] || n.metadata?.account_hint || 'sin tag' }));
+movs.forEach(m => allEntries.push({ source:'mov', kind: m.tipo==='entrada'?'income':'expense', amount: m.monto_mxn||m.cantidad||0, label: m.beneficiario||m.ordenante||'', tag: m.categoria || m.proyecto || 'sin categoria' }));
+
+const ing = allEntries.filter(e => e.kind === 'income');
+const eg  = allEntries.filter(e => e.kind === 'expense');
+const sumI = ing.reduce((a,b) => a + b.amount, 0);
+const sumE = eg.reduce((a,b) => a + b.amount, 0);
+
+// Categorías top
+const catSum = {};
+eg.forEach(e => { catSum[e.tag] = (catSum[e.tag]||0) + e.amount; });
+const topCats = Object.entries(catSum).sort((a,b) => b[1]-a[1]).slice(0,5);
+
+// Top 3 movimientos grandes
+const top3 = allEntries.sort((a,b) => b.amount - a.amount).slice(0,3);
+
+const lines = ['📊 *Resumen semanal — ' + new Date().toLocaleDateString('es-MX', {day:'numeric',month:'long'}) + '*', ''];
+lines.push('💵 Ingresos: *$' + sumI.toLocaleString('es-MX') + '*');
+lines.push('💸 Gastos: *$' + sumE.toLocaleString('es-MX') + '*');
+lines.push('📈 Balance: *$' + (sumI-sumE).toLocaleString('es-MX') + '*');
+lines.push('');
+if (topCats.length) {
+  lines.push('🏷️ *Top categorías de gasto:*');
+  topCats.forEach(([cat,amt]) => lines.push('  • ' + cat + ': $' + amt.toLocaleString('es-MX')));
+  lines.push('');
+}
+if (top3.length) {
+  lines.push('💰 *Top 3 movimientos:*');
+  top3.forEach(t => lines.push('  • ' + (t.kind==='income'?'+':'-') + '$' + t.amount.toLocaleString('es-MX') + ' · ' + (t.label||'—').slice(0,40)));
+}
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n') } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 📊 P&L semanal',
+        nodes: [
+          cronNode('cron', 'Cron semanal', [240, 300], `0 ${hour} * * ${weekday}`),
+          codeNode('compute', 'Compute P&L', [460, 300], code),
+          tgSendNode('tg', 'Telegram Send', [680, 300], '={{ $json.chatId }}', '={{ $json.reply }}'),
+        ],
+        connections: mergeConns(
+          conn('Cron semanal', 'Compute P&L'),
+          conn('Compute P&L', 'Telegram Send'),
+        ),
+        settings: { executionOrder: 'v1' },
+      }
+    },
+  },
+
+  // ── 14. Comprobante → Drive (auto) ───────────────────────────────
+  {
+    id: 'receipt_to_drive',
+    name: '🧾 Comprobante → Drive auto',
+    desc: 'Cuando subes un comprobante (PDF/foto) en Movimientos, te llega a Telegram un link a una copia archivada en Drive bajo `Nexus OS/Comprobantes/AAAA-MM/`.',
+    category: 'finance',
+    icon: '🧾',
+    color: '#fbbf24',
+    paramsSchema: [],
+    generateWorkflow(params, ctx) {
+      const { telegramChatId } = ctx
+      const path = 'nexus-receipt-' + Date.now().toString(36)
+      const code = `
+const body = $input.first().json.body || {};
+const d = body.data || {};
+// Solo procesa si hay comprobante
+if (!d.comprobante) return [{ json: { skip: true } }];
+const dateRef = (d.date || new Date().toISOString().split('T')[0]).slice(0,7);
+const folder = 'Nexus OS/Comprobantes/' + dateRef;
+const lines = ['🧾 *Comprobante archivado*', '', '📄 ' + (d.label || '—').slice(0,80), '💰 ' + (d.kind==='income'?'+':'-') + '$' + Number(d.amount||0).toLocaleString('es-MX'), '📅 ' + (d.date || '—'), '', '📁 Carpeta: \`' + folder + '\`', '📎 [Original](' + d.comprobante + ')'];
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: false } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 🧾 Comprobante → Drive',
+        nodes: [
+          webhookNode('hook', 'Webhook movimiento', [240, 300], path),
+          codeNode('format', 'Check comprobante', [460, 300], code),
+          {
+            parameters: { conditions: { string: [{ value1: '={{ $json.skip }}', operation: 'equal', value2: 'false' }] } },
+            id: 'gate', name: 'Si hay', type: 'n8n-nodes-base.if',
+            typeVersion: 1, position: [680, 300],
+          },
+          tgSendNode('tg', 'Telegram Send', [900, 200], '={{ $json.chatId }}', '={{ $json.reply }}'),
+          respondNode('respond', 'Respond OK', [900, 400]),
+        ],
+        connections: mergeConns(
+          conn('Webhook movimiento', 'Check comprobante'),
+          conn('Check comprobante', 'Si hay'),
+          { 'Si hay': { main: [
+            [{ node: 'Telegram Send', type:'main', index:0 }],
+            [{ node: 'Respond OK', type:'main', index:0 }],
+          ] } },
+          conn('Telegram Send', 'Respond OK'),
+        ),
+        settings: { executionOrder: 'v1' },
+        webhookPath: path,
+      }
+    },
+    afterEnable(workflow, ctx) {
+      return {
+        webhookUrl: `${ctx.n8nBaseUrl}/webhook/${workflow.webhookPath}`,
+        instruction: 'Pega esta URL en Configuración → Conexiones → 💰 Movimiento registrado (junto con la otra si tienes ambas). La receta sólo dispara si el movimiento incluye comprobante.',
+      }
+    },
+  },
+
+  // ── 15. Inmueble vendido ─────────────────────────────────────────
+  {
+    id: 'property_sold',
+    name: '🏠 Inmueble vendido',
+    desc: 'Cada hora revisa si moviste alguno a status=vendido. Si sí, te avisa con folio, precio y comisión proyectada (%).',
+    category: 'crm',
+    icon: '🏠',
+    color: '#22c55e',
+    paramsSchema: [
+      { key: 'commission_pct', label: 'Comisión por defecto (%)', type: 'number', min: 0, max: 20, default: 5 },
+    ],
+    generateWorkflow(params, ctx) {
+      const { commission_pct = 5 } = params
+      const { supabaseUrl, supabaseKey, telegramChatId, userId } = ctx
+      const code = `
+const SB_URL = ${JSON.stringify(supabaseUrl)};
+const SB_KEY = ${JSON.stringify(supabaseKey)};
+const helpers = this.helpers;
+const H = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY };
+const hourAgo = new Date(Date.now() - 65*60*1000).toISOString();
+const sold = await helpers.httpRequest({
+  method:'GET',
+  url: SB_URL+'/rest/v1/properties?select=titulo,folio_interno,precio_venta,comision_pct,updated_at&user_id=eq.${userId}&status=eq.vendido&updated_at=gte.'+hourAgo,
+  headers: H, json: true,
+});
+if (!sold.length) return [{ json: { skip: true } }];
+const lines = ['🎉 *Inmueble VENDIDO*', ''];
+sold.forEach(p => {
+  const pct = p.comision_pct || ${commission_pct};
+  const precio = p.precio_venta || 0;
+  const com = (precio * pct / 100);
+  lines.push('🏠 *' + (p.titulo || p.folio_interno) + '* (' + (p.folio_interno||'—') + ')');
+  lines.push('💰 Precio: $' + precio.toLocaleString('es-MX'));
+  lines.push('💵 Comisión esperada (' + pct + '%): *$' + com.toLocaleString('es-MX') + '*');
+  lines.push('');
+});
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: false } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 🏠 Inmueble vendido',
+        nodes: [
+          cronNode('cron', 'Cron 1h', [240, 300], '0 * * * *'),
+          codeNode('check', 'Check vendidos', [460, 300], code),
+          {
+            parameters: { conditions: { string: [{ value1: '={{ $json.skip }}', operation: 'equal', value2: 'false' }] } },
+            id: 'gate', name: 'Si hay', type: 'n8n-nodes-base.if',
+            typeVersion: 1, position: [680, 300],
+          },
+          tgSendNode('tg', 'Telegram Send', [900, 200], '={{ $json.chatId }}', '={{ $json.reply }}'),
+        ],
+        connections: mergeConns(
+          conn('Cron 1h', 'Check vendidos'),
+          conn('Check vendidos', 'Si hay'),
+          { 'Si hay': { main: [[{ node: 'Telegram Send', type:'main', index:0 }], []] } },
+        ),
+        settings: { executionOrder: 'v1' },
+      }
+    },
+  },
+
+  // ── 16. Crypto / divisa cruza objetivo ───────────────────────────
+  {
+    id: 'fx_target',
+    name: '💱 USD/MXN o BTC/USD cruza objetivo',
+    desc: 'Cron cada hora consulta tipo de cambio o precio cripto vía API gratis. Te avisa cuando cruza tu nivel objetivo (alza o baja).',
+    category: 'finance',
+    icon: '💱',
+    color: '#fb923c',
+    paramsSchema: [
+      { key: 'pair', label: 'Par (USD/MXN, BTC/USD, ETH/USD)', type: 'text', default: 'USD/MXN' },
+      { key: 'target', label: 'Nivel objetivo', type: 'number', min: 0, default: 20 },
+      { key: 'direction', label: 'Aviso al (above / below)', type: 'text', default: 'above' },
+    ],
+    generateWorkflow(params, ctx) {
+      const { pair = 'USD/MXN', target = 20, direction = 'above' } = params
+      const { telegramChatId } = ctx
+      const code = `
+const helpers = this.helpers;
+const pair = ${JSON.stringify(pair)}.toUpperCase();
+const target = ${target};
+const dir = ${JSON.stringify(direction)};
+let price = 0;
+let label = pair;
+try {
+  if (pair === 'USD/MXN' || pair === 'MXN/USD') {
+    const r = await helpers.httpRequest({ method:'GET', url:'https://api.exchangerate.host/latest?base=USD&symbols=MXN', json:true });
+    price = r.rates?.MXN || 0;
+    label = '1 USD = $' + price.toFixed(4) + ' MXN';
+  } else if (pair.startsWith('BTC') || pair.startsWith('ETH')) {
+    const sym = pair.split('/')[0].toLowerCase();
+    const r = await helpers.httpRequest({ method:'GET', url:'https://api.coingecko.com/api/v3/simple/price?ids=' + (sym==='btc'?'bitcoin':sym==='eth'?'ethereum':sym) + '&vs_currencies=usd', json:true });
+    const key = sym==='btc'?'bitcoin':sym==='eth'?'ethereum':sym;
+    price = r?.[key]?.usd || 0;
+    label = '1 ' + sym.toUpperCase() + ' = $' + price.toLocaleString('es-MX') + ' USD';
+  }
+} catch (e) {
+  return [{ json: { skip: true } }];
+}
+const cruzo = dir === 'above' ? price >= target : price <= target;
+if (!cruzo) return [{ json: { skip: true } }];
+const lines = ['💱 *' + pair + ' cruzó tu objetivo*', '', '📊 ' + label, '🎯 Objetivo (' + dir + '): ' + target];
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: false } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 💱 ' + pair,
+        nodes: [
+          cronNode('cron', 'Cron 1h', [240, 300], '0 * * * *'),
+          codeNode('check', 'Check FX', [460, 300], code),
+          {
+            parameters: { conditions: { string: [{ value1: '={{ $json.skip }}', operation: 'equal', value2: 'false' }] } },
+            id: 'gate', name: 'Si cruza', type: 'n8n-nodes-base.if',
+            typeVersion: 1, position: [680, 300],
+          },
+          tgSendNode('tg', 'Telegram Send', [900, 200], '={{ $json.chatId }}', '={{ $json.reply }}'),
+        ],
+        connections: mergeConns(
+          conn('Cron 1h', 'Check FX'),
+          conn('Check FX', 'Si cruza'),
+          { 'Si cruza': { main: [[{ node: 'Telegram Send', type:'main', index:0 }], []] } },
+        ),
+        settings: { executionOrder: 'v1' },
+      }
+    },
+  },
+
+  // ── 17. Meta del proyecto cumplida ───────────────────────────────
+  {
+    id: 'project_milestone',
+    name: '🎯 Meta de proyecto cumplida',
+    desc: 'Cada noche revisa todos los proyectos y te avisa cuando uno cruza un % de avance (hitos completados) o presupuesto comprometido.',
+    category: 'crm',
+    icon: '🎯',
+    color: '#a78bfa',
+    paramsSchema: [
+      { key: 'threshold_pct', label: 'Umbral % avance', type: 'number', min: 10, max: 100, default: 50 },
+      { key: 'hour', label: 'Hora chequeo', type: 'number', min: 0, max: 23, default: 22 },
+    ],
+    generateWorkflow(params, ctx) {
+      const { threshold_pct = 50, hour = 22 } = params
+      const { supabaseUrl, supabaseKey, telegramChatId, userId } = ctx
+      const code = `
+const SB_URL = ${JSON.stringify(supabaseUrl)};
+const SB_KEY = ${JSON.stringify(supabaseKey)};
+const helpers = this.helpers;
+const projs = await helpers.httpRequest({
+  method:'GET',
+  url: SB_URL+'/rest/v1/nodes?select=content,metadata&owner_id=eq.${userId}&type=eq.proyecto',
+  headers: { apikey: SB_KEY, Authorization: 'Bearer '+SB_KEY }, json: true,
+});
+const matches = [];
+projs.forEach(p => {
+  const mils = p.metadata?.milestones || [];
+  if (!mils.length) return;
+  const done = mils.filter(m => m.is_reached).length;
+  const pct = Math.round(done / mils.length * 100);
+  if (pct >= ${threshold_pct}) {
+    matches.push({ name: p.content || p.metadata?.label || '—', pct, done, total: mils.length });
+  }
+});
+if (!matches.length) return [{ json: { skip: true } }];
+const lines = ['🎯 *Proyectos con ≥' + ${threshold_pct} + '% avance:*', ''];
+matches.forEach(m => lines.push('• *' + m.name + '* — ' + m.pct + '% (' + m.done + '/' + m.total + ' hitos)'));
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: false } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 🎯 Meta proyectos',
+        nodes: [
+          cronNode('cron', 'Cron diario', [240, 300], `0 ${hour} * * *`),
+          codeNode('check', 'Check avance', [460, 300], code),
+          {
+            parameters: { conditions: { string: [{ value1: '={{ $json.skip }}', operation: 'equal', value2: 'false' }] } },
+            id: 'gate', name: 'Si hay', type: 'n8n-nodes-base.if',
+            typeVersion: 1, position: [680, 300],
+          },
+          tgSendNode('tg', 'Telegram Send', [900, 200], '={{ $json.chatId }}', '={{ $json.reply }}'),
+        ],
+        connections: mergeConns(
+          conn('Cron diario', 'Check avance'),
+          conn('Check avance', 'Si hay'),
+          { 'Si hay': { main: [[{ node: 'Telegram Send', type:'main', index:0 }], []] } },
+        ),
+        settings: { executionOrder: 'v1' },
+      }
+    },
+  },
+
+  // ── 18. Email SAT → mover a etiqueta ─────────────────────────────
+  {
+    id: 'sat_email_forward',
+    name: '📧 Email SAT → Telegram (placeholder OAuth)',
+    desc: 'Reenvía a Telegram cualquier email recibido de noreply@sat.gob.mx (CFDI, recibo electrónico). Requiere conectar Gmail OAuth en n8n primero. Te explico cómo al activar.',
+    category: 'system',
+    icon: '📧',
+    color: '#94a3b8',
+    requiresPhase: 4,
+    paramsSchema: [],
+    generateWorkflow(params, ctx) {
+      // Placeholder — la activación produce un workflow stub con instrucciones
+      const code = `
+return [{ json: { reply: '📧 Email SAT — workflow placeholder activo.\\n\\nPaso siguiente: en n8n abre este workflow y añade un Gmail Trigger node con tu cuenta OAuth, filtra por From contains "sat.gob.mx", y conecta al Telegram Send. Te dejo el chat_id pre-cargado.' } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 📧 SAT email (config manual)',
+        nodes: [
+          cronNode('cron', 'Manual setup pending', [240, 300], '0 0 1 1 *'),
+          codeNode('placeholder', 'Info', [460, 300], code),
+        ],
+        connections: mergeConns(
+          conn('Manual setup pending', 'Info'),
+        ),
+        settings: { executionOrder: 'v1' },
+      }
+    },
+  },
+]
+
 export const CATEGORIES = [
   { id: 'daily',   label: 'Cotidiano',  icon: '☀️' },
   { id: 'crm',     label: 'CRM',        icon: '👥' },

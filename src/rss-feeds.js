@@ -121,10 +121,17 @@ export async function renderProjectRssTab(projectId) {
             Rastrea contenido nuevo de artistas, canales y sitios. Se revisa cada 15 min.
           </p>
         </div>
-        <button data-rss-act="add-source" data-pid="${projectId}"
-          style="padding:8px 14px;background:linear-gradient(135deg,#34d399,#22c55e);border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;font-size:13px;">
-          + Agregar fuente
-        </button>
+        <div style="display:flex;gap:6px;">
+          <button data-rss-act="reload" data-pid="${projectId}"
+            title="Recargar"
+            style="padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid #374151;color:#9ca3af;border-radius:8px;cursor:pointer;font-size:13px;">
+            🔄
+          </button>
+          <button data-rss-act="add-source" data-pid="${projectId}"
+            style="padding:8px 14px;background:linear-gradient(135deg,#34d399,#22c55e);border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;font-size:13px;">
+            + Agregar fuente
+          </button>
+        </div>
       </div>
 
       <!-- ── FUENTES ── -->
@@ -150,9 +157,16 @@ export async function renderProjectRssTab(projectId) {
                     <div style="font-size:11px;color:#6b7280;">
                       ${pf.label}${s.artist_name ? ' · ' + _esc(s.artist_name) : ''}
                       ${s.last_check_at ? ' · revisado ' + _timeAgo(s.last_check_at) : ' · sin revisar'}
-                      ${s.fail_count > 2 ? ' · ⚠️ ' + s.fail_count + ' fallos' : ''}
+                      ${s.fail_count > 0 ? ' · ⚠️ ' + s.fail_count + ' fallos' : ''}
                     </div>
+                    ${s.last_error ? `<div style="font-size:10px;color:#f87171;margin-top:3px;line-height:1.3;">⛔ ${_esc(s.last_error.slice(0,120))}</div>` : ''}
+                    <div style="font-size:10px;color:#475569;margin-top:2px;line-height:1.3;font-family:monospace;word-break:break-all;">${_esc(s.feed_url || '').slice(0,100)}</div>
                   </div>
+                  <button data-rss-act="edit-source" data-sid="${s.id}" data-pid="${projectId}"
+                    title="Editar plataforma / handle / etiqueta"
+                    style="padding:5px 8px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:6px;cursor:pointer;font-size:11px;">
+                    ✏️
+                  </button>
                   <button data-rss-act="toggle-source" data-sid="${s.id}" data-pid="${projectId}"
                     title="${s.enabled ? 'Pausar' : 'Reactivar'}"
                     style="padding:5px 10px;background:${s.enabled ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.1)'};border:1px solid ${s.enabled ? 'rgba(34,197,94,0.25)' : 'rgba(148,163,184,0.25)'};color:${s.enabled ? '#22c55e' : '#94a3b8'};border-radius:6px;cursor:pointer;font-size:11px;">
@@ -252,6 +266,14 @@ function _attachHandlers(root, projectId) {
     const act = el.dataset.rssAct
     if (act === 'add-source') {
       el.addEventListener('click', () => _openAddSourceModal(projectId))
+    } else if (act === 'reload') {
+      el.addEventListener('click', () => renderProjectRssTab(projectId))
+    } else if (act === 'edit-source') {
+      el.addEventListener('click', () => {
+        const src = _state[projectId].sources.find(s => s.id === el.dataset.sid)
+        if (!src) return
+        _openEditSourceModal(projectId, src)
+      })
     } else if (act === 'toggle-source') {
       el.addEventListener('click', async () => {
         const sid = el.dataset.sid
@@ -632,6 +654,91 @@ ${d.og_image_prompt}`
   modal.querySelector('#dr-wp-publish').addEventListener('click', () => {
     if (!confirm('¿Publicar AHORA en WordPress? (no será borrador, queda visible al instante)')) return
     wpPublish('publish')
+  })
+}
+
+// ── Modal: editar fuente existente ────────────────────────────────
+function _openEditSourceModal(projectId, source) {
+  const overlay = document.createElement('div')
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;`
+  const modal = document.createElement('div')
+  modal.style.cssText = `background:#0f1419;border:1px solid #1f2937;border-radius:16px;padding:22px;max-width:520px;width:100%;color:#e5e7eb;`
+  modal.innerHTML = `
+    <h3 style="margin:0 0 14px;font-size:17px;font-weight:800;">✏️ Editar fuente RSS</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px;font-weight:700;">⚠️ Plataforma actual</label>
+        <select id="rss-platform" style="width:100%;padding:11px 12px;background:#1f2937;border:2px solid ${source.platform === 'youtube' ? '#374151' : '#a78bfa'};border-radius:8px;color:#e5e7eb;font-size:14px;font-weight:700;">
+          ${PLATFORMS.map(p => `<option value="${p.id}" ${p.id === source.platform ? 'selected' : ''}>${p.icon} ${p.label}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px;">Handle / URL</label>
+        <input id="rss-handle" type="text" value="${_esc(source.handle || '')}" style="width:100%;padding:9px 10px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+        <div id="rss-handle-help" style="font-size:11px;color:#6b7280;margin-top:4px;"></div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px;">Etiqueta</label>
+        <input id="rss-label" type="text" value="${_esc(source.label || '')}" style="width:100%;padding:9px 10px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px;">Artista / Marca</label>
+        <input id="rss-artist" type="text" value="${_esc(source.artist_name || '')}" style="width:100%;padding:9px 10px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+      </div>
+      <div id="rss-preview" style="font-size:11px;color:#6b7280;padding:8px;background:#0a0e13;border:1px solid #1f2937;border-radius:6px;font-family:monospace;word-break:break-all;"></div>
+      ${source.last_error ? `<div style="font-size:11px;color:#f87171;padding:8px;background:rgba(248,113,113,0.05);border:1px solid rgba(248,113,113,0.2);border-radius:6px;">⛔ Último error: ${_esc(source.last_error.slice(0,200))}</div>` : ''}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px;">
+      <button id="rss-cancel" style="flex:1;padding:11px;background:transparent;border:1px solid #374151;color:#9ca3af;border-radius:10px;cursor:pointer;font-size:14px;">Cancelar</button>
+      <button id="rss-save" style="flex:2;padding:11px;background:linear-gradient(135deg,#a78bfa,#60a5fa);border:none;color:#000;font-weight:700;border-radius:10px;cursor:pointer;font-size:14px;">💾 Guardar cambios</button>
+    </div>
+  `
+  overlay.appendChild(modal)
+  document.body.appendChild(overlay)
+
+  const platSel = modal.querySelector('#rss-platform')
+  const handleInput = modal.querySelector('#rss-handle')
+  const helpEl = modal.querySelector('#rss-handle-help')
+  const preview = modal.querySelector('#rss-preview')
+
+  async function updatePreview() {
+    const platform = platSel.value
+    const handle = handleInput.value.trim()
+    const pf = PLATFORM_BY_ID[platform]
+    handleInput.placeholder = pf?.placeholder || ''
+    helpEl.textContent = pf?.help || ''
+    if (!handle) { preview.textContent = '(handle vacío)'; return }
+    try {
+      const r = await _api('resolve_url', { platform, handle })
+      preview.textContent = '→ ' + (r.feed_url || '⚠️ no resuelto')
+    } catch { preview.textContent = '(error)' }
+  }
+  platSel.addEventListener('change', updatePreview)
+  handleInput.addEventListener('input', () => clearTimeout(handleInput._t) || (handleInput._t = setTimeout(updatePreview, 400)))
+  updatePreview()
+
+  const cleanup = () => document.body.removeChild(overlay)
+  modal.querySelector('#rss-cancel').addEventListener('click', cleanup)
+  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+  modal.querySelector('#rss-save').addEventListener('click', async () => {
+    const platform = platSel.value
+    const handle = handleInput.value.trim()
+    const label = modal.querySelector('#rss-label').value.trim() || null
+    const artist_name = modal.querySelector('#rss-artist').value.trim() || null
+    if (!handle) { alert('Pon el handle o URL.'); return }
+    // Necesitamos recomputar feed_url si cambia plataforma o handle
+    let feed_url = source.feed_url
+    if (platform !== source.platform || handle !== source.handle) {
+      try {
+        const r = await _api('resolve_url', { platform, handle })
+        if (r.feed_url) feed_url = r.feed_url
+      } catch {}
+    }
+    try {
+      await _api('update_source', { source_id: source.id, patch: { platform, handle, label, artist_name, feed_url, last_error: null, fail_count: 0 } })
+    } catch (e) { alert('Error: ' + e.message); return }
+    cleanup()
+    renderProjectRssTab(projectId)
   })
 }
 
