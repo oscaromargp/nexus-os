@@ -9,7 +9,9 @@
   "rewrites": [
     { "source": "/app",            "destination": "/app.html" },
     { "source": "/reset-password", "destination": "/reset-password.html" },
-    { "source": "/reporte",        "destination": "/reporte.html" }
+    { "source": "/reporte",        "destination": "/reporte.html" },
+    { "source": "/propiedad/:id",  "destination": "/api/propiedad?id=:id" },
+    { "source": "/p/:id",          "destination": "/api/propiedad?id=:id" }
   ],
   "crons": [
     {

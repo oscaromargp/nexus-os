@@ -1185,7 +1185,9 @@ export function openPropModal(id = null) {
           ${_field('prop-seo-desc','Descripción SEO','text',val('seo_description'),'Inversión patrimonial en zona kiteboarding, vista al Cerralvo, 1,200 m², agua y luz disponibles…')}
           <div style="font-size:10px;color:#475569;margin:-6px 0 10px;">Ideal 150-160 caracteres. Aparece debajo del título en Google.</div>
           ${_field('prop-seo-keywords','Keywords (separadas por coma)','text',val('seo_keywords'),'terreno la ventana, lote bcs, inversión inmobiliaria, kiteboarding')}
-          <div style="font-size:10px;color:#475569;margin:-6px 0 4px;">Palabras clave que describen este inmueble (pueblo, deporte, tipo de inversor objetivo, etc.).</div>
+          <div style="font-size:10px;color:#475569;margin:-6px 0 10px;">Palabras clave que describen este inmueble (pueblo, deporte, tipo de inversor objetivo, etc.).</div>
+          ${_field('prop-seo-image','Imagen para preview (opcional)','url',val('seo_image_url'),'https://...')}
+          <div style="font-size:10px;color:#475569;margin:-6px 0 4px;">URL específica para WhatsApp/FB/Twitter. Si la dejas vacía se usa la primera foto del inmueble. Recomendado: 1200×630px.</div>
         </div>
 
         <!-- ── Sección: Dimensiones ── -->
@@ -2050,6 +2052,7 @@ export async function saveProp(id) {
     seo_title:           gv('prop-seo-title'),
     seo_description:     gv('prop-seo-desc'),
     seo_keywords:        gv('prop-seo-keywords'),
+    seo_image_url:       gv('prop-seo-image') || null,
     uso_suelo:         gv('prop-uso-suelo'),
     topografia:        gv('prop-topografia'),
     // Industrial
@@ -2411,8 +2414,18 @@ window.propRemoveFotoByUrl = (url) => {
   all.forEach(el => { if (el.querySelector('img')?.src === url) el.remove() })
 }
 
+// Genera el link público con OG-friendly URL.
+// Si la propiedad tiene slug, usa /propiedad/<slug> (más bonito y SEO).
+// Si no, usa /propiedad/<id> (UUID).
+// La URL pasa por api/propiedad.js que renderiza HTML con OG tags
+// pre-llenados — preview correcto en WhatsApp/Telegram/FB/Twitter.
+function _propPublicUrl(p) {
+  const ref = p?.slug || p?.id
+  return `${location.origin}/propiedad/${ref}`
+}
+
 window.propCopyLink = (id, slug) => {
-  const url = `${location.origin}/propiedad.html?id=${id}`
+  const url = `${location.origin}/propiedad/${slug || id}`
   navigator.clipboard.writeText(url).then(() => window.showToast?.('🔗 Link copiado'))
 }
 
@@ -2420,7 +2433,7 @@ window.propWhatsApp = (id) => {
   const p = _props.find(x => x.id === id)
   if (!p) return
   const tipo  = _tipoInfo(p.tipo)
-  const link  = `${location.origin}/propiedad.html?id=${id}`
+  const link  = _propPublicUrl(p)
   const ops   = (p.operacion||[]).join(' / ')
   const precio = _precioLabel(p)
   const msg = encodeURIComponent(
