@@ -17,6 +17,7 @@ import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/p
 import { getTransactions, calcBalance, buildRunningBalance, currentPeriod } from './src/finance-engine.js'
 import { renderInmuebles, loadProperties, openPropModal, openPropDetail, closePropModal, saveProp, propHandleFiles, propHandleDrop } from './src/inmuebles.js'
 import { renderAutomations } from './src/automations.js'
+import { renderProjectRssTab } from './src/rss-feeds.js'
 import Sortable from 'sortablejs'
 import {
   Chart, DoughnutController, ArcElement, Tooltip, Legend,
@@ -16188,6 +16189,7 @@ window.openProjectDashboard = (projectId) => {
     { id:'notas',    label:'🧠 Notas'    },
     { id:'wiki',     label:'📖 Wiki'     },
     { id:'bitacora', label:'📝 Bitácora' },
+    { id:'rss',      label:'📡 RSS'      },
   ]
 
   root.innerHTML = `
@@ -16297,6 +16299,11 @@ function _renderProjTab(tab, d) {
   if (tab === 'notas')    return _renderProjNotas(d)
   if (tab === 'wiki')     return _renderProjWiki(d)
   if (tab === 'bitacora') return _renderProjBitacora(d)
+  if (tab === 'rss') {
+    // Render contenedor + dispara render async del módulo
+    setTimeout(() => { try { renderProjectRssTab(d.p.id) } catch (e) { console.warn('[rss]', e) } }, 10)
+    return `<div id="rss-tab-content-${d.p.id}"><div style="padding:18px;color:#94a3b8;font-size:13px;">⏳ Cargando feeds…</div></div>`
+  }
   return ''
 }
 
