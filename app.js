@@ -1558,6 +1558,10 @@ async function insertNodeRaw(raw, metadataOverrides={}) {
     if (idx !== -1) allNodes[idx] = inserted[0]; else allNodes.unshift(inserted[0])
     _markFuseDirty()
     saveNodesToCache(allNodes)
+    // 💰 Disparar webhook de movement_created si aplica (best-effort)
+    if ((type === 'income' || type === 'expense') && window.nexusN8n?.dispatchMovement) {
+      try { window.nexusN8n.dispatchMovement('node', inserted[0]) } catch (e) { /* silent */ }
+    }
     renderAll(); showToast(`NODO INYECTADO: ${type.toUpperCase()}`)
   } else {
     const q = loadOfflineQueue(); q.push({ payload }); saveOfflineQueue(q)
@@ -1593,6 +1597,10 @@ async function insertDirectNode(type, content, metadata) {
   const idx = allNodes.findIndex(n => n.id === tempId)
   if (!error && inserted?.[0]) {
     if (idx !== -1) allNodes[idx] = inserted[0]; else allNodes.unshift(inserted[0])
+    // 💰 Disparar webhook de movement_created si aplica (best-effort)
+    if ((type === 'income' || type === 'expense') && window.nexusN8n?.dispatchMovement) {
+      try { window.nexusN8n.dispatchMovement('node', inserted[0]) } catch (e) { /* silent */ }
+    }
     renderAll(); showToast(`✅ ${content}`)
   } else {
     const q = loadOfflineQueue(); q.push({ payload }); saveOfflineQueue(q)
@@ -22695,18 +22703,35 @@ window.mvSaveMov = async () => {
     const { data, error } = await supabase.from('movimientos').insert(payload).select().single()
     if (error) { showToast('⚠ ' + error.message); return }
     movId = data.id
+    // 💰 Disparar webhook de movement_created (best-effort, sin comprobante aún)
+    if (window.nexusN8n?.dispatchMovement) {
+      try { window.nexusN8n.dispatchMovement('movimiento', data) } catch (e) { /* silent */ }
+    }
   }
 
   // Comprobante: archivo tiene prioridad sobre URL manual
+  let comprobanteFinal = null
   if (_mvPendingFile && movId) {
     const url = await _mvUploadFile(currentUser.id, movId)
-    if (url) await supabase.from('movimientos').update({ comprobante_url: url }).eq('id', movId)
+    if (url) {
+      await supabase.from('movimientos').update({ comprobante_url: url }).eq('id', movId)
+      comprobanteFinal = url
+    }
     _mvPendingFile = null
   } else {
     const manualUrl = g('mv-comp-url')?.value.trim()
     if (manualUrl && movId) {
       await supabase.from('movimientos').update({ comprobante_url: manualUrl }).eq('id', movId)
+      comprobanteFinal = manualUrl
     }
+  }
+
+  // Si subimos comprobante DESPUÉS del insert, re-dispara con la URL del PDF/foto
+  if (comprobanteFinal && !_mvEditingId && window.nexusN8n?.dispatchMovement) {
+    try {
+      const { data: full } = await supabase.from('movimientos').select('*').eq('id', movId).single()
+      if (full) window.nexusN8n.dispatchMovement('movimiento', full)
+    } catch (e) { /* silent */ }
   }
 
   mvCloseModal()

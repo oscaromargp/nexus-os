@@ -16,6 +16,7 @@ const EVENT_TYPES = [
   { id: 'report_generated',  label: '🌟 Reporte IA generado',   desc: 'Cuando se completa un reporte geomarketing' },
   { id: 'backup_completed',  label: '📦 Backup completado',     desc: 'Cuando termina un backup a Drive' },
   { id: 'daily_summary',     label: '☀️ Resumen diario',         desc: 'Cron cada mañana con resumen del día' },
+  { id: 'movement_created',  label: '💰 Movimiento registrado',  desc: 'Cuando capturas un ingreso o gasto en Bio-Finanzas o Movimientos' },
 ]
 
 function _key(eventId) { return 'nexus_n8n_webhook_' + eventId }
@@ -88,11 +89,58 @@ export function getAllWebhooks() {
   return EVENT_TYPES.map(t => ({ ...t, url: getWebhook(t.id) }))
 }
 
+// Helper específico para movimientos: normaliza el payload y dispara.
+// Se invoca después de un INSERT exitoso en nodes (type income/expense) o
+// en movimientos (tipo entrada/salida). Best-effort, no bloquea UI.
+export function dispatchMovement(source, node) {
+  const url = getWebhook('movement_created')
+  if (!url) return  // sin webhook config → no-op silencioso
+
+  // Normaliza shape común entre `nodes` (income/expense) y `movimientos` (entrada/salida)
+  let payload = {}
+  if (source === 'node') {
+    const isIncome = node.type === 'income'
+    payload = {
+      kind:        isIncome ? 'income' : 'expense',
+      amount:      node.metadata?.amount || 0,
+      currency:    node.metadata?.currency || 'MXN',
+      label:       node.content || node.metadata?.label || '—',
+      account:     node.metadata?.account_hint || node.metadata?.account || null,
+      tags:        node.metadata?.tags || [],
+      date:        node.metadata?.date || node.created_at?.split('T')[0],
+      project_tag: node.metadata?.project_tag || null,
+      contact_id:  node.metadata?.contact_id || null,
+      source:      'nodes',
+      node_id:     node.id,
+    }
+  } else if (source === 'movimiento') {
+    const isIncome = node.tipo === 'entrada'
+    payload = {
+      kind:           isIncome ? 'income' : 'expense',
+      amount:         node.monto_mxn || node.cantidad || 0,
+      currency:       node.moneda || 'MXN',
+      label:          (node.tipo === 'entrada' ? 'Ingreso: ' : 'Pago: ') + (node.beneficiario || node.ordenante || '—'),
+      account:        node.banco_origen || node.banco || null,
+      account_dest:   node.banco_destino || null,
+      date:           node.fecha,
+      categoria:      node.categoria || null,
+      proyecto:       node.proyecto || null,
+      comprobante:    node.comprobante_url || null,  // ← PDF / link de evidencia
+      notas:          (node.notas || '').slice(0, 300),
+      estado:         node.estado || null,
+      source:         'movimientos',
+      movimiento_id:  node.id,
+    }
+  }
+  dispatchEvent('movement_created', payload).catch(() => { /* silent */ })
+}
+
 export { EVENT_TYPES }
 
 if (typeof window !== 'undefined') {
   window.nexusN8n = {
     dispatch: dispatchEvent,
+    dispatchMovement,
     get: getWebhook,
     set: setWebhook,
     all: getAllWebhooks,
