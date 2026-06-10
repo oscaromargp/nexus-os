@@ -7772,25 +7772,32 @@ window.otcExportPDF = function() {
   const feeR = parseFloat(document.getElementById('otc-fee-reported')?.value || '0')
   const ref  = document.getElementById('otc-ref')?.value.trim() || ('OTC-' + new Date().toISOString().slice(0,10).replace(/-/g,''))
 
+  // Aplica comisión del 0.90 (o la que esté configurada) para mostrar
+  // el USDT real entregado al beneficiario.
+  // Si feeR = 0.90 (%), comisión = 0.009, factor = 1 - 0.009 = 0.991.
+  // Si feeR = 10 (%), comisión = 0.10, factor = 0.90.
+  const commissionFactor = 1 - (feeR / 100)
+
   const pdfData = {
     orqName: ref,
     coin,
+    tc,
     rows: _otcRows.map(row => ({
       beneficiario: row.contactName || 'Sin nombre',
       banco:        row.bank   || '—',
       clabe:        row.clabe  || '',
-      cantidad:     tc > 0 ? _floor2(row.montoMXN / tc) : 0,
+      // USDT que el beneficiario recibió (post-comisión 0.90)
+      cantidad:     tc > 0 ? _floor2((row.montoMXN / tc) * commissionFactor) : 0,
       moneda:       coin,
-      tc,
-      comision:     feeR / 100,
       neto:         row.montoMXN,
+      // Pasa las URLs de comprobantes (string http o {data, isUrl})
+      comprobantes: row.receipts || [],
       comprobante:  (row.receipts?.length || 0) > 0,
+      fecha:        row.fecha || new Date().toISOString(),
     })),
     totals: {
-      usdt:     qty,
-      bruto:    _otcData.ventaBruta,
-      neto:     _otcData.ventaReportada,
-      ganancia: _otcData.gananciaOp,
+      usdt: qty,
+      neto: _otcData.ventaReportada,
     },
   }
 
@@ -16235,11 +16242,12 @@ window.openProjectDashboard = (projectId) => {
       <button onclick="openAgendaModal('bill','${projSlug}')" style="font-size:12px;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:7px;padding:5px 12px;cursor:pointer;font-weight:600;">📅 Pago Fijo</button>
     </div>
 
-    <!-- ── TABS ── -->
-    <div id="proj-tabs" style="display:flex;gap:2px;padding:0 16px;background:var(--bg-panel);border-bottom:1px solid rgba(255,255,255,0.06);">
+    <!-- ── TABS (scroll horizontal en móvil) ── -->
+    <div id="proj-tabs" style="display:flex;gap:2px;padding:0 16px;background:var(--bg-panel);border-bottom:1px solid rgba(255,255,255,0.06);overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:none;">
+      <style>#proj-tabs::-webkit-scrollbar { display: none; }</style>
       ${TABS.map(t => `
         <button id="proj-tab-${t.id}" onclick="switchProjTab('${t.id}')"
-          style="padding:12px 16px;background:none;border:none;border-bottom:2px solid ${_projDashTab===t.id?accentColor:'transparent'};color:${_projDashTab===t.id?accentColor:'var(--text-muted)'};cursor:pointer;font-size:13px;font-weight:${_projDashTab===t.id?'700':'500'};font-family:inherit;white-space:nowrap;transition:all .15s;">
+          style="padding:12px 14px;background:none;border:none;border-bottom:2px solid ${_projDashTab===t.id?accentColor:'transparent'};color:${_projDashTab===t.id?accentColor:'var(--text-muted)'};cursor:pointer;font-size:13px;font-weight:${_projDashTab===t.id?'700':'500'};font-family:inherit;white-space:nowrap;transition:all .15s;flex-shrink:0;">
           ${t.label}
         </button>`).join('')}
     </div>

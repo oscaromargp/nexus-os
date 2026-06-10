@@ -755,54 +755,127 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
 export function pdfDispersionOTC(data, fecha = new Date(), emisor = {}) {
   if (!data?.rows?.length) return
 
-  const doc   = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  // Vertical (portrait) según solicitud del usuario.
+  const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const W     = doc.internal.pageSize.getWidth()
   const folio = _folio()
 
+  // ── Período (si las filas tienen fechas) ─────────────────────────
+  const rowDates = data.rows.map(r => r.fecha).filter(Boolean).map(d => new Date(d)).filter(d => !isNaN(d))
+  let periodo = fecha.toLocaleDateString('es-MX')
+  if (rowDates.length > 1) {
+    const min = new Date(Math.min(...rowDates))
+    const max = new Date(Math.max(...rowDates))
+    if (min.getTime() !== max.getTime()) {
+      periodo = `${min.toLocaleDateString('es-MX')} → ${max.toLocaleDateString('es-MX')}`
+    }
+  }
+
   let y = _headerReport(doc, 'Dispersión OTC',
-    `${data.orqName || ''} · ${fecha.toLocaleDateString('es-MX')} · ${data.rows.length} operaciones`,
+    `${data.orqName || ''} · ${periodo} · ${data.rows.length} operaciones`,
     folio)
 
-  // KPIs
-  const kW = (W - T.mX * 2 - 9) / 4
-  _kpi(doc, T.mX,            y, kW, 22, 'Total Cripto', `${(data.totals?.usdt||0).toLocaleString('es-MX',{minimumFractionDigits:2})} ${data.coin||'USDT'}`, T.yellow)
-  _kpi(doc, T.mX + kW + 3,   y, kW, 22, 'Bruto MXN',   fmt$(data.totals?.bruto),   T.blue)
-  _kpi(doc, T.mX + (kW+3)*2, y, kW, 22, 'Neto MXN',    fmt$(data.totals?.neto),    T.green)
-  _kpi(doc, T.mX + (kW+3)*3, y, kW, 22, 'Ganancia Op.', fmt$(data.totals?.ganancia), T.cyan)
+  // ── KPIs (3 columnas en vertical, sin ganancia interna ni %) ─────
+  const kW = (W - T.mX * 2 - 6) / 3
+  const totalUsdtEntrada = data.totals?.usdt || 0
+  const totalMxnSalidas  = data.rows.reduce((s, r) => s + (r.neto || 0), 0)
+  const coin = data.coin || 'USDT'
+
+  _kpi(doc, T.mX,            y, kW, 22, 'ENTRADA ' + coin, `${totalUsdtEntrada.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${coin}`, T.yellow)
+  _kpi(doc, T.mX + kW + 3,   y, kW, 22, 'SALIDAS MXN',     fmt$(totalMxnSalidas), T.green)
+  _kpi(doc, T.mX + (kW+3)*2, y, kW, 22, 'OPERACIONES',     String(data.rows.length), T.blue)
   y += 28
+
+  // ── Sección ENTRADA (recibido en USDT) ───────────────────────────
+  if (data.totals?.usdt) {
+    doc.setFillColor(...T.cardBg).setDrawColor(...T.cardBorder).setLineWidth(0.3)
+    doc.roundedRect(T.mX, y, W - T.mX * 2, 18, 2, 2, 'FD')
+    doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...T.cyan)
+    doc.text('ENTRADA', T.mX + 4, y + 5)
+    doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...T.textPri)
+    doc.text(`${totalUsdtEntrada.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${coin}`, T.mX + 4, y + 11)
+    if (data.tc) {
+      doc.setFontSize(7).setTextColor(...T.textSec)
+      doc.text(`T/C: $${Number(data.tc).toFixed(2)} MXN  ·  Equivalente MXN: ${fmt$(totalUsdtEntrada * data.tc)}`, T.mX + 4, y + 16)
+    }
+    y += 22
+  }
+
+  // ── Tabla SALIDAS (dispersión) — portrait optimized ──────────────
+  doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...T.cyan)
+  doc.text('SALIDAS', T.mX, y)
+  y += 3
 
   _autoTable(doc, {
     startY: y,
-    head: [['#', 'BENEFICIARIO', 'BANCO', 'CLABE', 'CANTIDAD', 'MONEDA', 'T/C', 'COMISIÓN', 'NETO MXN', 'COMPROBANTE']],
-    body: data.rows.map((r, i) => [
-      i + 1,
-      r.beneficiario || '—',
-      r.banco || '—',
-      r.clabe ? '···' + String(r.clabe).slice(-4) : '—',
-      r.cantidad?.toLocaleString('es-MX', { maximumFractionDigits: 6 }) || '—',
-      r.moneda || 'USDT',
-      r.tc ? '$' + r.tc.toFixed(2) : '—',
-      r.comision ? (r.comision * 100).toFixed(1) + '%' : '—',
-      fmt$(r.neto ?? (r.cantidad * (r.tc || 1) * (r.comision || 1))),
-      r.comprobante ? '✓' : '—',
-    ]),
+    head: [['#', 'BENEFICIARIO', 'BANCO', 'CLABE', `${coin}`, 'MXN', 'COMPROBANTE']],
+    body: data.rows.map((r, i) => {
+      // USDT por fila: si trae .cantidad la usa, si no, calcula desde neto / tc
+      const usdt = r.cantidad ?? ((r.tc && r.neto) ? r.neto / r.tc : 0)
+      const compRef = (r.comprobantes && r.comprobantes.length > 0)
+        ? r.comprobantes.map((c, ci) => `[${ci + 1}]`).join(' ')
+        : (r.comprobante ? '✓' : '—')
+      return [
+        i + 1,
+        r.beneficiario || '—',
+        r.banco || '—',
+        r.clabe ? '···' + String(r.clabe).slice(-4) : '—',
+        usdt ? usdt.toLocaleString('es-MX', { maximumFractionDigits: 6 }) : '—',
+        fmt$(r.neto || 0),
+        compRef,
+      ]
+    }),
     columnStyles: {
       0: { cellWidth: 8,  halign: 'center' },
-      3: { font: 'courier', fontSize: 7 },
-      4: { halign: 'right' },
-      6: { halign: 'right' },
-      7: { halign: 'center' },
-      8: { halign: 'right', fontStyle: 'bold', textColor: T.green },
-      9: { halign: 'center', textColor: T.green },
+      1: { cellWidth: 40 },
+      2: { cellWidth: 25 },
+      3: { font: 'courier', fontSize: 7, cellWidth: 18 },
+      4: { halign: 'right', cellWidth: 22 },
+      5: { halign: 'right', cellWidth: 28, fontStyle: 'bold', textColor: T.green },
+      6: { halign: 'center', cellWidth: 18, textColor: T.cyan, fontSize: 7 },
     },
-    foot: [['', 'TOTALES', '', '',
-      `${(data.totals?.usdt||0).toLocaleString('es-MX',{minimumFractionDigits:2})}`, '', '', '',
-      fmt$(data.totals?.neto), '']],
+    foot: [['', 'TOTAL', '', '',
+      `${totalUsdtEntrada.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`,
+      fmt$(totalMxnSalidas),
+      '']],
     didDrawPage: (d) => {
-      _headerReport(doc, 'Dispersión OTC', `${data.orqName||''} · ${fecha.toLocaleDateString('es-MX')}`, folio)
+      _headerReport(doc, 'Dispersión OTC', `${data.orqName || ''} · ${periodo}`, folio)
       _footer(doc, d.pageNumber, doc.internal.getNumberOfPages(), emisor)
     },
   })
+
+  // ── Sección COMPROBANTES (URLs completas para auditoría) ─────────
+  y = doc.lastAutoTable.finalY + 8
+  const compRows = data.rows
+    .map((r, i) => ({ i: i + 1, name: r.beneficiario, links: (r.comprobantes || []).filter(c => c && (typeof c === 'string' ? c.startsWith('http') : c.isUrl)) }))
+    .filter(r => r.links.length > 0)
+
+  if (compRows.length > 0) {
+    // Nueva página si no cabe
+    if (y > 240) { doc.addPage(); y = 25 }
+    doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...T.cyan)
+    doc.text('COMPROBANTES', T.mX, y); y += 4
+    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...T.textPri)
+    compRows.forEach(c => {
+      c.links.forEach((link, li) => {
+        const url = typeof link === 'string' ? link : link.data
+        if (y > 285) { doc.addPage(); y = 25 }
+        const lbl = `[${c.i}.${li + 1}] ${c.name}: `
+        doc.setFont('helvetica', 'bold').setTextColor(...T.textPri).setFontSize(8)
+        doc.text(lbl, T.mX, y)
+        const lblW = doc.getTextWidth(lbl)
+        doc.setFont('helvetica', 'normal').setTextColor(...T.cyan).setFontSize(7)
+        // Trunca URL a ancho disponible
+        const maxW = W - T.mX * 2 - lblW
+        let shown = url
+        while (doc.getTextWidth(shown) > maxW && shown.length > 20) shown = shown.slice(0, -1)
+        if (shown !== url) shown = shown.slice(0, -1) + '…'
+        doc.textWithLink(shown, T.mX + lblW, y, { url })
+        y += 4
+      })
+    })
+    y += 4
+  }
 
   _footer(doc, 1, doc.internal.getNumberOfPages(), emisor)
   doc.save(`dispersion-otc-${fecha.toISOString().slice(0, 10)}-${folio}.pdf`)

@@ -231,7 +231,7 @@ async function renderAutomations() {
       Aún no tienes recetas activas. Explora el catálogo abajo ↓
     </div>`
   } else {
-    html += `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px;">`
+    html += `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap:12px;">`
     activeRecipes.forEach(r => {
       const a = activeByRecipe[r.id]
       html += `
@@ -273,7 +273,7 @@ async function renderAutomations() {
     if (inCat.length === 0) return
     html += `<div style="margin-bottom:20px;">
       <div style="font-size:12px; color:${cat.color}; margin-bottom:10px; font-weight:600;">${cat.label}</div>
-      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px;">`
+      <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap:12px;">`
     inCat.forEach(r => {
       const isDisabled = r.requiresPhase && r.requiresPhase > 1
       html += `
