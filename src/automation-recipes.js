@@ -880,7 +880,6 @@ return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n') } }];
       }
     },
   },
-]
 
   // ── 13. Resumen semanal financiero (domingo 7pm) ─────────────────
   {
