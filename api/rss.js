@@ -226,6 +226,125 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true })
     }
 
+    // ── GENERATE DRAFT (Gemini) ──────────────────────────────────
+    // Toma un item RSS y produce un draft listo para blog: título SEO,
+    // meta description, slug, H1, body markdown, tags, prompt de imagen.
+    if (action === 'generate_draft') {
+      const { item_id, tone, audience, brand, language } = req.body
+      if (!item_id) return res.status(400).json({ error: 'item_id requerido' })
+
+      const { data: item, error: iErr } = await admin
+        .from('project_rss_items')
+        .select('*, source:project_rss_sources(platform, handle, label, artist_name), project:nodes!project_rss_items_project_id_fkey(content, metadata)')
+        .eq('id', item_id)
+        .eq('owner_id', userId)
+        .single()
+      if (iErr || !item) return res.status(404).json({ error: 'Item no encontrado' })
+
+      const apiKey = process.env.GEMINI_API_KEY
+      if (!apiKey) return res.status(500).json({ error: 'GEMINI_API_KEY no configurada' })
+
+      const projectName = item.project?.content || item.project?.metadata?.label || 'Proyecto'
+      const finalBrand = brand || projectName
+      const finalTone = tone || 'profesional, cercano, conciso'
+      const finalAudience = audience || 'lectores generales del blog'
+      const finalLang = language || 'es-MX'
+
+      const sourceDesc = item.source?.artist_name
+        ? `del artista/marca "${item.source.artist_name}"`
+        : `de la fuente "${item.source?.label || item.source?.handle || item.source?.platform}"`
+
+      const userPrompt = `Eres redactor SEO senior para el blog del proyecto "${finalBrand}".
+
+Te paso una publicación detectada ${sourceDesc} en ${item.source?.platform || 'web'} y debes producir un *draft de nota* listo para publicar en WordPress.
+
+DATOS ORIGINALES:
+- Título original: ${item.title || '(sin título)'}
+- URL: ${item.url || '—'}
+- Autor: ${item.author || '—'}
+- Publicado: ${item.published_at || '—'}
+- Descripción/snippet: ${(item.description || '—').slice(0, 1500)}
+
+INSTRUCCIONES:
+- Idioma: ${finalLang}
+- Tono: ${finalTone}
+- Audiencia: ${finalAudience}
+- NO copies texto literal de la fuente — reescribe en tus palabras.
+- Optimiza para ranking en Google México sin sonar a click-bait.
+- Incluye al menos 1 párrafo con palabras clave naturales.
+- Body de 200 a 400 palabras, en Markdown (usa ## para subtítulos si conviene).
+- Termina con un párrafo de contexto y referencia a la fuente original.
+
+DEVUELVE *EXCLUSIVAMENTE* un objeto JSON con esta forma exacta (sin markdown fences, sin texto fuera del JSON):
+
+{
+  "title_seo": "Título de 50-60 chars optimizado SEO",
+  "h1": "Título principal de la nota (puede ser más rico que el SEO)",
+  "slug": "url-amigable-en-minusculas-con-guiones",
+  "meta_description": "Resumen de 140-160 chars para Google",
+  "excerpt": "Resumen de 1-2 líneas para índice del blog",
+  "body_markdown": "Cuerpo completo del post en Markdown, 200-400 palabras",
+  "tags": ["tag1", "tag2", "tag3"],
+  "category_suggestion": "Categoría sugerida en español",
+  "og_image_prompt": "Descripción detallada de imagen para generar con DALL-E/MJ, en inglés",
+  "keywords_focus": ["palabra clave principal", "secundaria 1", "secundaria 2"]
+}`
+
+      let gemResp
+      try {
+        gemResp = await fetch(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+              generationConfig: {
+                temperature: 0.7,
+                topP: 0.9,
+                maxOutputTokens: 2000,
+                responseMimeType: 'application/json',
+              },
+            }),
+          }
+        )
+      } catch (e) {
+        return res.status(502).json({ error: 'Gemini fetch fail: ' + e.message })
+      }
+
+      if (!gemResp.ok) {
+        const txt = await gemResp.text()
+        return res.status(502).json({ error: 'Gemini ' + gemResp.status + ': ' + txt.slice(0, 300) })
+      }
+
+      const gemJson = await gemResp.json()
+      const raw = gemJson?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+      let draft
+      try { draft = JSON.parse(raw) }
+      catch (e) {
+        // intenta extraer JSON entre { y }
+        const m = raw.match(/\{[\s\S]*\}/)
+        if (!m) return res.status(500).json({ error: 'Respuesta IA no parseable', raw: raw.slice(0, 500) })
+        try { draft = JSON.parse(m[0]) }
+        catch { return res.status(500).json({ error: 'JSON inválido', raw: raw.slice(0, 500) }) }
+      }
+
+      // Guardar en item.draft_content y mover a status=edited
+      const { data: updated, error: uErr } = await admin
+        .from('project_rss_items')
+        .update({
+          draft_content: JSON.stringify(draft),
+          status: 'edited',
+        })
+        .eq('id', item_id)
+        .eq('owner_id', userId)
+        .select()
+        .single()
+      if (uErr) throw uErr
+
+      return res.status(200).json({ ok: true, draft, item: updated })
+    }
+
     return res.status(400).json({ error: 'action no reconocida: ' + action })
   } catch (e) {
     console.error('[rss]', e)

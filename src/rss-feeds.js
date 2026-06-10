@@ -235,6 +235,7 @@ function _renderItemCard(it, projectId) {
         <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">
           ${it.status !== 'accepted' ? `<button data-rss-act="set-status" data-id="${it.id}" data-pid="${projectId}" data-val="accepted" style="padding:4px 8px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);color:#22c55e;border-radius:5px;font-size:11px;cursor:pointer;">✓ Aceptar</button>` : ''}
           ${it.status !== 'rejected' ? `<button data-rss-act="set-status" data-id="${it.id}" data-pid="${projectId}" data-val="rejected" style="padding:4px 8px;background:rgba(148,163,184,0.08);border:1px solid rgba(148,163,184,0.2);color:#94a3b8;border-radius:5px;font-size:11px;cursor:pointer;">✗ Rechazar</button>` : ''}
+          <button data-rss-act="gen-draft" data-id="${it.id}" data-pid="${projectId}" style="padding:4px 8px;background:linear-gradient(135deg,rgba(167,139,250,0.18),rgba(96,165,250,0.18));border:1px solid rgba(167,139,250,0.35);color:#c4b5fd;border-radius:5px;font-size:11px;cursor:pointer;font-weight:700;">🤖 ${it.draft_content ? 'Ver draft' : 'Draft IA'}</button>
           <button data-rss-act="edit-notes" data-id="${it.id}" data-pid="${projectId}" style="padding:4px 8px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:5px;font-size:11px;cursor:pointer;">📝 Nota</button>
           <button data-rss-act="schedule" data-id="${it.id}" data-pid="${projectId}" style="padding:4px 8px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);color:#fb923c;border-radius:5px;font-size:11px;cursor:pointer;">📅 Programar</button>
           <button data-rss-act="publish" data-id="${it.id}" data-pid="${projectId}" style="padding:4px 8px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);color:#34d399;border-radius:5px;font-size:11px;cursor:pointer;">🚀 Publicado</button>
@@ -303,6 +304,17 @@ function _attachHandlers(root, projectId) {
         try { await _api('update_item', { item_id: el.dataset.id, patch: { status: 'published', blog_post_url: url || null } }) }
         catch (e) { alert('Error: ' + e.message); return }
         renderProjectRssTab(projectId)
+      })
+    } else if (act === 'gen-draft') {
+      el.addEventListener('click', async () => {
+        const item = _state[projectId].items.find(i => i.id === el.dataset.id)
+        // Si ya hay draft, abre directo el modal de vista
+        if (item?.draft_content) {
+          try { _openDraftModal(item, JSON.parse(item.draft_content), projectId) }
+          catch { _openDraftModal(item, { body_markdown: item.draft_content }, projectId) }
+          return
+        }
+        await _openGenerateDraftModal(item, projectId)
       })
     }
   })
@@ -381,6 +393,220 @@ function _openAddSourceModal(projectId) {
     } catch (e) { alert('Error: ' + e.message); return }
     cleanup()
     renderProjectRssTab(projectId)
+  })
+}
+
+// ── Modal: parámetros del draft IA (tono, marca) ──────────────────
+async function _openGenerateDraftModal(item, projectId) {
+  // localStorage cache de últimas preferencias
+  const prefsKey = 'nexus_rss_draft_prefs'
+  let prefs = {}
+  try { prefs = JSON.parse(localStorage.getItem(prefsKey) || '{}') } catch {}
+
+  const overlay = document.createElement('div')
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;`
+  const modal = document.createElement('div')
+  modal.style.cssText = `background:#0f1419;border:1px solid #1f2937;border-radius:16px;padding:22px;max-width:500px;width:100%;color:#e5e7eb;`
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <div style="font-size:28px;">🤖</div>
+      <div>
+        <h3 style="margin:0;font-size:17px;font-weight:800;">Generar draft con IA</h3>
+        <div style="font-size:12px;color:#9ca3af;">Gemini 2.0 reescribirá esto en formato blog SEO</div>
+      </div>
+    </div>
+    <div style="padding:10px;background:rgba(255,255,255,0.02);border:1px solid #1f2937;border-radius:8px;margin-bottom:14px;font-size:12px;color:#9ca3af;">
+      <strong style="color:#e5e7eb;">${_esc((item.title || '(sin título)').slice(0, 120))}</strong>
+      ${item.source?.artist_name ? `<br><span style="color:#a78bfa;">${_esc(item.source.artist_name)}</span> · ${item.source?.platform || ''}` : ''}
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px;">Marca/Sitio (opcional)</label>
+        <input id="d-brand" type="text" placeholder="Ej: BN Records" value="${_esc(prefs.brand || '')}" style="width:100%;padding:9px 10px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px;">Tono</label>
+        <input id="d-tone" type="text" placeholder="profesional, cercano, conciso" value="${_esc(prefs.tone || 'profesional, cercano, conciso')}" style="width:100%;padding:9px 10px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:#9ca3af;margin-bottom:4px;">Audiencia</label>
+        <input id="d-audience" type="text" placeholder="lectores generales del blog" value="${_esc(prefs.audience || 'fans de música latina urbana, lectores del blog')}" style="width:100%;padding:9px 10px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px;">
+      <button id="d-cancel" style="flex:1;padding:11px;background:transparent;border:1px solid #374151;color:#9ca3af;border-radius:10px;cursor:pointer;font-size:14px;">Cancelar</button>
+      <button id="d-go" style="flex:2;padding:11px;background:linear-gradient(135deg,#a78bfa,#60a5fa);border:none;color:#000;font-weight:700;border-radius:10px;cursor:pointer;font-size:14px;">✨ Generar</button>
+    </div>
+    <div id="d-status" style="margin-top:10px;font-size:12px;color:#9ca3af;text-align:center;"></div>
+  `
+  overlay.appendChild(modal)
+  document.body.appendChild(overlay)
+  const cleanup = () => document.body.removeChild(overlay)
+  modal.querySelector('#d-cancel').addEventListener('click', cleanup)
+  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+  modal.querySelector('#d-go').addEventListener('click', async () => {
+    const brand    = modal.querySelector('#d-brand').value.trim()
+    const tone     = modal.querySelector('#d-tone').value.trim()
+    const audience = modal.querySelector('#d-audience').value.trim()
+    try { localStorage.setItem(prefsKey, JSON.stringify({ brand, tone, audience })) } catch {}
+    const status = modal.querySelector('#d-status')
+    const goBtn = modal.querySelector('#d-go')
+    goBtn.disabled = true
+    goBtn.textContent = '⏳ Generando…'
+    status.textContent = 'Gemini 2.0 está redactando tu draft. Esto toma 10-30 segundos.'
+    try {
+      const r = await _api('generate_draft', { item_id: item.id, brand, tone, audience })
+      cleanup()
+      _openDraftModal(r.item, r.draft, projectId)
+      renderProjectRssTab(projectId)
+    } catch (e) {
+      status.style.color = '#f87171'
+      status.textContent = 'Error: ' + e.message
+      goBtn.disabled = false
+      goBtn.textContent = '✨ Reintentar'
+    }
+  })
+}
+
+// ── Modal: visualizar draft generado ──────────────────────────────
+function _openDraftModal(item, draft, projectId) {
+  const overlay = document.createElement('div')
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;`
+  const modal = document.createElement('div')
+  modal.style.cssText = `background:#0f1419;border:1px solid #1f2937;border-radius:16px;padding:22px;max-width:780px;width:100%;color:#e5e7eb;max-height:90vh;overflow-y:auto;`
+
+  const fieldHtml = (label, value, opts = {}) => {
+    const id = 'df-' + label.replace(/[^a-z]/gi, '').toLowerCase()
+    const isLong = opts.long
+    return `
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+          <label style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:1.2px;font-weight:700;">${label}</label>
+          <button data-copy="${id}" style="padding:3px 9px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.25);color:#60a5fa;border-radius:5px;cursor:pointer;font-size:10px;">📋 Copiar</button>
+        </div>
+        ${isLong
+          ? `<textarea id="${id}" style="width:100%;padding:10px;background:#0a0e13;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:13px;line-height:1.6;min-height:${opts.minHeight || '200px'};font-family:${opts.mono ? 'monospace' : 'inherit'};resize:vertical;">${_esc(value || '')}</textarea>`
+          : `<input id="${id}" type="text" value="${_esc(value || '')}" style="width:100%;padding:9px 10px;background:#0a0e13;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>`
+        }
+        ${opts.hint ? `<div style="font-size:10px;color:#6b7280;margin-top:4px;">${opts.hint}</div>` : ''}
+      </div>
+    `
+  }
+
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="font-size:28px;">🤖</div>
+        <div>
+          <h3 style="margin:0;font-size:17px;font-weight:800;">Draft generado por IA</h3>
+          <div style="font-size:11px;color:#9ca3af;">Edita y copia campos para tu WordPress</div>
+        </div>
+      </div>
+      <button id="dr-close" style="background:transparent;border:none;color:#9ca3af;font-size:24px;cursor:pointer;line-height:1;">×</button>
+    </div>
+
+    ${fieldHtml('Título SEO (60 chars)', draft.title_seo, { hint: (draft.title_seo || '').length + ' caracteres' })}
+    ${fieldHtml('H1', draft.h1)}
+    ${fieldHtml('Slug URL', draft.slug)}
+    ${fieldHtml('Meta description (160 chars)', draft.meta_description, { hint: (draft.meta_description || '').length + ' caracteres' })}
+    ${fieldHtml('Excerpt', draft.excerpt, { long: true, minHeight: '60px' })}
+    ${fieldHtml('Body Markdown', draft.body_markdown, { long: true, mono: true, minHeight: '300px' })}
+    ${fieldHtml('Tags (separados por coma)', Array.isArray(draft.tags) ? draft.tags.join(', ') : (draft.tags || ''))}
+    ${fieldHtml('Categoría sugerida', draft.category_suggestion)}
+    ${fieldHtml('Keywords focus', Array.isArray(draft.keywords_focus) ? draft.keywords_focus.join(', ') : (draft.keywords_focus || ''))}
+    ${fieldHtml('Prompt imagen OG (para DALL-E / Midjourney)', draft.og_image_prompt, { long: true, minHeight: '70px', hint: 'Pega esto en tu generador favorito para crear la imagen del post' })}
+
+    <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;">
+      <button id="dr-copy-all" style="flex:1;min-width:160px;padding:11px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">📋 Copiar todo en formato</button>
+      <button id="dr-save" style="flex:1;min-width:120px;padding:11px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#22c55e;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">💾 Guardar cambios</button>
+      <button id="dr-regen" style="flex:1;min-width:140px;padding:11px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">🔄 Regenerar</button>
+      <button id="dr-publish" style="flex:1;min-width:140px;padding:11px;background:linear-gradient(135deg,#34d399,#22c55e);border:none;color:#000;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">🚀 Marcar publicado</button>
+    </div>
+    <div id="dr-feedback" style="margin-top:10px;font-size:12px;color:#9ca3af;text-align:center;min-height:18px;"></div>
+  `
+
+  overlay.appendChild(modal)
+  document.body.appendChild(overlay)
+  const cleanup = () => document.body.removeChild(overlay)
+  const feedback = (msg, color = '#22c55e') => {
+    const el = modal.querySelector('#dr-feedback')
+    el.textContent = msg; el.style.color = color
+    setTimeout(() => { el.textContent = '' }, 2400)
+  }
+
+  // copy buttons
+  modal.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = modal.querySelector('#' + btn.dataset.copy)
+      if (!target) return
+      navigator.clipboard.writeText(target.value || target.textContent || '').then(
+        () => { btn.textContent = '✓ Copiado'; setTimeout(() => { btn.textContent = '📋 Copiar' }, 1200) }
+      )
+    })
+  })
+
+  // close
+  modal.querySelector('#dr-close').addEventListener('click', cleanup)
+  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+
+  // helper para leer campos editados
+  const readDraft = () => ({
+    title_seo: modal.querySelector('#df-titleseochars').value,
+    h1: modal.querySelector('#df-h').value,
+    slug: modal.querySelector('#df-slugurl').value,
+    meta_description: modal.querySelector('#df-metadescriptionchars').value,
+    excerpt: modal.querySelector('#df-excerpt').value,
+    body_markdown: modal.querySelector('#df-bodymarkdown').value,
+    tags: modal.querySelector('#df-tagsseparadosporcoma').value.split(',').map(s => s.trim()).filter(Boolean),
+    category_suggestion: modal.querySelector('#df-categorasugerida').value,
+    keywords_focus: modal.querySelector('#df-keywordsfocus').value.split(',').map(s => s.trim()).filter(Boolean),
+    og_image_prompt: modal.querySelector('#df-promptimagenogparadalleemidjourney').value,
+  })
+
+  // copy all
+  modal.querySelector('#dr-copy-all').addEventListener('click', () => {
+    const d = readDraft()
+    const text = `TÍTULO: ${d.title_seo}
+H1: ${d.h1}
+SLUG: ${d.slug}
+META: ${d.meta_description}
+EXCERPT: ${d.excerpt}
+CATEGORÍA: ${d.category_suggestion}
+TAGS: ${d.tags.join(', ')}
+KEYWORDS: ${d.keywords_focus.join(', ')}
+
+═══ CUERPO ═══
+${d.body_markdown}
+
+═══ IMAGEN OG (PROMPT) ═══
+${d.og_image_prompt}`
+    navigator.clipboard.writeText(text).then(() => feedback('✓ Todo copiado al portapapeles'))
+  })
+
+  // save
+  modal.querySelector('#dr-save').addEventListener('click', async () => {
+    try {
+      await _api('update_item', { item_id: item.id, patch: { draft_content: JSON.stringify(readDraft()), status: 'edited' } })
+      feedback('✓ Cambios guardados')
+      renderProjectRssTab(projectId)
+    } catch (e) { feedback('Error: ' + e.message, '#f87171') }
+  })
+
+  // regen
+  modal.querySelector('#dr-regen').addEventListener('click', async () => {
+    if (!confirm('¿Regenerar? Se sobreescribirá el draft actual.')) return
+    cleanup()
+    await _openGenerateDraftModal(item, projectId)
+  })
+
+  // publish
+  modal.querySelector('#dr-publish').addEventListener('click', async () => {
+    const url = prompt('URL del post publicado (opcional):', '')
+    try {
+      await _api('update_item', { item_id: item.id, patch: { draft_content: JSON.stringify(readDraft()), status: 'published', blog_post_url: url || null } })
+      cleanup()
+      renderProjectRssTab(projectId)
+    } catch (e) { feedback('Error: ' + e.message, '#f87171') }
   })
 }
 
