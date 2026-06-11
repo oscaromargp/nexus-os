@@ -323,6 +323,119 @@ const TOOLS = [
     },
   },
   {
+    name: 'search_contacts',
+    description: 'Busca contactos (personas, bancos, proveedores) del CRM. SIEMPRE usa este tool cuando el usuario pida "datos de contacto de X", "teléfono de X", "email de X", "cuenta CLABE de X". Devuelve TODOS los datos para copy-paste: nombre completo, teléfonos, emails, ciudad, notas, cumpleaños, y cuentas bancarias asociadas con CLABEs. Si hay varios matches, muéstralos TODOS y pídele al usuario que elija.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Nombre o parte del nombre, teléfono, email, o palabra clave. Ejemplos: "Alex", "Banamex", "Pedro 555".' },
+        cType: { type: 'string', enum: ['persona','banco','proveedor','prospecto','agente'], description: 'Tipo de contacto (opcional)' },
+      },
+      required: ['text'],
+    },
+    handler: async (admin, userId, args) => {
+      const text = (args.text || '').trim()
+      if (!text) return { error: 'text requerido' }
+      // Busca en content, metadata.name, metadata.phone, metadata.email
+      const { data, error } = await admin.from('nodes')
+        .select('id, content, metadata')
+        .eq('owner_id', userId).eq('type', 'contact')
+        .or(`content.ilike.%${text}%,metadata->>name.ilike.%${text}%,metadata->>phone.ilike.%${text}%,metadata->>email.ilike.%${text}%,metadata->>notes.ilike.%${text}%`)
+        .limit(15)
+      if (error) return { error: error.message }
+      const filtered = args.cType ? data.filter(c => c.metadata?.cType === args.cType) : data
+      return {
+        count: filtered.length,
+        contacts: filtered.map(c => {
+          const m = c.metadata || {}
+          return {
+            id: c.id,
+            name: m.name || c.content,
+            cType: m.cType,
+            roles: m.roles,
+            phone: m.phone,
+            email: m.email,
+            phones: m.phones,  // array [{label, number}]
+            emails: m.emails,  // array [{label, address}]
+            city: m.city,
+            birthday: m.birthday,
+            notes: m.notes,
+            contact_accounts: m.contact_accounts,  // bancos/CLABEs/wallets
+          }
+        }),
+      }
+    },
+  },
+  {
+    name: 'search_accounts',
+    description: 'Busca cuentas bancarias/efectivo del usuario y SUS SALDOS calculados (saldo inicial + ingresos - gastos asociados a esa cuenta). Úsalo cuando el usuario pregunte "cuánto tengo en X", "saldo de mi cuenta NU", "estado de Banamex". Si hay varias cuentas, muéstralas TODAS con sus saldos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Nombre o parte del nombre de la cuenta (ej. "nom", "banamex", "nu"). Vacío = todas.' },
+      },
+    },
+    handler: async (admin, userId, args) => {
+      // 1) Trae cuentas que matchean
+      let q = admin.from('nodes').select('id, content, metadata, created_at')
+        .eq('owner_id', userId).eq('type', 'account')
+      const { data: accounts, error } = await q.limit(50)
+      if (error) return { error: error.message }
+      const text = (args.text || '').trim().toLowerCase()
+      const filteredAccounts = text
+        ? accounts.filter(a => {
+            const label = (a.metadata?.label || a.content || '').toLowerCase()
+            return label.includes(text)
+          })
+        : accounts
+
+      if (!filteredAccounts.length) {
+        return { count: 0, accounts: [], hint: 'Sin matches. Cuentas disponibles: ' + accounts.map(a => a.content).join(', ') }
+      }
+
+      // 2) Trae todos los movimientos del usuario en últimos 365 días
+      const yearAgo = new Date(Date.now() - 365 * 86400000).toISOString()
+      const { data: movs } = await admin.from('nodes')
+        .select('type, metadata').eq('owner_id', userId)
+        .in('type', ['income','expense'])
+        .gte('created_at', yearAgo)
+        .limit(2000)
+
+      // 3) Por cada cuenta, suma movimientos cuyo metadata.account_hint matchea label
+      const result = filteredAccounts.map(a => {
+        const label = (a.metadata?.label || a.content || '').toLowerCase()
+        const labelTokens = label.split(/\s+/).filter(Boolean)
+        const initial = Number(a.metadata?.initial_balance) || 0
+        let income = 0, expense = 0, countMovs = 0
+        for (const m of (movs || [])) {
+          const hint = (m.metadata?.account_hint || '').toLowerCase()
+          if (!hint) continue
+          // match si hint contiene el label o algún token
+          const matches = hint === label || hint.includes(label) || labelTokens.some(t => t.length >= 3 && hint.includes(t))
+          if (!matches) continue
+          countMovs++
+          const amt = Number(m.metadata?.amount) || 0
+          if (m.type === 'income') income += amt
+          else expense += amt
+        }
+        return {
+          id: a.id,
+          label: a.metadata?.label || a.content,
+          tipo: a.metadata?.acType,
+          color: a.metadata?.color,
+          initial_balance: initial,
+          ingresos_total: income,
+          gastos_total: expense,
+          balance_calculado: initial + income - expense,
+          movimientos_registrados: countMovs,
+          nota: countMovs === 0 ? 'Sin movimientos registrados con este account_hint. Saldo = inicial.' : null,
+        }
+      })
+
+      return { count: result.length, accounts: result }
+    },
+  },
+  {
     name: 'generate_property_link',
     description: 'Genera link público OG-friendly de un inmueble para compartir.',
     parameters: {
@@ -563,24 +676,70 @@ export default async function handler(req, res) {
     const systemInstruction = `Eres "Nexus", el asistente personal de Oscar Omar (oscaromargp@gmail.com).
 
 Su Nexus OS gestiona:
-- 🏠 Inmuebles (CRM, leads, reportes, exclusivas)
-- 💰 Finanzas (gastos, ingresos, agenda de pagos)
-- ✅ Tareas y citas (Kanban con prioridades y fechas)
-- 📁 Proyectos (BN Records discográfica, Casa Tulum, inmobiliarias)
-- 📡 RSS Editorial (rastreador → drafts blog)
+- 🏠 Inmuebles (CRM, leads, reportes, exclusivas) — search_properties, search_leads
+- 💰 Cuentas bancarias y movimientos — search_accounts, search_movements
+- 👥 Contactos (personas, bancos, proveedores) con CLABEs — search_contacts
+- ✅ Tareas y citas (Kanban) — search_tasks, create_task
+- 📊 Briefing diario — get_today_briefing
 
-ESTILO:
+═══ REGLA #1 — SIEMPRE USA TOOLS ═══
+Si el usuario pregunta por DATOS específicos (nombre, número, cantidad, cuenta, dirección, fecha), DEBES llamar el tool apropiado. NO digas "no sé" sin haber buscado primero.
+
+Ejemplos:
+- "datos de Alex" → search_contacts(text="Alex")
+- "teléfono de Pedro" → search_contacts(text="Pedro")
+- "cuenta de Banamex" → search_accounts(text="banamex")
+- "cuánto hay en nom" → search_accounts(text="nom")
+- "saldo de mi NU" → search_accounts(text="nu")
+- "qué pagué este mes" → search_movements(days_ago=30)
+
+═══ REGLA #2 — DISAMBIGUACIÓN ═══
+Si una búsqueda devuelve VARIOS matches (ej. "Alex" matchea 3 contactos):
+1. NO elijas uno al azar
+2. Lista los 3 con nombre completo + algún dato distintivo (rol, ciudad)
+3. Pide al usuario que aclare cuál
+
+Ejemplo: "Encontré 3 contactos con 'Alex'. ¿Cuál buscas?
+1. Alex Martínez · Banco · CDMX
+2. Alex García · Persona · 5555-1234
+3. Alex Hernández · Proveedor · Tulum"
+
+═══ REGLA #3 — FORMATO COPY-PASTE PARA CONTACTOS ═══
+Cuando muestres datos de contacto, formatea para que el usuario pueda copiar/pegar fácil. Cada dato en su propia línea:
+
+📋 *Ana Karen Olivera Aquino*
+📞 +52 1 958 173 5685
+✉ anakoliaqui@gmail.com
+📍 Puerto Angel, Oaxaca
+🎂 1994-06-10
+
+🏦 *Cuentas bancarias:*
+• AnaKOA - BBVA
+  CLABE: 012180015372883049
+  Cuenta: 153 728 8304
+
+_Notas:_ ...
+
+═══ REGLA #4 — CUENTAS Y SALDOS ═══
+Cuando muestres saldos, incluye:
+- Saldo calculado
+- Saldo inicial (si aplica)
+- Total ingresos / gastos (si hay movs)
+- Si no hay movimientos con esa cuenta, indícalo claro
+- Si hay varias cuentas, muéstralas TODAS aunque el usuario pida una
+
+═══ ESTILO ═══
 - Español neutro/mexicano, conciso, casual cercano
-- Markdown Telegram (*negrita*, _italica_)
-- Emojis con moderación (1-3 por mensaje)
-- Si no encuentras datos, dilo claro, no inventes
-- Para mensajes sociales (gracias, hola), responde breve y natural sin tools
+- Markdown Telegram (*negrita*, _italica_, \`código\`)
+- Emojis con moderación (1-3 por mensaje, excepto en listas de contactos donde puedes usar más para legibilidad)
+- Para sociales (gracias, hola), responde breve sin tools
 - Para modificar datos, confirma con resumen antes
 
-REGLAS:
+═══ REGLAS DE SEGURIDAD ═══
 - NUNCA borres datos
-- NUNCA inventes IDs/folios
+- NUNCA inventes IDs, folios, teléfonos, CLABEs o datos
 - Si el usuario menciona folio (NX-001), úsalo tal cual
+- Si una búsqueda no devuelve nada, dilo claro: "No encontré X en tus contactos"
 
 Fecha actual: ${new Date().toISOString().split('T')[0]}.`
 
