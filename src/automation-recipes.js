@@ -830,6 +830,98 @@ return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: fal
     },
   },
 
+  // ── Actividad universal Nexus → Telegram ─────────────────────────
+  // (Renumeración: este va antes que backup_status para mantener
+  // continuidad lógica de categoría 'system')
+  {
+    id: 'activity_telegram',
+    name: '🔔 Toda actividad → Telegram',
+    desc: 'Cada vez que creas o editas algo importante en Nexus (tarea, contacto, proyecto, nota, inmueble, lead aceptado), te llega un mensaje. Útil para tener trazabilidad en tiempo real de lo que estás trabajando.',
+    category: 'system',
+    icon: '🔔',
+    color: '#fbbf24',
+    paramsSchema: [
+      { key: 'include_tasks',    label: 'Tareas / citas',         type: 'bool', default: true },
+      { key: 'include_contacts', label: 'Contactos nuevos',       type: 'bool', default: true },
+      { key: 'include_projects', label: 'Proyectos nuevos',       type: 'bool', default: true },
+      { key: 'include_notes',    label: 'Notas largas (>40 chars)', type: 'bool', default: false },
+      { key: 'include_properties', label: 'Inmuebles modificados', type: 'bool', default: true },
+    ],
+    generateWorkflow(params, ctx) {
+      const { telegramChatId } = ctx
+      const path = 'nexus-activity-' + Date.now().toString(36)
+      const flags = {
+        tasks:      params.include_tasks !== false,
+        contacts:   params.include_contacts !== false,
+        projects:   params.include_projects !== false,
+        notes:      params.include_notes === true,
+        properties: params.include_properties !== false,
+      }
+      const code = `
+const body = $input.first().json.body || {};
+const d = body.data || {};
+const kind = d.kind || d.type || 'unknown';
+const flags = ${JSON.stringify(flags)};
+
+const passes = (
+  (kind === 'task' && flags.tasks) ||
+  (kind === 'contact' && flags.contacts) ||
+  (kind === 'project' && flags.projects) ||
+  (kind === 'note' && flags.notes) ||
+  (kind === 'property' && flags.properties)
+);
+if (!passes) return [{ json: { skip: true } }];
+
+const EMOJI = { task:'✅', contact:'👤', project:'📁', note:'📝', property:'🏠' };
+const VERB  = { create:'creado', update:'editado', delete:'borrado' };
+const action = d.action || 'create';
+const emoji = EMOJI[kind] || '🔔';
+
+const lines = [emoji + ' *' + (kind.toUpperCase()) + ' ' + (VERB[action] || action) + '*', ''];
+if (d.label || d.title || d.name) lines.push('📝 ' + (d.label || d.title || d.name).slice(0,200));
+if (d.priority) lines.push('🎯 ' + d.priority);
+if (d.due_date) lines.push('📅 ' + d.due_date + (d.due_time ? ' ' + d.due_time : ''));
+if (d.project_tag) lines.push('📁 #' + d.project_tag);
+if (d.amount != null) lines.push('💰 $' + Number(d.amount).toLocaleString('es-MX'));
+if (d.tags?.length) lines.push('🏷️ ' + d.tags.join(' '));
+if (d.url) lines.push(d.url);
+
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: false } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 🔔 Actividad → TG',
+        nodes: [
+          webhookNode('hook', 'Webhook actividad', [240, 300], path),
+          codeNode('format', 'Format msg', [460, 300], code),
+          {
+            parameters: { conditions: { string: [{ value1: '={{ $json.skip }}', operation: 'equal', value2: 'false' }] } },
+            id: 'gate', name: 'Si pasa filtro', type: 'n8n-nodes-base.if',
+            typeVersion: 1, position: [680, 300],
+          },
+          tgSendNode('tg', 'Telegram Send', [900, 200], '={{ $json.chatId }}', '={{ $json.reply }}'),
+          respondNode('respond', 'Respond OK', [900, 400]),
+        ],
+        connections: mergeConns(
+          conn('Webhook actividad', 'Format msg'),
+          conn('Format msg', 'Si pasa filtro'),
+          { 'Si pasa filtro': { main: [
+            [{ node: 'Telegram Send', type:'main', index:0 }],
+            [{ node: 'Respond OK', type:'main', index:0 }],
+          ] } },
+          conn('Telegram Send', 'Respond OK'),
+        ),
+        settings: { executionOrder: 'v1' },
+        webhookPath: path,
+      }
+    },
+    afterEnable(workflow, ctx) {
+      return {
+        webhookUrl: `${ctx.n8nBaseUrl}/webhook/${workflow.webhookPath}`,
+        instruction: 'Pega esta URL en Configuración → Conexiones → 🔔 Actividad Nexus (cuando se cree). Por ahora cópiala — el dispatch desde app.js se agrega en el siguiente push.',
+      }
+    },
+  },
+
   // ── 8. Backup completado ─────────────────────────────────────────
   {
     id: 'backup_status',
