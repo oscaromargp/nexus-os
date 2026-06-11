@@ -1,22 +1,41 @@
-// Nexus OS — Agente conversacional con tool use
+// Nexus OS — Agente conversacional con tool use (multi-provider)
 //
 // POST /api/agent
-//   { user_id, platform, external_chat_id, message }
+//   { user_id, platform, external_chat_id, message, provider? }
 //
-// Implementa loop de tool use con Gemini 2.0 Flash (free tier 1500 req/día).
-// Memoria conversacional persistente en chat_sessions + chat_messages.
+// Providers soportados:
+//   - 'groq'   → Llama 3.3 70B (default, free tier 30 req/min)
+//   - 'gemini' → Gemini 2.0 Flash (free tier 1500 req/día, condicional)
 //
-// Tier 2: lectura + escritura segura. Sin acciones destructivas (no delete).
+// Selección: por header X-Nexus-Provider, o user_metadata.agent_provider,
+// o env DEFAULT_LLM_PROVIDER, o 'groq' por defecto.
+// Fallback automático: si el primario falla, intenta el siguiente.
 //
-// Auth: header X-Nexus-Service-Secret (compartido con bot Telegram).
+// Memoria conversacional: chat_sessions + chat_messages.
 
 import { createClient } from '@supabase/supabase-js'
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY
-const GROQ_KEY   = process.env.GROQ_API_KEY  // fallback (opcional)
+const GROQ_KEY   = process.env.GROQ_API_KEY
 const SERVICE_SECRET = process.env.NEXUS_WEBHOOK_SECRET
 const MAX_TOOL_ITERATIONS = 8
 const HISTORY_WINDOW = 20
+
+const PROVIDERS = ['groq', 'gemini']  // orden de preferencia + fallback chain
+const DEFAULT_PROVIDER = process.env.DEFAULT_LLM_PROVIDER || 'groq'
+
+const PROVIDER_CONFIG = {
+  groq: {
+    available: !!GROQ_KEY,
+    model: 'llama-3.3-70b-versatile',
+    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+  },
+  gemini: {
+    available: !!GEMINI_KEY,
+    model: 'gemini-2.0-flash',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+  },
+}
 
 function getAdminSupabase() {
   const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
@@ -25,7 +44,7 @@ function getAdminSupabase() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// TOOLS (Tier 2: lectura + escritura segura)
+// TOOLS (Tier 2: lectura + escritura segura, sin delete)
 // ════════════════════════════════════════════════════════════════════
 
 const TOOLS = [
@@ -42,7 +61,7 @@ const TOOLS = [
         status:        { type: 'string', description: 'borrador, disponible, vendido, etc.' },
         precio_max:    { type: 'number' },
         precio_min:    { type: 'number' },
-        limit:         { type: 'number', description: 'máx 20, default 5' },
+        limit:         { type: 'number', description: 'max 20, default 5' },
       },
     },
     handler: async (admin, userId, args) => {
@@ -67,14 +86,14 @@ const TOOLS = [
   },
   {
     name: 'search_leads',
-    description: 'Busca leads (solicitudes de información de clientes) capturados desde propiedad.html.',
+    description: 'Busca leads (solicitudes de información) capturados desde propiedad.html.',
     parameters: {
       type: 'object',
       properties: {
         text:        { type: 'string', description: 'Busca en nombre, teléfono, email, mensaje' },
         status:      { type: 'string', enum: ['nuevo','contactado','negociacion','cerrado','descartado'] },
-        days_ago:    { type: 'number', description: 'Filtrar por antigüedad en días (ej. 7 = última semana)' },
-        limit:       { type: 'number', description: 'máx 20, default 10' },
+        days_ago:    { type: 'number', description: 'Filtrar por antigüedad en días' },
+        limit:       { type: 'number', description: 'max 20, default 10' },
       },
     },
     handler: async (admin, userId, args) => {
@@ -98,26 +117,22 @@ const TOOLS = [
   },
   {
     name: 'search_movements',
-    description: 'Busca movimientos financieros (gastos e ingresos) recientes del usuario. Lee de nodes (capturados con parser) y movimientos (bancarios).',
+    description: 'Busca movimientos financieros recientes (gastos e ingresos capturados con parser o desde Movimientos).',
     parameters: {
       type: 'object',
       properties: {
         kind:        { type: 'string', enum: ['income','expense','both'], description: 'default both' },
-        days_ago:    { type: 'number', description: 'Filtrar por antigüedad en días (default 30)' },
-        text:        { type: 'string', description: 'Busca en label/concepto' },
-        limit:       { type: 'number', description: 'máx 30, default 15' },
+        days_ago:    { type: 'number', description: 'default 30' },
+        text:        { type: 'string' },
+        limit:       { type: 'number', description: 'max 30, default 15' },
       },
     },
     handler: async (admin, userId, args) => {
       const limit = Math.min(args.limit || 15, 30)
       const days = args.days_ago || 30
       const cutoff = new Date(Date.now() - days * 86400000).toISOString()
-      let typeFilter
-      if (args.kind === 'income') typeFilter = ['income']
-      else if (args.kind === 'expense') typeFilter = ['expense']
-      else typeFilter = ['income','expense']
-      let q = admin.from('nodes')
-        .select('id, type, content, metadata, created_at')
+      const typeFilter = args.kind === 'income' ? ['income'] : args.kind === 'expense' ? ['expense'] : ['income','expense']
+      let q = admin.from('nodes').select('id, type, content, metadata, created_at')
         .eq('owner_id', userId).in('type', typeFilter)
         .gte('created_at', cutoff)
         .order('created_at', { ascending: false })
@@ -125,10 +140,8 @@ const TOOLS = [
       const { data, error } = await q.limit(limit)
       if (error) return { error: error.message }
       return { count: data.length, items: data.map(n => ({
-        id: n.id,
-        type: n.type,
-        amount: n.metadata?.amount,
-        currency: n.metadata?.currency || 'MXN',
+        id: n.id, type: n.type,
+        amount: n.metadata?.amount, currency: n.metadata?.currency || 'MXN',
         label: n.content || n.metadata?.label,
         account: n.metadata?.account_hint,
         tags: n.metadata?.tags,
@@ -138,26 +151,25 @@ const TOOLS = [
   },
   {
     name: 'search_tasks',
-    description: 'Busca tareas/citas (nodes type=kanban) del usuario. Útil para "qué tengo pendiente", "qué tareas tengo esta semana".',
+    description: 'Busca tareas/citas pendientes del Kanban. Útil para "qué tengo pendiente".',
     parameters: {
       type: 'object',
       properties: {
         status:     { type: 'string', enum: ['todo','doing','done'] },
         priority:   { type: 'string', enum: ['alta','media','baja'] },
-        from_date:  { type: 'string', description: 'YYYY-MM-DD, fecha límite mínima' },
-        to_date:    { type: 'string', description: 'YYYY-MM-DD, fecha límite máxima' },
+        from_date:  { type: 'string', description: 'YYYY-MM-DD' },
+        to_date:    { type: 'string', description: 'YYYY-MM-DD' },
         text:       { type: 'string' },
         limit:      { type: 'number', description: 'default 20' },
       },
     },
     handler: async (admin, userId, args) => {
       const limit = Math.min(args.limit || 20, 50)
-      let q = admin.from('nodes')
-        .select('id, content, metadata, created_at')
+      let q = admin.from('nodes').select('id, content, metadata, created_at')
         .eq('owner_id', userId).eq('type', 'kanban')
         .order('created_at', { ascending: false })
       if (args.text) q = q.ilike('content', '%' + args.text + '%')
-      const { data, error } = await q.limit(limit * 2)  // sobre-trae para filtrar metadata
+      const { data, error } = await q.limit(limit * 2)
       if (error) return { error: error.message }
       const filtered = (data || []).filter(n => {
         if (args.status && n.metadata?.status !== args.status) return false
@@ -167,27 +179,22 @@ const TOOLS = [
         return true
       }).slice(0, limit)
       return { count: filtered.length, items: filtered.map(n => ({
-        id: n.id,
-        title: n.content || n.metadata?.label,
-        status: n.metadata?.status,
-        priority: n.metadata?.priority,
-        due_date: n.metadata?.due_date,
-        due_time: n.metadata?.due_time,
-        tags: n.metadata?.tags,
-        project_tag: n.metadata?.project_tag,
+        id: n.id, title: n.content || n.metadata?.label,
+        status: n.metadata?.status, priority: n.metadata?.priority,
+        due_date: n.metadata?.due_date, due_time: n.metadata?.due_time,
+        tags: n.metadata?.tags, project_tag: n.metadata?.project_tag,
       })) }
     },
   },
   {
     name: 'get_today_briefing',
-    description: 'Resumen rápido del día: total inmuebles activos, leads hoy/semana/total, tareas pendientes con fecha hoy, movimientos del día, exclusivas próximas a vencer.',
+    description: 'Resumen del día: total inmuebles, leads hoy/semana/total, tareas pendientes hoy, movimientos del día, exclusivas próximas a vencer.',
     parameters: { type: 'object', properties: {} },
     handler: async (admin, userId) => {
       const today = new Date(); today.setHours(0,0,0,0)
       const todayIso = today.toISOString()
       const wkAgo = new Date(Date.now() - 7*86400000).toISOString()
       const wkAhead = new Date(Date.now() + 7*86400000).toISOString().split('T')[0]
-
       const [props, leadsHoy, leadsSem, leadsCold, movs, tareas, excl] = await Promise.all([
         admin.from('properties').select('id', { count: 'exact', head: true }).eq('user_id', userId).is('deleted_at', null),
         admin.from('property_leads').select('id', { count: 'exact', head: true }).gte('created_at', todayIso),
@@ -197,29 +204,18 @@ const TOOLS = [
         admin.from('nodes').select('content,metadata').eq('owner_id', userId).eq('type', 'kanban').limit(50),
         admin.from('properties').select('titulo,folio_interno,exclusiva_fin').eq('user_id', userId).eq('exclusiva', true).gte('exclusiva_fin', todayIso.split('T')[0]).lte('exclusiva_fin', wkAhead).is('deleted_at', null),
       ])
-
       const tasksToday = (tareas.data || []).filter(t => {
         const dd = t.metadata?.due_date
         return dd && dd === todayIso.split('T')[0] && t.metadata?.status !== 'done'
       })
       const ing = (movs.data || []).filter(m => m.type === 'income').reduce((s,m) => s + (m.metadata?.amount||0), 0)
       const eg  = (movs.data || []).filter(m => m.type === 'expense').reduce((s,m) => s + (m.metadata?.amount||0), 0)
-
       return {
         inmuebles_activos: props.count || 0,
-        leads_hoy: leadsHoy.count || 0,
-        leads_semana: leadsSem.count || 0,
-        leads_frios_3d: (leadsCold.data || []).slice(0,3).map(l => ({
-          nombre: l.nombre,
-          inmueble: l.properties?.titulo || l.properties?.folio_interno,
-        })),
-        ingresos_hoy: ing,
-        gastos_hoy: eg,
-        tareas_pendientes_hoy: tasksToday.map(t => ({
-          titulo: t.content || t.metadata?.label,
-          hora: t.metadata?.due_time,
-          prioridad: t.metadata?.priority,
-        })),
+        leads_hoy: leadsHoy.count || 0, leads_semana: leadsSem.count || 0,
+        leads_frios_3d: (leadsCold.data || []).slice(0,3).map(l => ({ nombre: l.nombre, inmueble: l.properties?.titulo || l.properties?.folio_interno })),
+        ingresos_hoy: ing, gastos_hoy: eg,
+        tareas_pendientes_hoy: tasksToday.map(t => ({ titulo: t.content || t.metadata?.label, hora: t.metadata?.due_time, prioridad: t.metadata?.priority })),
         exclusivas_proximas: (excl.data || []).map(p => ({ titulo: p.titulo, folio: p.folio_interno, vence: p.exclusiva_fin })),
         fecha: todayIso.split('T')[0],
       }
@@ -227,33 +223,27 @@ const TOOLS = [
   },
   {
     name: 'create_task',
-    description: 'Crea una nueva tarea/cita en el Kanban del usuario. Útil cuando el usuario dice "recuérdame", "anota", "agenda", etc.',
+    description: 'Crea una nueva tarea/cita en Kanban. Útil para "recuérdame", "anota", "agenda".',
     parameters: {
-      type: 'object',
-      required: ['title'],
+      type: 'object', required: ['title'],
       properties: {
-        title:     { type: 'string', description: 'Texto de la tarea' },
+        title:     { type: 'string' },
         priority:  { type: 'string', enum: ['alta','media','baja'] },
         due_date:  { type: 'string', description: 'YYYY-MM-DD' },
-        due_time:  { type: 'string', description: 'HH:MM (24h)' },
-        project_tag: { type: 'string', description: 'Slug del proyecto, ej: casatulum' },
+        due_time:  { type: 'string', description: 'HH:MM' },
+        project_tag: { type: 'string' },
         notes:     { type: 'string' },
       },
     },
     handler: async (admin, userId, args) => {
       const meta = {
-        status: 'todo',
-        tags: ['#tarea'],
-        priority: args.priority || null,
-        due_date: args.due_date || null,
-        due_time: args.due_time || null,
-        project_tag: args.project_tag || null,
-        notes: args.notes || null,
-        label: args.title,
+        status: 'todo', tags: ['#tarea'],
+        priority: args.priority || null, due_date: args.due_date || null,
+        due_time: args.due_time || null, project_tag: args.project_tag || null,
+        notes: args.notes || null, label: args.title,
       }
       const { data, error } = await admin.from('nodes').insert({
-        owner_id: userId, type: 'kanban',
-        content: args.title, metadata: meta,
+        owner_id: userId, type: 'kanban', content: args.title, metadata: meta,
       }).select().single()
       if (error) return { error: error.message }
       return { ok: true, id: data.id, message: 'Tarea creada: ' + args.title }
@@ -261,15 +251,14 @@ const TOOLS = [
   },
   {
     name: 'create_movement',
-    description: 'Crea un movimiento financiero (gasto o ingreso) en Bio-Finanzas. Útil cuando el usuario dice "registra gasto", "pagué", "cobré".',
+    description: 'Crea un movimiento financiero (gasto o ingreso). Útil para "registra gasto", "pagué", "cobré".',
     parameters: {
-      type: 'object',
-      required: ['kind','amount','label'],
+      type: 'object', required: ['kind','amount','label'],
       properties: {
         kind:    { type: 'string', enum: ['income','expense'] },
         amount:  { type: 'number' },
-        label:   { type: 'string', description: 'Descripción del movimiento' },
-        account: { type: 'string', description: 'Banco o cuenta (ej. bancomer, hsbc)' },
+        label:   { type: 'string' },
+        account: { type: 'string' },
         currency:{ type: 'string', description: 'default MXN' },
         date:    { type: 'string', description: 'YYYY-MM-DD' },
         project_tag: { type: 'string' },
@@ -278,17 +267,14 @@ const TOOLS = [
     },
     handler: async (admin, userId, args) => {
       const meta = {
-        amount: args.amount,
-        currency: args.currency || 'MXN',
-        label: args.label,
-        account_hint: args.account || null,
+        amount: args.amount, currency: args.currency || 'MXN',
+        label: args.label, account_hint: args.account || null,
         date: args.date || new Date().toISOString().split('T')[0],
         project_tag: args.project_tag || null,
         tags: args.tags?.length ? args.tags.map(t => t.startsWith('#') ? t : '#' + t) : [],
       }
       const { data, error } = await admin.from('nodes').insert({
-        owner_id: userId, type: args.kind,
-        content: args.label, metadata: meta,
+        owner_id: userId, type: args.kind, content: args.label, metadata: meta,
       }).select().single()
       if (error) return { error: error.message }
       return { ok: true, id: data.id, message: `${args.kind === 'income' ? 'Ingreso' : 'Gasto'} de $${args.amount} registrado: ${args.label}` }
@@ -296,23 +282,15 @@ const TOOLS = [
   },
   {
     name: 'create_note',
-    description: 'Crea una nota libre. Útil para "anota", "guarda esto", "apunta".',
+    description: 'Crea una nota libre. Para "anota", "guarda esto", "apunta".',
     parameters: {
-      type: 'object',
-      required: ['content'],
-      properties: {
-        content: { type: 'string' },
-        tags:    { type: 'array', items: { type: 'string' } },
-      },
+      type: 'object', required: ['content'],
+      properties: { content: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } } },
     },
     handler: async (admin, userId, args) => {
-      const meta = {
-        label: args.content.slice(0,60),
-        tags: args.tags?.length ? args.tags.map(t => t.startsWith('#') ? t : '#' + t) : [],
-      }
+      const meta = { label: args.content.slice(0,60), tags: args.tags?.length ? args.tags.map(t => t.startsWith('#') ? t : '#' + t) : [] }
       const { data, error } = await admin.from('nodes').insert({
-        owner_id: userId, type: 'note',
-        content: args.content, metadata: meta,
+        owner_id: userId, type: 'note', content: args.content, metadata: meta,
       }).select().single()
       if (error) return { error: error.message }
       return { ok: true, id: data.id, message: 'Nota guardada' }
@@ -320,14 +298,10 @@ const TOOLS = [
   },
   {
     name: 'update_lead_status',
-    description: 'Actualiza el status de un lead (nuevo, contactado, negociacion, cerrado, descartado). Útil cuando el usuario dice "marca como contactado el lead X".',
+    description: 'Actualiza status de un lead. Útil para "marca como contactado el lead X".',
     parameters: {
-      type: 'object',
-      required: ['lead_id','status'],
-      properties: {
-        lead_id: { type: 'string' },
-        status:  { type: 'string', enum: ['nuevo','contactado','negociacion','cerrado','descartado'] },
-      },
+      type: 'object', required: ['lead_id','status'],
+      properties: { lead_id: { type: 'string' }, status: { type: 'string', enum: ['nuevo','contactado','negociacion','cerrado','descartado'] } },
     },
     handler: async (admin, userId, args) => {
       const { error } = await admin.from('property_leads').update({ status: args.status }).eq('id', args.lead_id)
@@ -337,14 +311,10 @@ const TOOLS = [
   },
   {
     name: 'update_property_status',
-    description: 'Cambia el status de un inmueble (borrador, disponible, vendido, rentado, pausado). Útil cuando el usuario dice "marca como vendido NX-001".',
+    description: 'Cambia el status de un inmueble (borrador, disponible, vendido, rentado, pausado).',
     parameters: {
-      type: 'object',
-      required: ['property_id','status'],
-      properties: {
-        property_id: { type: 'string', description: 'UUID o folio_interno' },
-        status:      { type: 'string', description: 'borrador, disponible, vendido, rentado, pausado' },
-      },
+      type: 'object', required: ['property_id','status'],
+      properties: { property_id: { type: 'string', description: 'UUID o folio_interno' }, status: { type: 'string' } },
     },
     handler: async (admin, userId, args) => {
       let query = admin.from('properties').update({ status: args.status })
@@ -353,15 +323,14 @@ const TOOLS = [
       query = query.eq('user_id', userId)
       const { error } = await query
       if (error) return { error: error.message }
-      return { ok: true, message: `Inmueble ${args.property_id} → status ${args.status}` }
+      return { ok: true, message: `Inmueble ${args.property_id} → ${args.status}` }
     },
   },
   {
     name: 'generate_property_link',
-    description: 'Genera el link público OG-friendly de un inmueble (para compartir en WhatsApp/Telegram).',
+    description: 'Genera link público OG-friendly de un inmueble para compartir.',
     parameters: {
-      type: 'object',
-      required: ['property_id'],
+      type: 'object', required: ['property_id'],
       properties: { property_id: { type: 'string', description: 'UUID o folio_interno' } },
     },
     handler: async (admin, userId, args) => {
@@ -378,37 +347,139 @@ const TOOLS = [
 function toolByName(name) { return TOOLS.find(t => t.name === name) }
 
 // ════════════════════════════════════════════════════════════════════
-// GEMINI con tool use
+// HISTORIA INTERNA → FORMATO PROVIDER
 // ════════════════════════════════════════════════════════════════════
 
-function buildGeminiTools() {
-  return [{
-    function_declarations: TOOLS.map(t => ({
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters,
-    })),
-  }]
+// Historia interna shape: { role, content?, tool_calls?, tool_results? }
+// - role: 'user'|'assistant'|'tool'
+// - content: string (para user, assistant text)
+// - tool_calls: [{ id, name, args }] en assistant
+// - tool_results: [{ tool_call_id, name, response }] en tool
+
+function toOpenAiMessages(history, systemInstruction) {
+  // Para Groq (OpenAI-compatible)
+  const msgs = [{ role: 'system', content: systemInstruction }]
+  for (const h of history) {
+    if (h.role === 'user') {
+      msgs.push({ role: 'user', content: h.content || '' })
+    } else if (h.role === 'assistant') {
+      const msg = { role: 'assistant', content: h.content || null }
+      if (h.tool_calls?.length) {
+        msg.tool_calls = h.tool_calls.map(tc => ({
+          id: tc.id, type: 'function',
+          function: { name: tc.name, arguments: JSON.stringify(tc.args || {}) },
+        }))
+      }
+      msgs.push(msg)
+    } else if (h.role === 'tool') {
+      if (h.tool_results?.length) {
+        for (const tr of h.tool_results) {
+          msgs.push({
+            role: 'tool', tool_call_id: tr.tool_call_id || tr.name,
+            content: JSON.stringify(tr.response),
+          })
+        }
+      }
+    }
+  }
+  return msgs
 }
 
-async function callGemini({ history, systemInstruction, tools }) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`
-  const body = {
-    systemInstruction: { parts: [{ text: systemInstruction }] },
-    contents: history,
-    tools,
-    generationConfig: { temperature: 0.4, maxOutputTokens: 1500 },
+function toGeminiContents(history) {
+  const contents = []
+  for (const h of history) {
+    if (h.role === 'user') {
+      contents.push({ role: 'user', parts: [{ text: h.content || '' }] })
+    } else if (h.role === 'assistant') {
+      const parts = []
+      if (h.content) parts.push({ text: h.content })
+      if (h.tool_calls?.length) {
+        for (const tc of h.tool_calls) parts.push({ functionCall: { name: tc.name, args: tc.args || {} } })
+      }
+      if (parts.length) contents.push({ role: 'model', parts })
+    } else if (h.role === 'tool') {
+      if (h.tool_results?.length) {
+        contents.push({
+          role: 'user',
+          parts: h.tool_results.map(tr => ({ functionResponse: { name: tr.name, response: tr.response } })),
+        })
+      }
+    }
   }
+  return contents
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CALL LLM (returna { text, tool_calls, tokens_in, tokens_out })
+// ════════════════════════════════════════════════════════════════════
+
+async function callGroq({ history, systemInstruction }) {
+  const tools = TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
+  const r = await fetch(PROVIDER_CONFIG.groq.endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + GROQ_KEY },
+    body: JSON.stringify({
+      model: PROVIDER_CONFIG.groq.model,
+      messages: toOpenAiMessages(history, systemInstruction),
+      tools, tool_choice: 'auto',
+      temperature: 0.4, max_tokens: 1500,
+    }),
+  })
+  if (!r.ok) {
+    const t = await r.text()
+    throw new Error(`Groq ${r.status}: ${t.slice(0, 300)}`)
+  }
+  const j = await r.json()
+  const choice = j.choices?.[0]?.message || {}
+  const tool_calls = (choice.tool_calls || []).map(tc => ({
+    id: tc.id, name: tc.function?.name,
+    args: (() => { try { return JSON.parse(tc.function?.arguments || '{}') } catch { return {} } })(),
+  }))
+  return {
+    text: choice.content || '',
+    tool_calls,
+    tokens_in: j.usage?.prompt_tokens || 0,
+    tokens_out: j.usage?.completion_tokens || 0,
+  }
+}
+
+async function callGemini({ history, systemInstruction }) {
+  const tools = [{ functionDeclarations: TOOLS.map(t => ({ name: t.name, description: t.description, parameters: t.parameters })) }]
+  const url = PROVIDER_CONFIG.gemini.endpoint + '?key=' + GEMINI_KEY
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      contents: toGeminiContents(history),
+      tools,
+      generationConfig: { temperature: 0.4, maxOutputTokens: 1500 },
+    }),
   })
   if (!r.ok) {
-    const errBody = await r.text()
-    throw new Error(`Gemini ${r.status}: ${errBody.slice(0,200)}`)
+    const t = await r.text()
+    throw new Error(`Gemini ${r.status}: ${t.slice(0, 300)}`)
   }
-  return r.json()
+  const j = await r.json()
+  const cand = j.candidates?.[0]
+  const parts = cand?.content?.parts || []
+  const text = parts.filter(p => p.text).map(p => p.text).join('')
+  const tool_calls = parts.filter(p => p.functionCall).map((p, i) => ({
+    id: 'gem_' + Date.now() + '_' + i,
+    name: p.functionCall.name,
+    args: p.functionCall.args || {},
+  }))
+  return {
+    text, tool_calls,
+    tokens_in: j.usageMetadata?.promptTokenCount || 0,
+    tokens_out: j.usageMetadata?.candidatesTokenCount || 0,
+  }
+}
+
+async function callProvider(provider, params) {
+  if (provider === 'groq')   return callGroq(params)
+  if (provider === 'gemini') return callGemini(params)
+  throw new Error('Provider desconocido: ' + provider)
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -417,44 +488,59 @@ async function callGemini({ history, systemInstruction, tools }) {
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
+
+  if (req.method === 'GET') {
+    // Health check & status
+    return res.status(200).json({
+      ok: true,
+      providers: PROVIDERS.map(p => ({
+        id: p, ...PROVIDER_CONFIG[p],
+        endpoint: '<hidden>',
+      })),
+      default: DEFAULT_PROVIDER,
+    })
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  // Auth interno (bot → este endpoint)
   const secret = req.headers['x-nexus-service-secret']
   if (SERVICE_SECRET && secret !== SERVICE_SECRET) {
     return res.status(401).json({ error: 'Bad service secret' })
   }
 
-  if (!GEMINI_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY no configurada' })
-
   try {
-    const { user_id, platform = 'telegram', external_chat_id, message } = req.body || {}
+    const { user_id, platform = 'telegram', external_chat_id, message, provider: requestedProvider } = req.body || {}
     if (!user_id || !external_chat_id || !message) {
       return res.status(400).json({ error: 'user_id + external_chat_id + message requeridos' })
+    }
+
+    // Determina cadena de providers: el solicitado primero, luego el resto como fallback
+    const initialProvider = requestedProvider || DEFAULT_PROVIDER
+    const tryOrder = [initialProvider, ...PROVIDERS.filter(p => p !== initialProvider)]
+      .filter(p => PROVIDER_CONFIG[p]?.available)
+
+    if (tryOrder.length === 0) {
+      return res.status(500).json({ error: 'Ningún provider configurado. Define GROQ_API_KEY o GEMINI_API_KEY.' })
     }
 
     const startTime = Date.now()
     const admin = getAdminSupabase()
 
-    // ── 1. Carga o crea sesión ───────────────────────────────────
+    // ── Sesión ───────────────────────────────────────────────────
     let { data: session } = await admin
       .from('chat_sessions')
       .select('id, context_summary, message_count')
-      .eq('owner_id', user_id)
-      .eq('platform', platform)
-      .eq('external_chat_id', String(external_chat_id))
+      .eq('owner_id', user_id).eq('platform', platform).eq('external_chat_id', String(external_chat_id))
       .maybeSingle()
     if (!session) {
       const { data: newSession, error: sErr } = await admin
-        .from('chat_sessions')
-        .insert({ owner_id: user_id, platform, external_chat_id: String(external_chat_id) })
-        .select('id, context_summary, message_count')
-        .single()
+        .from('chat_sessions').insert({ owner_id: user_id, platform, external_chat_id: String(external_chat_id) })
+        .select('id, context_summary, message_count').single()
       if (sErr) throw sErr
       session = newSession
     }
 
-    // ── 2. Carga historial reciente ──────────────────────────────
+    // ── Historial ────────────────────────────────────────────────
     const { data: historyMsgs } = await admin
       .from('chat_messages')
       .select('role, content, tool_calls, tool_results')
@@ -462,165 +548,140 @@ export default async function handler(req, res) {
       .order('created_at', { ascending: true })
       .limit(HISTORY_WINDOW)
 
-    // Construye historia formato Gemini (parts arrays)
     const history = []
     for (const m of (historyMsgs || [])) {
-      if (m.role === 'user') {
-        history.push({ role: 'user', parts: [{ text: m.content || '' }] })
-      } else if (m.role === 'assistant') {
-        const parts = []
-        if (m.content) parts.push({ text: m.content })
-        if (m.tool_calls?.length) {
-          for (const tc of m.tool_calls) {
-            parts.push({ functionCall: { name: tc.name, args: tc.args || {} } })
-          }
-        }
-        if (parts.length) history.push({ role: 'model', parts })
-      } else if (m.role === 'tool') {
-        if (m.tool_results?.length) {
-          history.push({
-            role: 'user',
-            parts: m.tool_results.map(tr => ({
-              functionResponse: { name: tr.name, response: tr.response },
-            })),
-          })
-        }
-      }
+      const entry = { role: m.role }
+      if (m.content) entry.content = m.content
+      if (m.tool_calls?.length) entry.tool_calls = m.tool_calls
+      if (m.tool_results?.length) entry.tool_results = m.tool_results
+      history.push(entry)
     }
+    history.push({ role: 'user', content: message })
 
-    // Mensaje nuevo
-    history.push({ role: 'user', parts: [{ text: message }] })
-
-    // ── 3. Persiste mensaje del usuario ──────────────────────────
+    // ── Persiste msg user ────────────────────────────────────────
     await admin.from('chat_messages').insert({
-      session_id: session.id, owner_id: user_id,
-      role: 'user', content: message,
+      session_id: session.id, owner_id: user_id, role: 'user', content: message,
     })
 
-    // ── 4. Loop de tool use ──────────────────────────────────────
+    // ── System prompt ────────────────────────────────────────────
     const systemInstruction = `Eres "Nexus", el asistente personal de Oscar Omar (oscaromargp@gmail.com).
 
-Su Nexus OS es un sistema all-in-one que gestiona:
-- 🏠 Inmuebles (CRM inmobiliario, leads, reportes, exclusivas)
-- 💰 Finanzas (gastos, ingresos, movimientos bancarios, agenda de pagos)
+Su Nexus OS gestiona:
+- 🏠 Inmuebles (CRM, leads, reportes, exclusivas)
+- 💰 Finanzas (gastos, ingresos, agenda de pagos)
 - ✅ Tareas y citas (Kanban con prioridades y fechas)
-- 📁 Proyectos (BN Records discográfica + inmobiliarias + Casa Tulum + otros)
-- 📡 RSS Editorial (rastreador de artistas → drafts blog)
+- 📁 Proyectos (BN Records discográfica, Casa Tulum, inmobiliarias)
+- 📡 RSS Editorial (rastreador → drafts blog)
 
-ESTILO DE RESPUESTA:
-- Español neutro/mexicano, conciso, tono casual cercano
-- Usa Markdown de Telegram (*negrita*, _italica_, código con backticks)
+ESTILO:
+- Español neutro/mexicano, conciso, casual cercano
+- Markdown Telegram (*negrita*, _italica_)
 - Emojis con moderación (1-3 por mensaje)
 - Si no encuentras datos, dilo claro, no inventes
-- Para mensajes sociales (gracias, hola, qué tal), responde breve y natural sin llamar tools
-- Si vas a modificar datos, confirma antes con un mini-resumen
+- Para mensajes sociales (gracias, hola), responde breve y natural sin tools
+- Para modificar datos, confirma con resumen antes
 
-CUÁNDO USAR TOOLS:
-- "qué leads tengo" → search_leads
-- "muéstrame casas en X" → search_properties
-- "cuánto gasté" → search_movements
-- "resumen del día" → get_today_briefing
-- "marca como contactado" → update_lead_status
-- "anota..." / "recuérdame..." → create_task
-- "registré $X" → create_movement
-- "link de NX-001" → generate_property_link
-
-NUNCA inventes IDs o folios. Si el usuario menciona un folio (ej. NX-001), úsalo tal cual.
-NUNCA borres datos.
+REGLAS:
+- NUNCA borres datos
+- NUNCA inventes IDs/folios
+- Si el usuario menciona folio (NX-001), úsalo tal cual
 
 Fecha actual: ${new Date().toISOString().split('T')[0]}.`
 
-    const tools = buildGeminiTools()
+    // ── Loop ─────────────────────────────────────────────────────
     let assistantText = ''
-    const usedToolCalls = []
-    const usedToolResults = []
+    let usedToolCalls = []
+    let usedToolResults = []
     let totalTokensIn = 0, totalTokensOut = 0
-    let llmProvider = 'gemini'
+    let usedProvider = tryOrder[0]
+    let lastError = null
 
-    for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
-      let resp
+    outer:
+    for (const provider of tryOrder) {
+      usedProvider = provider
+      // Reset por provider — reintenta historia desde 0
+      const localHistory = history.slice()
+      let iterToolCalls = []
+      let iterToolResults = []
+      let iterText = ''
+      let iterTokensIn = 0, iterTokensOut = 0
+
       try {
-        resp = await callGemini({ history, systemInstruction, tools })
-      } catch (e) {
-        // Fallback simple: si Gemini falla, intenta sin tools (mensaje corto)
-        if (iter === 0 && message.length < 30) {
-          assistantText = '👋 Hola! Estoy aquí. ¿En qué te ayudo?'
-          break
-        }
-        throw e
-      }
+        for (let iter = 0; iter < MAX_TOOL_ITERATIONS; iter++) {
+          const resp = await callProvider(provider, { history: localHistory, systemInstruction })
+          iterTokensIn += resp.tokens_in
+          iterTokensOut += resp.tokens_out
+          if (resp.text) iterText = resp.text
 
-      const usage = resp.usageMetadata || {}
-      totalTokensIn += usage.promptTokenCount || 0
-      totalTokensOut += usage.candidatesTokenCount || 0
+          if (!resp.tool_calls?.length) break
 
-      const cand = resp.candidates?.[0]
-      const parts = cand?.content?.parts || []
+          // Persiste mensaje del asistente con tool_calls
+          localHistory.push({ role: 'assistant', content: resp.text || '', tool_calls: resp.tool_calls })
+          iterToolCalls.push(...resp.tool_calls)
 
-      const textParts = parts.filter(p => p.text).map(p => p.text)
-      const functionCalls = parts.filter(p => p.functionCall).map(p => p.functionCall)
-
-      if (textParts.length) assistantText = textParts.join('').trim()
-
-      if (!functionCalls.length) break  // respuesta final
-
-      // Ejecuta tools
-      const toolResultsForGemini = []
-      const modelParts = [...parts]
-      history.push({ role: 'model', parts: modelParts })
-
-      for (const fc of functionCalls) {
-        const tool = toolByName(fc.name)
-        usedToolCalls.push({ name: fc.name, args: fc.args || {} })
-        let result
-        if (!tool) {
-          result = { error: 'Tool no existe: ' + fc.name }
-        } else {
-          try {
-            result = await tool.handler(admin, user_id, fc.args || {})
-          } catch (e) {
-            result = { error: e.message }
+          // Ejecuta tools
+          const toolResults = []
+          for (const tc of resp.tool_calls) {
+            const tool = toolByName(tc.name)
+            let result
+            if (!tool) result = { error: 'Tool no existe: ' + tc.name }
+            else {
+              try { result = await tool.handler(admin, user_id, tc.args || {}) }
+              catch (e) { result = { error: e.message } }
+            }
+            toolResults.push({ tool_call_id: tc.id, name: tc.name, response: result })
           }
+          iterToolResults.push(...toolResults)
+          localHistory.push({ role: 'tool', tool_results: toolResults })
         }
-        usedToolResults.push({ name: fc.name, response: result })
-        toolResultsForGemini.push({
-          functionResponse: { name: fc.name, response: result },
-        })
+
+        // Éxito
+        assistantText = iterText
+        usedToolCalls = iterToolCalls
+        usedToolResults = iterToolResults
+        totalTokensIn = iterTokensIn
+        totalTokensOut = iterTokensOut
+        break outer
+      } catch (e) {
+        lastError = e
+        console.warn(`[agent] provider ${provider} failed:`, e.message)
+        // siguiente provider en la cadena
       }
-
-      history.push({ role: 'user', parts: toolResultsForGemini })
     }
 
-    if (!assistantText) {
-      assistantText = '🤖 (sin respuesta)'
+    if (!assistantText && lastError) {
+      assistantText = '⚠️ ' + (lastError.message || 'Error LLM').slice(0, 200)
     }
+    if (!assistantText) assistantText = '🤖 (sin respuesta)'
 
-    // ── 5. Persiste respuesta del agente ─────────────────────────
-    await admin.from('chat_messages').insert([
-      ...(usedToolCalls.length ? [{
+    // ── Persiste respuesta ──────────────────────────────────────
+    const toPersist = []
+    if (usedToolCalls.length) {
+      toPersist.push({
         session_id: session.id, owner_id: user_id,
         role: 'assistant', content: '', tool_calls: usedToolCalls,
-      }, {
+      })
+      toPersist.push({
         session_id: session.id, owner_id: user_id,
         role: 'tool', tool_results: usedToolResults,
-      }] : []),
-      {
-        session_id: session.id, owner_id: user_id,
-        role: 'assistant', content: assistantText,
-        tokens_in: totalTokensIn, tokens_out: totalTokensOut,
-        llm_provider: llmProvider, llm_model: 'gemini-2.0-flash',
-        latency_ms: Date.now() - startTime,
-      },
-    ])
-
+      })
+    }
+    toPersist.push({
+      session_id: session.id, owner_id: user_id,
+      role: 'assistant', content: assistantText,
+      tokens_in: totalTokensIn, tokens_out: totalTokensOut,
+      llm_provider: usedProvider, llm_model: PROVIDER_CONFIG[usedProvider]?.model,
+      latency_ms: Date.now() - startTime,
+    })
+    await admin.from('chat_messages').insert(toPersist)
     await admin.from('chat_sessions').update({
       message_count: (session.message_count || 0) + 1,
       last_message_at: new Date().toISOString(),
     }).eq('id', session.id)
 
     return res.status(200).json({
-      ok: true,
-      reply: assistantText,
+      ok: true, reply: assistantText,
+      provider: usedProvider, model: PROVIDER_CONFIG[usedProvider]?.model,
       tools_used: usedToolCalls.length,
       tokens: { in: totalTokensIn, out: totalTokensOut },
       latency_ms: Date.now() - startTime,

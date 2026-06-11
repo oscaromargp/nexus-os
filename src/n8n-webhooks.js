@@ -230,10 +230,66 @@ async function _initWpConnector() {
   })
 }
 
+// ── Agent provider selector (F8) ─────────────────────────────────
+async function _initAgentConnector() {
+  const sel = document.getElementById('conn-agent-provider')
+  const testBtn = document.getElementById('conn-agent-test')
+  const statusEl = document.getElementById('conn-agent-status')
+  const resultEl = document.getElementById('conn-agent-test-result')
+  if (!sel || !testBtn) return
+
+  // Carga preferencia actual
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    const current = user?.user_metadata?.agent_provider || 'groq'
+    sel.value = current
+    statusEl.textContent = '🟢 Proveedor activo: ' + (current === 'groq' ? 'Groq Llama 3.3' : 'Gemini Flash')
+    statusEl.style.color = '#22c55e'
+  } catch (e) {
+    statusEl.textContent = '⚪ No disponible'
+  }
+
+  sel.addEventListener('change', async () => {
+    const newProvider = sel.value
+    try {
+      await supabase.auth.updateUser({ data: { agent_provider: newProvider } })
+      statusEl.textContent = '💾 Guardado: ' + newProvider
+      statusEl.style.color = '#22c55e'
+    } catch (e) {
+      statusEl.textContent = '⚠ Error: ' + e.message
+      statusEl.style.color = '#f87171'
+    }
+  })
+
+  testBtn.addEventListener('click', async () => {
+    resultEl.textContent = '⏳ Probando…'
+    resultEl.style.color = '#9ca3af'
+    try {
+      const r = await fetch('/api/agent', { method: 'GET' })
+      const j = await r.json()
+      if (j.ok) {
+        const status = j.providers.map(p => `${p.id}: ${p.available ? '🟢' : '⚪'}`).join(' · ')
+        resultEl.textContent = `✓ Endpoint OK · ${status} · Default: ${j.default}`
+        resultEl.style.color = '#22c55e'
+      } else {
+        resultEl.textContent = '⚠ ' + (j.error || 'fail')
+        resultEl.style.color = '#f87171'
+      }
+    } catch (e) {
+      resultEl.textContent = '⚠ ' + e.message
+      resultEl.style.color = '#f87171'
+    }
+  })
+}
+
 if (typeof window !== 'undefined') {
-  setTimeout(() => { try { _initWpConnector() } catch (e) { console.warn('[wp connector]', e) } }, 2000)
+  setTimeout(() => { try { _initWpConnector() } catch (e) { console.warn('[wp]', e) } }, 2000)
+  setTimeout(() => { try { _initAgentConnector() } catch (e) { console.warn('[agent]', e) } }, 2100)
   // Re-inicializa si el usuario navega a la tab de Conexiones después
   document.addEventListener('click', (e) => {
-    if (e.target?.closest?.('.cfg-tab')) setTimeout(() => { try { _initWpConnector() } catch {} }, 200)
+    if (e.target?.closest?.('.cfg-tab')) setTimeout(() => {
+      try { _initWpConnector() } catch {}
+      try { _initAgentConnector() } catch {}
+    }, 200)
   })
 }
