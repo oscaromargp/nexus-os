@@ -549,6 +549,13 @@ async function callGroq({ history, systemInstruction, model }) {
     tools, tool_choice: 'auto',
     temperature: 0.4, max_tokens: 1000,
   })
+
+  // Helper: extrae segundos de espera del mensaje "try again in X.XXs"
+  const extractWait = (msg) => {
+    const m = (msg || '').match(/try again in ([\d.]+)s/)
+    return m ? Math.min(Math.ceil(parseFloat(m[1]) * 1000) + 200, 8000) : 0
+  }
+
   // Auto-retry en 429 con el wait que indica la API
   let r, retries = 0
   while (true) {
@@ -560,9 +567,10 @@ async function callGroq({ history, systemInstruction, model }) {
     if (r.status !== 429 || retries >= 2) break
     const txt = await r.text()
     const m = txt.match(/try again in (\d+(?:\.\d+)?)(ms|s)/i)
-    let waitMs = 1000
+    let waitMs = 1500
     if (m) waitMs = m[2].toLowerCase() === 's' ? Number(m[1]) * 1000 : Number(m[1])
-    waitMs = Math.min(waitMs + 200, 4000)  // cap 4s
+    waitMs = Math.min(waitMs + 500, 10000)  // cap 10s (era 4s, muy bajo)
+    console.log(`[groq:${model || PROVIDER_CONFIG.groq.model}] 429 retry-after ${waitMs}ms (attempt ${retries+1}/3)`)
     await new Promise(res => setTimeout(res, waitMs))
     retries++
   }
@@ -744,6 +752,7 @@ Fecha: ${new Date().toISOString().split('T')[0]}.`
     outer:
     for (const provider of tryOrder) {
       usedProvider = provider
+      console.log(`[agent] trying provider: ${provider}`)
       // Reset por provider — reintenta historia desde 0
       const localHistory = history.slice()
       let iterToolCalls = []
@@ -781,6 +790,7 @@ Fecha: ${new Date().toISOString().split('T')[0]}.`
         }
 
         // Éxito
+        console.log(`[agent] provider ${provider} OK (text:${iterText.length}, tools:${iterToolCalls.length})`)
         assistantText = iterText
         usedToolCalls = iterToolCalls
         usedToolResults = iterToolResults
@@ -789,7 +799,7 @@ Fecha: ${new Date().toISOString().split('T')[0]}.`
         break outer
       } catch (e) {
         lastError = e
-        console.warn(`[agent] provider ${provider} failed:`, e.message)
+        console.warn(`[agent] provider ${provider} FAILED: ${(e.message || '').slice(0, 200)}`)
         // siguiente provider en la cadena
       }
     }
