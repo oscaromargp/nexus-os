@@ -61,11 +61,10 @@ const TOOLS = [
         status:        { type: 'string', description: 'borrador, disponible, vendido, etc.' },
         precio_max:    { type: 'number' },
         precio_min:    { type: 'number' },
-        limit:         { type: 'number', description: 'max 20, default 5' },
       },
     },
     handler: async (admin, userId, args) => {
-      const limit = Math.min(args.limit || 5, 20)
+      const limit = 5
       let q = admin.from('properties')
         .select('id, folio_interno, titulo, tipo, operacion, status, precio_venta, precio_renta, municipio, estado_rep, recamaras, banos, sup_construida')
         .eq('user_id', userId).is('deleted_at', null)
@@ -77,8 +76,8 @@ const TOOLS = [
       if (args.tipo)      q = q.eq('tipo', args.tipo)
       if (args.operacion) q = q.eq('operacion', args.operacion)
       if (args.status)    q = q.eq('status', args.status)
-      if (args.precio_max) q = q.lte('precio_venta', args.precio_max)
-      if (args.precio_min) q = q.gte('precio_venta', args.precio_min)
+      if (args.precio_max) q = q.lte('precio_venta', Number(args.precio_max))
+      if (args.precio_min) q = q.gte('precio_venta', Number(args.precio_min))
       const { data, error } = await q.limit(limit)
       if (error) return { error: error.message }
       return { count: data.length, items: data }
@@ -93,11 +92,10 @@ const TOOLS = [
         text:        { type: 'string', description: 'Busca en nombre, teléfono, email, mensaje' },
         status:      { type: 'string', enum: ['nuevo','contactado','negociacion','cerrado','descartado'] },
         days_ago:    { type: 'number', description: 'Filtrar por antigüedad en días' },
-        limit:       { type: 'number', description: 'max 20, default 10' },
       },
     },
     handler: async (admin, userId, args) => {
-      const limit = Math.min(args.limit || 10, 20)
+      const limit = 10
       let q = admin.from('property_leads')
         .select('id, nombre, telefono, email, mensaje, status, created_at, properties(titulo,folio_interno,id)')
         .order('created_at', { ascending: false })
@@ -107,7 +105,7 @@ const TOOLS = [
         q = q.or(`nombre.ilike.${t},telefono.ilike.${t},email.ilike.${t},mensaje.ilike.${t}`)
       }
       if (args.days_ago) {
-        const cutoff = new Date(Date.now() - args.days_ago * 86400000).toISOString()
+        const cutoff = new Date(Date.now() - Number(args.days_ago) * 86400000).toISOString()
         q = q.gte('created_at', cutoff)
       }
       const { data, error } = await q.limit(limit)
@@ -124,12 +122,11 @@ const TOOLS = [
         kind:        { type: 'string', enum: ['income','expense','both'], description: 'default both' },
         days_ago:    { type: 'number', description: 'default 30' },
         text:        { type: 'string' },
-        limit:       { type: 'number', description: 'max 30, default 15' },
       },
     },
     handler: async (admin, userId, args) => {
-      const limit = Math.min(args.limit || 15, 30)
-      const days = args.days_ago || 30
+      const limit = 15
+      const days = Number(args.days_ago) || 30
       const cutoff = new Date(Date.now() - days * 86400000).toISOString()
       const typeFilter = args.kind === 'income' ? ['income'] : args.kind === 'expense' ? ['expense'] : ['income','expense']
       let q = admin.from('nodes').select('id, type, content, metadata, created_at')
@@ -160,11 +157,10 @@ const TOOLS = [
         from_date:  { type: 'string', description: 'YYYY-MM-DD' },
         to_date:    { type: 'string', description: 'YYYY-MM-DD' },
         text:       { type: 'string' },
-        limit:      { type: 'number', description: 'default 20' },
       },
     },
     handler: async (admin, userId, args) => {
-      const limit = Math.min(args.limit || 20, 50)
+      const limit = 20
       let q = admin.from('nodes').select('id, content, metadata, created_at')
         .eq('owner_id', userId).eq('type', 'kanban')
         .order('created_at', { ascending: false })
