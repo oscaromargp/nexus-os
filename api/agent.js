@@ -21,13 +21,18 @@ const SERVICE_SECRET = process.env.NEXUS_WEBHOOK_SECRET
 const MAX_TOOL_ITERATIONS = 8
 const HISTORY_WINDOW = 20
 
-const PROVIDERS = ['groq', 'gemini']  // orden de preferencia + fallback chain
+const PROVIDERS = ['groq', 'groq_fast', 'gemini']  // orden de preferencia + fallback
 const DEFAULT_PROVIDER = process.env.DEFAULT_LLM_PROVIDER || 'groq'
 
 const PROVIDER_CONFIG = {
   groq: {
     available: !!GROQ_KEY,
-    model: 'llama-3.3-70b-versatile',
+    model: 'llama-3.3-70b-versatile',  // 12K TPM, 70B params
+    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+  },
+  groq_fast: {
+    available: !!GROQ_KEY,
+    model: 'llama-3.1-8b-instant',  // 30K TPM, 8B params (fallback rápido)
     endpoint: 'https://api.groq.com/openai/v1/chat/completions',
   },
   gemini: {
@@ -50,7 +55,7 @@ function getAdminSupabase() {
 const TOOLS = [
   {
     name: 'search_properties',
-    description: 'Busca inmuebles del usuario en su CRM. Filtra por estado, municipio, tipo, operación (venta/renta), rango de precio, o texto libre que se busca en título y folio.',
+    description: 'Busca inmuebles del usuario por título, folio, municipio, tipo, operación o precio.',
     parameters: {
       type: 'object',
       properties: {
@@ -85,7 +90,7 @@ const TOOLS = [
   },
   {
     name: 'search_leads',
-    description: 'Busca leads (solicitudes de información) capturados desde propiedad.html.',
+    description: 'Busca leads del usuario.',
     parameters: {
       type: 'object',
       properties: {
@@ -115,7 +120,7 @@ const TOOLS = [
   },
   {
     name: 'search_movements',
-    description: 'Busca movimientos financieros recientes (gastos e ingresos capturados con parser o desde Movimientos).',
+    description: 'Busca gastos e ingresos.',
     parameters: {
       type: 'object',
       properties: {
@@ -148,7 +153,7 @@ const TOOLS = [
   },
   {
     name: 'search_tasks',
-    description: 'Busca tareas/citas pendientes del Kanban. Útil para "qué tengo pendiente".',
+    description: 'Busca tareas/citas en Kanban.',
     parameters: {
       type: 'object',
       properties: {
@@ -184,7 +189,7 @@ const TOOLS = [
   },
   {
     name: 'get_today_briefing',
-    description: 'Resumen del día: total inmuebles, leads hoy/semana/total, tareas pendientes hoy, movimientos del día, exclusivas próximas a vencer.',
+    description: 'Resumen del día del usuario.',
     parameters: { type: 'object', properties: {} },
     handler: async (admin, userId) => {
       const today = new Date(); today.setHours(0,0,0,0)
@@ -219,7 +224,7 @@ const TOOLS = [
   },
   {
     name: 'create_task',
-    description: 'Crea una nueva tarea/cita en Kanban. Útil para "recuérdame", "anota", "agenda".',
+    description: 'Crea tarea/cita en Kanban.',
     parameters: {
       type: 'object', required: ['title'],
       properties: {
@@ -247,7 +252,7 @@ const TOOLS = [
   },
   {
     name: 'create_movement',
-    description: 'Crea un movimiento financiero (gasto o ingreso). Útil para "registra gasto", "pagué", "cobré".',
+    description: 'Crea gasto/ingreso.',
     parameters: {
       type: 'object', required: ['kind','amount','label'],
       properties: {
@@ -278,7 +283,7 @@ const TOOLS = [
   },
   {
     name: 'create_note',
-    description: 'Crea una nota libre. Para "anota", "guarda esto", "apunta".',
+    description: 'Crea nota libre.',
     parameters: {
       type: 'object', required: ['content'],
       properties: { content: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } } },
@@ -294,7 +299,7 @@ const TOOLS = [
   },
   {
     name: 'update_lead_status',
-    description: 'Actualiza status de un lead. Útil para "marca como contactado el lead X".',
+    description: 'Cambia status de lead.',
     parameters: {
       type: 'object', required: ['lead_id','status'],
       properties: { lead_id: { type: 'string' }, status: { type: 'string', enum: ['nuevo','contactado','negociacion','cerrado','descartado'] } },
@@ -307,7 +312,7 @@ const TOOLS = [
   },
   {
     name: 'update_property_status',
-    description: 'Cambia el status de un inmueble (borrador, disponible, vendido, rentado, pausado).',
+    description: 'Cambia status de inmueble (borrador/disponible/vendido/rentado/pausado).',
     parameters: {
       type: 'object', required: ['property_id','status'],
       properties: { property_id: { type: 'string', description: 'UUID o folio_interno' }, status: { type: 'string' } },
@@ -324,7 +329,7 @@ const TOOLS = [
   },
   {
     name: 'search_contacts',
-    description: 'Busca contactos (personas, bancos, proveedores) del CRM. SIEMPRE usa este tool cuando el usuario pida "datos de contacto de X", "teléfono de X", "email de X", "cuenta CLABE de X". Devuelve TODOS los datos para copy-paste: nombre completo, teléfonos, emails, ciudad, notas, cumpleaños, y cuentas bancarias asociadas con CLABEs. Si hay varios matches, muéstralos TODOS y pídele al usuario que elija.',
+    description: 'Busca contactos (personas/bancos/proveedores) por nombre/tel/email/CLABE. Ignora acentos.',
     parameters: {
       type: 'object',
       properties: {
@@ -336,14 +341,28 @@ const TOOLS = [
     handler: async (admin, userId, args) => {
       const text = (args.text || '').trim()
       if (!text) return { error: 'text requerido' }
-      // Busca en content, metadata.name, metadata.phone, metadata.email
+      // Quita acentos para matchear "Óscar" ↔ "Oscar", "Peña" ↔ "Pena"
+      const stripAccents = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+      const textNoAccent = stripAccents(text)
+      // Trae todos los contactos del usuario (suelen ser < 500) y filtra en JS
+      // — esto evita el problema de PostgreSQL ilike con/sin acentos.
       const { data, error } = await admin.from('nodes')
         .select('id, content, metadata')
         .eq('owner_id', userId).eq('type', 'contact')
-        .or(`content.ilike.%${text}%,metadata->>name.ilike.%${text}%,metadata->>phone.ilike.%${text}%,metadata->>email.ilike.%${text}%,metadata->>notes.ilike.%${text}%`)
-        .limit(15)
+        .limit(500)
       if (error) return { error: error.message }
-      const filtered = args.cType ? data.filter(c => c.metadata?.cType === args.cType) : data
+      const matches = (data || []).filter(c => {
+        const m = c.metadata || {}
+        const blob = stripAccents([
+          c.content, m.name, m.phone, m.email, m.notes, m.city,
+          JSON.stringify(m.phones || []), JSON.stringify(m.emails || []),
+          JSON.stringify(m.contact_accounts || []),
+        ].filter(Boolean).join(' ').toLowerCase())
+        // Match si todos los tokens (separados por espacio) están en el blob
+        const tokens = textNoAccent.toLowerCase().split(/\s+/).filter(t => t.length >= 2)
+        return tokens.every(t => blob.includes(t))
+      }).slice(0, 15)
+      const filtered = args.cType ? matches.filter(c => c.metadata?.cType === args.cType) : matches
       return {
         count: filtered.length,
         contacts: filtered.map(c => {
@@ -368,7 +387,7 @@ const TOOLS = [
   },
   {
     name: 'search_accounts',
-    description: 'Busca cuentas bancarias/efectivo del usuario y SUS SALDOS calculados (saldo inicial + ingresos - gastos asociados a esa cuenta). Úsalo cuando el usuario pregunte "cuánto tengo en X", "saldo de mi cuenta NU", "estado de Banamex". Si hay varias cuentas, muéstralas TODAS con sus saldos.',
+    description: 'Cuentas bancarias del usuario con saldo calculado. Si text vacío devuelve TODAS.',
     parameters: {
       type: 'object',
       properties: {
@@ -437,7 +456,7 @@ const TOOLS = [
   },
   {
     name: 'generate_property_link',
-    description: 'Genera link público OG-friendly de un inmueble para compartir.',
+    description: 'Link público OG de inmueble.',
     parameters: {
       type: 'object', required: ['property_id'],
       properties: { property_id: { type: 'string', description: 'UUID o folio_interno' } },
@@ -522,10 +541,10 @@ function toGeminiContents(history) {
 // CALL LLM (returna { text, tool_calls, tokens_in, tokens_out })
 // ════════════════════════════════════════════════════════════════════
 
-async function callGroq({ history, systemInstruction }) {
+async function callGroq({ history, systemInstruction, model }) {
   const tools = TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } }))
   const body = JSON.stringify({
-    model: PROVIDER_CONFIG.groq.model,
+    model: model || PROVIDER_CONFIG.groq.model,
     messages: toOpenAiMessages(history, systemInstruction),
     tools, tool_choice: 'auto',
     temperature: 0.4, max_tokens: 1000,
@@ -599,8 +618,9 @@ async function callGemini({ history, systemInstruction }) {
 }
 
 async function callProvider(provider, params) {
-  if (provider === 'groq')   return callGroq(params)
-  if (provider === 'gemini') return callGemini(params)
+  if (provider === 'groq')      return callGroq({ ...params, model: PROVIDER_CONFIG.groq.model })
+  if (provider === 'groq_fast') return callGroq({ ...params, model: PROVIDER_CONFIG.groq_fast.model })
+  if (provider === 'gemini')    return callGemini(params)
   throw new Error('Provider desconocido: ' + provider)
 }
 
