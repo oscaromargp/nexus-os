@@ -73,13 +73,14 @@ function _pieChart(items) {
 }
 
 let _allTxs = []
+let _currentPrices = {}  // cache de precios actuales para auto-conv MXN/USD
 
 export async function renderCrypto() {
   const root = document.getElementById('crypto-root')
   if (!root) return
   root.innerHTML = `<div style="padding:24px;color:#94a3b8;">⏳ Calculando portfolio y consultando precios…</div>`
 
-  let data, txData, journalData
+  let data, txData, journalData, newsData = { items: [] }
   try {
     [data, txData, journalData] = await Promise.all([
       _api('crypto_list'),
@@ -89,6 +90,26 @@ export async function renderCrypto() {
   } catch (e) {
     root.innerHTML = `<div style="padding:24px;color:#f87171;">⚠ ${e.message}</div>`
     return
+  }
+
+  // Cache de precios para conversión MXN↔USD
+  _currentPrices = {}
+  for (const it of (data.items || [])) {
+    if (it.current_price_mxn && it.current_price_usd) {
+      _currentPrices[it.symbol] = {
+        mxn: it.current_price_mxn,
+        usd: it.current_price_usd,
+        rate: it.current_price_mxn / it.current_price_usd,  // USD → MXN
+      }
+    }
+  }
+
+  // News en background — no bloquea render
+  const heldSymbols = data.items.map(i => i.symbol)
+  if (heldSymbols.length) {
+    _api('crypto_news', { symbols: heldSymbols, limit: 10 })
+      .then(j => { _renderNewsInto(j.items || []) })
+      .catch(() => { _renderNewsInto([]) })
   }
 
   _allTxs = txData.transactions || []
@@ -215,7 +236,7 @@ export async function renderCrypto() {
       <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">
         <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;">Transacciones recientes</div>
         <div style="display:flex;flex-direction:column;">
-          ${_allTxs.slice(0, 10).map(tx => {
+          ${_allTxs.slice(0, 15).map(tx => {
             const isBuy = tx.type === 'buy' || tx.type === 'transfer_in'
             const icon = isBuy ? '🟢' : '🔴'
             const sign = isBuy ? '+' : '-'
@@ -228,11 +249,23 @@ export async function renderCrypto() {
                   <div style="font-size:11px;color:#6b7280;">${tx.date}${tx.reasoning ? ' · ' + _esc(tx.reasoning.slice(0,60)) : ''}</div>
                 </div>
                 ${tx.total_mxn ? `<div style="color:${col};font-weight:700;font-size:13px;">${_fmt(tx.total_mxn)}</div>` : ''}
-                <button data-del-tx="${tx.id}" style="background:transparent;border:none;color:#6b7280;cursor:pointer;padding:4px;font-size:14px;">🗑</button>
+                <button data-edit-tx="${tx.id}" title="Editar" style="background:transparent;border:none;color:#22d3ee;cursor:pointer;padding:4px;font-size:14px;">✏️</button>
+                <button data-del-tx="${tx.id}" title="Eliminar" style="background:transparent;border:none;color:#6b7280;cursor:pointer;padding:4px;font-size:14px;">🗑</button>
               </div>
             `
           }).join('')}
         </div>
+      </div>
+      ` : ''}
+
+      <!-- NEWS PANEL -->
+      ${items.length ? `
+      <div id="crypto-news-panel" style="margin-top:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">
+        <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
+          <span>📡 Noticias de tus criptos</span>
+          <span style="font-size:10px;color:#6b7280;text-transform:none;letter-spacing:0;">CoinDesk · CoinTelegraph · Decrypt · The Defiant</span>
+        </div>
+        <div id="crypto-news-list" style="padding:12px;color:#6b7280;font-size:12px;text-align:center;">⏳ Cargando noticias…</div>
       </div>
       ` : ''}
 
@@ -251,7 +284,7 @@ export async function renderCrypto() {
   `
 
   root.innerHTML = html
-  document.getElementById('crypto-add-tx-btn')?.addEventListener('click', () => _openAddTxModal())
+  document.getElementById('crypto-add-tx-btn')?.addEventListener('click', () => _openTxModal(null))
   document.getElementById('crypto-journal-btn')?.addEventListener('click', () => _openJournalModal(journalData.entries, items.map(i => i.symbol)))
   root.querySelectorAll('[data-del-tx]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -262,100 +295,175 @@ export async function renderCrypto() {
       } catch (e) { alert('⚠ ' + e.message) }
     })
   })
+  root.querySelectorAll('[data-edit-tx]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tx = _allTxs.find(t => t.id === btn.dataset.editTx)
+      if (tx) _openTxModal(tx)
+    })
+  })
 }
 
-function _openAddTxModal() {
+function _renderNewsInto(items) {
+  const list = document.getElementById('crypto-news-list')
+  if (!list) return
+  if (!items.length) {
+    list.innerHTML = '<div style="padding:14px;color:#6b7280;font-size:12px;text-align:center;">Sin noticias relevantes en este momento.</div>'
+    return
+  }
+  list.style.padding = '0'
+  list.style.textAlign = 'left'
+  list.innerHTML = items.map(n => {
+    const date = n.published_at ? new Date(n.published_at).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}) : ''
+    return `
+      <a href="${_esc(n.url)}" target="_blank" rel="noopener" style="display:block;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.04);text-decoration:none;color:inherit;">
+        <div style="font-size:13px;font-weight:700;color:#e5e7eb;margin-bottom:3px;line-height:1.4;">${_esc(n.title)}</div>
+        ${n.description ? `<div style="font-size:11px;color:#94a3b8;line-height:1.5;margin-bottom:4px;">${_esc(n.description.slice(0,160))}…</div>` : ''}
+        <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:#6b7280;">
+          <span style="background:rgba(167,139,250,0.15);color:#a78bfa;padding:1px 6px;border-radius:4px;font-weight:600;">${_esc(n.source)}</span>
+          <span>${date}</span>
+        </div>
+      </a>
+    `
+  }).join('')
+}
+
+function _openTxModal(existingTx) {
+  const isEdit = !!existingTx
   const overlay = document.createElement('div')
   overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;`
   const modal = document.createElement('div')
   modal.style.cssText = `background:#0f1419;border:1px solid #1f2937;border-radius:16px;padding:22px;max-width:520px;width:100%;color:#e5e7eb;max-height:90vh;overflow-y:auto;`
 
   const today = new Date().toISOString().split('T')[0]
+  const v = existingTx || {}
+
+  const sel = (val, options) => options.map(o => `<option value="${o[0]}" ${val === o[0] ? 'selected':''}>${o[1]}</option>`).join('')
+  const cryptos = [['BTC','BTC · Bitcoin'],['ETH','ETH · Ethereum'],['XRP','XRP · Ripple'],['TRX','TRX · Tron'],['USDT','USDT · Tether'],['USDC','USDC · USD Coin'],['SOL','SOL · Solana'],['ADA','ADA · Cardano'],['DOGE','DOGE · Dogecoin'],['BNB','BNB · BNB'],['AVAX','AVAX · Avalanche'],['MATIC','MATIC · Polygon'],['DOT','DOT · Polkadot'],['LINK','LINK · Chainlink'],['LTC','LTC · Litecoin']]
 
   modal.innerHTML = `
-    <h3 style="margin:0 0 14px;font-size:17px;font-weight:800;">+ Nueva transacción cripto</h3>
+    <h3 style="margin:0 0 14px;font-size:17px;font-weight:800;">${isEdit ? '✏️ Editar transacción cripto' : '+ Nueva transacción cripto'}</h3>
+    <div id="tx-price-helper" style="display:none;background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.3);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#22d3ee;"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
       <div>
         <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Tipo</label>
         <select id="tx-type" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;">
-          <option value="buy">🟢 Compra</option>
-          <option value="sell">🔴 Venta</option>
-          <option value="transfer_in">⬇ Transfer in</option>
-          <option value="transfer_out">⬆ Transfer out</option>
+          ${sel(v.type || 'buy', [['buy','🟢 Compra'],['sell','🔴 Venta'],['transfer_in','⬇ Transfer in'],['transfer_out','⬆ Transfer out']])}
         </select>
       </div>
       <div>
         <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Símbolo</label>
-        <select id="tx-symbol" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;">
-          <option value="BTC">BTC · Bitcoin</option>
-          <option value="ETH">ETH · Ethereum</option>
-          <option value="XRP">XRP · Ripple</option>
-          <option value="TRX">TRX · Tron</option>
-          <option value="USDT">USDT · Tether</option>
-          <option value="USDC">USDC · USD Coin</option>
-          <option value="SOL">SOL · Solana</option>
-          <option value="ADA">ADA · Cardano</option>
-          <option value="DOGE">DOGE · Dogecoin</option>
-          <option value="BNB">BNB · BNB</option>
-          <option value="AVAX">AVAX · Avalanche</option>
-          <option value="MATIC">MATIC · Polygon</option>
-          <option value="DOT">DOT · Polkadot</option>
-          <option value="LINK">LINK · Chainlink</option>
-          <option value="LTC">LTC · Litecoin</option>
-        </select>
+        <select id="tx-symbol" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;">${sel(v.symbol || 'BTC', cryptos)}</select>
       </div>
       <div>
         <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Cantidad</label>
-        <input id="tx-qty" type="number" step="any" placeholder="0.01" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+        <input id="tx-qty" type="number" step="any" value="${v.quantity || ''}" placeholder="0.01" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
       </div>
       <div>
         <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Fecha</label>
-        <input id="tx-date" type="date" value="${today}" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+        <input id="tx-date" type="date" value="${v.date || today}" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
       </div>
       <div>
-        <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Precio MXN</label>
-        <input id="tx-price-mxn" type="number" step="any" placeholder="1200000" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+        <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Precio MXN <span style="color:#22d3ee;text-transform:none;font-weight:500;">(auto ↔)</span></label>
+        <input id="tx-price-mxn" type="number" step="any" value="${v.price_mxn || ''}" placeholder="1200000" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
       </div>
       <div>
-        <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Precio USD (opcional)</label>
-        <input id="tx-price-usd" type="number" step="any" placeholder="60000" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+        <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Precio USD <span style="color:#22d3ee;text-transform:none;font-weight:500;">(auto ↔)</span></label>
+        <input id="tx-price-usd" type="number" step="any" value="${v.price_usd || ''}" placeholder="60000" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
       </div>
       <div>
         <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Exchange</label>
         <select id="tx-exchange" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;">
-          <option value="">(ninguno)</option>
-          <option value="Bitso">Bitso</option>
-          <option value="Ledger">Ledger (hardware wallet)</option>
-          <option value="Binance">Binance</option>
-          <option value="Coinbase">Coinbase</option>
-          <option value="Kraken">Kraken</option>
-          <option value="Otro">Otro</option>
+          ${sel(v.exchange || '', [['','(ninguno)'],['Bitso','Bitso'],['Ledger','Ledger (hardware wallet)'],['Binance','Binance'],['Coinbase','Coinbase'],['Kraken','Kraken'],['Otro','Otro']])}
         </select>
       </div>
       <div>
         <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Comisión MXN</label>
-        <input id="tx-fee" type="number" step="any" placeholder="0" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
+        <input id="tx-fee" type="number" step="any" value="${v.fee_mxn || ''}" placeholder="0" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:14px;"/>
       </div>
     </div>
+    <div id="tx-total-display" style="margin-top:8px;padding:8px 12px;background:rgba(247,147,26,0.08);border:1px solid rgba(247,147,26,0.25);border-radius:6px;font-size:13px;color:#fb923c;text-align:center;display:none;"></div>
     <div style="margin-top:10px;">
-      <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">¿Por qué? (motivo de la compra/venta)</label>
-      <textarea id="tx-reasoning" rows="2" placeholder="Ej: BTC bajó 8% en una semana, acumulo a precio bajo..." style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:13px;resize:vertical;"></textarea>
+      <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">¿Por qué? (motivo de la operación)</label>
+      <textarea id="tx-reasoning" rows="2" placeholder="Ej: BTC bajó 8% en una semana, acumulo a precio bajo..." style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:13px;resize:vertical;">${_esc(v.reasoning || '')}</textarea>
     </div>
     <div style="margin-top:10px;">
       <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Notas (opcional)</label>
-      <input id="tx-notes" type="text" placeholder="Tx hash, recibo, etc." style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:13px;"/>
+      <input id="tx-notes" type="text" value="${_esc(v.notes || '')}" placeholder="Tx hash, recibo, etc." style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:13px;"/>
     </div>
     <div style="display:flex;gap:8px;margin-top:18px;">
       <button id="tx-cancel" style="flex:1;padding:11px;background:transparent;border:1px solid #374151;color:#94a3b8;border-radius:10px;cursor:pointer;font-size:14px;">Cancelar</button>
-      <button id="tx-save" style="flex:2;padding:11px;background:linear-gradient(135deg,#f7931a,#fb923c);border:none;color:#000;font-weight:700;border-radius:10px;cursor:pointer;font-size:14px;">+ Registrar transacción</button>
+      <button id="tx-save" style="flex:2;padding:11px;background:linear-gradient(135deg,#f7931a,#fb923c);border:none;color:#000;font-weight:700;border-radius:10px;cursor:pointer;font-size:14px;">${isEdit ? '💾 Actualizar' : '+ Registrar transacción'}</button>
     </div>
   `
 
   overlay.appendChild(modal)
   document.body.appendChild(overlay)
   const cleanup = () => document.body.removeChild(overlay)
+
+  // ── AUTO-CONVERSIÓN MXN ↔ USD ─────────────────────────────────
+  const symbolSel = modal.querySelector('#tx-symbol')
+  const mxnInput = modal.querySelector('#tx-price-mxn')
+  const usdInput = modal.querySelector('#tx-price-usd')
+  const qtyInput = modal.querySelector('#tx-qty')
+  const helper = modal.querySelector('#tx-price-helper')
+  const totalDisplay = modal.querySelector('#tx-total-display')
+
+  const updateHelper = () => {
+    const sym = symbolSel.value
+    const p = _currentPrices[sym]
+    if (p) {
+      helper.style.display = 'block'
+      helper.innerHTML = `💡 Precio actual de mercado ${sym}: <strong>${_fmt(p.mxn)} MXN</strong> · ${_fmt(p.usd, 'USD')} USD · <button id="tx-use-market" style="background:rgba(34,211,238,0.2);border:1px solid rgba(34,211,238,0.4);color:#22d3ee;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;font-weight:700;margin-left:6px;">Usar precio actual</button>`
+      modal.querySelector('#tx-use-market')?.addEventListener('click', () => {
+        mxnInput.value = p.mxn.toFixed(2)
+        usdInput.value = p.usd.toFixed(2)
+        updateTotal()
+      })
+    } else {
+      helper.style.display = 'none'
+    }
+  }
+
+  const updateTotal = () => {
+    const q = Number(qtyInput.value)
+    const pm = Number(mxnInput.value)
+    const pu = Number(usdInput.value)
+    if (q > 0 && pm > 0) {
+      const totalMxn = q * pm
+      const totalUsd = pu > 0 ? q * pu : null
+      totalDisplay.style.display = 'block'
+      totalDisplay.innerHTML = `Total: <strong>${_fmt(totalMxn)}</strong>${totalUsd ? ` · <strong>${_fmt(totalUsd, 'USD')} USD</strong>` : ''}`
+    } else {
+      totalDisplay.style.display = 'none'
+    }
+  }
+
+  let lastEditedField = null
+  mxnInput.addEventListener('input', () => {
+    lastEditedField = 'mxn'
+    const sym = symbolSel.value
+    const p = _currentPrices[sym]
+    if (p && p.rate && Number(mxnInput.value) > 0 && document.activeElement === mxnInput) {
+      usdInput.value = (Number(mxnInput.value) / p.rate).toFixed(2)
+    }
+    updateTotal()
+  })
+  usdInput.addEventListener('input', () => {
+    lastEditedField = 'usd'
+    const sym = symbolSel.value
+    const p = _currentPrices[sym]
+    if (p && p.rate && Number(usdInput.value) > 0 && document.activeElement === usdInput) {
+      mxnInput.value = (Number(usdInput.value) * p.rate).toFixed(2)
+    }
+    updateTotal()
+  })
+  qtyInput.addEventListener('input', updateTotal)
+  symbolSel.addEventListener('change', () => { updateHelper(); updateTotal() })
+  updateHelper(); updateTotal()
+
   modal.querySelector('#tx-cancel').addEventListener('click', cleanup)
   overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+
   modal.querySelector('#tx-save').addEventListener('click', async () => {
     const get = id => modal.querySelector('#' + id).value.trim()
     const payload = {
@@ -372,10 +480,13 @@ function _openAddTxModal() {
     }
     if (!payload.quantity || Number(payload.quantity) <= 0) { alert('Cantidad requerida'); return }
     try {
-      await _api('crypto_add_tx', payload)
-      // Si tiene reasoning + es buy, también guarda en journal
-      if (payload.reasoning && (payload.type === 'buy' || payload.type === 'transfer_in')) {
-        try { await _api('journal_add', { symbol: payload.symbol, thesis: payload.reasoning }) } catch {}
+      if (isEdit) {
+        await _api('crypto_update_tx', { tx_id: existingTx.id, ...payload })
+      } else {
+        await _api('crypto_add_tx', payload)
+        if (payload.reasoning && (payload.type === 'buy' || payload.type === 'transfer_in')) {
+          try { await _api('journal_add', { symbol: payload.symbol, thesis: payload.reasoning }) } catch {}
+        }
       }
       cleanup()
       renderCrypto()

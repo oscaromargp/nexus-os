@@ -27,11 +27,19 @@ function getAdminSupabase() {
 // AFP — Arquitecto Financiero Personal
 // ════════════════════════════════════════════════════════════════════
 
-async function afpDiagnose(admin, userId) {
+async function afpDiagnose(admin, userId, userMetadata = {}) {
   const today = new Date()
   const days30 = new Date(today.getTime() - 30 * 86400000).toISOString()
   const days60 = new Date(today.getTime() - 60 * 86400000).toISOString()
   const days90 = new Date(today.getTime() - 90 * 86400000).toISOString()
+
+  // Config del usuario
+  const cfg = userMetadata.afp || {}
+  const includedAccounts = Array.isArray(cfg.included_accounts) ? cfg.included_accounts : null
+  const manualFixedExpenses = Array.isArray(cfg.fixed_expenses) ? cfg.fixed_expenses : []
+  const goals = Array.isArray(cfg.goals) ? cfg.goals : []
+  const strategy = cfg.strategy || '50_30_20'
+  const customDispersion = cfg.custom_dispersion || null
 
   // Pull data en paralelo
   const [movs30, movs90, accounts, bills, allTx] = await Promise.all([
@@ -56,12 +64,15 @@ async function afpDiagnose(admin, userId) {
   const monthlyIncome  = income90 / 3 || income30 || 0
   const monthlyExpense = expense90 / 3 || expense30 || 0
 
-  // ── Saldos de cuentas (sin cripto, sin tarjetas crédito) ─────
-  const cuentas = (accounts.data || []).map(a => ({
+  // ── Saldos de cuentas (filtradas por config si aplica) ───────
+  const cuentasTodas = (accounts.data || []).map(a => ({
     name: a.content || a.metadata?.label || a.metadata?.account_name,
     balance: Number(a.metadata?.initial_balance || a.metadata?.balance || 0),
     kind: (a.metadata?.kind || a.metadata?.account_type || '').toLowerCase(),
+    included: !includedAccounts || includedAccounts.includes(a.content || a.metadata?.label || a.metadata?.account_name),
   }))
+  // Si el user no ha configurado nada → usa todas. Si configuró → respeta.
+  const cuentas = cuentasTodas.filter(c => c.included)
   const totalLiquido = cuentas
     .filter(c => !c.kind.includes('credit') && !c.kind.includes('credito'))
     .reduce((s, c) => s + c.balance, 0)
@@ -73,7 +84,22 @@ async function afpDiagnose(admin, userId) {
     const due = b.metadata?.dueDate
     return due && due >= todayDate && due <= limit30 && !b.metadata?.paid
   })
-  const monthlyCommitted = billsProximos.reduce((s, b) => s + Number(b.metadata?.amount || 0), 0)
+  const monthlyBillsAuto = billsProximos.reduce((s, b) => s + Number(b.metadata?.amount || 0), 0)
+
+  // Suma gastos fijos manuales (declarados en config AFP)
+  const monthlyManualFixed = manualFixedExpenses.reduce((s, e) => {
+    const amt = Number(e.amount) || 0
+    const freq = e.frequency || 'monthly'
+    // Normaliza a monto mensual
+    if (freq === 'weekly')      return s + amt * 4.33
+    if (freq === 'biweekly')    return s + amt * 2.17
+    if (freq === 'bimonthly')   return s + amt / 2
+    if (freq === 'quarterly')   return s + amt / 3
+    if (freq === 'yearly')      return s + amt / 12
+    return s + amt // monthly default
+  }, 0)
+
+  const monthlyCommitted = monthlyBillsAuto + monthlyManualFixed
 
   // ── Patrimonio cripto (valor estimado) ───────────────────────
   // Holdings = sum(buy quantity) - sum(sell quantity)
@@ -119,25 +145,71 @@ async function afpDiagnose(admin, userId) {
   else if (score >= 35) { healthLabel = 'En riesgo';  healthColor = '#fbbf24' }
   else                  { healthLabel = 'Crítico';    healthColor = '#ef4444' }
 
-  // ── Estrategia: dispersión 50/30/20 adaptada ─────────────────
-  // Si tienes deuda alta → ajustar
-  let pctNecesidades = 50, pctAhorro = 20, pctLifestyle = 30
-  if (commitmentRatio > 40) {
-    pctNecesidades = Math.min(70, commitmentRatio + 10)
-    pctLifestyle = 100 - pctNecesidades - pctAhorro
+  // ── Estrategia seleccionable ─────────────────────────────────
+  const strategies = {
+    '50_30_20':    { name: '50/30/20 clásica',     pct: { necesidades: 50, ahorro: 20, lifestyle: 30 } },
+    '70_20_10':    { name: '70/20/10 conservadora',pct: { necesidades: 70, ahorro: 20, lifestyle: 10 } },
+    'profit_first':{ name: 'Profit First Personal',pct: { necesidades: 55, ahorro: 25, lifestyle: 15, profit: 5 } },
+    'aggressive':  { name: 'Ahorro agresivo 60/30/10', pct: { necesidades: 60, ahorro: 30, lifestyle: 10 } },
+    'custom':      { name: 'Personalizada', pct: customDispersion || { necesidades: 50, ahorro: 20, lifestyle: 30 } },
   }
-  if (liquidityMonths < 3) {
-    pctAhorro = 25
-    pctLifestyle = 100 - pctNecesidades - pctAhorro
+  const selected = strategies[strategy] || strategies['50_30_20']
+  let pcts = { ...selected.pct }
+
+  // Si la estrategia no es custom y hay deuda alta o liquidez baja, sugerir ajuste
+  let adjustmentNote = null
+  if (strategy !== 'custom') {
+    if (commitmentRatio > pcts.necesidades) {
+      adjustmentNote = `⚠ Tus compromisos (${commitmentRatio.toFixed(0)}%) superan el ${pcts.necesidades}% sugerido por esta estrategia. Considera reducir gastos fijos o cambiar a una estrategia más conservadora.`
+    }
   }
 
-  // Dispersión sugerida del PRÓXIMO ingreso (= ingreso mensual promedio)
+  // Dispersión sugerida del PRÓXIMO ingreso
   const nextIncome = Math.round(monthlyIncome) || 5000
-  const dispersion = {
-    necesidades: Math.round(nextIncome * pctNecesidades / 100),
-    ahorro:      Math.round(nextIncome * pctAhorro / 100),
-    lifestyle:   Math.round(nextIncome * pctLifestyle / 100),
+  const dispersion = {}
+  for (const k of Object.keys(pcts)) {
+    dispersion[k] = Math.round(nextIncome * pcts[k] / 100)
   }
+  // Asegura 3 keys mínimas para retro-compat
+  if (!dispersion.necesidades) dispersion.necesidades = 0
+  if (!dispersion.ahorro) dispersion.ahorro = 0
+  if (!dispersion.lifestyle) dispersion.lifestyle = 0
+
+  // ── METAS con plan ───────────────────────────────────────────
+  const monthlyAhorroCapacity = monthlyIncome - monthlyCommitted - (monthlyExpense - monthlyBillsAuto)
+  const goalsWithPlan = goals.map(g => {
+    const target = Number(g.target_amount) || 0
+    const current = Number(g.current_amount) || 0
+    const remaining = Math.max(0, target - current)
+    const deadline = g.deadline ? new Date(g.deadline) : null
+    const monthsLeft = deadline ? Math.max(1, Math.ceil((deadline - today) / (30 * 86400000))) : 12
+    const monthlyNeeded = Math.ceil(remaining / monthsLeft)
+    const gap = Math.max(0, monthlyNeeded - Math.max(0, monthlyAhorroCapacity))
+    // Cálculo de trabajo extra si hay gap
+    const extraJob = gap > 0 ? {
+      gap_monthly: Math.round(gap),
+      options: [
+        { hours_per_week: 4,  hourly_rate: Math.ceil(gap / (4 * 4.33)) },
+        { hours_per_week: 8,  hourly_rate: Math.ceil(gap / (8 * 4.33)) },
+        { hours_per_week: 16, hourly_rate: Math.ceil(gap / (16 * 4.33)) },
+      ],
+    } : null
+    return {
+      id: g.id,
+      name: g.name,
+      target_amount: target,
+      current_amount: current,
+      remaining,
+      deadline: g.deadline,
+      months_left: monthsLeft,
+      monthly_needed: monthlyNeeded,
+      monthly_capacity: Math.round(monthlyAhorroCapacity),
+      gap_monthly: Math.round(gap),
+      achievable: gap <= 0,
+      progress_pct: target > 0 ? Math.round((current / target) * 100) : 0,
+      extra_job: extraJob,
+    }
+  })
 
   // ── Recomendación principal ──────────────────────────────────
   const recommendations = []
@@ -184,6 +256,9 @@ async function afpDiagnose(admin, userId) {
       monthly_income: Math.round(monthlyIncome),
       monthly_expense: Math.round(monthlyExpense),
       monthly_committed: Math.round(monthlyCommitted),
+      monthly_bills_auto: Math.round(monthlyBillsAuto),
+      monthly_manual_fixed: Math.round(monthlyManualFixed),
+      monthly_savings_capacity: Math.round(monthlyAhorroCapacity),
       total_liquido: Math.round(totalLiquido),
       total_cripto_cost: Math.round(totalCriptoAtCost),
       patrimonio_total: Math.round(patrimonioTotal),
@@ -197,18 +272,30 @@ async function afpDiagnose(admin, userId) {
       deuda: Math.round(scoreDeuda),
     },
     strategy: {
-      name: '50/30/20 adaptado',
+      id: strategy,
+      name: selected.name,
       next_income: nextIncome,
       dispersion,
-      percentages: { necesidades: pctNecesidades, ahorro: pctAhorro, lifestyle: pctLifestyle },
+      percentages: pcts,
+      adjustment_note: adjustmentNote,
     },
+    goals: goalsWithPlan,
     recommendations,
     upcoming_bills: billsProximos.map(b => ({
       name: b.content || b.metadata?.label,
       amount: Number(b.metadata?.amount || 0),
       due: b.metadata?.dueDate,
     })).sort((a,b) => a.due < b.due ? -1 : 1).slice(0, 5),
-    accounts_summary: cuentas.map(c => ({ name: c.name, balance: c.balance })),
+    manual_fixed_expenses: manualFixedExpenses,
+    accounts_all: cuentasTodas,
+    accounts_included: cuentas.map(c => ({ name: c.name, balance: c.balance })),
+    config: {
+      strategy,
+      included_accounts: includedAccounts,
+      fixed_expenses: manualFixedExpenses,
+      goals,
+      custom_dispersion: customDispersion,
+    },
     last_updated: new Date().toISOString(),
   }
 }
@@ -458,34 +545,21 @@ export default async function handler(req, res) {
 
     // ── AFP ─────────────────────────────────────────────────────
     if (action === 'afp_diagnose') {
-      const result = await afpDiagnose(admin, userId)
+      const result = await afpDiagnose(admin, userId, user.user_metadata || {})
       return res.status(200).json({ ok: true, ...result })
     }
 
-    if (action === 'afp_apply_dispersion') {
-      // Crea movimientos sugeridos como nodes pendientes
-      const { dispersion, source_account } = req.body
-      if (!dispersion) return res.status(400).json({ error: 'dispersion requerida' })
-      const date = new Date().toISOString().split('T')[0]
-      const rows = []
-      if (dispersion.ahorro > 0) {
-        rows.push({ owner_id: userId, type: 'expense', content: 'AFP: transferencia a ahorro',
-          metadata: { amount: dispersion.ahorro, currency: 'MXN', date, tags: ['#afp','#ahorro'],
-            account_hint: source_account || null, afp_dispersion: true, category: 'Ahorro' } })
-      }
-      if (dispersion.necesidades > 0) {
-        rows.push({ owner_id: userId, type: 'note', content: 'AFP: presupuesto necesidades $' + dispersion.necesidades,
-          metadata: { amount: dispersion.necesidades, currency: 'MXN', date, tags: ['#afp','#necesidades'],
-            afp_dispersion: true, is_budget: true } })
-      }
-      if (dispersion.lifestyle > 0) {
-        rows.push({ owner_id: userId, type: 'note', content: 'AFP: presupuesto lifestyle $' + dispersion.lifestyle,
-          metadata: { amount: dispersion.lifestyle, currency: 'MXN', date, tags: ['#afp','#lifestyle'],
-            afp_dispersion: true, is_budget: true } })
-      }
-      const { error } = await admin.from('nodes').insert(rows)
+    if (action === 'afp_save_config') {
+      // Guarda config AFP en user_metadata
+      const { config } = req.body
+      if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config requerida' })
+      const currentMeta = user.user_metadata || {}
+      const newAfp = { ...(currentMeta.afp || {}), ...config }
+      const { error } = await admin.auth.admin.updateUserById(userId, {
+        user_metadata: { ...currentMeta, afp: newAfp },
+      })
       if (error) throw error
-      return res.status(200).json({ ok: true, created: rows.length })
+      return res.status(200).json({ ok: true, afp: newAfp })
     }
 
     // ── CRIPTO PORTFOLIO ────────────────────────────────────────
@@ -534,6 +608,102 @@ export default async function handler(req, res) {
       const { error } = await admin.from('crypto_transactions').delete().eq('id', tx_id).eq('owner_id', userId)
       if (error) throw error
       return res.status(200).json({ ok: true })
+    }
+
+    if (action === 'crypto_update_tx') {
+      const { tx_id, ...patch } = req.body
+      if (!tx_id) return res.status(400).json({ error: 'tx_id requerido' })
+      const allowed = ['symbol','name','type','quantity','price_mxn','price_usd','total_mxn','fee_mxn','fee_usd','exchange','network','notes','reasoning','date']
+      const update = {}
+      for (const k of allowed) if (k in patch) update[k] = patch[k]
+      if (update.symbol) update.symbol = String(update.symbol).toUpperCase()
+      if (update.quantity != null) update.quantity = Number(update.quantity)
+      if (update.price_mxn != null) update.price_mxn = Number(update.price_mxn)
+      if (update.price_usd != null) update.price_usd = Number(update.price_usd)
+      if (update.fee_mxn != null) update.fee_mxn = Number(update.fee_mxn)
+      // Recalcula total_mxn
+      if (update.quantity != null && update.price_mxn != null) {
+        update.total_mxn = update.quantity * update.price_mxn + (update.fee_mxn || 0)
+      }
+      const { data, error } = await admin.from('crypto_transactions').update(update).eq('id', tx_id).eq('owner_id', userId).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, transaction: data })
+    }
+
+    // ── CRIPTO NEWS (filtradas por holdings) ────────────────────
+    // Fuentes RSS hardcoded (no requieren config del user)
+    if (action === 'crypto_news') {
+      const { symbols, limit = 12 } = req.body
+      const symbolsUpper = (symbols || []).map(s => String(s).toUpperCase())
+
+      const SOURCES = [
+        { name: 'CoinDesk',     url: 'https://www.coindesk.com/arc/outboundfeeds/rss/' },
+        { name: 'CoinTelegraph',url: 'https://cointelegraph.com/rss' },
+        { name: 'Decrypt',      url: 'https://decrypt.co/feed' },
+        { name: 'The Defiant',  url: 'https://thedefiant.io/feed' },
+      ]
+
+      // Mapping símbolo → nombre completo para filtrado
+      const NAMES = {
+        BTC: ['bitcoin','btc'], ETH: ['ethereum','eth','ether'],
+        XRP: ['xrp','ripple'], TRX: ['tron','trx'],
+        USDT: ['tether','usdt'], USDC: ['usdc','usd coin'],
+        SOL: ['solana','sol'], ADA: ['cardano','ada'],
+        DOGE: ['dogecoin','doge'], BNB: ['bnb','binance coin'],
+        AVAX: ['avalanche','avax'], MATIC: ['polygon','matic'],
+        DOT: ['polkadot','dot'], LINK: ['chainlink','link'],
+        LTC: ['litecoin','ltc'],
+      }
+      const keywords = []
+      for (const s of symbolsUpper) {
+        if (NAMES[s]) keywords.push(...NAMES[s])
+      }
+      const keywordsLower = keywords.map(k => k.toLowerCase())
+
+      // Parser RSS minimalista
+      const parseRss = (xml, sourceName) => {
+        const items = []
+        const tag = (text, name) => {
+          const m = text.match(new RegExp('<' + name + '[^>]*>([\\s\\S]*?)<\\/' + name + '>', 'i'))
+          return m ? m[1].replace(/<!\[CDATA\[/g,'').replace(/\]\]>/g,'').trim() : null
+        }
+        const cleanText = s => s ? s.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/\s{2,}/g,' ').trim() : null
+        const matches = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)]
+        for (const m of matches) {
+          const it = m[0]
+          const title = cleanText(tag(it, 'title')) || ''
+          const description = cleanText(tag(it, 'description')) || ''
+          const url = tag(it, 'link')
+          const pubDate = tag(it, 'pubDate')
+          // Filtra por keywords si hay
+          if (keywordsLower.length) {
+            const blob = (title + ' ' + description).toLowerCase()
+            if (!keywordsLower.some(k => blob.includes(k))) continue
+          }
+          items.push({ title, description: description.slice(0, 200), url, published_at: pubDate, source: sourceName })
+        }
+        return items
+      }
+
+      // Fetch en paralelo con timeout corto
+      const fetchSource = async (src) => {
+        try {
+          const r = await fetch(src.url, { signal: AbortSignal.timeout(6000), headers: { 'User-Agent': 'NexusOS/1.0' } })
+          if (!r.ok) return []
+          const xml = await r.text()
+          return parseRss(xml, src.name)
+        } catch { return [] }
+      }
+      const allResults = await Promise.all(SOURCES.map(fetchSource))
+      const flat = allResults.flat()
+
+      // Sort by date desc + limit
+      flat.sort((a,b) => {
+        const da = a.published_at ? new Date(a.published_at).getTime() : 0
+        const db = b.published_at ? new Date(b.published_at).getTime() : 0
+        return db - da
+      })
+      return res.status(200).json({ ok: true, items: flat.slice(0, Number(limit) || 12), sources_count: SOURCES.length })
     }
 
     if (action === 'crypto_prices') {
