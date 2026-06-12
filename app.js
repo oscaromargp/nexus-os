@@ -18,6 +18,9 @@ import { getTransactions, calcBalance, buildRunningBalance, currentPeriod } from
 import { renderInmuebles, loadProperties, openPropModal, openPropDetail, closePropModal, saveProp, propHandleFiles, propHandleDrop } from './src/inmuebles.js'
 import { renderAutomations } from './src/automations.js'
 import { renderProjectRssTab } from './src/rss-feeds.js'
+import { renderAFP } from './src/afp.js'
+import { renderCrypto } from './src/crypto.js'
+import { renderModulesPanel, applyModulesToSidebar } from './src/modules.js'
 import Sortable from 'sortablejs'
 import {
   Chart, DoughnutController, ArcElement, Tooltip, Legend,
@@ -2457,6 +2460,8 @@ const VIEW_RENDER_MAP = {
   cotizaciones: ()      => renderCotizaciones(),
   inmuebles:    ()      => renderInmuebles(),
   automations:  ()      => { if (window.nexusAutomations?.render) window.nexusAutomations.render() },
+  afp:          ()      => renderAFP(),
+  crypto:       ()      => renderCrypto(),
   // Vistas adicionales — evitan que caigan al fallback costoso
   tags:         (nodes) => { if (typeof renderTagsView === 'function') renderTagsView(nodes) },
   herramientas: ()      => {},
@@ -13543,7 +13548,11 @@ window.switchCfgTab = function(panelId, btn) {
   }
   if (panelId === 'uso') _initUsoTab()
   if (panelId === 'datos') _initDatosTab()
+  if (panelId === 'modulos') { try { renderModulesPanel() } catch (e) { console.warn('[modules]', e) } }
 }
+
+// Aplica filtros de módulos al sidebar al cargar la app
+setTimeout(() => { try { applyModulesToSidebar() } catch {} }, 1500)
 
 function _initDatosTab() {
   // Refresca historial de backups al entrar al panel

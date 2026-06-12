@@ -1768,6 +1768,8 @@ nav#sidebar .nav-items {
       <button class="nav-item" data-view="cotizaciones"       data-tip="Cotizaciones y Ventas"><span class="nav-icon"><i data-lucide="FileSpreadsheet"></i></span> Cotizaciones y Ventas</button>
       <button class="nav-item" data-view="inmuebles"           data-tip="Módulo Inmobiliario"><span class="nav-icon"><i data-lucide="Building2"></i></span> Inmuebles</button>
       <button class="nav-item" data-view="herramientas"       data-tip="OTC, documentos, calculadoras"><span class="nav-icon"><i data-lucide="Sliders"></i></span> Herramientas</button>
+      <button class="nav-item" data-view="afp"                data-tip="Arquitecto Financiero Personal — score, diagnóstico, dispersión"><span class="nav-icon"><i data-lucide="Gauge"></i></span> AFP</button>
+      <button class="nav-item" data-view="crypto"             data-tip="Cripto Portfolio — tracking + precios live + journal"><span class="nav-icon"><i data-lucide="Coins"></i></span> Cripto</button>
       <button class="nav-item" data-view="automations"        data-tip="Flujos automáticos IFTTT entre Nexus, Telegram y n8n"><span class="nav-icon"><i data-lucide="Zap"></i></span> Flujos</button>
       <button class="nav-item" data-view="tags"               data-tip="Análisis de etiquetas"><span class="nav-icon"><i data-lucide="Tag"></i></span> Inteligencia Tags</button>
       <button class="nav-item" data-view="settings"           data-tip="Preferencias del sistema"><span class="nav-icon"><i data-lucide="Settings"></i></span> Configuración</button>
@@ -1950,6 +1952,16 @@ nav#sidebar .nav-items {
         <button onclick="openQuickCreate('proyecto')" class="qc-ctx-btn">+ Nuevo Proyecto</button>
       </div>
       <div id="proyectos-root"></div>
+    </div>
+
+    <!-- ════ AFP ════ -->
+    <div id="view-afp" class="view-section">
+      <div id="afp-root"></div>
+    </div>
+
+    <!-- ════ CRIPTO PORTFOLIO ════ -->
+    <div id="view-crypto" class="view-section">
+      <div id="crypto-root"></div>
     </div>
 
     <!-- ════ DISPARADORES (Automatizaciones) ════ -->
@@ -2535,6 +2547,9 @@ nav#sidebar .nav-items {
         <button class="cfg-tab" onclick="switchCfgTab('datos',this)">
           <span class="cfg-tab-icon">💾</span>Datos
         </button>
+        <button class="cfg-tab" onclick="switchCfgTab('modulos',this)">
+          <span class="cfg-tab-icon">🧩</span>Mis Módulos
+        </button>
         <button class="cfg-tab" onclick="switchCfgTab('conexiones',this)">
           <span class="cfg-tab-icon">🔗</span>Conexiones
         </button>
@@ -2812,6 +2827,15 @@ nav#sidebar .nav-items {
             <div><div style="font-size:13px;font-weight:700;color:#f87171;">☢️ Reinicio Total</div><div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Elimina TODOS tus nodos. La sesión continúa.</div></div>
             <button onclick="resetAllData()" style="padding:8px 16px;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.4);color:#f87171;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">☢️ Reiniciar</button>
           </div>
+        </div>
+      </div>
+
+      <!-- ── Panel: Mis Módulos ── -->
+      <div id="cfg-panel-modulos" class="cfg-panel">
+        <div class="settings-card">
+          <h2 style="font-size:15px;font-weight:800;color:var(--accent-cyan);margin-bottom:6px;">🧩 Mis Módulos</h2>
+          <p style="font-size:12px;color:var(--text-muted);margin:0 0 8px;">Catálogo de módulos disponibles. Activa solo los que necesites — útil para personalizar lo que ofreces a cada cliente.</p>
+          <div id="modules-panel-root"></div>
         </div>
       </div>
 
