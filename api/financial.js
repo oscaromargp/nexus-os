@@ -422,6 +422,25 @@ async function cryptoListHoldings(admin, userId) {
 // ════════════════════════════════════════════════════════════════════
 
 export default async function handler(req, res) {
+  // ── BITSO PROXY (GET ?bitso=book) — sin auth ──────────────────
+  // Reenvía al ticker público de Bitso evitando CORS.
+  if (req.method === 'GET' && req.query.bitso) {
+    const book = req.query.bitso
+    if (!/^[a-z0-9_]{3,20}$/.test(book)) {
+      return res.status(400).json({ error: 'invalid book' })
+    }
+    try {
+      const upstream = await fetch(`https://api.bitso.com/v3/ticker/?book=${book}`, {
+        headers: { 'User-Agent': 'nexus-os-proxy/1.0' },
+      })
+      const data = await upstream.json()
+      res.setHeader('Cache-Control', 's-maxage=10, stale-while-revalidate=20')
+      return res.json(data)
+    } catch (e) {
+      return res.status(502).json({ success: false, error: 'upstream error' })
+    }
+  }
+
   res.setHeader('Cache-Control', 'no-store')
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 

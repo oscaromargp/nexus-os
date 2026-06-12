@@ -7209,7 +7209,7 @@ window.otcFetchBitso = async function() {
       otcRecalc()
       return
     }
-    const resp = await fetch('/api/bitso?book=' + book)
+    const resp = await fetch('/api/financial?bitso=' + book)
     const json = await resp.json()
     if (json.success && json.payload) {
       const ask = parseFloat(json.payload.ask) || 0
