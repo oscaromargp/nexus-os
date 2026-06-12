@@ -184,11 +184,20 @@ export async function renderCrypto() {
     }
   }
 
-  // News en background — no bloquea render
+  // News en background — pide noticias y luego pide traducción al español
   const heldSymbols = data.items.map(i => i.symbol)
   if (heldSymbols.length) {
     _api('crypto_news', { symbols: heldSymbols, limit: 10 })
-      .then(j => { _renderNewsInto(j.items || []) })
+      .then(async (j) => {
+        const items = j.items || []
+        if (!items.length) { _renderNewsInto([]); return }
+        try {
+          const t = await _api('crypto_news_translate', { items })
+          _renderNewsInto(t.translated || items)
+        } catch {
+          _renderNewsInto(items)
+        }
+      })
       .catch(() => { _renderNewsInto([]) })
   }
 
@@ -375,17 +384,56 @@ export async function renderCrypto() {
       </div>
       ` : ''}
 
-      <!-- NEWS FEED (estilo Google Feeds) -->
+      <!-- IA STRATEGY + DISPERSIÓN -->
+      ${items.length ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+        <div id="crypto-strategy-card" style="background:linear-gradient(135deg,rgba(167,139,250,0.06),rgba(99,102,241,0.10));border:1px solid rgba(167,139,250,0.3);border-radius:12px;padding:16px;">
+          <div style="display:flex;align-items:start;justify-content:space-between;gap:8px;margin-bottom:8px;">
+            <div>
+              <div style="font-size:14px;font-weight:800;color:#a78bfa;">🧠 Estrategia del momento</div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:2px;">IA analiza tu portafolio + mercado</div>
+            </div>
+            <button id="crypto-strategy-btn" style="padding:7px 12px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.4);color:#c4b5fd;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;flex-shrink:0;">✨ Pídeme estrategia</button>
+          </div>
+          <div id="crypto-strategy-content" style="margin-top:8px;font-size:12px;color:#94a3b8;">Pulsa "Pídeme estrategia" para recibir 2-3 sugerencias accionables con razones.</div>
+        </div>
+
+        <div id="crypto-dispersion-card" style="background:linear-gradient(135deg,rgba(34,211,238,0.06),rgba(6,182,212,0.10));border:1px solid rgba(34,211,238,0.3);border-radius:12px;padding:16px;">
+          <div style="display:flex;align-items:start;justify-content:space-between;gap:8px;margin-bottom:8px;">
+            <div>
+              <div style="font-size:14px;font-weight:800;color:#22d3ee;">💸 Calculadora de dispersión</div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:2px;">"Hoy tengo $X, ¿cómo los reparto?"</div>
+            </div>
+            <button id="crypto-dispersion-btn" style="padding:7px 12px;background:rgba(34,211,238,0.15);border:1px solid rgba(34,211,238,0.4);color:#67e8f9;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;flex-shrink:0;">💡 Calcular</button>
+          </div>
+          <div id="crypto-dispersion-content" style="margin-top:8px;font-size:12px;color:#94a3b8;">Pulsa "Calcular" para que la IA te sugiera cómo distribuir un monto entre tus monedas.</div>
+        </div>
+      </div>
+
+      <!-- WALLETS -->
+      <div style="margin-bottom:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">
+        <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div>
+            <div style="font-size:14px;font-weight:800;color:#e5e7eb;">🔐 Mis wallets y direcciones</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Cold wallet (Ledger), Hot wallet (Bitso), etc.</div>
+          </div>
+          <button id="crypto-wallets-btn" style="padding:7px 12px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">+ Gestionar wallets</button>
+        </div>
+        <div id="crypto-wallets-content" style="padding:12px 16px;color:#6b7280;font-size:12px;">⏳</div>
+      </div>
+      ` : ''}
+
+      <!-- NEWS FEED en ESPAÑOL -->
       ${items.length ? `
       <div id="crypto-news-panel" style="margin-top:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">
         <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
           <div>
-            <div style="font-size:14px;font-weight:800;color:#e5e7eb;">📡 Feed de tus criptos</div>
-            <div style="font-size:11px;color:#6b7280;margin-top:2px;">CoinDesk · CoinTelegraph · Decrypt · The Defiant</div>
+            <div style="font-size:14px;font-weight:800;color:#e5e7eb;">📡 Feed de tus criptos · en español 🇲🇽</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">CoinDesk · CoinTelegraph · Decrypt · The Defiant — traducidos con IA</div>
           </div>
           <div id="crypto-news-header-actions" style="display:flex;align-items:center;gap:8px;"></div>
         </div>
-        <div id="crypto-news-list" style="padding:12px;color:#6b7280;font-size:12px;text-align:center;">⏳ Cargando feed…</div>
+        <div id="crypto-news-list" style="padding:12px;color:#6b7280;font-size:12px;text-align:center;">⏳ Cargando feed y traduciendo…</div>
       </div>
       ` : ''}
 
@@ -408,7 +456,9 @@ export async function renderCrypto() {
   document.getElementById('crypto-journal-btn')?.addEventListener('click', () => _openJournalModal(journalData.entries, items.map(i => i.symbol)))
   root.querySelectorAll('[data-del-tx]').forEach(btn => {
     btn.addEventListener('click', async () => {
-      if (!confirm('¿Eliminar transacción?')) return
+      const tx = _allTxs.find(t => t.id === btn.dataset.delTx)
+      const isWithdraw = tx && (tx.type === 'sell' || tx.type === 'transfer_out')
+      if (!confirm(`¿Eliminar transacción?${isWithdraw ? '\n\nEsto era una venta/retiro — perderás el registro.' : ''}`)) return
       try {
         await _api('crypto_delete_tx', { tx_id: btn.dataset.delTx })
         renderCrypto()
@@ -421,6 +471,311 @@ export async function renderCrypto() {
       if (tx) _openTxModal(tx)
     })
   })
+
+  // ── Bind nuevos botones ────────────────────────────────────
+  document.getElementById('crypto-strategy-btn')?.addEventListener('click', () => _requestStrategy(items, summary))
+  document.getElementById('crypto-dispersion-btn')?.addEventListener('click', () => _openDispersionModal(items, summary))
+  document.getElementById('crypto-wallets-btn')?.addEventListener('click', () => _openWalletsModal())
+  if (items.length) _loadWalletsPreview()
+}
+
+// ── Wallets preview en home ────────────────────────────────────
+async function _loadWalletsPreview() {
+  const target = document.getElementById('crypto-wallets-content')
+  if (!target) return
+  try {
+    const j = await _api('crypto_wallets_list')
+    const wallets = j.wallets || []
+    if (!wallets.length) {
+      target.innerHTML = `<div style="font-size:13px;color:#94a3b8;">No tienes wallets registrados aún. Crea uno para empezar a organizar tus direcciones por red.</div>`
+      return
+    }
+    target.innerHTML = wallets.map(w => {
+      const addrSummary = w.addresses && w.addresses.length
+        ? w.addresses.map(a => `${a.symbol}-${a.network}`).join(' · ')
+        : 'Sin direcciones aún'
+      const kindLabels = { cold: '🥶 Cold', hot: '🔥 Hot', exchange: '🏦 Exchange', custodial: '🔐 Custodial', paper: '📄 Paper' }
+      return `
+        <div style="padding:10px 0;border-top:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-weight:700;color:#e5e7eb;font-size:13px;">${_esc(w.name)}</span>
+          <span style="font-size:11px;color:#94a3b8;background:rgba(255,255,255,0.04);padding:2px 8px;border-radius:4px;">${kindLabels[w.kind] || w.kind}</span>
+          ${w.provider ? `<span style="font-size:11px;color:#94a3b8;">${_esc(w.provider)}</span>` : ''}
+          <span style="font-size:11px;color:#22d3ee;flex:1;text-align:right;">${_esc(addrSummary).slice(0,80)}</span>
+        </div>
+      `
+    }).join('')
+  } catch (e) {
+    target.innerHTML = `<div style="color:#f87171;font-size:12px;">⚠ ${e.message}</div>`
+  }
+}
+
+// ── IA Strategy ────────────────────────────────────────────────
+async function _requestStrategy(items, summary) {
+  const target = document.getElementById('crypto-strategy-content')
+  const btn = document.getElementById('crypto-strategy-btn')
+  if (!target) return
+  target.innerHTML = '<div style="color:#94a3b8;font-size:12px;">🤖 Analizando portafolio y mercado…</div>'
+  if (btn) btn.disabled = true
+
+  // Construye contexto
+  const context = {
+    holdings: items.map(i => ({
+      symbol: i.symbol, qty: i.quantity, value_mxn: i.value_mxn,
+      allocation_pct: i.allocation_pct, roi_pct: i.roi_pct,
+      change_24h_pct: i.change_24h_pct,
+    })),
+    summary: {
+      total_value_mxn: summary.total_value_mxn,
+      total_roi_pct: summary.total_roi_pct,
+      holdings_count: items.length,
+    },
+    preferences: {
+      weekly_budget_mxn: 200,
+      preferred_for_cold: ['XRP', 'TRX'],
+      exchange: 'Bitso',
+      cold_wallet: 'Ledger',
+    },
+  }
+  try {
+    const j = await _api('crypto_strategy_suggest', { context })
+    _renderStrategy(j.strategy)
+  } catch (e) {
+    target.innerHTML = `<div style="color:#f87171;font-size:12px;">⚠ ${e.message}</div>`
+  } finally {
+    if (btn) btn.disabled = false
+  }
+}
+
+function _renderStrategy(s) {
+  const target = document.getElementById('crypto-strategy-content')
+  if (!target) return
+  const urgencyColor = { high: '#ef4444', medium: '#fbbf24', low: '#94a3b8' }
+  const typeIcon = { buy: '🟢', sell: '🔴', hold: '🤲', rebalance: '🔁', wait: '⏳' }
+  let html = ''
+  if (s.summary) html += `<div style="font-size:12px;color:#cbd5e1;line-height:1.5;margin-bottom:10px;font-style:italic;">${_esc(s.summary)}</div>`
+  if (s.warning) html += `<div style="font-size:11px;color:#fca5a5;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);padding:8px;border-radius:6px;margin-bottom:10px;">⚠ ${_esc(s.warning)}</div>`
+  if (s.actions && s.actions.length) {
+    html += s.actions.map(a => `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:10px;margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+          <span style="font-size:14px;">${typeIcon[a.type] || '•'}</span>
+          <span style="font-weight:700;color:#e5e7eb;font-size:13px;">${_esc(a.action)}</span>
+          <span style="background:${urgencyColor[a.urgency] || '#94a3b8'}22;color:${urgencyColor[a.urgency] || '#94a3b8'};font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:1px;">${a.urgency || 'medium'}</span>
+          ${a.amount_suggestion ? `<span style="font-size:11px;color:#22d3ee;margin-left:auto;">${_esc(a.amount_suggestion)}</span>` : ''}
+        </div>
+        <div style="font-size:12px;color:#94a3b8;line-height:1.5;">${_esc(a.reason)}</div>
+      </div>
+    `).join('')
+  }
+  target.innerHTML = html
+}
+
+// ── Dispersión modal ──────────────────────────────────────────
+function _openDispersionModal(items, summary) {
+  const overlay = document.createElement('div')
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;`
+  const modal = document.createElement('div')
+  modal.style.cssText = `background:#0f1419;border:1px solid #1f2937;border-radius:16px;padding:22px;max-width:520px;width:100%;color:#e5e7eb;max-height:90vh;overflow-y:auto;`
+
+  modal.innerHTML = `
+    <h3 style="margin:0 0 6px;font-size:17px;font-weight:800;">💸 Calculadora de dispersión</h3>
+    <p style="margin:0 0 14px;font-size:12px;color:#94a3b8;">Pon el monto que tienes hoy y la IA te dice cómo repartirlo entre tus monedas, sesgada a XRP/TRX para retiros baratos a tu cold wallet.</p>
+
+    <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;font-weight:700;letter-spacing:1px;">Monto disponible (MXN)</label>
+    <input id="disp-amount" type="number" step="1" placeholder="200" value="200" style="width:100%;padding:11px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:16px;margin-bottom:14px;font-weight:700;"/>
+
+    <button id="disp-go" style="width:100%;padding:11px;background:linear-gradient(135deg,#22d3ee,#06b6d4);border:none;color:#000;font-weight:800;border-radius:8px;cursor:pointer;font-size:14px;">✨ Sugiéreme la mejor dispersión</button>
+
+    <div id="disp-result" style="margin-top:14px;"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button id="disp-cancel" style="flex:1;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:8px;cursor:pointer;font-size:13px;">Cerrar</button>
+    </div>
+  `
+  overlay.appendChild(modal)
+  document.body.appendChild(overlay)
+  const cleanup = () => document.body.removeChild(overlay)
+  modal.querySelector('#disp-cancel').addEventListener('click', cleanup)
+  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+
+  modal.querySelector('#disp-go').addEventListener('click', async () => {
+    const amount = Number(modal.querySelector('#disp-amount').value)
+    if (!amount || amount <= 0) { alert('Pon un monto válido'); return }
+    const resultEl = modal.querySelector('#disp-result')
+    resultEl.innerHTML = '<div style="color:#94a3b8;font-size:12px;text-align:center;padding:14px;">🤖 Calculando dispersión inteligente…</div>'
+
+    try {
+      const j = await _api('crypto_dispersion_suggest', {
+        amount_mxn: amount,
+        holdings_summary: items.map(i => ({
+          symbol: i.symbol, allocation_pct: i.allocation_pct,
+          change_24h_pct: i.change_24h_pct, value_mxn: i.value_mxn,
+        })),
+        prices_24h: items.reduce((m, i) => ({ ...m, [i.symbol]: { change_24h_pct: i.change_24h_pct, price_mxn: i.current_price_mxn } }), {}),
+        preferences: {
+          weekly_budget_mxn: 200,
+          preferred_for_cold: ['XRP', 'TRX'],
+          exchange: 'Bitso',
+        },
+      })
+      _renderDispersion(j.dispersion, resultEl)
+    } catch (e) {
+      resultEl.innerHTML = `<div style="color:#f87171;font-size:12px;padding:14px;">⚠ ${e.message}</div>`
+    }
+  })
+}
+
+function _renderDispersion(d, target) {
+  if (!d) return
+  let html = ''
+  if (d.rationale) html += `<div style="font-size:12px;color:#cbd5e1;line-height:1.6;font-style:italic;margin-bottom:12px;padding:10px;background:rgba(34,211,238,0.06);border-left:3px solid #22d3ee;border-radius:0 6px 6px 0;">${_esc(d.rationale)}</div>`
+  if (d.splits && d.splits.length) {
+    html += '<div style="display:flex;flex-direction:column;gap:8px;">'
+    for (const s of d.splits) {
+      html += `
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:10px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="width:22px;height:22px;background:${_coinColor(s.symbol)};border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#000;">${s.symbol[0]}</span>
+            <span style="font-weight:700;color:#e5e7eb;">${s.symbol}</span>
+            <span style="color:#94a3b8;font-size:11px;">${s.pct}%</span>
+            <span style="margin-left:auto;font-weight:800;color:#22d3ee;">${_fmt(s.amount_mxn)}</span>
+          </div>
+          <div style="font-size:12px;color:#94a3b8;line-height:1.5;">${_esc(s.reason)}</div>
+          ${s.low_fee_to_cold ? `<div style="font-size:10px;color:#34d399;margin-top:4px;">✓ Baja comisión Bitso → cold wallet</div>` : ''}
+        </div>
+      `
+    }
+    html += '</div>'
+  }
+  if (d.warnings && d.warnings.length) {
+    html += '<div style="margin-top:12px;padding:10px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.3);border-radius:6px;font-size:11px;color:#fde68a;">'
+    html += '<strong>⚠ Considera:</strong><ul style="margin:4px 0 0 16px;padding:0;">'
+    for (const w of d.warnings) html += `<li>${_esc(w)}</li>`
+    html += '</ul></div>'
+  }
+  target.innerHTML = html
+}
+
+// ── Wallets modal completo ───────────────────────────────────
+async function _openWalletsModal() {
+  const overlay = document.createElement('div')
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;`
+  const modal = document.createElement('div')
+  modal.style.cssText = `background:#0f1419;border:1px solid #1f2937;border-radius:16px;padding:22px;max-width:680px;width:100%;color:#e5e7eb;max-height:92vh;overflow-y:auto;`
+
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <h3 style="margin:0;font-size:17px;font-weight:800;">🔐 Wallets y direcciones</h3>
+      <button id="wall-close" style="background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;line-height:1;">×</button>
+    </div>
+    <p style="margin:0 0 14px;font-size:12px;color:#94a3b8;line-height:1.5;">Organiza tus monedas por wallet (cold/hot) y dirección. Cada wallet puede tener múltiples direcciones (ej. XRP en 2 direcciones distintas; USDT en TRC20 y ERC20).</p>
+
+    <!-- Form nuevo wallet -->
+    <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.2);border-radius:10px;padding:12px;margin-bottom:16px;">
+      <div style="font-size:11px;color:#22d3ee;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">+ Nuevo wallet</div>
+      <div style="display:grid;grid-template-columns:1fr 140px 130px;gap:6px;margin-bottom:6px;">
+        <input id="wn-name" placeholder="Ej: Ledger Nano S Plus" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;"/>
+        <select id="wn-kind" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;">
+          <option value="cold">🥶 Cold wallet</option>
+          <option value="hot">🔥 Hot wallet</option>
+          <option value="exchange">🏦 Exchange</option>
+          <option value="custodial">🔐 Custodial</option>
+          <option value="paper">📄 Paper</option>
+        </select>
+        <input id="wn-provider" placeholder="Proveedor" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;"/>
+      </div>
+      <button id="wn-add" style="padding:8px 14px;background:rgba(34,211,238,0.15);border:1px solid rgba(34,211,238,0.4);color:#22d3ee;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;">+ Crear wallet</button>
+    </div>
+
+    <div id="wall-list" style="display:flex;flex-direction:column;gap:10px;"></div>
+  `
+
+  overlay.appendChild(modal)
+  document.body.appendChild(overlay)
+  const cleanup = () => { document.body.removeChild(overlay); _loadWalletsPreview() }
+  modal.querySelector('#wall-close').addEventListener('click', cleanup)
+  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+
+  const renderList = async () => {
+    const list = modal.querySelector('#wall-list')
+    list.innerHTML = '<div style="color:#94a3b8;font-size:12px;text-align:center;padding:14px;">⏳</div>'
+    try {
+      const j = await _api('crypto_wallets_list')
+      const wallets = j.wallets || []
+      if (!wallets.length) {
+        list.innerHTML = '<div style="color:#6b7280;font-size:13px;text-align:center;padding:20px;background:rgba(255,255,255,0.02);border-radius:8px;">Aún no hay wallets. Crea uno arriba.</div>'
+        return
+      }
+      const kindLabels = { cold: '🥶 Cold', hot: '🔥 Hot', exchange: '🏦 Exchange', custodial: '🔐 Custodial', paper: '📄 Paper' }
+      list.innerHTML = wallets.map(w => `
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+            <strong style="color:#e5e7eb;">${_esc(w.name)}</strong>
+            <span style="font-size:11px;color:#94a3b8;background:rgba(255,255,255,0.04);padding:2px 8px;border-radius:4px;">${kindLabels[w.kind] || w.kind}</span>
+            ${w.provider ? `<span style="font-size:11px;color:#94a3b8;">${_esc(w.provider)}</span>` : ''}
+            <button data-del-wallet="${w.id}" style="margin-left:auto;background:transparent;border:none;color:#6b7280;cursor:pointer;font-size:14px;">🗑</button>
+          </div>
+          <!-- Direcciones -->
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+            ${(w.addresses || []).map(a => `
+              <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px;padding:7px 10px;display:flex;align-items:center;gap:8px;font-size:12px;">
+                <span style="font-weight:700;color:${_coinColor(a.symbol)};min-width:50px;">${a.symbol}</span>
+                <span style="background:rgba(34,211,238,0.1);color:#22d3ee;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:600;">${_esc(a.network)}</span>
+                ${a.label ? `<span style="color:#94a3b8;">${_esc(a.label)}</span>` : ''}
+                <span style="color:#6b7280;font-family:monospace;font-size:10px;flex:1;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc(a.address).slice(0,28)}${a.address.length > 28 ? '…' : ''}</span>
+                <button data-del-addr="${a.id}" style="background:transparent;border:none;color:#6b7280;cursor:pointer;font-size:12px;">🗑</button>
+              </div>
+            `).join('')}
+          </div>
+          <!-- Form direccion -->
+          <div style="margin-top:8px;display:grid;grid-template-columns:80px 100px 1fr 70px;gap:4px;">
+            <input data-addr-symbol="${w.id}" placeholder="XRP" style="padding:6px;background:#1f2937;border:1px solid #374151;border-radius:4px;color:#e5e7eb;font-size:11px;text-transform:uppercase;"/>
+            <input data-addr-network="${w.id}" placeholder="XRP / TRC20" style="padding:6px;background:#1f2937;border:1px solid #374151;border-radius:4px;color:#e5e7eb;font-size:11px;"/>
+            <input data-addr-address="${w.id}" placeholder="rEXXX… o TXXXXX…" style="padding:6px;background:#1f2937;border:1px solid #374151;border-radius:4px;color:#e5e7eb;font-size:11px;font-family:monospace;"/>
+            <button data-add-addr="${w.id}" style="padding:6px;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:4px;cursor:pointer;font-size:11px;font-weight:700;">+ Dir</button>
+          </div>
+        </div>
+      `).join('')
+
+      // Handlers
+      list.querySelectorAll('[data-del-wallet]').forEach(btn => btn.addEventListener('click', async () => {
+        if (!confirm('¿Eliminar este wallet y todas sus direcciones?')) return
+        try { await _api('crypto_wallet_delete', { id: btn.dataset.delWallet }); renderList() }
+        catch (e) { alert('⚠ ' + e.message) }
+      }))
+      list.querySelectorAll('[data-del-addr]').forEach(btn => btn.addEventListener('click', async () => {
+        try { await _api('crypto_address_delete', { id: btn.dataset.delAddr }); renderList() }
+        catch (e) { alert('⚠ ' + e.message) }
+      }))
+      list.querySelectorAll('[data-add-addr]').forEach(btn => btn.addEventListener('click', async () => {
+        const wid = btn.dataset.addAddr
+        const symbol = list.querySelector(`[data-addr-symbol="${wid}"]`).value.trim()
+        const network = list.querySelector(`[data-addr-network="${wid}"]`).value.trim()
+        const address = list.querySelector(`[data-addr-address="${wid}"]`).value.trim()
+        if (!symbol || !network || !address) { alert('Llena símbolo + red + dirección'); return }
+        try {
+          await _api('crypto_address_add', { wallet_id: wid, symbol, network, address })
+          renderList()
+        } catch (e) { alert('⚠ ' + e.message) }
+      }))
+    } catch (e) {
+      list.innerHTML = `<div style="color:#f87171;font-size:12px;padding:14px;">⚠ ${e.message}</div>`
+    }
+  }
+
+  modal.querySelector('#wn-add').addEventListener('click', async () => {
+    const name = modal.querySelector('#wn-name').value.trim()
+    const kind = modal.querySelector('#wn-kind').value
+    const provider = modal.querySelector('#wn-provider').value.trim()
+    if (!name) { alert('Nombre requerido'); return }
+    try {
+      await _api('crypto_wallet_add', { name, kind, provider: provider || null })
+      modal.querySelector('#wn-name').value = ''
+      modal.querySelector('#wn-provider').value = ''
+      renderList()
+    } catch (e) { alert('⚠ ' + e.message) }
+  })
+
+  renderList()
 }
 
 // ── Feed estilo Google Feeds ───────────────────────────────────
@@ -431,8 +786,14 @@ function _renderNewsInto(items) {
     list.innerHTML = '<div style="padding:14px;color:#6b7280;font-size:12px;text-align:center;">Sin noticias relevantes en este momento.</div>'
     return
   }
-  // Asigna id estable por URL
-  const withIds = items.map(n => ({ ...n, _id: _hashUrl(n.url || n.title) }))
+  // Asigna id estable por URL — soporta tanto items crudos como traducidos
+  const withIds = items.map(n => ({
+    ...n,
+    _id: n.id || _hashUrl(n.url || n.title || n.title_en || ''),
+    _displayTitle: n.title_es || n.title || n.title_en || '(sin título)',
+    _displaySummary: n.summary_es || n.description || n.desc_en || '',
+    _isTranslated: !!n.translated,
+  }))
   const readIds = _getReadIds()
   const unreadCount = withIds.filter(n => !readIds.has(n._id)).length
 
@@ -460,16 +821,18 @@ function _renderNewsInto(items) {
         <div data-news-toggle="${n._id}" style="display:flex;align-items:start;gap:12px;padding:14px 16px;cursor:pointer;">
           <div style="width:6px;height:6px;border-radius:50%;background:${isRead ? 'transparent' : '#22d3ee'};margin-top:6px;flex-shrink:0;${!isRead ? 'box-shadow:0 0 6px #22d3ee;' : ''}"></div>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;font-weight:${isRead ? '500' : '700'};color:${isRead ? '#94a3b8' : '#e5e7eb'};line-height:1.4;margin-bottom:4px;">${_esc(n.title)}</div>
+            <div style="font-size:14px;font-weight:${isRead ? '500' : '700'};color:${isRead ? '#94a3b8' : '#e5e7eb'};line-height:1.4;margin-bottom:4px;">${_esc(n._displayTitle)}</div>
             <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#6b7280;flex-wrap:wrap;">
               <span style="background:rgba(167,139,250,0.15);color:#a78bfa;padding:1px 7px;border-radius:4px;font-weight:600;">${_esc(n.source)}</span>
+              ${n._isTranslated ? `<span style="background:rgba(34,211,238,0.12);color:#22d3ee;padding:1px 6px;border-radius:3px;font-weight:600;">🇲🇽 ES</span>` : ''}
               <span>${ago}</span>
             </div>
           </div>
           <button data-news-expand="${n._id}" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;padding:4px;font-size:14px;flex-shrink:0;">▾</button>
         </div>
         <div data-news-body="${n._id}" style="display:none;padding:0 16px 14px 34px;">
-          ${n.description ? `<p style="font-size:12px;color:#cbd5e1;line-height:1.6;margin:0 0 10px;">${_esc(n.description.slice(0,500))}…</p>` : ''}
+          ${n._displaySummary ? `<p style="font-size:12px;color:#cbd5e1;line-height:1.6;margin:0 0 10px;">${_esc(n._displaySummary.slice(0,500))}</p>` : ''}
+          ${n._isTranslated && n.title_en ? `<p style="font-size:11px;color:#6b7280;font-style:italic;margin:0 0 8px;">Original: "${_esc(n.title_en.slice(0,200))}"</p>` : ''}
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <a href="${_esc(n.url)}" target="_blank" rel="noopener" data-news-read="${n._id}" style="padding:6px 12px;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">↗ Leer artículo completo</a>
             <button data-news-mark="${n._id}" style="padding:6px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">${isRead ? '↻ Marcar no leído' : '✓ Marcar como leído'}</button>

@@ -791,6 +791,295 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, prices, supported: COIN_MAP })
     }
 
+    // ════════════════════════════════════════════════════════════
+    // CRIPTO WALLETS + DIRECCIONES (cold/hot/exchange, redes)
+    // ════════════════════════════════════════════════════════════
+    if (action === 'crypto_wallets_list') {
+      const [walletsRes, addrRes] = await Promise.all([
+        admin.from('crypto_wallets').select('*').eq('owner_id', userId).eq('is_active', true).order('created_at'),
+        admin.from('crypto_wallet_addresses').select('*').eq('owner_id', userId).eq('is_active', true),
+      ])
+      const wallets = walletsRes.data || []
+      const addresses = addrRes.data || []
+      const result = wallets.map(w => ({
+        ...w,
+        addresses: addresses.filter(a => a.wallet_id === w.id),
+      }))
+      return res.status(200).json({ ok: true, wallets: result })
+    }
+    if (action === 'crypto_wallet_add') {
+      const { name, kind, provider, notes } = req.body
+      if (!name) return res.status(400).json({ error: 'name requerido' })
+      const { data, error } = await admin.from('crypto_wallets').insert({
+        owner_id: userId, name, kind: kind || 'cold',
+        provider: provider || null, notes: notes || null,
+      }).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, wallet: data })
+    }
+    if (action === 'crypto_wallet_delete') {
+      const { id } = req.body
+      if (!id) return res.status(400).json({ error: 'id requerido' })
+      const { error } = await admin.from('crypto_wallets').delete().eq('id', id).eq('owner_id', userId)
+      if (error) throw error
+      return res.status(200).json({ ok: true })
+    }
+    if (action === 'crypto_address_add') {
+      const { wallet_id, symbol, network, address, label, notes } = req.body
+      if (!wallet_id || !symbol || !network || !address) {
+        return res.status(400).json({ error: 'wallet_id + symbol + network + address requeridos' })
+      }
+      const { data, error } = await admin.from('crypto_wallet_addresses').insert({
+        owner_id: userId, wallet_id,
+        symbol: String(symbol).toUpperCase(),
+        network: String(network).toUpperCase(),
+        address, label: label || null, notes: notes || null,
+      }).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, address: data })
+    }
+    if (action === 'crypto_address_delete') {
+      const { id } = req.body
+      if (!id) return res.status(400).json({ error: 'id requerido' })
+      const { error } = await admin.from('crypto_wallet_addresses').delete().eq('id', id).eq('owner_id', userId)
+      if (error) throw error
+      return res.status(200).json({ ok: true })
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // CRIPTO NEWS TRADUCCIÓN (cacheada 24h por url_hash)
+    // ════════════════════════════════════════════════════════════
+    if (action === 'crypto_news_translate') {
+      const { items } = req.body  // [{ url, title, description, source, published_at }]
+      if (!Array.isArray(items) || !items.length) {
+        return res.status(200).json({ ok: true, translated: [] })
+      }
+      const GROQ_KEY = process.env.GROQ_API_KEY
+      const GEMINI_KEY = process.env.GEMINI_API_KEY
+
+      // Hash de URL para cache
+      const hashUrl = (u) => {
+        let h = 0
+        for (let i = 0; i < u.length; i++) { h = ((h << 5) - h) + u.charCodeAt(i); h |= 0 }
+        return 'n' + Math.abs(h).toString(36)
+      }
+
+      const hashed = items.map(it => ({ ...it, url_hash: hashUrl(it.url || it.title) }))
+      const allHashes = hashed.map(it => it.url_hash)
+
+      // 1. Lee cache
+      const { data: cached } = await admin
+        .from('crypto_news_cache')
+        .select('*')
+        .in('url_hash', allHashes)
+        .gt('expires_at', new Date().toISOString())
+
+      const cachedMap = {}
+      ;(cached || []).forEach(c => { cachedMap[c.url_hash] = c })
+
+      // 2. Identifica los que faltan
+      const toTranslate = hashed.filter(it => !cachedMap[it.url_hash])
+
+      let newlyTranslated = {}
+      if (toTranslate.length && (GROQ_KEY || GEMINI_KEY)) {
+        const batch = toTranslate.map((it, idx) => ({
+          idx, title: it.title || '', desc: (it.description || '').slice(0, 300),
+        }))
+        const sys = 'Eres traductor experto de noticias cripto al español. Devuelves SOLO JSON válido. Mantén nombres propios y términos técnicos cripto en inglés cuando se usen así habitualmente.'
+        const user = `Traduce al español natural (es-MX) cada item. Para cada uno:
+- "title_es": título atractivo en español (máx 100 caracteres)
+- "summary_es": resumen breve y útil en español (máx 200 caracteres, oraciones completas)
+
+Items:
+${JSON.stringify(batch)}
+
+Devuelve JSON con esta forma exacta: { "results": [ { "idx": 0, "title_es": "...", "summary_es": "..." }, ... ] }`
+
+        async function callGroq() {
+          const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + GROQ_KEY },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b-versatile',
+              messages: [
+                { role: 'system', content: sys },
+                { role: 'user', content: user },
+              ],
+              response_format: { type: 'json_object' },
+              temperature: 0.3, max_tokens: 3000,
+            }),
+            signal: AbortSignal.timeout(25000),
+          })
+          if (!r.ok) throw new Error('Groq ' + r.status)
+          const j = await r.json()
+          return JSON.parse(j.choices[0].message.content)
+        }
+
+        try {
+          let parsed
+          if (GROQ_KEY) parsed = await callGroq()
+          // (Si Groq falla por algún motivo, dejamos fallar y los items no se traducen — siguen en inglés)
+
+          const rows = []
+          for (const r of (parsed?.results || [])) {
+            const original = toTranslate[r.idx]
+            if (!original) continue
+            const row = {
+              url_hash: original.url_hash,
+              source: original.source || null,
+              title_en: original.title,
+              desc_en: original.description,
+              title_es: r.title_es,
+              summary_es: r.summary_es,
+              published_at: original.published_at || null,
+              url: original.url || null,
+              expires_at: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+            }
+            rows.push(row)
+            newlyTranslated[original.url_hash] = row
+          }
+          if (rows.length) {
+            await admin.from('crypto_news_cache').upsert(rows, { onConflict: 'url_hash' })
+          }
+        } catch (e) {
+          console.warn('[news translate]', e.message)
+        }
+      }
+
+      // 3. Devuelve todos
+      const translated = hashed.map(it => {
+        const c = cachedMap[it.url_hash] || newlyTranslated[it.url_hash]
+        return {
+          id: it.url_hash,
+          url: it.url,
+          source: it.source,
+          published_at: it.published_at,
+          title_en: it.title,
+          desc_en: it.description,
+          title_es: c?.title_es || it.title,
+          summary_es: c?.summary_es || it.description,
+          translated: !!c,
+        }
+      })
+
+      return res.status(200).json({ ok: true, translated })
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // CRIPTO SUGERENCIA DE ESTRATEGIA (IA)
+    // ════════════════════════════════════════════════════════════
+    if (action === 'crypto_strategy_suggest') {
+      const GROQ_KEY = process.env.GROQ_API_KEY
+      if (!GROQ_KEY) return res.status(500).json({ error: 'GROQ_API_KEY no configurada' })
+
+      const { context } = req.body  // { holdings, prices_24h, preferences, recent_news }
+
+      const sys = `Eres analista cripto conservador para inversor mexicano que invierte semanalmente cantidades pequeñas ($100-$200 MXN), guarda en cold wallet, compra principalmente XRP y TRX en Bitso (porque tienen comisiones bajas para retirar a cold wallet). No promete ganancias, da contexto y sugerencias de movimientos sensatos. Responde SIEMPRE en español natural. Devuelve SOLO JSON válido.`
+      const user = `Analiza este portafolio cripto y sugiere 2-3 acciones concretas (con razón breve cada una). Considera momentum 24h, concentración del portfolio, costo de comisiones (XRP y TRX son baratos en Bitso → cold wallet, BTC/ETH son caros).
+
+Contexto:
+${JSON.stringify(context).slice(0, 4000)}
+
+Devuelve JSON exacto:
+{
+  "summary": "Resumen del estado actual del portafolio (1-2 oraciones)",
+  "actions": [
+    {
+      "type": "buy|sell|hold|rebalance|wait",
+      "symbol": "TRX",
+      "action": "Comprar más TRX",
+      "reason": "Razón breve y útil",
+      "urgency": "low|medium|high",
+      "amount_suggestion": "$100 MXN" o null
+    }
+  ],
+  "warning": "Alerta importante o null si no hay"
+}`
+
+      try {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + GROQ_KEY },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              { role: 'system', content: sys },
+              { role: 'user', content: user },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.4, max_tokens: 1200,
+          }),
+          signal: AbortSignal.timeout(30000),
+        })
+        if (!r.ok) throw new Error('Groq ' + r.status)
+        const j = await r.json()
+        const parsed = JSON.parse(j.choices[0].message.content)
+        return res.status(200).json({ ok: true, strategy: parsed, generated_at: new Date().toISOString() })
+      } catch (e) {
+        return res.status(502).json({ error: 'IA fallback: ' + e.message })
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // CRIPTO DISPERSIÓN INTELIGENTE (IA)
+    // "Tengo $200, ¿cómo los reparto?"
+    // ════════════════════════════════════════════════════════════
+    if (action === 'crypto_dispersion_suggest') {
+      const GROQ_KEY = process.env.GROQ_API_KEY
+      if (!GROQ_KEY) return res.status(500).json({ error: 'GROQ_API_KEY no configurada' })
+
+      const { amount_mxn, holdings_summary, prices_24h, preferences } = req.body
+      if (!amount_mxn || amount_mxn <= 0) return res.status(400).json({ error: 'amount_mxn requerido' })
+
+      const sys = `Eres asesor cripto para usuario mexicano que compra en Bitso y guarda en cold wallet (Ledger). Bitso solo permite ciertos pares MXN. Comisiones de retiro a cold wallet baratas: XRP, TRX, USDT-TRC20. Caras: BTC, ETH. El usuario quiere acumular DCA constante, sesgado a XRP/TRX. Responde SIEMPRE en español natural. Devuelve SOLO JSON.`
+      const user = `Tengo $${amount_mxn} MXN para invertir hoy. Sugiere distribución entre 2-4 monedas considerando:
+- Mi sesgo: XRP y TRX (baja comisión Bitso → Ledger)
+- Estado actual del portafolio: ${JSON.stringify(holdings_summary || {}).slice(0, 800)}
+- Movimientos 24h: ${JSON.stringify(prices_24h || {}).slice(0, 500)}
+- Preferencias: ${JSON.stringify(preferences || {})}
+
+Devuelve JSON exacto:
+{
+  "total_mxn": ${amount_mxn},
+  "splits": [
+    {
+      "symbol": "TRX",
+      "amount_mxn": 100,
+      "pct": 50,
+      "reason": "Razón breve",
+      "low_fee_to_cold": true
+    }
+  ],
+  "rationale": "Justificación general (1-2 oraciones)",
+  "warnings": ["Cosas a vigilar"] o null
+}
+
+La suma de amount_mxn debe igualar el total.`
+
+      try {
+        const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + GROQ_KEY },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              { role: 'system', content: sys },
+              { role: 'user', content: user },
+            ],
+            response_format: { type: 'json_object' },
+            temperature: 0.4, max_tokens: 1000,
+          }),
+          signal: AbortSignal.timeout(30000),
+        })
+        if (!r.ok) throw new Error('Groq ' + r.status)
+        const j = await r.json()
+        const parsed = JSON.parse(j.choices[0].message.content)
+        return res.status(200).json({ ok: true, dispersion: parsed })
+      } catch (e) {
+        return res.status(502).json({ error: 'IA fallback: ' + e.message })
+      }
+    }
+
     // ── CRIPTO JOURNAL ──────────────────────────────────────────
     if (action === 'journal_list') {
       const { data, error } = await admin
