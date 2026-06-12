@@ -28,16 +28,18 @@ function getAdminSupabase() {
 // ════════════════════════════════════════════════════════════════════
 
 // Normaliza monto según frecuencia → mensual
+// Multiplicadores enteros (más intuitivos para el usuario que el promedio anualizado):
+//   semanal = 4 semanas/mes · quincenal = 2 quincenas/mes
 function toMonthly(amount, frequency) {
   const a = Number(amount) || 0
   switch (frequency) {
-    case 'weekly':    return a * 4.33
-    case 'biweekly':  return a * 2.17
+    case 'weekly':    return a * 4
+    case 'biweekly':  return a * 2
     case 'monthly':   return a
     case 'bimonthly': return a / 2
     case 'quarterly': return a / 3
     case 'yearly':    return a / 12
-    case 'one_time':  return a / 12  // estima 1/12 del año
+    case 'one_time':  return a
     default:          return a
   }
 }
@@ -50,12 +52,13 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
   const customDispersion = cfg.custom_dispersion || null
 
   // Pull data SOLO de tablas AFP
-  const [incomesRes, fixedRes, debtsRes, planRes, goalsRes] = await Promise.all([
+  const [incomesRes, fixedRes, debtsRes, planRes, goalsRes, adjRes] = await Promise.all([
     admin.from('afp_incomes').select('*').eq('owner_id', userId).eq('is_active', true),
     admin.from('afp_fixed_expenses').select('*').eq('owner_id', userId).eq('is_active', true),
     admin.from('afp_debts').select('*').eq('owner_id', userId).eq('is_active', true),
     admin.from('afp_monthly_plans').select('*').eq('owner_id', userId).eq('month', monthStr),
     admin.from('afp_goals').select('*').eq('owner_id', userId).eq('is_achieved', false),
+    admin.from('afp_adjustments').select('*').eq('owner_id', userId).eq('month', monthStr).order('created_at'),
   ])
 
   const incomes = incomesRes.data || []
@@ -63,6 +66,7 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
   const debts = debtsRes.data || []
   const monthlyPlan = planRes.data || []
   const goals = goalsRes.data || []
+  const adjustments = adjRes.data || []
 
   // ── Ingresos: TODO viene de afp_incomes (declarado por usuario) ──
   const monthlyIncome = incomes.reduce((s, i) => s + toMonthly(i.amount, i.frequency), 0)
@@ -104,15 +108,36 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
     .filter(d => d.balance > 0)
     .sort((a,b) => a.balance - b.balance)
 
-  const monthlyCommitted = monthlyFixed + planTotal + monthlyMinDebt
-  const totalLiquido = 0  // En AFP v3 no calculamos liquidez de cuentas externas — opcional para futuro
-  const monthlyExpense = monthlyCommitted  // backwards compat
+  // ── Ajustes del mes (imprevistos, transferencias, ahorros extra) ──
+  const adjustmentsImpact = {
+    extra_expense: 0,
+    extra_income: 0,
+    saved: 0,
+    transferred: 0,
+  }
+  for (const a of adjustments) {
+    const amt = Number(a.amount) || 0
+    if (a.kind === 'expense') adjustmentsImpact.extra_expense += amt
+    else if (a.kind === 'income') adjustmentsImpact.extra_income += amt
+    else if (a.kind === 'save') adjustmentsImpact.saved += amt
+    else if (a.kind === 'transfer') adjustmentsImpact.transferred += amt
+  }
+  const adjustmentsNormalized = adjustments.map(a => ({
+    id: a.id, kind: a.kind, amount: Number(a.amount), reason: a.reason,
+    category: a.category, account_from: a.account_from, account_to: a.account_to,
+    notes: a.notes, created_at: a.created_at,
+  }))
+
+  const monthlyCommitted = monthlyFixed + planTotal + monthlyMinDebt + adjustmentsImpact.extra_expense
+  const effectiveIncome = monthlyIncome + adjustmentsImpact.extra_income
+  const totalLiquido = 0
+  const monthlyExpense = monthlyCommitted
 
   // ── Métricas clave ───────────────────────────────────────────
-  const disposable = monthlyIncome - monthlyCommitted
-  const savingsRate = monthlyIncome > 0 ? (disposable / monthlyIncome) * 100 : 0
-  const commitmentRatio = monthlyIncome > 0 ? (monthlyCommitted / monthlyIncome) * 100 : 0
-  const debtToIncomeRatio = monthlyIncome > 0 ? (monthlyMinDebt / monthlyIncome) * 100 : 0
+  const disposable = effectiveIncome - monthlyCommitted - adjustmentsImpact.saved
+  const savingsRate = effectiveIncome > 0 ? (disposable / effectiveIncome) * 100 : 0
+  const commitmentRatio = effectiveIncome > 0 ? (monthlyCommitted / effectiveIncome) * 100 : 0
+  const debtToIncomeRatio = effectiveIncome > 0 ? (monthlyMinDebt / effectiveIncome) * 100 : 0
 
   // ── Score 0-100 (determinístico, basado en declaraciones) ────
   // 40 pts margen ahorrable (>30% = full)
@@ -249,6 +274,7 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
     month: monthStr,
     metrics: {
       monthly_income: Math.round(monthlyIncome),
+      effective_income: Math.round(effectiveIncome),
       monthly_fixed: Math.round(monthlyFixed),
       monthly_plan: Math.round(planTotal),
       monthly_min_debt: Math.round(monthlyMinDebt),
@@ -259,6 +285,7 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
       savings_rate_pct: Number(savingsRate.toFixed(1)),
       commitment_ratio_pct: Number(commitmentRatio.toFixed(1)),
       debt_to_income_pct: Number(debtToIncomeRatio.toFixed(1)),
+      adjustments_impact: adjustmentsImpact,
     },
     score_breakdown: {
       ahorro: Math.round(scoreAhorro),
@@ -274,6 +301,7 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
     fixed_expenses: fixedNormalized,
     monthly_plan: planNormalized,
     debts: debtsNormalized,
+    adjustments: adjustmentsNormalized,
     debt_strategies: {
       avalanche: debtsByAvalanche,
       snowball:  debtsBySnowball,
@@ -595,6 +623,7 @@ export default async function handler(req, res) {
       afp_debt:    { table: 'afp_debts',           fields: ['name','kind','balance','credit_limit','min_payment','interest_rate','cut_day','due_day','notes','is_active'] },
       afp_plan:    { table: 'afp_monthly_plans',   fields: ['month','name','amount','category','planned_date','priority','is_done','notes'] },
       afp_goal:    { table: 'afp_goals',           fields: ['name','target_amount','current_amount','deadline','priority','notes','is_achieved'] },
+      afp_adjustment: { table: 'afp_adjustments',  fields: ['month','kind','amount','reason','category','account_from','account_to','notes'] },
     }
     for (const [prefix, def] of Object.entries(AFP_TABLES)) {
       if (action === `${prefix}_list`) {

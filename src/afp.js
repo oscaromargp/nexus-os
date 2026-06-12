@@ -46,6 +46,60 @@ const CATEGORIES_FIXED = ['Vivienda','Familia','Alimento','Salud','Transporte','
 const CATEGORIES_INCOME = ['Salario','Freelance','Renta inmueble','Inversiones','Otro']
 const CATEGORIES_PLAN = ['Familia','Salud','Educación','Tecnología','Ropa','Entretenimiento','Hogar','Regalo','Otro']
 
+// ── Plantillas predefinidas — el usuario sólo escoge y pone el monto ──
+const TEMPLATES_INCOME = [
+  { name: 'Sueldo principal',  category: 'salario',    frequency: 'monthly' },
+  { name: 'Sueldo secundario', category: 'salario',    frequency: 'biweekly' },
+  { name: 'Freelance',         category: 'freelance',  frequency: 'monthly' },
+  { name: 'Renta de inmueble', category: 'renta inmueble', frequency: 'monthly' },
+  { name: 'Comisiones',        category: 'salario',    frequency: 'monthly' },
+  { name: 'Inversiones',       category: 'inversiones',frequency: 'monthly' },
+  { name: 'Pensión / Apoyo',   category: 'salario',    frequency: 'monthly' },
+  { name: 'Aguinaldo / Bono',  category: 'salario',    frequency: 'yearly' },
+]
+const TEMPLATES_FIXED = [
+  { name: 'Renta / Hipoteca',  category: 'vivienda',    icon: '🏠' },
+  { name: 'Luz (CFE)',         category: 'servicios',   icon: '💡' },
+  { name: 'Agua',              category: 'servicios',   icon: '💧' },
+  { name: 'Gas',               category: 'servicios',   icon: '🔥' },
+  { name: 'Internet',          category: 'servicios',   icon: '📡' },
+  { name: 'Teléfono / Celular',category: 'servicios',   icon: '📱' },
+  { name: 'Despensa',          category: 'alimento',    icon: '🛒' },
+  { name: 'Gasolina',          category: 'transporte',  icon: '⛽' },
+  { name: 'Transporte público',category: 'transporte',  icon: '🚌' },
+  { name: 'Medicinas',         category: 'salud',       icon: '💊' },
+  { name: 'Seguro de salud',   category: 'salud',       icon: '🏥' },
+  { name: 'Seguro de auto',    category: 'transporte',  icon: '🚗' },
+  { name: 'Colegiatura',       category: 'educación',   icon: '🎓' },
+  { name: 'Pensión hijos',     category: 'familia',     icon: '👶' },
+  { name: 'Mantenimiento (mensual)', category: 'vivienda', icon: '🔧' },
+  { name: 'Estacionamiento',   category: 'transporte',  icon: '🅿️' },
+  { name: 'Gym / Deporte',     category: 'salud',       icon: '💪' },
+  { name: 'Netflix',           category: 'suscripciones', icon: '📺' },
+  { name: 'Spotify',           category: 'suscripciones', icon: '🎧' },
+  { name: 'iCloud / Drive',    category: 'suscripciones', icon: '☁️' },
+  { name: 'Mascotas (alimento/vet)', category: 'familia', icon: '🐕' },
+  { name: 'Donaciones',        category: 'otro',        icon: '💝' },
+]
+const TEMPLATES_PLAN = [
+  { name: 'Regalo cumpleaños', category: 'regalo',        icon: '🎁' },
+  { name: 'Consulta médica',   category: 'salud',         icon: '🩺' },
+  { name: 'Curso / Libro',     category: 'educación',     icon: '📚' },
+  { name: 'Salida especial',   category: 'entretenimiento',icon: '🍽️' },
+  { name: 'Viaje corto',       category: 'entretenimiento',icon: '✈️' },
+  { name: 'Reparación auto',   category: 'familia',       icon: '🛠️' },
+  { name: 'Reparación casa',   category: 'hogar',         icon: '🔨' },
+  { name: 'Ropa / Calzado',    category: 'ropa',          icon: '👕' },
+  { name: 'Electrónico',       category: 'tecnología',    icon: '💻' },
+  { name: 'Tenida fiesta',     category: 'entretenimiento',icon: '🎉' },
+]
+const ADJUSTMENT_KINDS = [
+  { id: 'expense',  label: 'Gasto imprevisto', icon: '💸', color: '#ef4444', desc: 'Algo no planificado que tuviste que pagar' },
+  { id: 'income',   label: 'Ingreso extra',    icon: '💰', color: '#22c55e', desc: 'Dinero que llegó fuera del plan' },
+  { id: 'transfer', label: 'Movimiento entre cuentas', icon: '🔄', color: '#94a3b8', desc: 'Pasaste dinero de una cuenta a otra' },
+  { id: 'save',     label: 'Ahorro extra',     icon: '🌱', color: '#34d399', desc: 'Apartaste para metas / fondo emergencia' },
+]
+
 const STRATEGIES = [
   { id: '50_30_20',     name: '50/30/20 clásica', desc: '50% necesidades, 20% ahorro, 30% lifestyle.' },
   { id: '70_20_10',     name: '70/20/10 conservadora', desc: '70% necesidades, 20% ahorro, 10% lifestyle.' },
@@ -162,7 +216,8 @@ export async function renderAFP() {
           <p style="color:#94a3b8;font-size:13px;margin:0;">Módulo 100% teórico — basado en lo que TÚ declaras. No mezcla con otros módulos.</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button id="afp-pdf-btn" style="padding:9px 14px;background:linear-gradient(135deg,#22d3ee,#06b6d4);border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;font-size:13px;">📄 Exportar plan PDF</button>
+          <button id="afp-adjust-btn" style="padding:9px 14px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.3);color:#fb923c;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">⚡ Reajustar</button>
+          <button id="afp-pdf-btn" style="padding:9px 14px;background:linear-gradient(135deg,#22d3ee,#06b6d4);border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;font-size:13px;">📄 PDF para el refri</button>
           <button id="afp-config-btn" style="padding:9px 14px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">⚙️ Mi configuración</button>
         </div>
       </div>
@@ -316,125 +371,476 @@ export async function renderAFP() {
   root.innerHTML = html
   document.getElementById('afp-pdf-btn')?.addEventListener('click', () => _exportPDF(data))
   document.getElementById('afp-config-btn')?.addEventListener('click', () => _openConfigModal())
+  document.getElementById('afp-adjust-btn')?.addEventListener('click', () => _openAdjustmentModal(data))
 }
 
-// ── PDF EXPORT ────────────────────────────────────────────────
+// ── PDF EXPORT v4 — rediseñado con secciones, tablas y gráficas ──
 async function _exportPDF(d) {
   let jsPDF
   try {
     const mod = await import('jspdf')
     jsPDF = mod.jsPDF || mod.default
   } catch (e) { alert('No pude cargar jsPDF: ' + e.message); return }
+
   const doc = new jsPDF({ unit: 'pt', format: 'letter' })
   const W = doc.internal.pageSize.getWidth()
-  let y = 50
-  const M = 48
+  const H = doc.internal.pageSize.getHeight()
+  const M = 40                      // margen
   const monthLabel = new Date(d.month + '-01').toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
 
-  doc.setFont('helvetica','bold'); doc.setFontSize(22); doc.setTextColor(20,20,30)
-  doc.text('Plan Financiero Personal', M, y); y += 8
-  doc.setFont('helvetica','normal'); doc.setFontSize(11); doc.setTextColor(100,100,110)
-  doc.text(monthLabel.toUpperCase(), M, y + 14); y += 30
-
-  doc.setDrawColor(220,220,230); doc.line(M, y, W - M, y); y += 18
-
-  doc.setFontSize(13); doc.setTextColor(50,50,60); doc.setFont('helvetica','bold')
-  doc.text(`Score: ${d.score}/100 — ${d.health.label}`, M, y); y += 20
-
-  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(20,20,30)
-  doc.text('Ingresos del mes', M, y); y += 14
-  doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(70,70,80)
-  for (const i of d.incomes) {
-    doc.text(`• ${i.name}: $${i.amount.toLocaleString('es-MX')} ${FREQ_LABEL[i.frequency] || i.frequency} (≈ $${Math.round(i.monthly).toLocaleString('es-MX')}/mes)`, M, y); y += 13
-  }
-  doc.setFont('helvetica','bold'); doc.text(`  TOTAL: $${d.metrics.monthly_income.toLocaleString('es-MX')}/mes`, M, y); y += 18
-
-  if (d.fixed_expenses.length) {
-    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(20,20,30)
-    doc.text('Gastos fijos', M, y); y += 14
-    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(70,70,80)
-    for (const f of d.fixed_expenses) {
-      if (y > 720) { doc.addPage(); y = 50 }
-      const due = f.due_day ? ` (día ${f.due_day})` : ''
-      doc.text(`• ${f.name}${due}: $${f.amount.toLocaleString('es-MX')} ${FREQ_LABEL[f.frequency] || f.frequency} (≈ $${Math.round(f.monthly).toLocaleString('es-MX')}/mes)`, M, y); y += 13
-    }
-    doc.setFont('helvetica','bold'); doc.text(`  TOTAL: $${d.metrics.monthly_fixed.toLocaleString('es-MX')}/mes`, M, y); y += 18
+  // Paleta de colores (RGB)
+  const C = {
+    primary:  [34, 211, 238],   // cyan
+    accent:   [167, 139, 250],  // violet
+    income:   [34, 197, 94],    // green
+    expense:  [251, 146, 60],   // orange
+    debt:     [239, 68, 68],    // red
+    plan:     [167, 139, 250],  // violet
+    ok:       [34, 197, 94],
+    bad:      [239, 68, 68],
+    text:     [30, 41, 59],
+    muted:    [100, 116, 139],
+    light:    [241, 245, 249],
+    bg:       [255, 255, 255],
   }
 
-  if (d.monthly_plan.length) {
-    if (y > 700) { doc.addPage(); y = 50 }
-    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(20,20,30)
-    doc.text(`Plan puntual de ${monthLabel}`, M, y); y += 14
-    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(70,70,80)
-    for (const p of d.monthly_plan) {
-      if (y > 720) { doc.addPage(); y = 50 }
-      const date = p.planned_date ? ` (${p.planned_date})` : ''
-      doc.text(`• ${p.name}${date}: $${p.amount.toLocaleString('es-MX')}`, M, y); y += 13
-    }
-    doc.setFont('helvetica','bold'); doc.text(`  TOTAL: $${d.metrics.monthly_plan.toLocaleString('es-MX')}`, M, y); y += 18
+  const setColor = (rgb) => doc.setTextColor(rgb[0], rgb[1], rgb[2])
+  const setFill  = (rgb) => doc.setFillColor(rgb[0], rgb[1], rgb[2])
+  const setDraw  = (rgb) => doc.setDrawColor(rgb[0], rgb[1], rgb[2])
+
+  // ════════════════════════════════════════════
+  // PORTADA: header con banda de color + branding
+  // ════════════════════════════════════════════
+  setFill(C.text); doc.rect(0, 0, W, 95, 'F')
+  // Logo / texto Nexus
+  setColor([255, 255, 255]); doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
+  doc.text('NEXUS OS', M, 28)
+  setColor(C.primary); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+  doc.text('PLAN FINANCIERO PERSONAL', M, 42)
+
+  setColor([255, 255, 255]); doc.setFont('helvetica', 'bold'); doc.setFontSize(28)
+  doc.text('Mi plan del mes', M, 75)
+
+  // Fecha en lado derecho
+  doc.setFontSize(11); doc.setFont('helvetica', 'normal'); setColor(C.primary)
+  doc.text(monthLabel.toUpperCase(), W - M, 28, { align: 'right' })
+  setColor([255, 255, 255]); doc.setFontSize(8)
+  doc.text('Generado: ' + new Date().toLocaleDateString('es-MX'), W - M, 42, { align: 'right' })
+
+  let y = 130
+
+  // ════════════════════════════════════════════
+  // SCORE BLOCK
+  // ════════════════════════════════════════════
+  const scoreColor = d.score >= 75 ? C.ok : d.score >= 55 ? [132, 204, 22] : d.score >= 35 ? [251, 191, 36] : C.bad
+  setFill(C.light); doc.rect(M, y, W - 2*M, 80, 'F')
+  // Círculo del score
+  setFill(scoreColor); doc.circle(M + 50, y + 40, 32, 'F')
+  setColor([255, 255, 255]); doc.setFont('helvetica', 'bold'); doc.setFontSize(28)
+  doc.text(String(d.score), M + 50, y + 50, { align: 'center' })
+
+  setColor(C.text); doc.setFont('helvetica', 'bold'); doc.setFontSize(18)
+  doc.text(d.health.label, M + 100, y + 32)
+  setColor(C.muted); doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
+  doc.text('Salud financiera de tu plan', M + 100, y + 48)
+  doc.text(`Ahorro mensual: ${d.metrics.savings_rate_pct}% · Compromiso: ${d.metrics.commitment_ratio_pct}%`, M + 100, y + 62)
+
+  y += 100
+
+  // ════════════════════════════════════════════
+  // GRÁFICO DE BARRAS — Ingresos vs Egresos
+  // ════════════════════════════════════════════
+  const sectionTitle = (title, color) => {
+    setFill(color); doc.rect(M, y, 4, 16, 'F')
+    setColor(C.text); doc.setFont('helvetica', 'bold'); doc.setFontSize(13)
+    doc.text(title, M + 12, y + 12); y += 24
   }
 
-  if (d.debts.length) {
-    if (y > 680) { doc.addPage(); y = 50 }
-    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(20,20,30)
-    doc.text('Deudas — orden de pago sugerido (Avalancha)', M, y); y += 14
-    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(70,70,80)
-    let idx = 1
-    for (const dbt of d.debt_strategies.avalanche) {
-      if (y > 720) { doc.addPage(); y = 50 }
-      doc.text(`${idx++}. ${dbt.name}: saldo $${dbt.balance.toLocaleString('es-MX')} · tasa ${dbt.interest_rate}% · mín $${dbt.min_payment.toLocaleString('es-MX')}/mes`, M, y); y += 13
-    }
-    y += 8
-  }
+  sectionTitle('Tu mes en un vistazo', C.primary)
 
-  if (y > 600) { doc.addPage(); y = 50 }
-  doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(20,20,30)
-  doc.text('Resumen', M, y); y += 14
-  doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(70,70,80)
-  doc.text(`• Ingresos mensuales: $${d.metrics.monthly_income.toLocaleString('es-MX')}`, M, y); y += 13
-  doc.text(`• Compromisos fijos + plan + mínimos deuda: $${d.metrics.monthly_committed.toLocaleString('es-MX')}`, M, y); y += 13
-  doc.setFont('helvetica','bold')
-  doc.setTextColor(d.metrics.monthly_disposable >= 0 ? 34 : 200, d.metrics.monthly_disposable >= 0 ? 139 : 30, d.metrics.monthly_disposable >= 0 ? 34 : 30)
-  doc.text(`• Margen libre: $${d.metrics.monthly_disposable.toLocaleString('es-MX')}/mes ${d.metrics.monthly_disposable >= 0 ? '✓' : '⚠ DÉFICIT'}`, M, y); y += 16
-  doc.setTextColor(70,70,80); doc.setFont('helvetica','normal')
+  const income = d.metrics.effective_income || d.metrics.monthly_income
+  const fixed = d.metrics.monthly_fixed
+  const plan = d.metrics.monthly_plan
+  const debt = d.metrics.monthly_min_debt
+  const dispMargin = d.metrics.monthly_disposable
 
-  if (d.metrics.monthly_disposable > 0 && d.strategy) {
-    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(20,20,30)
-    doc.text(`Dispersión sugerida del margen libre (${d.strategy.name})`, M, y); y += 14
-    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(70,70,80)
-    const dispLabels = { necesidades:'Refuerzo necesidades', ahorro:'Ahorro / metas', lifestyle:'Lifestyle', profit:'Profit' }
-    for (const [k,v] of Object.entries(d.strategy.dispersion)) {
-      if (v <= 0) continue
-      const proportion = Math.round(v * d.metrics.monthly_disposable / d.metrics.monthly_income)
-      doc.text(`• ${dispLabels[k] || k}: $${proportion.toLocaleString('es-MX')} (${d.strategy.percentages[k] || 0}% del ingreso)`, M, y); y += 13
-    }
-    y += 10
-  }
+  const maxVal = Math.max(income, fixed + plan + debt + Math.max(0, dispMargin))
+  const barH = 28
+  const barWidth = W - 2*M - 100  // espacio para etiquetas
+  const labelX = M
+  const barX = M + 100
 
-  if (d.goals.length) {
-    if (y > 680) { doc.addPage(); y = 50 }
-    doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(20,20,30)
-    doc.text('Metas', M, y); y += 14
-    doc.setFontSize(10); doc.setFont('helvetica','normal'); doc.setTextColor(70,70,80)
-    for (const g of d.goals) {
-      if (y > 720) { doc.addPage(); y = 50 }
-      doc.setFont('helvetica','bold'); doc.text(`• ${g.name}`, M, y); y += 13
-      doc.setFont('helvetica','normal')
-      doc.text(`  $${g.target_amount.toLocaleString('es-MX')} en ${g.months_left} meses → necesitas $${g.monthly_needed.toLocaleString('es-MX')}/mes`, M, y); y += 13
-      if (!g.achievable && g.extra_job) {
-        doc.setTextColor(180,30,30); doc.text(`  ⚠ Te faltan $${g.gap_monthly.toLocaleString('es-MX')}/mes. Opciones:`, M, y); y += 13
-        for (const o of g.extra_job.options) {
-          doc.text(`    – ${o.hours_per_week}h/sem → cobra ≥ $${o.hourly_rate.toLocaleString('es-MX')}/hora`, M, y); y += 12
+  const drawBar = (label, segments, totalLabel) => {
+    setColor(C.text); doc.setFont('helvetica', 'normal'); doc.setFontSize(10)
+    doc.text(label, labelX, y + 18)
+    let cx = barX
+    for (const seg of segments) {
+      const segW = maxVal > 0 ? (seg.value / maxVal) * barWidth : 0
+      if (segW > 0) {
+        setFill(seg.color); doc.rect(cx, y, segW, barH, 'F')
+        if (segW > 35) {
+          setColor([255, 255, 255]); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
+          doc.text('$' + Math.round(seg.value).toLocaleString('es-MX'), cx + segW / 2, y + 18, { align: 'center' })
         }
-        doc.setTextColor(70,70,80)
+        cx += segW
       }
-      y += 4
+    }
+    setColor(C.muted); doc.setFont('helvetica', 'bold'); doc.setFontSize(10)
+    doc.text(totalLabel, W - M, y + 18, { align: 'right' })
+    y += barH + 6
+  }
+
+  drawBar('INGRESOS', [{ value: income, color: C.income }], '$' + income.toLocaleString('es-MX'))
+  const segs = []
+  if (fixed > 0) segs.push({ value: fixed, color: C.expense })
+  if (plan > 0)  segs.push({ value: plan,  color: C.plan })
+  if (debt > 0)  segs.push({ value: debt,  color: C.debt })
+  drawBar('COMPROMISOS', segs, '$' + (fixed + plan + debt).toLocaleString('es-MX'))
+
+  if (dispMargin >= 0) {
+    drawBar('LIBRE', [{ value: dispMargin, color: C.ok }], '$' + dispMargin.toLocaleString('es-MX') + ' ✓')
+  } else {
+    drawBar('DÉFICIT', [{ value: Math.abs(dispMargin), color: C.bad }], '-$' + Math.abs(dispMargin).toLocaleString('es-MX') + ' ⚠')
+  }
+
+  // Leyenda
+  y += 4
+  setColor(C.muted); doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
+  const legend = [
+    { col: C.income,  label: 'Ingresos' },
+    { col: C.expense, label: 'Fijos' },
+    { col: C.plan,    label: 'Plan mes' },
+    { col: C.debt,    label: 'Mín deudas' },
+    { col: C.ok,      label: 'Libre' },
+  ]
+  let lx = M + 100
+  for (const l of legend) {
+    setFill(l.col); doc.rect(lx, y + 3, 8, 8, 'F')
+    setColor(C.muted)
+    doc.text(l.label, lx + 12, y + 10)
+    lx += 70
+  }
+  y += 28
+
+  // ════════════════════════════════════════════
+  // TABLA — Ingresos
+  // ════════════════════════════════════════════
+  const drawTable = (rows, headers, widths) => {
+    if (y > H - 80) { doc.addPage(); y = 50 }
+    // Header
+    setFill(C.text); doc.rect(M, y, W - 2*M, 22, 'F')
+    setColor([255, 255, 255]); doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+    let cx = M + 8
+    for (let i = 0; i < headers.length; i++) {
+      doc.text(headers[i], cx, y + 14, headers[i].align || {})
+      cx += widths[i]
+    }
+    y += 22
+    // Rows
+    let alt = false
+    for (const r of rows) {
+      if (y > H - 50) {
+        doc.addPage(); y = 50
+        setFill(C.text); doc.rect(M, y, W - 2*M, 22, 'F')
+        setColor([255, 255, 255]); doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+        let cxh = M + 8
+        for (let i = 0; i < headers.length; i++) { doc.text(headers[i], cxh, y + 14); cxh += widths[i] }
+        y += 22
+      }
+      if (alt) { setFill([248, 250, 252]); doc.rect(M, y, W - 2*M, 18, 'F') }
+      alt = !alt
+      setColor(C.text); doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
+      let cx = M + 8
+      for (let i = 0; i < r.length; i++) {
+        const cell = r[i]
+        if (typeof cell === 'object') {
+          if (cell.color) setColor(cell.color); else setColor(C.text)
+          if (cell.bold) doc.setFont('helvetica', 'bold'); else doc.setFont('helvetica', 'normal')
+          doc.text(String(cell.text), cx, y + 13, cell.opts || {})
+        } else {
+          doc.text(String(cell), cx, y + 13)
+        }
+        cx += widths[i]
+      }
+      y += 18
+    }
+    y += 6
+  }
+
+  // INGRESOS
+  if (d.incomes.length) {
+    sectionTitle('Mis ingresos', C.income)
+    const rows = d.incomes.map(i => [
+      i.name, FREQ_LABEL[i.frequency] || i.frequency,
+      { text: '$' + Math.round(i.amount).toLocaleString('es-MX'), color: C.muted, opts: { align: 'right' } },
+      { text: '$' + Math.round(i.monthly).toLocaleString('es-MX') + ' /mes', color: C.income, bold: true, opts: { align: 'right' } },
+    ])
+    rows.push([
+      { text: 'TOTAL', bold: true, color: C.text },
+      '',
+      '',
+      { text: '$' + d.metrics.monthly_income.toLocaleString('es-MX') + ' /mes', color: C.income, bold: true, opts: { align: 'right' } },
+    ])
+    const widths = [220, 90, 100, W - 2*M - 410]
+    drawTable(rows, ['CONCEPTO', 'FRECUENCIA', 'MONTO', 'MENSUAL'], widths)
+  }
+
+  // GASTOS FIJOS
+  if (d.fixed_expenses.length) {
+    sectionTitle('Gastos fijos', C.expense)
+    const rows = d.fixed_expenses.map(f => [
+      f.name + (f.due_day ? ` · día ${f.due_day}` : ''),
+      f.category || '—',
+      { text: '$' + Math.round(f.amount).toLocaleString('es-MX'), color: C.muted, opts: { align: 'right' } },
+      { text: '$' + Math.round(f.monthly).toLocaleString('es-MX') + ' /mes', color: C.expense, bold: true, opts: { align: 'right' } },
+    ])
+    rows.push([
+      { text: 'TOTAL', bold: true, color: C.text }, '', '',
+      { text: '$' + d.metrics.monthly_fixed.toLocaleString('es-MX') + ' /mes', color: C.expense, bold: true, opts: { align: 'right' } },
+    ])
+    const widths = [240, 90, 100, W - 2*M - 430]
+    drawTable(rows, ['CONCEPTO', 'CATEGORÍA', 'MONTO', 'MENSUAL'], widths)
+  }
+
+  // PLAN DEL MES
+  if (d.monthly_plan.length) {
+    sectionTitle('Plan puntual de ' + monthLabel, C.plan)
+    const rows = d.monthly_plan.map(p => [
+      p.name,
+      p.planned_date || '—',
+      p.category || '—',
+      { text: '$' + Math.round(p.amount).toLocaleString('es-MX'), color: C.plan, bold: true, opts: { align: 'right' } },
+    ])
+    rows.push([
+      { text: 'TOTAL', bold: true, color: C.text }, '', '',
+      { text: '$' + d.metrics.monthly_plan.toLocaleString('es-MX'), color: C.plan, bold: true, opts: { align: 'right' } },
+    ])
+    const widths = [220, 90, 110, W - 2*M - 420]
+    drawTable(rows, ['CONCEPTO', 'FECHA', 'CATEGORÍA', 'MONTO'], widths)
+  }
+
+  // DEUDAS
+  if (d.debts.length) {
+    sectionTitle('Mis deudas — pagar primero las más caras', C.debt)
+    let idx = 1
+    const rows = d.debt_strategies.avalanche.map(dbt => [
+      `${idx++}. ${dbt.name}`,
+      dbt.kind === 'credit_card' ? 'Tarjeta' : dbt.kind === 'loan' ? 'Préstamo' : dbt.kind,
+      { text: dbt.interest_rate + '% ', color: C.debt, opts: { align: 'right' } },
+      { text: '$' + Math.round(dbt.balance).toLocaleString('es-MX'), color: C.text, bold: true, opts: { align: 'right' } },
+      { text: '$' + Math.round(dbt.min_payment).toLocaleString('es-MX'), color: C.muted, opts: { align: 'right' } },
+    ])
+    rows.push([
+      { text: 'TOTAL', bold: true, color: C.text }, '', '',
+      { text: '$' + d.metrics.total_debt_balance.toLocaleString('es-MX'), color: C.debt, bold: true, opts: { align: 'right' } },
+      { text: '$' + d.metrics.monthly_min_debt.toLocaleString('es-MX') + ' /mes', color: C.debt, bold: true, opts: { align: 'right' } },
+    ])
+    const widths = [180, 70, 70, 110, W - 2*M - 430]
+    drawTable(rows, ['DEUDA', 'TIPO', 'TASA', 'SALDO', 'MÍN /MES'], widths)
+  }
+
+  // AJUSTES DEL MES
+  if (d.adjustments && d.adjustments.length) {
+    sectionTitle('Reajustes del mes (imprevistos)', C.accent)
+    const adjLabels = { expense: '💸 Gasto', income: '💰 Ingreso', transfer: '🔄 Transfer', save: '🌱 Ahorro' }
+    const rows = d.adjustments.map(a => [
+      adjLabels[a.kind] || a.kind,
+      a.reason,
+      a.category || '—',
+      { text: (a.kind === 'expense' ? '-$' : '+$') + Math.round(a.amount).toLocaleString('es-MX'),
+        color: a.kind === 'expense' ? C.debt : C.income, bold: true, opts: { align: 'right' } },
+    ])
+    const widths = [90, 250, 90, W - 2*M - 446]
+    drawTable(rows, ['TIPO', 'MOTIVO', 'CATEGORÍA', 'MONTO'], widths)
+  }
+
+  // DISPERSIÓN
+  if (dispMargin > 0 && d.strategy) {
+    if (y > H - 130) { doc.addPage(); y = 50 }
+    sectionTitle('Dispersión sugerida del libre — ' + (d.strategy.name || ''), C.primary)
+    const dispLabels = { necesidades:'Refuerzo necesidades', ahorro:'Ahorro / metas', lifestyle:'Lifestyle', profit:'Profit' }
+    const dispColors = { necesidades: C.expense, ahorro: C.income, lifestyle: C.accent, profit: [251, 191, 36] }
+
+    // Tarjetas horizontales
+    const entries = Object.entries(d.strategy.dispersion).filter(([k,v]) => v > 0)
+    const cardW = (W - 2*M - 10 * (entries.length - 1)) / Math.max(1, entries.length)
+    let cx = M
+    for (const [k, v] of entries) {
+      const proportion = Math.round(v * dispMargin / income)
+      const col = dispColors[k] || C.muted
+      setFill([col[0]/255*200 + 55*0.85, col[1]/255*200 + 55*0.85, col[2]/255*200 + 55*0.85].map(n => Math.min(255, n)))
+      doc.rect(cx, y, cardW, 60, 'F')
+      setFill(col); doc.rect(cx, y, 4, 60, 'F')
+      setColor(col); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
+      doc.text((dispLabels[k] || k).toUpperCase(), cx + 12, y + 16)
+      setColor(C.text); doc.setFontSize(22); doc.setFont('helvetica', 'bold')
+      doc.text('$' + proportion.toLocaleString('es-MX'), cx + 12, y + 40)
+      setColor(C.muted); doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
+      doc.text((d.strategy.percentages[k] || 0) + '% del ingreso', cx + 12, y + 53)
+      cx += cardW + 10
+    }
+    y += 75
+  }
+
+  // METAS
+  if (d.goals && d.goals.length) {
+    if (y > H - 120) { doc.addPage(); y = 50 }
+    sectionTitle('Mis metas', C.income)
+    for (const g of d.goals) {
+      if (y > H - 70) { doc.addPage(); y = 50 }
+      setFill(g.achievable ? [240, 253, 244] : [254, 242, 242])
+      doc.rect(M, y, W - 2*M, 50, 'F')
+      setFill(g.achievable ? C.ok : C.bad); doc.rect(M, y, 4, 50, 'F')
+      setColor(C.text); doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
+      doc.text(g.name, M + 12, y + 16)
+      setColor(C.muted); doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
+      doc.text(`Meta: $${g.target_amount.toLocaleString('es-MX')} · ${g.months_left} meses restantes · Necesitas $${g.monthly_needed.toLocaleString('es-MX')}/mes`, M + 12, y + 32)
+      setColor(g.achievable ? C.ok : C.bad); doc.setFont('helvetica', 'bold'); doc.setFontSize(10)
+      doc.text(g.achievable ? '✓ Alcanzable' : `⚠ Te faltan $${g.gap_monthly.toLocaleString('es-MX')}/mes`, W - M - 8, y + 16, { align: 'right' })
+      if (!g.achievable && g.extra_job) {
+        setColor(C.muted); doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
+        const opt = g.extra_job.options[1] || g.extra_job.options[0]
+        doc.text(`Opción: ${opt.hours_per_week}h/sem a $${opt.hourly_rate.toLocaleString('es-MX')}/hora`, W - M - 8, y + 32, { align: 'right' })
+      }
+      y += 56
     }
   }
 
-  doc.setFontSize(8); doc.setTextColor(150,150,160)
-  doc.text(`Nexus OS · Plan teórico — los números no afectan tus cuentas reales. · ${new Date().toISOString().split('T')[0]}`, M, 760)
+  // FOOTER en todas las páginas
+  const pageCount = doc.internal.getNumberOfPages()
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p)
+    setFill(C.text); doc.rect(0, H - 28, W, 28, 'F')
+    setColor([255, 255, 255]); doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
+    doc.text('Nexus OS · Plan teórico — los números no afectan tus cuentas reales.', M, H - 12)
+    setColor(C.primary)
+    doc.text(`${monthLabel.toUpperCase()} · Pag. ${p}/${pageCount}`, W - M, H - 12, { align: 'right' })
+  }
+
   doc.save(`afp-plan-${d.month}.pdf`)
+}
+
+// ── Modal de reajuste ────────────────────────────────────────
+function _openAdjustmentModal(data) {
+  const monthStr = data.month
+  const overlay = document.createElement('div')
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:8px;overflow-y:auto;`
+  const modal = document.createElement('div')
+  modal.style.cssText = `background:#0f1419;border:1px solid #1f2937;border-radius:16px;padding:18px;max-width:680px;width:100%;color:#e5e7eb;max-height:95vh;overflow-y:auto;`
+
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div>
+        <h3 style="margin:0;font-size:18px;font-weight:800;">⚡ Reajustar plan</h3>
+        <p style="margin:4px 0 0;font-size:12px;color:#94a3b8;">Pasó algo no planeado este mes. Regístralo aquí — el plan se reajusta al instante.</p>
+      </div>
+      <button id="adj-close" style="background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;line-height:1;">×</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:14px;">
+      ${ADJUSTMENT_KINDS.map(k => `
+        <button data-adj-kind="${k.id}" style="padding:12px;background:rgba(${_hexRgb(k.color)},0.05);border:1px solid rgba(${_hexRgb(k.color)},0.2);border-radius:10px;cursor:pointer;text-align:left;color:#e5e7eb;">
+          <div style="font-size:20px;margin-bottom:4px;">${k.icon}</div>
+          <div style="font-size:13px;font-weight:700;color:${k.color};">${k.label}</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${k.desc}</div>
+        </button>
+      `).join('')}
+    </div>
+
+    <div id="adj-form" style="display:none;">
+      <input type="hidden" id="adj-kind" />
+      <input type="hidden" id="adj-month" value="${monthStr}" />
+      <div style="display:grid;grid-template-columns:1fr 130px;gap:8px;margin-bottom:8px;">
+        <input id="adj-reason" type="text" placeholder="¿Qué pasó? Ej: 'Llanta ponchada'" style="padding:9px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;"/>
+        <input id="adj-amount" type="number" step="0.01" placeholder="Monto MXN" style="padding:9px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;font-weight:700;"/>
+      </div>
+      <input id="adj-category" type="text" placeholder="Categoría (opcional, ej: transporte)" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;margin-bottom:8px;"/>
+      <textarea id="adj-notes" placeholder="Notas adicionales (opcional)" rows="2" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;resize:vertical;margin-bottom:10px;"></textarea>
+      <button id="adj-save" style="width:100%;padding:11px;background:linear-gradient(135deg,#22d3ee,#06b6d4);border:none;color:#000;font-weight:800;border-radius:8px;cursor:pointer;font-size:14px;">💾 Registrar reajuste</button>
+    </div>
+
+    <!-- Lista de ajustes ya registrados -->
+    <div style="margin-top:18px;">
+      <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px;">Reajustes ya registrados en ${new Date(monthStr + '-01').toLocaleDateString('es-MX', { month: 'long' })}</div>
+      <div id="adj-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+  `
+
+  document.body.appendChild(overlay)
+  overlay.appendChild(modal)
+  const cleanup = () => { document.body.removeChild(overlay); renderAFP() }
+  modal.querySelector('#adj-close').addEventListener('click', cleanup)
+  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+
+  // Pick kind
+  modal.querySelectorAll('[data-adj-kind]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.adjKind
+      modal.querySelector('#adj-kind').value = kind
+      modal.querySelectorAll('[data-adj-kind]').forEach(b => b.style.outline = '')
+      btn.style.outline = '2px solid ' + (ADJUSTMENT_KINDS.find(k => k.id === kind)?.color || '#22d3ee')
+      modal.querySelector('#adj-form').style.display = 'block'
+      modal.querySelector('#adj-reason').focus()
+    })
+  })
+
+  const renderList = async () => {
+    const list = modal.querySelector('#adj-list')
+    list.innerHTML = '<div style="color:#6b7280;font-size:12px;padding:6px;">⏳</div>'
+    try {
+      const r = await _api('afp_adjustment_list', { month: monthStr })
+      const items = r.items || []
+      if (!items.length) {
+        list.innerHTML = '<div style="color:#6b7280;font-size:12px;padding:6px;text-align:center;background:rgba(255,255,255,0.02);border-radius:6px;">Sin reajustes este mes.</div>'
+        return
+      }
+      list.innerHTML = items.map(a => {
+        const k = ADJUSTMENT_KINDS.find(x => x.id === a.kind) || ADJUSTMENT_KINDS[0]
+        return `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-left:3px solid ${k.color};border-radius:6px;font-size:12px;">
+            <span style="font-size:16px;">${k.icon}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="color:#e5e7eb;font-weight:600;">${_esc(a.reason)}</div>
+              <div style="color:#6b7280;font-size:10px;">${k.label}${a.category ? ' · ' + _esc(a.category) : ''} · ${new Date(a.created_at).toLocaleDateString('es-MX')}</div>
+            </div>
+            <span style="color:${k.color};font-weight:800;font-size:13px;">${a.kind === 'expense' ? '-' : '+'}$${Math.round(a.amount).toLocaleString('es-MX')}</span>
+            <button data-del-adj="${a.id}" style="background:transparent;border:none;color:#6b7280;cursor:pointer;font-size:14px;padding:2px;">🗑</button>
+          </div>
+        `
+      }).join('')
+      list.querySelectorAll('[data-del-adj]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('¿Eliminar este reajuste?')) return
+        try { await _api('afp_adjustment_delete', { id: b.dataset.delAdj }); renderList() }
+        catch (e) { alert('⚠ ' + e.message) }
+      }))
+    } catch (e) {
+      list.innerHTML = `<div style="color:#f87171;font-size:12px;">⚠ ${e.message}</div>`
+    }
+  }
+
+  modal.querySelector('#adj-save').addEventListener('click', async () => {
+    const kind = modal.querySelector('#adj-kind').value
+    const reason = modal.querySelector('#adj-reason').value.trim()
+    const amount = Number(modal.querySelector('#adj-amount').value)
+    const category = modal.querySelector('#adj-category').value.trim() || null
+    const notes = modal.querySelector('#adj-notes').value.trim() || null
+    if (!kind) { alert('Elige un tipo'); return }
+    if (!reason) { alert('Escribe el motivo'); return }
+    if (!amount || amount <= 0) { alert('Pon un monto válido'); return }
+    try {
+      await _api('afp_adjustment_add', { month: monthStr, kind, amount, reason, category, notes })
+      // Limpia form
+      modal.querySelector('#adj-reason').value = ''
+      modal.querySelector('#adj-amount').value = ''
+      modal.querySelector('#adj-category').value = ''
+      modal.querySelector('#adj-notes').value = ''
+      modal.querySelector('#adj-form').style.display = 'none'
+      modal.querySelectorAll('[data-adj-kind]').forEach(b => b.style.outline = '')
+      renderList()
+    } catch (e) { alert('⚠ ' + e.message) }
+  })
+
+  renderList()
 }
 
 // ── CONFIG MODAL (5 secciones con tabs) ───────────────────────
@@ -578,6 +984,10 @@ async function _renderConfigTabContent(tabId, container) {
 function _formIncomes() {
   return `
     <div style="background:rgba(34,197,94,0.04);border:1px solid rgba(34,197,94,0.2);border-radius:10px;padding:12px;">
+      <div style="font-size:11px;color:#86efac;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px;">⚡ Plantillas rápidas — clic para usar</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">
+        ${TEMPLATES_INCOME.map(t => `<button data-tpl-income='${JSON.stringify(t).replace(/'/g, "&#39;")}' style="padding:4px 9px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);color:#86efac;border-radius:14px;font-size:11px;cursor:pointer;font-weight:600;">+ ${t.name}</button>`).join('')}
+      </div>
       <div style="font-size:11px;color:#86efac;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px;">+ Agregar ingreso</div>
       <div style="display:grid;grid-template-columns:1fr 110px 130px;gap:6px;margin-bottom:6px;">
         <input data-f="name" placeholder="Ej: Sueldo principal" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;"/>
@@ -603,6 +1013,10 @@ function _formIncomes() {
 function _formFixed() {
   return `
     <div style="background:rgba(251,146,60,0.04);border:1px solid rgba(251,146,60,0.2);border-radius:10px;padding:12px;">
+      <div style="font-size:11px;color:#fb923c;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px;">⚡ Plantillas rápidas — clic para usar (luego pon monto)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;max-height:140px;overflow-y:auto;">
+        ${TEMPLATES_FIXED.map(t => `<button data-tpl-fixed='${JSON.stringify(t).replace(/'/g, "&#39;")}' style="padding:4px 9px;background:rgba(251,146,60,0.1);border:1px solid rgba(251,146,60,0.25);color:#fb923c;border-radius:14px;font-size:11px;cursor:pointer;font-weight:600;">${t.icon} ${t.name}</button>`).join('')}
+      </div>
       <div style="font-size:11px;color:#fb923c;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px;">+ Agregar gasto fijo</div>
       <div style="display:grid;grid-template-columns:1fr 110px 130px;gap:6px;margin-bottom:6px;">
         <input data-f="name" placeholder="Ej: Renta casa" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;"/>
@@ -660,6 +1074,10 @@ function _formPlan() {
   const monthLabel = new Date(monthStr + '-01').toLocaleDateString('es-MX',{month:'long',year:'numeric'})
   return `
     <div style="background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:12px;">
+      <div style="font-size:11px;color:#a78bfa;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px;">⚡ Plantillas rápidas</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px;">
+        ${TEMPLATES_PLAN.map(t => `<button data-tpl-plan='${JSON.stringify(t).replace(/'/g, "&#39;")}' style="padding:4px 9px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.25);color:#a78bfa;border-radius:14px;font-size:11px;cursor:pointer;font-weight:600;">${t.icon} ${t.name}</button>`).join('')}
+      </div>
       <div style="font-size:11px;color:#a78bfa;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px;">+ Plan puntual para ${monthLabel}</div>
       <input type="hidden" data-f="month" value="${monthStr}"/>
       <div style="display:grid;grid-template-columns:1fr 130px;gap:6px;margin-bottom:6px;">
@@ -721,6 +1139,24 @@ function _renderItemRow(tabId, item) {
 }
 
 function _bindFormEvents(tabId, container, onReload) {
+  // Click en plantilla → pre-llena el formulario
+  const templateAttr = { incomes: 'data-tpl-income', fixed: 'data-tpl-fixed', plan: 'data-tpl-plan' }[tabId]
+  if (templateAttr) {
+    container.querySelectorAll('[' + templateAttr + ']').forEach(btn => {
+      btn.addEventListener('click', () => {
+        try {
+          const tpl = JSON.parse(btn.getAttribute(templateAttr).replace(/&#39;/g, "'"))
+          for (const [k, v] of Object.entries(tpl)) {
+            const inp = container.querySelector(`[data-f="${k}"]`)
+            if (inp) inp.value = v
+          }
+          // Focus en amount para que el usuario sólo escriba el número
+          const amt = container.querySelector('[data-f="amount"]') || container.querySelector('[data-f="target_amount"]')
+          if (amt) { amt.focus(); amt.select?.() }
+        } catch {}
+      })
+    })
+  }
   const addBtn = container.querySelector('[data-action="add"]')
   if (!addBtn) return
   addBtn.addEventListener('click', async () => {
