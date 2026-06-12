@@ -217,7 +217,7 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
     recommendations.push({
       priority: 'alta',
       title: 'Construir fondo de emergencia',
-      detail: `Tienes ${liquidityMonths.toFixed(1)} meses de liquidez. Meta: 3-6 meses. Prioriza ahorro al ${pctAhorro}% sobre lifestyle.`,
+      detail: `Tienes ${liquidityMonths.toFixed(1)} meses de liquidez. Meta: 3-6 meses. Prioriza ahorro al ${pcts.ahorro || 20}% sobre lifestyle.`,
     })
   }
   if (commitmentRatio > 50) {
@@ -304,23 +304,61 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
 // CRIPTO — Portfolio + precios + journal
 // ════════════════════════════════════════════════════════════════════
 
-// Mapeo símbolo → CoinGecko ID
+// Mapeo símbolo → CoinGecko ID (top ~40 + memecoins populares)
 const COIN_MAP = {
-  BTC:  'bitcoin',
-  ETH:  'ethereum',
-  XRP:  'ripple',
-  TRX:  'tron',
+  // Top blue chips
+  BTC:   'bitcoin',
+  ETH:   'ethereum',
+  XRP:   'ripple',
+  BNB:   'binancecoin',
+  SOL:   'solana',
+  ADA:   'cardano',
+  DOGE:  'dogecoin',
+  AVAX:  'avalanche-2',
+  TRX:   'tron',
+  DOT:   'polkadot',
+  LINK:  'chainlink',
+  LTC:   'litecoin',
+  MATIC: 'matic-network',
+  ATOM:  'cosmos',
+  XLM:   'stellar',
+  XMR:   'monero',
+  BCH:   'bitcoin-cash',
+  ETC:   'ethereum-classic',
+  // Stablecoins
   USDT: 'tether',
   USDC: 'usd-coin',
-  SOL:  'solana',
-  ADA:  'cardano',
-  DOGE: 'dogecoin',
-  BNB:  'binancecoin',
-  AVAX: 'avalanche-2',
-  MATIC:'matic-network',
-  DOT:  'polkadot',
-  LINK: 'chainlink',
-  LTC:  'litecoin',
+  DAI:  'dai',
+  // L1/L2 / DeFi
+  NEAR: 'near',
+  APT:  'aptos',
+  SUI:  'sui',
+  ARB:  'arbitrum',
+  OP:   'optimism',
+  INJ:  'injective-protocol',
+  TIA:  'celestia',
+  HBAR: 'hedera-hashgraph',
+  ICP:  'internet-computer',
+  FIL:  'filecoin',
+  AAVE: 'aave',
+  UNI:  'uniswap',
+  MKR:  'maker',
+  LDO:  'lido-dao',
+  RUNE: 'thorchain',
+  // Memecoins populares
+  SHIB: 'shiba-inu',
+  PEPE: 'pepe',
+  FLOKI:'floki',
+  BONK: 'bonk',
+  WIF:  'dogwifcoin',
+  // Gaming/NFT
+  IMX:  'immutable-x',
+  RNDR: 'render-token',
+  FET:  'fetch-ai',
+  GRT:  'the-graph',
+  // Otros
+  XTZ:  'tezos',
+  ALGO: 'algorand',
 }
 
 const CACHE_MAX_AGE_MIN = 10
@@ -647,12 +685,23 @@ export default async function handler(req, res) {
       const NAMES = {
         BTC: ['bitcoin','btc'], ETH: ['ethereum','eth','ether'],
         XRP: ['xrp','ripple'], TRX: ['tron','trx'],
-        USDT: ['tether','usdt'], USDC: ['usdc','usd coin'],
+        USDT: ['tether','usdt'], USDC: ['usdc','usd coin'], DAI: ['dai stablecoin'],
         SOL: ['solana','sol'], ADA: ['cardano','ada'],
         DOGE: ['dogecoin','doge'], BNB: ['bnb','binance coin'],
         AVAX: ['avalanche','avax'], MATIC: ['polygon','matic'],
         DOT: ['polkadot','dot'], LINK: ['chainlink','link'],
-        LTC: ['litecoin','ltc'],
+        LTC: ['litecoin','ltc'], XLM: ['stellar','xlm'], XMR: ['monero','xmr'],
+        BCH: ['bitcoin cash','bch'], ETC: ['ethereum classic','etc'],
+        ATOM: ['cosmos','atom'], NEAR: ['near protocol'], APT: ['aptos'], SUI: ['sui'],
+        ARB: ['arbitrum'], OP: ['optimism'], INJ: ['injective'], TIA: ['celestia'],
+        HBAR: ['hedera','hbar'], ICP: ['internet computer','icp'], FIL: ['filecoin'],
+        AAVE: ['aave'], UNI: ['uniswap','uni'], MKR: ['maker','mkr'], LDO: ['lido'],
+        RUNE: ['thorchain','rune'],
+        SHIB: ['shiba inu','shib'], PEPE: ['pepe'], FLOKI: ['floki'],
+        BONK: ['bonk'], WIF: ['dogwifhat','wif'],
+        IMX: ['immutable','imx'], RNDR: ['render','rndr'],
+        FET: ['fetch.ai','fetch ai','fet'], GRT: ['the graph','grt'],
+        XTZ: ['tezos','xtz'], ALGO: ['algorand','algo'],
       }
       const keywords = []
       for (const s of symbolsUpper) {

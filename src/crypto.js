@@ -39,13 +39,37 @@ function _fmtQty(n) {
 }
 
 const COIN_COLORS = {
-  BTC: '#f7931a', ETH: '#627eea', XRP: '#000000', USDT: '#26a17b',
+  BTC: '#f7931a', ETH: '#627eea', XRP: '#23292f', USDT: '#26a17b', DAI: '#f5ac37',
   TRX: '#ff0027', USDC: '#2775ca', SOL: '#14f195', ADA: '#0033ad',
   DOGE: '#c2a633', BNB: '#f3ba2f', AVAX: '#e84142', MATIC: '#8247e5',
-  DOT: '#e6007a', LINK: '#2a5ada', LTC: '#bfbbbb',
+  DOT: '#e6007a', LINK: '#2a5ada', LTC: '#bfbbbb', XLM: '#7d00ff', XMR: '#ff6600',
+  BCH: '#0ac18e', ETC: '#33ff33', ATOM: '#2e3148', NEAR: '#000000', APT: '#000000',
+  SUI: '#6fbcf0', ARB: '#28a0f0', OP: '#ff0420', INJ: '#00d2ff', TIA: '#7b2bf9',
+  HBAR: '#000000', ICP: '#3b00b9', FIL: '#0090ff', AAVE: '#b6509e', UNI: '#ff007a',
+  MKR: '#1aab9b', LDO: '#f5a623', RUNE: '#33ff99',
+  SHIB: '#ffa409', PEPE: '#3a9b3f', FLOKI: '#ffc14a', BONK: '#ff8c00', WIF: '#dbb37a',
+  IMX: '#0b0e1f', RNDR: '#cf1f31', FET: '#3b41e1', GRT: '#6747ed', XTZ: '#2c7df7', ALGO: '#000000',
 }
-function _coinColor(sym) {
-  return COIN_COLORS[sym] || '#94a3b8'
+const COIN_NAMES = {
+  BTC: 'Bitcoin', ETH: 'Ethereum', XRP: 'Ripple', BNB: 'BNB', SOL: 'Solana',
+  ADA: 'Cardano', DOGE: 'Dogecoin', AVAX: 'Avalanche', TRX: 'Tron', DOT: 'Polkadot',
+  LINK: 'Chainlink', LTC: 'Litecoin', MATIC: 'Polygon', ATOM: 'Cosmos', XLM: 'Stellar',
+  XMR: 'Monero', BCH: 'Bitcoin Cash', ETC: 'Ethereum Classic',
+  USDT: 'Tether', USDC: 'USD Coin', DAI: 'DAI',
+  NEAR: 'NEAR Protocol', APT: 'Aptos', SUI: 'Sui', ARB: 'Arbitrum', OP: 'Optimism',
+  INJ: 'Injective', TIA: 'Celestia', HBAR: 'Hedera', ICP: 'Internet Computer',
+  FIL: 'Filecoin', AAVE: 'Aave', UNI: 'Uniswap', MKR: 'Maker', LDO: 'Lido',
+  RUNE: 'THORChain',
+  SHIB: 'Shiba Inu', PEPE: 'Pepe', FLOKI: 'Floki', BONK: 'Bonk', WIF: 'dogwifhat',
+  IMX: 'Immutable', RNDR: 'Render', FET: 'Fetch.ai', GRT: 'The Graph',
+  XTZ: 'Tezos', ALGO: 'Algorand',
+}
+function _coinColor(sym) { return COIN_COLORS[sym] || '#94a3b8' }
+function _coinName(sym) { return COIN_NAMES[sym] || sym }
+function _hexRgb(hex) {
+  const m = hex.match(/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i)
+  if (!m) return '255,255,255'
+  return parseInt(m[1],16) + ',' + parseInt(m[2],16) + ',' + parseInt(m[3],16)
 }
 
 function _pieChart(items) {
@@ -74,6 +98,62 @@ function _pieChart(items) {
 
 let _allTxs = []
 let _currentPrices = {}  // cache de precios actuales para auto-conv MXN/USD
+
+// ── Feed lectura: persistencia local de IDs leídos ────────────
+const READ_FEED_KEY = 'nexus_crypto_news_read'
+function _getReadIds() { try { return new Set(JSON.parse(localStorage.getItem(READ_FEED_KEY) || '[]')) } catch { return new Set() } }
+function _markRead(id) { const s = _getReadIds(); s.add(id); try { localStorage.setItem(READ_FEED_KEY, JSON.stringify([...s].slice(-300))) } catch {} }
+function _markAllRead(ids) { const s = _getReadIds(); ids.forEach(id => s.add(id)); try { localStorage.setItem(READ_FEED_KEY, JSON.stringify([...s].slice(-300))) } catch {} }
+function _hashUrl(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0 } return 'n' + Math.abs(h) }
+
+// ── Score determinístico del portafolio cripto ───────────────
+function _cryptoScore(items, summary) {
+  if (!items.length) return null
+  // 4 factores, 25 pts cada uno
+  // 1. ROI total
+  let scoreRoi = 0
+  if (summary.total_roi_pct >= 50) scoreRoi = 25
+  else if (summary.total_roi_pct >= 20) scoreRoi = 22
+  else if (summary.total_roi_pct >= 0) scoreRoi = 18
+  else if (summary.total_roi_pct >= -20) scoreRoi = 8
+  else scoreRoi = 2
+  // 2. Diversificación (≥ 4 monedas = full; menos = parcial)
+  const scoreDivers = Math.min(25, items.length * 6)
+  // 3. Concentración: el activo más grande no debería pasar 70%
+  const topAllocation = Math.max(...items.map(i => i.allocation_pct || 0))
+  let scoreConc = 0
+  if (topAllocation < 40) scoreConc = 25
+  else if (topAllocation < 55) scoreConc = 20
+  else if (topAllocation < 70) scoreConc = 12
+  else scoreConc = 4
+  // 4. Momentum 24h promedio ponderado por allocation
+  let weighted24h = 0
+  for (const i of items) weighted24h += (i.change_24h_pct || 0) * ((i.allocation_pct || 0) / 100)
+  let scoreMomentum = 0
+  if (weighted24h >= 3) scoreMomentum = 25
+  else if (weighted24h >= 0) scoreMomentum = 20
+  else if (weighted24h >= -3) scoreMomentum = 13
+  else if (weighted24h >= -10) scoreMomentum = 5
+  else scoreMomentum = 0
+
+  const total = Math.round(scoreRoi + scoreDivers + scoreConc + scoreMomentum)
+  let label, color
+  if (total >= 80) { label = 'Excelente'; color = '#22c55e' }
+  else if (total >= 60) { label = 'Saludable'; color = '#84cc16' }
+  else if (total >= 40) { label = 'Mixto'; color = '#fbbf24' }
+  else if (total >= 20) { label = 'En riesgo'; color = '#fb923c' }
+  else { label = 'Crítico'; color = '#ef4444' }
+
+  return {
+    total, label, color,
+    breakdown: {
+      roi: { value: scoreRoi, max: 25, label: 'Rentabilidad', detail: `ROI ${summary.total_roi_pct.toFixed(1)}%` },
+      diversification: { value: scoreDivers, max: 25, label: 'Diversificación', detail: `${items.length} activos distintos` },
+      concentration: { value: scoreConc, max: 25, label: 'Concentración', detail: `Top activo: ${topAllocation.toFixed(0)}%` },
+      momentum: { value: scoreMomentum, max: 25, label: 'Momentum 24h', detail: `${weighted24h >= 0 ? '+' : ''}${weighted24h.toFixed(2)}% ponderado` },
+    },
+  }
+}
 
 export async function renderCrypto() {
   const root = document.getElementById('crypto-root')
@@ -152,6 +232,43 @@ export async function renderCrypto() {
           <div>💰 Costo total: <span style="color:#e5e7eb;font-weight:700;">${_fmt(summary.total_cost_mxn)}</span></div>
         </div>
       </div>
+
+      ${(() => {
+        const cs = _cryptoScore(items, summary)
+        if (!cs) return ''
+        return `
+        <!-- CRYPTO SCORE -->
+        <div style="background:linear-gradient(135deg,rgba(${_hexRgb(cs.color)},0.05),rgba(${_hexRgb(cs.color)},0.12));border:1px solid ${cs.color}40;border-radius:14px;padding:18px;margin-bottom:20px;">
+          <div style="display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;">
+            <div style="text-align:center;min-width:140px;">
+              <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;">Cripto Score</div>
+              <div style="font-size:54px;font-weight:800;color:${cs.color};margin-top:4px;line-height:1;">${cs.total}</div>
+              <div style="font-size:11px;color:#6b7280;">/ 100</div>
+              <div style="font-size:14px;font-weight:800;color:${cs.color};margin-top:6px;">${cs.label}</div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;">
+              ${Object.entries(cs.breakdown).map(([k, b]) => {
+                const ratio = b.value / b.max
+                const col = ratio >= 0.8 ? '#22c55e' : ratio >= 0.5 ? '#fbbf24' : '#f87171'
+                return `
+                  <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px;">
+                    <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:600;">${b.label}</div>
+                    <div style="display:flex;align-items:baseline;gap:4px;margin-top:2px;">
+                      <span style="font-size:18px;font-weight:800;color:${col};">${b.value}</span>
+                      <span style="font-size:11px;color:#6b7280;">/${b.max}</span>
+                    </div>
+                    <div style="font-size:10px;color:#94a3b8;margin-top:2px;">${b.detail}</div>
+                    <div style="height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:5px;overflow:hidden;">
+                      <div style="height:100%;width:${(ratio*100).toFixed(0)}%;background:${col};border-radius:2px;"></div>
+                    </div>
+                  </div>
+                `
+              }).join('')}
+            </div>
+          </div>
+        </div>
+        `
+      })()}
 
       ${items.length ? `
       <!-- 2 COLUMNS: PIE + TABLE -->
@@ -258,14 +375,17 @@ export async function renderCrypto() {
       </div>
       ` : ''}
 
-      <!-- NEWS PANEL -->
+      <!-- NEWS FEED (estilo Google Feeds) -->
       ${items.length ? `
       <div id="crypto-news-panel" style="margin-top:20px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;">
-        <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
-          <span>📡 Noticias de tus criptos</span>
-          <span style="font-size:10px;color:#6b7280;text-transform:none;letter-spacing:0;">CoinDesk · CoinTelegraph · Decrypt · The Defiant</span>
+        <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:14px;font-weight:800;color:#e5e7eb;">📡 Feed de tus criptos</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">CoinDesk · CoinTelegraph · Decrypt · The Defiant</div>
+          </div>
+          <div id="crypto-news-header-actions" style="display:flex;align-items:center;gap:8px;"></div>
         </div>
-        <div id="crypto-news-list" style="padding:12px;color:#6b7280;font-size:12px;text-align:center;">⏳ Cargando noticias…</div>
+        <div id="crypto-news-list" style="padding:12px;color:#6b7280;font-size:12px;text-align:center;">⏳ Cargando feed…</div>
       </div>
       ` : ''}
 
@@ -303,6 +423,7 @@ export async function renderCrypto() {
   })
 }
 
+// ── Feed estilo Google Feeds ───────────────────────────────────
 function _renderNewsInto(items) {
   const list = document.getElementById('crypto-news-list')
   if (!list) return
@@ -310,21 +431,103 @@ function _renderNewsInto(items) {
     list.innerHTML = '<div style="padding:14px;color:#6b7280;font-size:12px;text-align:center;">Sin noticias relevantes en este momento.</div>'
     return
   }
+  // Asigna id estable por URL
+  const withIds = items.map(n => ({ ...n, _id: _hashUrl(n.url || n.title) }))
+  const readIds = _getReadIds()
+  const unreadCount = withIds.filter(n => !readIds.has(n._id)).length
+
+  // Renderiza header con contador + "marcar todas leídas"
+  const headerEl = document.getElementById('crypto-news-header-actions')
+  if (headerEl) {
+    headerEl.innerHTML = `
+      <span style="font-size:11px;color:#22d3ee;font-weight:700;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.3);padding:2px 8px;border-radius:10px;">${unreadCount} sin leer</span>
+      ${unreadCount > 0 ? `<button id="news-mark-all-read" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px;font-weight:600;">✓ Marcar todas como leídas</button>` : ''}
+    `
+    document.getElementById('news-mark-all-read')?.addEventListener('click', () => {
+      _markAllRead(withIds.map(n => n._id))
+      _renderNewsInto(items)
+    })
+  }
+
   list.style.padding = '0'
   list.style.textAlign = 'left'
-  list.innerHTML = items.map(n => {
-    const date = n.published_at ? new Date(n.published_at).toLocaleString('es-MX',{dateStyle:'short',timeStyle:'short'}) : ''
+  list.innerHTML = withIds.map(n => {
+    const isRead = readIds.has(n._id)
+    const date = n.published_at ? new Date(n.published_at) : null
+    const ago = date ? _timeAgo(date) : ''
     return `
-      <a href="${_esc(n.url)}" target="_blank" rel="noopener" style="display:block;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.04);text-decoration:none;color:inherit;">
-        <div style="font-size:13px;font-weight:700;color:#e5e7eb;margin-bottom:3px;line-height:1.4;">${_esc(n.title)}</div>
-        ${n.description ? `<div style="font-size:11px;color:#94a3b8;line-height:1.5;margin-bottom:4px;">${_esc(n.description.slice(0,160))}…</div>` : ''}
-        <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:#6b7280;">
-          <span style="background:rgba(167,139,250,0.15);color:#a78bfa;padding:1px 6px;border-radius:4px;font-weight:600;">${_esc(n.source)}</span>
-          <span>${date}</span>
+      <div data-news-id="${n._id}" class="news-card" style="border-top:1px solid rgba(255,255,255,0.04);transition:background 0.15s;${isRead ? 'opacity:0.5;' : ''}">
+        <div data-news-toggle="${n._id}" style="display:flex;align-items:start;gap:12px;padding:14px 16px;cursor:pointer;">
+          <div style="width:6px;height:6px;border-radius:50%;background:${isRead ? 'transparent' : '#22d3ee'};margin-top:6px;flex-shrink:0;${!isRead ? 'box-shadow:0 0 6px #22d3ee;' : ''}"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:${isRead ? '500' : '700'};color:${isRead ? '#94a3b8' : '#e5e7eb'};line-height:1.4;margin-bottom:4px;">${_esc(n.title)}</div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#6b7280;flex-wrap:wrap;">
+              <span style="background:rgba(167,139,250,0.15);color:#a78bfa;padding:1px 7px;border-radius:4px;font-weight:600;">${_esc(n.source)}</span>
+              <span>${ago}</span>
+            </div>
+          </div>
+          <button data-news-expand="${n._id}" style="background:transparent;border:none;color:#94a3b8;cursor:pointer;padding:4px;font-size:14px;flex-shrink:0;">▾</button>
         </div>
-      </a>
+        <div data-news-body="${n._id}" style="display:none;padding:0 16px 14px 34px;">
+          ${n.description ? `<p style="font-size:12px;color:#cbd5e1;line-height:1.6;margin:0 0 10px;">${_esc(n.description.slice(0,500))}…</p>` : ''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <a href="${_esc(n.url)}" target="_blank" rel="noopener" data-news-read="${n._id}" style="padding:6px 12px;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:6px;font-size:12px;text-decoration:none;font-weight:600;">↗ Leer artículo completo</a>
+            <button data-news-mark="${n._id}" style="padding:6px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#94a3b8;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">${isRead ? '↻ Marcar no leído' : '✓ Marcar como leído'}</button>
+          </div>
+        </div>
+      </div>
     `
   }).join('')
+
+  // Handlers de expand/colapsar
+  list.querySelectorAll('[data-news-toggle]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      // Evita conflicto con clicks sobre botones internos
+      if (e.target.closest('[data-news-expand]') || e.target.closest('a') || e.target.closest('button')) return
+      const id = el.dataset.newsToggle
+      const body = list.querySelector(`[data-news-body="${id}"]`)
+      const exp = list.querySelector(`[data-news-expand="${id}"]`)
+      if (body) {
+        const isOpen = body.style.display === 'block'
+        body.style.display = isOpen ? 'none' : 'block'
+        if (exp) exp.textContent = isOpen ? '▾' : '▴'
+      }
+    })
+  })
+  // Click en "Leer artículo" → marca como leído
+  list.querySelectorAll('[data-news-read]').forEach(a => {
+    a.addEventListener('click', () => {
+      _markRead(a.dataset.newsRead)
+      setTimeout(() => _renderNewsInto(items), 600)
+    })
+  })
+  // Botón mark/unmark
+  list.querySelectorAll('[data-news-mark]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const id = btn.dataset.newsMark
+      const cur = _getReadIds()
+      if (cur.has(id)) {
+        cur.delete(id)
+        try { localStorage.setItem(READ_FEED_KEY, JSON.stringify([...cur])) } catch {}
+      } else {
+        _markRead(id)
+      }
+      _renderNewsInto(items)
+    })
+  })
+}
+
+function _timeAgo(date) {
+  const diff = Date.now() - date.getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'ahora'
+  if (mins < 60) return `hace ${mins} min`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `hace ${hrs} h`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `hace ${days} d`
+  return date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
 function _openTxModal(existingTx) {
@@ -338,7 +541,32 @@ function _openTxModal(existingTx) {
   const v = existingTx || {}
 
   const sel = (val, options) => options.map(o => `<option value="${o[0]}" ${val === o[0] ? 'selected':''}>${o[1]}</option>`).join('')
-  const cryptos = [['BTC','BTC · Bitcoin'],['ETH','ETH · Ethereum'],['XRP','XRP · Ripple'],['TRX','TRX · Tron'],['USDT','USDT · Tether'],['USDC','USDC · USD Coin'],['SOL','SOL · Solana'],['ADA','ADA · Cardano'],['DOGE','DOGE · Dogecoin'],['BNB','BNB · BNB'],['AVAX','AVAX · Avalanche'],['MATIC','MATIC · Polygon'],['DOT','DOT · Polkadot'],['LINK','LINK · Chainlink'],['LTC','LTC · Litecoin']]
+  // Catálogo agrupado por categoría
+  const cryptos = [
+    // Blue chips
+    ['BTC','BTC · Bitcoin'],['ETH','ETH · Ethereum'],['XRP','XRP · Ripple'],
+    ['BNB','BNB · BNB'],['SOL','SOL · Solana'],['ADA','ADA · Cardano'],
+    ['DOGE','DOGE · Dogecoin'],['AVAX','AVAX · Avalanche'],['TRX','TRX · Tron'],
+    ['DOT','DOT · Polkadot'],['LINK','LINK · Chainlink'],['LTC','LTC · Litecoin'],
+    ['MATIC','MATIC · Polygon'],['ATOM','ATOM · Cosmos'],['XLM','XLM · Stellar'],
+    ['XMR','XMR · Monero'],['BCH','BCH · Bitcoin Cash'],['ETC','ETC · Ethereum Classic'],
+    // Stables
+    ['USDT','USDT · Tether'],['USDC','USDC · USD Coin'],['DAI','DAI · Dai'],
+    // L1 / L2 / DeFi
+    ['NEAR','NEAR · NEAR Protocol'],['APT','APT · Aptos'],['SUI','SUI · Sui'],
+    ['ARB','ARB · Arbitrum'],['OP','OP · Optimism'],['INJ','INJ · Injective'],
+    ['TIA','TIA · Celestia'],['HBAR','HBAR · Hedera'],['ICP','ICP · Internet Computer'],
+    ['FIL','FIL · Filecoin'],['AAVE','AAVE · Aave'],['UNI','UNI · Uniswap'],
+    ['MKR','MKR · Maker'],['LDO','LDO · Lido'],['RUNE','RUNE · THORChain'],
+    // Memecoins (lo que pediste)
+    ['SHIB','SHIB · Shiba Inu 🐕'],['PEPE','PEPE · Pepe 🐸'],
+    ['FLOKI','FLOKI · Floki 🐺'],['BONK','BONK · Bonk 🐶'],['WIF','WIF · dogwifhat 🐕'],
+    // Gaming/NFT
+    ['IMX','IMX · Immutable'],['RNDR','RNDR · Render'],
+    ['FET','FET · Fetch.ai'],['GRT','GRT · The Graph'],
+    // Otros
+    ['XTZ','XTZ · Tezos'],['ALGO','ALGO · Algorand'],
+  ]
 
   modal.innerHTML = `
     <h3 style="margin:0 0 14px;font-size:17px;font-weight:800;">${isEdit ? '✏️ Editar transacción cripto' : '+ Nueva transacción cripto'}</h3>
