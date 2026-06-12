@@ -201,7 +201,7 @@ export async function renderAFP() {
     return
   }
 
-  const { score, health, metrics: m, score_breakdown: sb, strategy, goals, recommendations, incomes, fixed_expenses, monthly_plan, debts, debt_strategies, month } = data
+  const { score, health, metrics: m, score_breakdown: sb, strategy, goals, recommendations, incomes, fixed_expenses, monthly_plan, debts, debt_strategies, month, cushion } = data
   const topRec = recommendations[0] || {}
   const monthLabel = new Date(month + '-01').toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
   const dispersionEntries = Object.entries(strategy.dispersion).filter(([k,v]) => v > 0)
@@ -281,6 +281,48 @@ export async function renderAFP() {
           </div>
         </div>
       </div>
+
+      <!-- COLCHÓN FIAT -->
+      ${(() => {
+        const cur = cushion?.current_balance || 0
+        const tgt = cushion?.target_amount || 0
+        const pct = cushion?.progress_pct || 0
+        const monthsCov = cushion?.months_covered || 0
+        const monthsTgt = cushion?.target_months || 3
+        const barColor = pct >= 100 ? '#22c55e' : pct >= 50 ? '#fbbf24' : '#f87171'
+        const ready = pct >= 100
+        return `
+        <div style="background:rgba(52,211,153,0.04);border:1px solid rgba(52,211,153,0.25);border-radius:12px;padding:16px;margin-bottom:20px;">
+          <div style="display:flex;align-items:start;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+            <div>
+              <div style="font-size:14px;font-weight:800;color:#34d399;display:flex;align-items:center;gap:6px;">🛡️ Colchón Fiat ${cushion?.account_label ? `<span style="font-size:11px;color:#94a3b8;font-weight:500;">· ${_esc(cushion.account_label)}</span>` : ''}</div>
+              <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Fondo de emergencia — el suelo que te sostiene si algo falla</div>
+            </div>
+            <button id="afp-cushion-btn" style="padding:7px 12px;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.4);color:#34d399;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">💵 Depositar/Retirar</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px;">
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px;">
+              <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Saldo actual</div>
+              <div style="font-size:22px;font-weight:800;color:#34d399;margin-top:4px;">${_fmt(cur)}</div>
+              <div style="font-size:10px;color:#6b7280;">cubre ${monthsCov.toFixed(1)} meses de fijos</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px;">
+              <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Meta</div>
+              <div style="font-size:22px;font-weight:800;color:#e5e7eb;margin-top:4px;">${_fmt(tgt)}</div>
+              <div style="font-size:10px;color:#6b7280;">${monthsTgt} meses de gastos fijos</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:10px;">
+              <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Progreso</div>
+              <div style="font-size:22px;font-weight:800;color:${barColor};margin-top:4px;">${pct}%</div>
+              <div style="font-size:10px;color:#6b7280;">${ready ? '✓ Meta lograda' : _fmt(tgt - cur) + ' restantes'}</div>
+            </div>
+          </div>
+          <div style="height:8px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width 0.4s;"></div>
+          </div>
+        </div>
+        `
+      })()}
 
       <!-- ESTRATEGIA + DISPERSIÓN -->
       ${m.monthly_disposable > 0 ? `
@@ -372,6 +414,7 @@ export async function renderAFP() {
   document.getElementById('afp-pdf-btn')?.addEventListener('click', () => _exportPDF(data))
   document.getElementById('afp-config-btn')?.addEventListener('click', () => _openConfigModal())
   document.getElementById('afp-adjust-btn')?.addEventListener('click', () => _openAdjustmentModal(data))
+  document.getElementById('afp-cushion-btn')?.addEventListener('click', () => _openCushionModal(data))
 }
 
 // ── PDF EXPORT v4 — rediseñado con secciones, tablas y gráficas ──
@@ -1036,6 +1079,13 @@ function _formFixed() {
         </select>
         <input data-f="due_day" type="number" min="1" max="31" placeholder="Día del mes (1-31)" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;"/>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(251,191,36,0.06);border:1px solid rgba(251,191,36,0.25);border-radius:8px;margin-bottom:8px;cursor:pointer;">
+        <input data-f="is_sacred" type="checkbox" style="width:16px;height:16px;accent-color:#fbbf24;"/>
+        <div style="flex:1;">
+          <div style="font-size:12px;color:#fde68a;font-weight:700;">🪙 Compromiso sagrado</div>
+          <div style="font-size:10px;color:#94a3b8;line-height:1.4;">Intocable. Se separa <em>antes</em> de cualquier dispersión (ej. cripto $200/sem, ahorro fijo).</div>
+        </div>
+      </label>
       <button data-action="add" style="padding:8px 14px;background:rgba(251,146,60,0.15);border:1px solid rgba(251,146,60,0.4);color:#fb923c;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;">+ Agregar</button>
     </div>
   `
@@ -1116,7 +1166,8 @@ function _renderItemRow(tabId, item) {
     main = `<strong>${_esc(item.name)}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${FREQ_LABEL[item.frequency] || item.frequency}${item.category ? ' · ' + item.category : ''}</div>`
     side = `<span style="color:#86efac;font-weight:700;">${_fmt(item.amount)}</span>`
   } else if (tabId === 'fixed') {
-    main = `<strong>${_esc(item.name)}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${FREQ_LABEL[item.frequency] || item.frequency}${item.due_day ? ' · día ' + item.due_day : ''}${item.category ? ' · ' + item.category : ''}</div>`
+    const sacredBadge = item.is_sacred ? ' <span style="font-size:9px;color:#fbbf24;background:rgba(251,191,36,0.15);padding:1px 6px;border-radius:4px;letter-spacing:1px;font-weight:700;">🪙 SAGRADO</span>' : ''
+    main = `<strong>${_esc(item.name)}</strong>${sacredBadge}<div style="font-size:11px;color:#94a3b8;margin-top:2px;">${FREQ_LABEL[item.frequency] || item.frequency}${item.due_day ? ' · día ' + item.due_day : ''}${item.category ? ' · ' + item.category : ''}</div>`
     side = `<span style="color:#fb923c;font-weight:700;">${_fmt(item.amount)}</span>`
   } else if (tabId === 'debts') {
     main = `<strong>${_esc(item.name)}</strong><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${item.kind === 'credit_card' ? 'Tarjeta' : 'Préstamo'} · ${item.interest_rate||0}% · mín ${_fmt(item.min_payment||0)}</div>`
@@ -1162,6 +1213,7 @@ function _bindFormEvents(tabId, container, onReload) {
   addBtn.addEventListener('click', async () => {
     const payload = {}
     container.querySelectorAll('[data-f]').forEach(inp => {
+      if (inp.type === 'checkbox') { payload[inp.dataset.f] = !!inp.checked; return }
       let val = inp.value
       if (val === '') return
       if (inp.type === 'number') val = Number(val)
@@ -1185,6 +1237,137 @@ function _bindFormEvents(tabId, container, onReload) {
       await onReload()
     } catch (e) { alert('⚠ ' + e.message) }
   })
+}
+
+// ── Modal del Colchón Fiat ────────────────────────────────────
+async function _openCushionModal(data) {
+  const overlay = document.createElement('div')
+  overlay.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:8px;overflow-y:auto;`
+  const modal = document.createElement('div')
+  modal.style.cssText = `background:#0f1419;border:1px solid #1f2937;border-radius:16px;padding:18px;max-width:560px;width:100%;color:#e5e7eb;max-height:95vh;overflow-y:auto;`
+
+  let cushion = null
+  try {
+    const r = await _api('afp_cushion_get'); cushion = r.cushion
+  } catch (e) { cushion = { current_balance: 0, target_months: 3, account_label: null } }
+
+  const monthlyFixed = data?.metrics?.monthly_fixed || 0
+  const targetAmt = monthlyFixed * (Number(cushion.target_months) || 3)
+  const cur = Number(cushion.current_balance || 0)
+
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div>
+        <h3 style="margin:0;font-size:18px;font-weight:800;">🛡️ Colchón Fiat</h3>
+        <p style="margin:4px 0 0;font-size:12px;color:#94a3b8;">Tu fondo de emergencia — depósitos y retiros con motivo.</p>
+      </div>
+      <button id="cush-close" style="background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;line-height:1;">×</button>
+    </div>
+
+    <!-- Configuración -->
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px;">Configuración</div>
+      <div style="display:grid;grid-template-columns:1fr 110px;gap:8px;margin-bottom:6px;">
+        <input id="cush-label" type="text" placeholder="Etiqueta (ej. BBVA débito)" value="${_esc(cushion.account_label || '')}" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;"/>
+        <select id="cush-target-months" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;">
+          ${[1,2,3,6,9,12].map(n => `<option value="${n}" ${n === (cushion.target_months || 3) ? 'selected':''}>${n} ${n===1?'mes':'meses'}</option>`).join('')}
+        </select>
+      </div>
+      <div style="font-size:10px;color:#6b7280;margin-bottom:6px;">Meta automática: ${cushion.target_months || 3} meses × $${monthlyFixed.toLocaleString('es-MX')} fijos = <strong style="color:#34d399;">$${targetAmt.toLocaleString('es-MX')}</strong></div>
+      <button id="cush-save-cfg" style="padding:7px 14px;background:rgba(34,211,238,0.15);border:1px solid rgba(34,211,238,0.4);color:#22d3ee;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700;">💾 Guardar configuración</button>
+    </div>
+
+    <!-- Movimiento -->
+    <div style="background:rgba(52,211,153,0.05);border:1px solid rgba(52,211,153,0.2);border-radius:10px;padding:12px;margin-bottom:14px;">
+      <div style="font-size:11px;color:#34d399;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px;">Registrar movimiento</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px;">
+        <button data-cush-kind="deposit" style="padding:9px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#86efac;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;">💵 Depositar</button>
+        <button data-cush-kind="withdraw" style="padding:9px;background:rgba(248,113,113,0.15);border:1px solid rgba(248,113,113,0.4);color:#fca5a5;border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;">↗ Retirar</button>
+      </div>
+      <input type="hidden" id="cush-kind" />
+      <div id="cush-form" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 130px;gap:6px;margin-bottom:6px;">
+          <input id="cush-reason" type="text" placeholder="Motivo (ej: ahorro mensual junio)" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;"/>
+          <input id="cush-amount" type="number" step="0.01" placeholder="Monto MXN" style="padding:8px;background:#1f2937;border:1px solid #374151;border-radius:6px;color:#e5e7eb;font-size:13px;font-weight:700;"/>
+        </div>
+        <button id="cush-save-mv" style="padding:9px 14px;background:linear-gradient(135deg,#22d3ee,#06b6d4);border:none;color:#000;border-radius:6px;cursor:pointer;font-size:13px;font-weight:800;">💾 Guardar movimiento</button>
+      </div>
+    </div>
+
+    <!-- Saldo y meta -->
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:12px;margin-bottom:14px;text-align:center;">
+      <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;">Saldo actual</div>
+      <div id="cush-balance-display" style="font-size:28px;font-weight:800;color:#34d399;margin-top:4px;">${_fmt(cur)}</div>
+    </div>
+
+    <!-- Histórico -->
+    <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:6px;">Movimientos recientes</div>
+    <div id="cush-moves" style="display:flex;flex-direction:column;gap:6px;"></div>
+  `
+
+  document.body.appendChild(overlay)
+  overlay.appendChild(modal)
+  const cleanup = () => { document.body.removeChild(overlay); renderAFP() }
+  modal.querySelector('#cush-close').addEventListener('click', cleanup)
+  overlay.addEventListener('click', e => { if (e.target === overlay) cleanup() })
+
+  modal.querySelectorAll('[data-cush-kind]').forEach(b => {
+    b.addEventListener('click', () => {
+      modal.querySelector('#cush-kind').value = b.dataset.cushKind
+      modal.querySelector('#cush-form').style.display = 'block'
+      modal.querySelectorAll('[data-cush-kind]').forEach(x => x.style.outline = '')
+      b.style.outline = '2px solid ' + (b.dataset.cushKind === 'deposit' ? '#22c55e' : '#ef4444')
+      modal.querySelector('#cush-reason').focus()
+    })
+  })
+
+  modal.querySelector('#cush-save-cfg').addEventListener('click', async () => {
+    const label = modal.querySelector('#cush-label').value.trim() || null
+    const months = Number(modal.querySelector('#cush-target-months').value)
+    try {
+      await _api('afp_cushion_set', { account_label: label, target_months: months })
+      alert('✓ Configuración guardada')
+    } catch (e) { alert('⚠ ' + e.message) }
+  })
+
+  modal.querySelector('#cush-save-mv').addEventListener('click', async () => {
+    const kind = modal.querySelector('#cush-kind').value
+    const reason = modal.querySelector('#cush-reason').value.trim()
+    const amount = Number(modal.querySelector('#cush-amount').value)
+    if (!kind) { alert('Elige depositar o retirar'); return }
+    if (!reason) { alert('Escribe el motivo'); return }
+    if (!amount || amount <= 0) { alert('Monto > 0 requerido'); return }
+    try {
+      const r = await _api('afp_cushion_move', { kind, amount, reason })
+      modal.querySelector('#cush-balance-display').textContent = _fmt(r.new_balance)
+      modal.querySelector('#cush-reason').value = ''
+      modal.querySelector('#cush-amount').value = ''
+      modal.querySelector('#cush-form').style.display = 'none'
+      modal.querySelectorAll('[data-cush-kind]').forEach(x => x.style.outline = '')
+      renderMoves()
+    } catch (e) { alert('⚠ ' + e.message) }
+  })
+
+  const renderMoves = async () => {
+    const wrap = modal.querySelector('#cush-moves')
+    wrap.innerHTML = '<div style="color:#6b7280;font-size:12px;text-align:center;padding:6px;">⏳</div>'
+    try {
+      const r = await _api('afp_cushion_moves_list')
+      const moves = r.moves || []
+      if (!moves.length) { wrap.innerHTML = '<div style="color:#6b7280;font-size:12px;text-align:center;padding:10px;background:rgba(255,255,255,0.02);border-radius:6px;">Sin movimientos aún.</div>'; return }
+      wrap.innerHTML = moves.map(mv => `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:6px;font-size:12px;">
+          <span style="font-size:16px;">${mv.kind === 'deposit' ? '💵' : '↗'}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="color:#e5e7eb;font-weight:600;">${_esc(mv.reason || '(sin motivo)')}</div>
+            <div style="color:#6b7280;font-size:10px;">${new Date(mv.created_at).toLocaleString('es-MX')}</div>
+          </div>
+          <span style="font-weight:800;color:${mv.kind === 'deposit' ? '#22c55e' : '#ef4444'};">${mv.kind === 'deposit' ? '+' : '-'}${_fmt(mv.amount)}</span>
+        </div>
+      `).join('')
+    } catch (e) { wrap.innerHTML = `<div style="color:#f87171;font-size:12px;">⚠ ${e.message}</div>` }
+  }
+  renderMoves()
 }
 
 if (typeof window !== 'undefined') {

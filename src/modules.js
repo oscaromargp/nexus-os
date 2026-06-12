@@ -23,7 +23,7 @@ export const MODULES = [
   { id: 'agenda',       name: 'Agenda Financiera',icon: '💳', category: 'finance', sidebar: 'agenda',    desc: 'Pagos y cobros recurrentes' },
   { id: 'movimientos',  name: 'Movimientos',     icon: '🔄', category: 'finance', sidebar: 'movimientos',desc: 'Orquestador multi-cuenta' },
   { id: 'cotizaciones', name: 'Cotizaciones',    icon: '📄', category: 'finance', sidebar: 'cotizaciones',desc: 'Ventas + abonos + comisiones' },
-  { id: 'afp',          name: 'AFP',             icon: '📐', category: 'finance', sidebar: 'afp',        desc: 'Arquitecto Financiero — score 0-100, dispersión sugerida' },
+  { id: 'afp',          name: 'AFP',             icon: '📐', category: 'finance', sidebar: 'afp',        desc: 'Plan financiero teórico: ingresos, gastos fijos, deudas, metas, colchón Fiat, dispersión semanal' },
 
   // Inversiones
   { id: 'crypto',       name: 'Cripto Portfolio',icon: '₿',  category: 'invest',  sidebar: 'crypto',     desc: 'Tracking manual con precios live + journal' },

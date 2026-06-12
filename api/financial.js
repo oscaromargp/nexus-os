@@ -52,13 +52,14 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
   const customDispersion = cfg.custom_dispersion || null
 
   // Pull data SOLO de tablas AFP
-  const [incomesRes, fixedRes, debtsRes, planRes, goalsRes, adjRes] = await Promise.all([
+  const [incomesRes, fixedRes, debtsRes, planRes, goalsRes, adjRes, cushionRes] = await Promise.all([
     admin.from('afp_incomes').select('*').eq('owner_id', userId).eq('is_active', true),
     admin.from('afp_fixed_expenses').select('*').eq('owner_id', userId).eq('is_active', true),
     admin.from('afp_debts').select('*').eq('owner_id', userId).eq('is_active', true),
     admin.from('afp_monthly_plans').select('*').eq('owner_id', userId).eq('month', monthStr),
     admin.from('afp_goals').select('*').eq('owner_id', userId).eq('is_achieved', false),
     admin.from('afp_adjustments').select('*').eq('owner_id', userId).eq('month', monthStr).order('created_at'),
+    admin.from('afp_cushion').select('*').eq('owner_id', userId).maybeSingle(),
   ])
 
   const incomes = incomesRes.data || []
@@ -67,6 +68,7 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
   const monthlyPlan = planRes.data || []
   const goals = goalsRes.data || []
   const adjustments = adjRes.data || []
+  const cushion = cushionRes.data || { current_balance: 0, target_months: 3, account_label: null }
 
   // ── Ingresos: TODO viene de afp_incomes (declarado por usuario) ──
   const monthlyIncome = incomes.reduce((s, i) => s + toMonthly(i.amount, i.frequency), 0)
@@ -75,13 +77,15 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
     monthly: toMonthly(i.amount, i.frequency), category: i.category, notes: i.notes,
   }))
 
-  // ── Gastos fijos declarados ──────────────────────────────────
+  // ── Gastos fijos declarados (separa "sagrados" de los normales) ──
   const fixedNormalized = fixedExpenses.map(f => ({
     id: f.id, name: f.name, amount: Number(f.amount), frequency: f.frequency,
     monthly: toMonthly(f.amount, f.frequency), category: f.category,
     due_day: f.due_day, priority: f.priority, notes: f.notes,
+    is_sacred: !!f.is_sacred,
   })).sort((a,b) => (a.due_day || 99) - (b.due_day || 99))
   const monthlyFixed = fixedNormalized.reduce((s, f) => s + f.monthly, 0)
+  const monthlySacred = fixedNormalized.filter(f => f.is_sacred).reduce((s, f) => s + f.monthly, 0)
 
   // ── Plan mensual (gastos puntuales de este mes) ──────────────
   const planTotal = monthlyPlan.reduce((s, p) => s + Number(p.amount), 0)
@@ -276,6 +280,7 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
       monthly_income: Math.round(monthlyIncome),
       effective_income: Math.round(effectiveIncome),
       monthly_fixed: Math.round(monthlyFixed),
+      monthly_sacred: Math.round(monthlySacred),
       monthly_plan: Math.round(planTotal),
       monthly_min_debt: Math.round(monthlyMinDebt),
       monthly_committed: Math.round(monthlyCommitted),
@@ -286,6 +291,16 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
       commitment_ratio_pct: Number(commitmentRatio.toFixed(1)),
       debt_to_income_pct: Number(debtToIncomeRatio.toFixed(1)),
       adjustments_impact: adjustmentsImpact,
+    },
+    cushion: {
+      current_balance: Number(cushion.current_balance || 0),
+      target_months: Number(cushion.target_months || 3),
+      target_amount: Math.round(monthlyFixed * Number(cushion.target_months || 3)),
+      progress_pct: monthlyFixed > 0
+        ? Math.min(100, Math.round((Number(cushion.current_balance || 0) / (monthlyFixed * Number(cushion.target_months || 3))) * 100))
+        : 0,
+      months_covered: monthlyFixed > 0 ? Number((Number(cushion.current_balance || 0) / monthlyFixed).toFixed(1)) : 0,
+      account_label: cushion.account_label,
     },
     score_breakdown: {
       ahorro: Math.round(scoreAhorro),
@@ -617,9 +632,57 @@ export default async function handler(req, res) {
     }
 
     // ── CRUD genérico para tablas AFP ─────────────────────────────
+    // ── Colchón Fiat (un registro por usuario) ──────────────────
+    if (action === 'afp_cushion_get') {
+      const { data, error } = await admin.from('afp_cushion').select('*').eq('owner_id', userId).maybeSingle()
+      if (error) throw error
+      const cushion = data || { owner_id: userId, current_balance: 0, target_months: 3, account_label: null, notes: null }
+      return res.status(200).json({ ok: true, cushion })
+    }
+    if (action === 'afp_cushion_set') {
+      const { current_balance, target_months, account_label, notes } = req.body
+      const payload = { owner_id: userId }
+      if (current_balance != null) payload.current_balance = Number(current_balance)
+      if (target_months != null)   payload.target_months = Number(target_months)
+      if ('account_label' in req.body) payload.account_label = account_label || null
+      if ('notes' in req.body) payload.notes = notes || null
+      const { data, error } = await admin.from('afp_cushion').upsert(payload, { onConflict: 'owner_id' }).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, cushion: data })
+    }
+    if (action === 'afp_cushion_move') {
+      const { kind, amount, reason, month } = req.body
+      if (!kind || !['deposit','withdraw'].includes(kind)) return res.status(400).json({ error: 'kind requerido' })
+      const amt = Number(amount)
+      if (!amt || amt <= 0) return res.status(400).json({ error: 'amount > 0 requerido' })
+      // Trae saldo actual o crea registro
+      const { data: existing } = await admin.from('afp_cushion').select('current_balance').eq('owner_id', userId).maybeSingle()
+      const curr = Number(existing?.current_balance || 0)
+      const newBalance = kind === 'deposit' ? curr + amt : Math.max(0, curr - amt)
+      // Actualiza saldo
+      await admin.from('afp_cushion').upsert({
+        owner_id: userId, current_balance: newBalance,
+        target_months: existing ? undefined : 3,
+      }, { onConflict: 'owner_id' })
+      // Registra movimiento
+      const { data: mv, error } = await admin.from('afp_cushion_moves').insert({
+        owner_id: userId, kind, amount: amt, reason: reason || null,
+        month: month || new Date().toISOString().substring(0,7),
+      }).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, move: mv, new_balance: newBalance })
+    }
+    if (action === 'afp_cushion_moves_list') {
+      const { data, error } = await admin.from('afp_cushion_moves')
+        .select('*').eq('owner_id', userId)
+        .order('created_at', { ascending: false }).limit(50)
+      if (error) throw error
+      return res.status(200).json({ ok: true, moves: data || [] })
+    }
+
     const AFP_TABLES = {
       afp_income:  { table: 'afp_incomes',         fields: ['name','amount','frequency','category','notes','is_active'] },
-      afp_fixed:   { table: 'afp_fixed_expenses',  fields: ['name','amount','frequency','category','due_day','priority','notes','is_active'] },
+      afp_fixed:   { table: 'afp_fixed_expenses',  fields: ['name','amount','frequency','category','due_day','priority','notes','is_active','is_sacred'] },
       afp_debt:    { table: 'afp_debts',           fields: ['name','kind','balance','credit_limit','min_payment','interest_rate','cut_day','due_day','notes','is_active'] },
       afp_plan:    { table: 'afp_monthly_plans',   fields: ['month','name','amount','category','planned_date','priority','is_done','notes'] },
       afp_goal:    { table: 'afp_goals',           fields: ['name','target_amount','current_amount','deadline','priority','notes','is_achieved'] },
