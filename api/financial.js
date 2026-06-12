@@ -27,120 +27,106 @@ function getAdminSupabase() {
 // AFP — Arquitecto Financiero Personal
 // ════════════════════════════════════════════════════════════════════
 
+// Normaliza monto según frecuencia → mensual
+function toMonthly(amount, frequency) {
+  const a = Number(amount) || 0
+  switch (frequency) {
+    case 'weekly':    return a * 4.33
+    case 'biweekly':  return a * 2.17
+    case 'monthly':   return a
+    case 'bimonthly': return a / 2
+    case 'quarterly': return a / 3
+    case 'yearly':    return a / 12
+    case 'one_time':  return a / 12  // estima 1/12 del año
+    default:          return a
+  }
+}
+
 async function afpDiagnose(admin, userId, userMetadata = {}) {
   const today = new Date()
-  const days30 = new Date(today.getTime() - 30 * 86400000).toISOString()
-  const days60 = new Date(today.getTime() - 60 * 86400000).toISOString()
-  const days90 = new Date(today.getTime() - 90 * 86400000).toISOString()
-
-  // Config del usuario
+  const monthStr = today.toISOString().substring(0, 7)  // 'YYYY-MM'
   const cfg = userMetadata.afp || {}
-  const includedAccounts = Array.isArray(cfg.included_accounts) ? cfg.included_accounts : null
-  const manualFixedExpenses = Array.isArray(cfg.fixed_expenses) ? cfg.fixed_expenses : []
-  const goals = Array.isArray(cfg.goals) ? cfg.goals : []
   const strategy = cfg.strategy || '50_30_20'
   const customDispersion = cfg.custom_dispersion || null
 
-  // Pull data en paralelo
-  const [movs30, movs90, accounts, bills, allTx] = await Promise.all([
-    admin.from('nodes').select('type,metadata,created_at').eq('owner_id', userId).in('type', ['income','expense']).gte('created_at', days30),
-    admin.from('nodes').select('type,metadata,created_at').eq('owner_id', userId).in('type', ['income','expense']).gte('created_at', days90),
-    admin.from('nodes').select('content,metadata').eq('owner_id', userId).eq('type', 'account'),
-    admin.from('nodes').select('content,metadata').eq('owner_id', userId).eq('type', 'bill'),
-    admin.from('crypto_transactions').select('quantity,price_mxn,total_mxn,type,symbol').eq('owner_id', userId),
+  // Pull data SOLO de tablas AFP
+  const [incomesRes, fixedRes, debtsRes, planRes, goalsRes] = await Promise.all([
+    admin.from('afp_incomes').select('*').eq('owner_id', userId).eq('is_active', true),
+    admin.from('afp_fixed_expenses').select('*').eq('owner_id', userId).eq('is_active', true),
+    admin.from('afp_debts').select('*').eq('owner_id', userId).eq('is_active', true),
+    admin.from('afp_monthly_plans').select('*').eq('owner_id', userId).eq('month', monthStr),
+    admin.from('afp_goals').select('*').eq('owner_id', userId).eq('is_achieved', false),
   ])
 
-  // ── Ingresos / Egresos ───────────────────────────────────────
-  const sumAmount = (rows, type) => (rows.data || [])
-    .filter(r => r.type === type)
-    .reduce((s, r) => s + (Number(r.metadata?.amount) || 0), 0)
+  const incomes = incomesRes.data || []
+  const fixedExpenses = fixedRes.data || []
+  const debts = debtsRes.data || []
+  const monthlyPlan = planRes.data || []
+  const goals = goalsRes.data || []
 
-  const income30  = sumAmount(movs30, 'income')
-  const expense30 = sumAmount(movs30, 'expense')
-  const income90  = sumAmount(movs90, 'income')
-  const expense90 = sumAmount(movs90, 'expense')
-
-  // Promedio mensual (usando 90d / 3)
-  const monthlyIncome  = income90 / 3 || income30 || 0
-  const monthlyExpense = expense90 / 3 || expense30 || 0
-
-  // ── Saldos de cuentas (filtradas por config si aplica) ───────
-  const cuentasTodas = (accounts.data || []).map(a => ({
-    name: a.content || a.metadata?.label || a.metadata?.account_name,
-    balance: Number(a.metadata?.initial_balance || a.metadata?.balance || 0),
-    kind: (a.metadata?.kind || a.metadata?.account_type || '').toLowerCase(),
-    included: !includedAccounts || includedAccounts.includes(a.content || a.metadata?.label || a.metadata?.account_name),
+  // ── Ingresos: TODO viene de afp_incomes (declarado por usuario) ──
+  const monthlyIncome = incomes.reduce((s, i) => s + toMonthly(i.amount, i.frequency), 0)
+  const incomesNormalized = incomes.map(i => ({
+    id: i.id, name: i.name, amount: Number(i.amount), frequency: i.frequency,
+    monthly: toMonthly(i.amount, i.frequency), category: i.category, notes: i.notes,
   }))
-  // Si el user no ha configurado nada → usa todas. Si configuró → respeta.
-  const cuentas = cuentasTodas.filter(c => c.included)
-  const totalLiquido = cuentas
-    .filter(c => !c.kind.includes('credit') && !c.kind.includes('credito'))
-    .reduce((s, c) => s + c.balance, 0)
 
-  // ── Pagos comprometidos próximos 30 días ─────────────────────
-  const todayDate = today.toISOString().split('T')[0]
-  const limit30 = new Date(today.getTime() + 30 * 86400000).toISOString().split('T')[0]
-  const billsProximos = (bills.data || []).filter(b => {
-    const due = b.metadata?.dueDate
-    return due && due >= todayDate && due <= limit30 && !b.metadata?.paid
-  })
-  const monthlyBillsAuto = billsProximos.reduce((s, b) => s + Number(b.metadata?.amount || 0), 0)
+  // ── Gastos fijos declarados ──────────────────────────────────
+  const fixedNormalized = fixedExpenses.map(f => ({
+    id: f.id, name: f.name, amount: Number(f.amount), frequency: f.frequency,
+    monthly: toMonthly(f.amount, f.frequency), category: f.category,
+    due_day: f.due_day, priority: f.priority, notes: f.notes,
+  })).sort((a,b) => (a.due_day || 99) - (b.due_day || 99))
+  const monthlyFixed = fixedNormalized.reduce((s, f) => s + f.monthly, 0)
 
-  // Suma gastos fijos manuales (declarados en config AFP)
-  const monthlyManualFixed = manualFixedExpenses.reduce((s, e) => {
-    const amt = Number(e.amount) || 0
-    const freq = e.frequency || 'monthly'
-    // Normaliza a monto mensual
-    if (freq === 'weekly')      return s + amt * 4.33
-    if (freq === 'biweekly')    return s + amt * 2.17
-    if (freq === 'bimonthly')   return s + amt / 2
-    if (freq === 'quarterly')   return s + amt / 3
-    if (freq === 'yearly')      return s + amt / 12
-    return s + amt // monthly default
-  }, 0)
+  // ── Plan mensual (gastos puntuales de este mes) ──────────────
+  const planTotal = monthlyPlan.reduce((s, p) => s + Number(p.amount), 0)
+  const planNormalized = monthlyPlan.map(p => ({
+    id: p.id, name: p.name, amount: Number(p.amount), category: p.category,
+    planned_date: p.planned_date, priority: p.priority, is_done: p.is_done, notes: p.notes,
+  })).sort((a,b) => (a.planned_date || '9999') < (b.planned_date || '9999') ? -1 : 1)
 
-  const monthlyCommitted = monthlyBillsAuto + monthlyManualFixed
+  // ── Deudas — pagos mínimos + estrategia ──────────────────────
+  const debtsNormalized = debts.map(d => ({
+    id: d.id, name: d.name, kind: d.kind, balance: Number(d.balance),
+    credit_limit: d.credit_limit ? Number(d.credit_limit) : null,
+    min_payment: Number(d.min_payment || 0), interest_rate: Number(d.interest_rate || 0),
+    cut_day: d.cut_day, due_day: d.due_day, notes: d.notes,
+  }))
+  const totalDebtBalance = debtsNormalized.reduce((s, d) => s + d.balance, 0)
+  const monthlyMinDebt = debtsNormalized.reduce((s, d) => s + d.min_payment, 0)
+  // Avalanche: ordena por tasa desc (paga primero el más caro)
+  const debtsByAvalanche = [...debtsNormalized]
+    .filter(d => d.balance > 0)
+    .sort((a,b) => b.interest_rate - a.interest_rate)
+  // Snowball: por balance asc (paga primero el más chico — para motivación)
+  const debtsBySnowball = [...debtsNormalized]
+    .filter(d => d.balance > 0)
+    .sort((a,b) => a.balance - b.balance)
 
-  // ── Patrimonio cripto (valor estimado) ───────────────────────
-  // Holdings = sum(buy quantity) - sum(sell quantity)
-  const holdings = {}
-  for (const tx of (allTx.data || [])) {
-    const sym = tx.symbol
-    if (!holdings[sym]) holdings[sym] = { quantity: 0, costMxn: 0 }
-    const q = Number(tx.quantity) || 0
-    const total = Number(tx.total_mxn) || (q * Number(tx.price_mxn || 0))
-    if (tx.type === 'buy' || tx.type === 'transfer_in') {
-      holdings[sym].quantity += q
-      holdings[sym].costMxn += total
-    } else if (tx.type === 'sell' || tx.type === 'transfer_out') {
-      holdings[sym].quantity -= q
-      holdings[sym].costMxn -= total
-    }
-  }
-  // Valor cripto al COSTO (no precio actual — eso lo veremos en el módulo cripto)
-  const totalCriptoAtCost = Object.values(holdings).reduce((s, h) => s + Math.max(0, h.costMxn), 0)
+  const monthlyCommitted = monthlyFixed + planTotal + monthlyMinDebt
+  const totalLiquido = 0  // En AFP v3 no calculamos liquidez de cuentas externas — opcional para futuro
+  const monthlyExpense = monthlyCommitted  // backwards compat
 
   // ── Métricas clave ───────────────────────────────────────────
-  const savingsRate = monthlyIncome > 0
-    ? ((monthlyIncome - monthlyExpense) / monthlyIncome) * 100
-    : 0
-  const liquidityMonths = monthlyExpense > 0
-    ? totalLiquido / monthlyExpense
-    : (totalLiquido > 0 ? 12 : 0)
-  const commitmentRatio = monthlyIncome > 0
-    ? (monthlyCommitted / monthlyIncome) * 100
-    : 0
-  const patrimonioTotal = totalLiquido + totalCriptoAtCost
+  const disposable = monthlyIncome - monthlyCommitted
+  const savingsRate = monthlyIncome > 0 ? (disposable / monthlyIncome) * 100 : 0
+  const commitmentRatio = monthlyIncome > 0 ? (monthlyCommitted / monthlyIncome) * 100 : 0
+  const debtToIncomeRatio = monthlyIncome > 0 ? (monthlyMinDebt / monthlyIncome) * 100 : 0
 
-  // ── Score 0-100 (determinístico) ─────────────────────────────
-  // 40 pts liquidez (4+ meses = full), 30 pts ahorro (20%+ = full), 30 pts deuda (0% = full)
-  let scoreLiquidez = Math.min(40, liquidityMonths * 10)
-  let scoreAhorro   = Math.max(0, Math.min(30, savingsRate * 1.5))
-  let scoreDeuda    = Math.max(0, 30 - commitmentRatio)
-  const score = Math.round(scoreLiquidez + scoreAhorro + scoreDeuda)
+  // ── Score 0-100 (determinístico, basado en declaraciones) ────
+  // 40 pts margen ahorrable (>30% = full)
+  // 30 pts ratio deuda (0% = full, ≥40% = 0)
+  // 30 pts equilibrio compromisos (≤60% = full, ≥90% = 0)
+  let scoreAhorro = Math.max(0, Math.min(40, savingsRate * 1.33))
+  let scoreDeuda  = Math.max(0, 30 - debtToIncomeRatio * 0.75)
+  let scoreEquilibrio = Math.max(0, Math.min(30, (100 - commitmentRatio)))
+  const score = Math.max(0, Math.round(scoreAhorro + scoreDeuda + scoreEquilibrio))
 
   let healthLabel, healthColor
-  if (score >= 75)      { healthLabel = 'Excelente'; healthColor = '#22c55e' }
+  if (incomes.length === 0) {
+    healthLabel = 'Sin datos'; healthColor = '#94a3b8'
+  } else if (score >= 75)      { healthLabel = 'Excelente'; healthColor = '#22c55e' }
   else if (score >= 55) { healthLabel = 'Saludable';  healthColor = '#84cc16' }
   else if (score >= 35) { healthLabel = 'En riesgo';  healthColor = '#fbbf24' }
   else                  { healthLabel = 'Crítico';    healthColor = '#ef4444' }
@@ -176,7 +162,7 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
   if (!dispersion.lifestyle) dispersion.lifestyle = 0
 
   // ── METAS con plan ───────────────────────────────────────────
-  const monthlyAhorroCapacity = monthlyIncome - monthlyCommitted - (monthlyExpense - monthlyBillsAuto)
+  const monthlyAhorroCapacity = disposable
   const goalsWithPlan = goals.map(g => {
     const target = Number(g.target_amount) || 0
     const current = Number(g.current_amount) || 0
@@ -185,7 +171,6 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
     const monthsLeft = deadline ? Math.max(1, Math.ceil((deadline - today) / (30 * 86400000))) : 12
     const monthlyNeeded = Math.ceil(remaining / monthsLeft)
     const gap = Math.max(0, monthlyNeeded - Math.max(0, monthlyAhorroCapacity))
-    // Cálculo de trabajo extra si hay gap
     const extraJob = gap > 0 ? {
       gap_monthly: Math.round(gap),
       options: [
@@ -195,14 +180,10 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
       ],
     } : null
     return {
-      id: g.id,
-      name: g.name,
-      target_amount: target,
-      current_amount: current,
-      remaining,
+      id: g.id, name: g.name,
+      target_amount: target, current_amount: current, remaining,
       deadline: g.deadline,
-      months_left: monthsLeft,
-      monthly_needed: monthlyNeeded,
+      months_left: monthsLeft, monthly_needed: monthlyNeeded,
       monthly_capacity: Math.round(monthlyAhorroCapacity),
       gap_monthly: Math.round(gap),
       achievable: gap <= 0,
@@ -213,89 +194,97 @@ async function afpDiagnose(admin, userId, userMetadata = {}) {
 
   // ── Recomendación principal ──────────────────────────────────
   const recommendations = []
-  if (liquidityMonths < 3) {
+  if (incomes.length === 0) {
+    recommendations.push({
+      priority: 'alta', title: 'Empieza declarando tus ingresos',
+      detail: 'Antes de poder analizar tu salud financiera necesitas decirme cuánto ganas y cada cuándo. Ve a ⚙️ Mi configuración → Ingresos.',
+    })
+  } else if (disposable < 0) {
+    recommendations.push({
+      priority: 'alta', title: '⚠️ Gastas más de lo que ganas',
+      detail: `Tus compromisos suman $${monthlyCommitted.toLocaleString('es-MX')}/mes pero solo ganas $${Math.round(monthlyIncome).toLocaleString('es-MX')}. Te faltan $${Math.abs(Math.round(disposable)).toLocaleString('es-MX')}/mes. Necesitas reducir gastos fijos o aumentar ingreso urgente.`,
+    })
+  }
+
+  // Recomendación de deudas (avalanche por tasa de interés)
+  if (debtsByAvalanche.length > 0 && disposable > 0) {
+    const target = debtsByAvalanche[0]
+    const extra = Math.min(disposable, target.balance * 0.1)
     recommendations.push({
       priority: 'alta',
-      title: 'Construir fondo de emergencia',
-      detail: `Tienes ${liquidityMonths.toFixed(1)} meses de liquidez. Meta: 3-6 meses. Prioriza ahorro al ${pcts.ahorro || 20}% sobre lifestyle.`,
+      title: '💳 Prioriza pagar ' + target.name,
+      detail: `Es la deuda más cara (${target.interest_rate}% anual, saldo $${target.balance.toLocaleString('es-MX')}). Si abonas $${Math.round(extra).toLocaleString('es-MX')} extra al mes (sobre el mínimo de $${target.min_payment}), saldarías en ~${Math.ceil(target.balance / (target.min_payment + extra))} meses.`,
     })
   }
-  if (commitmentRatio > 50) {
+
+  if (commitmentRatio > 80 && incomes.length > 0) {
     recommendations.push({
-      priority: 'alta',
-      title: 'Reducir compromisos fijos',
-      detail: `${commitmentRatio.toFixed(0)}% de tu ingreso está comprometido en pagos fijos. Considera renegociar o consolidar.`,
+      priority: 'alta', title: 'Compromisos muy altos',
+      detail: `${commitmentRatio.toFixed(0)}% de tu ingreso está comprometido. Solo te queda $${Math.max(0, Math.round(disposable)).toLocaleString('es-MX')}/mes libre. Considera renegociar gastos o aumentar ingresos.`,
+    })
+  } else if (commitmentRatio > 60 && incomes.length > 0) {
+    recommendations.push({
+      priority: 'media', title: 'Compromisos elevados',
+      detail: `${commitmentRatio.toFixed(0)}% comprometido. Ideal: ≤60%. Margen libre actual: $${Math.round(disposable).toLocaleString('es-MX')}/mes.`,
     })
   }
-  if (savingsRate < 10 && savingsRate >= 0) {
+
+  if (savingsRate < 10 && savingsRate >= 0 && incomes.length > 0) {
     recommendations.push({
-      priority: 'media',
-      title: 'Aumentar tasa de ahorro',
-      detail: `Estás ahorrando ${savingsRate.toFixed(1)}%. Meta inicial: 15-20%.`,
+      priority: 'media', title: 'Empieza a ahorrar',
+      detail: `Estás ahorrando ${savingsRate.toFixed(1)}% de tu ingreso. Meta inicial: 15-20%. Aunque sea $${Math.round(monthlyIncome * 0.05).toLocaleString('es-MX')}/mes al fondo de emergencia hace diferencia.`,
     })
   }
-  if (savingsRate < 0) {
+
+  if (recommendations.length === 0 && incomes.length > 0) {
     recommendations.push({
-      priority: 'alta',
-      title: 'Gastas más de lo que ganas',
-      detail: `Tu ahorro mensual es negativo (${savingsRate.toFixed(1)}%). Revisa categorías de gasto.`,
-    })
-  }
-  if (recommendations.length === 0) {
-    recommendations.push({
-      priority: 'baja',
-      title: 'Optimización avanzada',
-      detail: `Tu salud financiera es ${healthLabel.toLowerCase()}. Considera incrementar inversiones a largo plazo.`,
+      priority: 'baja', title: '✓ Vas por buen camino',
+      detail: `Tu salud financiera es ${healthLabel.toLowerCase()}. Considera empezar a invertir el excedente mensual para hacer crecer tu patrimonio.`,
     })
   }
 
   return {
     score,
     health: { label: healthLabel, color: healthColor },
+    month: monthStr,
     metrics: {
       monthly_income: Math.round(monthlyIncome),
-      monthly_expense: Math.round(monthlyExpense),
+      monthly_fixed: Math.round(monthlyFixed),
+      monthly_plan: Math.round(planTotal),
+      monthly_min_debt: Math.round(monthlyMinDebt),
       monthly_committed: Math.round(monthlyCommitted),
-      monthly_bills_auto: Math.round(monthlyBillsAuto),
-      monthly_manual_fixed: Math.round(monthlyManualFixed),
-      monthly_savings_capacity: Math.round(monthlyAhorroCapacity),
-      total_liquido: Math.round(totalLiquido),
-      total_cripto_cost: Math.round(totalCriptoAtCost),
-      patrimonio_total: Math.round(patrimonioTotal),
+      monthly_disposable: Math.round(disposable),
+      monthly_savings_capacity: Math.round(disposable),
+      total_debt_balance: Math.round(totalDebtBalance),
       savings_rate_pct: Number(savingsRate.toFixed(1)),
-      liquidity_months: Number(liquidityMonths.toFixed(1)),
       commitment_ratio_pct: Number(commitmentRatio.toFixed(1)),
+      debt_to_income_pct: Number(debtToIncomeRatio.toFixed(1)),
     },
     score_breakdown: {
-      liquidez: Math.round(scoreLiquidez),
       ahorro: Math.round(scoreAhorro),
       deuda: Math.round(scoreDeuda),
+      equilibrio: Math.round(scoreEquilibrio),
     },
     strategy: {
-      id: strategy,
-      name: selected.name,
-      next_income: nextIncome,
-      dispersion,
-      percentages: pcts,
+      id: strategy, name: selected.name,
+      next_income: nextIncome, dispersion, percentages: pcts,
       adjustment_note: adjustmentNote,
+    },
+    incomes: incomesNormalized,
+    fixed_expenses: fixedNormalized,
+    monthly_plan: planNormalized,
+    debts: debtsNormalized,
+    debt_strategies: {
+      avalanche: debtsByAvalanche,
+      snowball:  debtsBySnowball,
     },
     goals: goalsWithPlan,
     recommendations,
-    upcoming_bills: billsProximos.map(b => ({
-      name: b.content || b.metadata?.label,
-      amount: Number(b.metadata?.amount || 0),
-      due: b.metadata?.dueDate,
-    })).sort((a,b) => a.due < b.due ? -1 : 1).slice(0, 5),
-    manual_fixed_expenses: manualFixedExpenses,
-    accounts_all: cuentasTodas,
-    accounts_included: cuentas.map(c => ({ name: c.name, balance: c.balance })),
     config: {
       strategy,
-      included_accounts: includedAccounts,
-      fixed_expenses: manualFixedExpenses,
-      goals,
       custom_dispersion: customDispersion,
     },
+    has_data: incomes.length > 0 || fixedExpenses.length > 0,
     last_updated: new Date().toISOString(),
   }
 }
@@ -588,7 +577,6 @@ export default async function handler(req, res) {
     }
 
     if (action === 'afp_save_config') {
-      // Guarda config AFP en user_metadata
       const { config } = req.body
       if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config requerida' })
       const currentMeta = user.user_metadata || {}
@@ -598,6 +586,48 @@ export default async function handler(req, res) {
       })
       if (error) throw error
       return res.status(200).json({ ok: true, afp: newAfp })
+    }
+
+    // ── CRUD genérico para tablas AFP ─────────────────────────────
+    const AFP_TABLES = {
+      afp_income:  { table: 'afp_incomes',         fields: ['name','amount','frequency','category','notes','is_active'] },
+      afp_fixed:   { table: 'afp_fixed_expenses',  fields: ['name','amount','frequency','category','due_day','priority','notes','is_active'] },
+      afp_debt:    { table: 'afp_debts',           fields: ['name','kind','balance','credit_limit','min_payment','interest_rate','cut_day','due_day','notes','is_active'] },
+      afp_plan:    { table: 'afp_monthly_plans',   fields: ['month','name','amount','category','planned_date','priority','is_done','notes'] },
+      afp_goal:    { table: 'afp_goals',           fields: ['name','target_amount','current_amount','deadline','priority','notes','is_achieved'] },
+    }
+    for (const [prefix, def] of Object.entries(AFP_TABLES)) {
+      if (action === `${prefix}_list`) {
+        let q = admin.from(def.table).select('*').eq('owner_id', userId)
+        if (req.body.month) q = q.eq('month', req.body.month)
+        if (req.body.active_only) q = q.eq('is_active', true)
+        const { data, error } = await q.order('created_at', { ascending: true })
+        if (error) throw error
+        return res.status(200).json({ ok: true, items: data || [] })
+      }
+      if (action === `${prefix}_add`) {
+        const row = { owner_id: userId }
+        for (const f of def.fields) if (f in req.body) row[f] = req.body[f]
+        const { data, error } = await admin.from(def.table).insert(row).select().single()
+        if (error) throw error
+        return res.status(200).json({ ok: true, item: data })
+      }
+      if (action === `${prefix}_update`) {
+        const { id, ...patch } = req.body
+        if (!id) return res.status(400).json({ error: 'id requerido' })
+        const update = {}
+        for (const f of def.fields) if (f in patch) update[f] = patch[f]
+        const { data, error } = await admin.from(def.table).update(update).eq('id', id).eq('owner_id', userId).select().single()
+        if (error) throw error
+        return res.status(200).json({ ok: true, item: data })
+      }
+      if (action === `${prefix}_delete`) {
+        const { id } = req.body
+        if (!id) return res.status(400).json({ error: 'id requerido' })
+        const { error } = await admin.from(def.table).delete().eq('id', id).eq('owner_id', userId)
+        if (error) throw error
+        return res.status(200).json({ ok: true })
+      }
     }
 
     // ── CRIPTO PORTFOLIO ────────────────────────────────────────
