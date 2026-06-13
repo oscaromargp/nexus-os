@@ -68,7 +68,7 @@ import {
   UserPlus, UserCheck, UserX, UsersRound, Contact,
   ArrowRight, ArrowLeft, MoveRight, MoveLeft,
   Minus, Asterisk, Divide, Equal,
-  ArrowLeftRight, Printer, Save, FileSpreadsheet
+  ArrowLeftRight, Printer, Save, FileSpreadsheet, Coins
 } from 'lucide'
 
 // Registro central — todos los iconos disponibles en Nexus OS
@@ -95,7 +95,7 @@ const _lucideIcons = {
   UserPlus, UserCheck, UserX, UsersRound, Contact,
   ArrowRight, ArrowLeft, MoveRight, MoveLeft,
   Minus, Asterisk, Divide, Equal,
-  ArrowLeftRight, Printer, Save, FileSpreadsheet
+  ArrowLeftRight, Printer, Save, FileSpreadsheet, Coins
 }
 
 /**
