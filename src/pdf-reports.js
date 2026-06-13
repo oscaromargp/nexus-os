@@ -578,47 +578,75 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
         ? Math.round(bruto * (1 - m.comision) * 100) / 100 : 0
       const neto   = Math.round((bruto - comMxn) * 100) / 100
       const isCan    = m.estado === 'cancelado'
+      const isPen    = m.estado === 'pendiente'
       const isCrypto = m.moneda !== 'MXN' && m.moneda !== 'USD'
 
       // Nombre de la contraparte
       const nombre = m.tipo === 'entrada'
-        ? (m.ordenante    || m.notas || 'Depósito')
-        : (m.beneficiario || m.notas || 'Retiro')
+        ? (m.ordenante    || 'Depósito')
+        : (m.beneficiario || 'Retiro')
 
-      // Línea banco origen → destino (nueva trazabilidad dual)
-      const bo = m.banco_origen,  co = m.clabe_origen  ? String(m.clabe_origen)  : ''
-      const bd = m.banco_destino, cd = m.clabe_destino ? String(m.clabe_destino) : ''
+      // Línea banco origen → destino (corta CLABEs largas a últimos 4 dígitos
+      // para evitar que autotable estire char-by-char cuando un token excede el cell)
+      const _clabe = (c) => {
+        const s = String(c || '').trim()
+        return s.length >= 10 ? '…' + s.slice(-4) : s
+      }
+      const bo = m.banco_origen,  co = _clabe(m.clabe_origen)
+      const bd = m.banco_destino, cd = _clabe(m.clabe_destino)
       let bancoLine = ''
       if (bo || bd) {
-        if (bo) bancoLine += bo + (co ? '  ' + co : '')
+        if (bo) bancoLine += bo + (co ? ' ' + co : '')
         if (bo && bd) bancoLine += '  →  '
-        if (bd) bancoLine += bd + (cd ? '  ' + cd : '')
+        if (bd) bancoLine += bd + (cd ? ' ' + cd : '')
       } else if (m.banco || m.clabe) {
-        bancoLine = [m.banco, m.clabe ? String(m.clabe) : ''].filter(Boolean).join('  ·  ')
+        bancoLine = [m.banco, _clabe(m.clabe)].filter(Boolean).join(' · ')
       }
 
-      const extraNote   = m.notas && m.notas !== nombre ? m.notas : ''
+      // Quita URLs de las notas (van como links clickables aparte) y trunca
+      const cleanNotes = (m.notas || '')
+        .replace(/https?:\/\/\S+/g, '')   // ← URLs van a links abajo
+        .replace(/\s+/g, ' ')
+        .trim()
+      const extraNote = cleanNotes && cleanNotes !== nombre ? cleanNotes.slice(0, 80) : ''
+
+      // Línea reservada al pie de la celda para los chips clickables (los pinta didDrawCell).
+      // Usamos espacios en blanco para reservar la altura de la fila.
+      const hasUrls = (Array.isArray(m.comprobantes) && m.comprobantes.some(c => c?.url))
+                   || !!m.comprobante_url
+                   || /https?:\/\/\S+/.test(m.notas || '')
+
       const contraparte = nombre
         + (bancoLine ? '\n' + bancoLine : '')
         + (extraNote ? '\n' + extraNote : '')
+        + (hasUrls   ? '\n '            : '')
 
-      const cryptoStr = isCrypto && !isCan
+      const cryptoStr = isCrypto && !isCan && !isPen
         ? (m.cantidad || 0).toLocaleString('es-MX', { maximumFractionDigits: 6 })
           + ' ' + m.moneda
           + (m.tc ? '\n@$' + m.tc.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '')
         : ''
 
-      return [
+      // En pendiente: monto entre paréntesis con etiqueta "PENDIENTE", saldo SIN cambio
+      const cargoStr = isCan ? '' : isPen
+        ? (m.tipo === 'salida'  ? '(' + fmt$(neto) + ')\nPENDIENTE' : '')
+        : (m.tipo === 'salida'  ? fmt$(neto) : '')
+      const abonoStr = isCan ? '' : isPen
+        ? (m.tipo === 'entrada' ? '(' + fmt$(neto) + ')\nPENDIENTE' : '')
+        : (m.tipo === 'entrada' ? fmt$(neto) : '')
+
+      const row = [
         m.fecha,
         '',            // ← triángulo dibujado en didDrawCell
         contraparte,
         cryptoStr,
-        !isCan && m.tipo === 'salida'  ? fmt$(neto) : '',
-        !isCan && m.tipo === 'entrada' ? fmt$(neto) : '',
-        isCan ? 'CANCELADO' : fmt$(m._balance),
+        cargoStr,
+        abonoStr,
+        isCan ? 'CANCELADO' : isPen ? '—' : fmt$(m._balance),
       ]
+      return row
     }),
-    styles: { fontSize: 7, cellPadding: 2.5, lineColor: [30, 45, 70], lineWidth: 0.1 },
+    styles: { fontSize: 7, cellPadding: 2.5, lineColor: [30, 45, 70], lineWidth: 0.1, overflow: 'linebreak', valign: 'top' },
     headStyles: {
       fillColor: T.ink, textColor: T.cyan,
       fontSize: 6.5, fontStyle: 'bold',
@@ -633,15 +661,28 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
       5: { cellWidth: 23, halign: 'right',  textColor: T.greenD, fontStyle: 'bold', fontSize: 7 },
       6: { cellWidth: 24, halign: 'right',  fontStyle: 'bold',   fontSize: 7.5 },
     },
+    didParseCell: (data) => {
+      // Pinta el fondo de las filas pendientes en amarillo tenue
+      if (data.section === 'body') {
+        const m_ = list[data.row.index]
+        if (m_?.estado === 'pendiente') {
+          data.cell.styles.fillColor = [254, 249, 195]   // amber-100
+          data.cell.styles.textColor = [120, 53, 15]     // amber-900
+        } else if (m_?.estado === 'cancelado') {
+          data.cell.styles.textColor = [100, 116, 139]
+        }
+      }
+    },
     didDrawCell: (data) => {
       // ── Triángulo direccional (col 1) ────────────────────────────────────────
       if (data.section === 'body' && data.column.index === 1) {
         const m_    = list[data.row.index]
         const isEnt = m_?.tipo === 'entrada'
+        const isPen = m_?.estado === 'pendiente'
         const cx    = data.cell.x + data.cell.width  / 2
         const cy    = data.cell.y + data.cell.height / 2
         const s     = 2.2
-        doc.setFillColor(...(isEnt ? T.greenD : T.redD))
+        doc.setFillColor(...(isPen ? [217, 119, 6] : isEnt ? T.greenD : T.redD))
         if (isEnt) {
           doc.triangle(cx - s, cy + s * 0.85, cx + s, cy + s * 0.85, cx, cy - s * 0.85, 'F')
         } else {
@@ -650,8 +691,35 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
       }
       // ── Saldo — verde/rojo según positivo/negativo (col 6) ──────────────────
       if (data.section === 'body' && data.column.index === 6) {
-        const bal = list[data.row.index]?._balance ?? 0
-        data.cell.styles.textColor = bal >= 0 ? T.greenD : T.redD
+        const m_  = list[data.row.index]
+        const bal = m_?._balance ?? 0
+        if (m_?.estado !== 'pendiente' && m_?.estado !== 'cancelado') {
+          data.cell.styles.textColor = bal >= 0 ? T.greenD : T.redD
+        }
+      }
+      // ── Comprobantes clickables (col 2) ──────────────────────────────────────
+      if (data.section === 'body' && data.column.index === 2) {
+        const m_ = list[data.row.index]
+        if (!m_) return
+        const urls = []
+        if (Array.isArray(m_.comprobantes)) m_.comprobantes.forEach(c => c?.url && urls.push(c.url))
+        if (m_.comprobante_url && !urls.includes(m_.comprobante_url)) urls.unshift(m_.comprobante_url)
+        ;(m_.notas || '').match(/https?:\/\/\S+/g)?.forEach(u => { if (!urls.includes(u)) urls.push(u) })
+        if (!urls.length) return
+        // Dibuja chips clickables al pie de la celda
+        const padX = 2.5
+        const baseY = data.cell.y + data.cell.height - 3.2
+        let cx = data.cell.x + padX
+        doc.setFont(T.font, 'bold'); doc.setFontSize(6); doc.setTextColor(...T.cyan)
+        urls.forEach((url, i) => {
+          const label = `🔗 #${i + 1}`
+          const w = doc.getTextWidth(label) + 1.2
+          if (cx + w > data.cell.x + data.cell.width - padX) return   // no cabe más
+          doc.text(label, cx, baseY)
+          doc.link(cx, baseY - 2.6, w, 3.4, { url })
+          cx += w + 1.6
+        })
+        doc.setTextColor(...T.textInk); doc.setFontSize(7); doc.setFont(T.font, 'normal')
       }
     },
     didDrawPage: (data) => {

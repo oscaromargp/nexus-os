@@ -254,6 +254,7 @@ const _MV_PER_PAGE  = 30
 let _mvTcCache      = {}     // { USDT: {price, ts}, BTC: {...}, ... }
 let _mvEditingId    = null
 let _mvPendingFile  = null
+let _mvComprobantes = []     // [{type:'url'|'file', url, label?}]  ← multi-adjuntos
 
 // Categorías base de movimientos (con autosugerencia)
 const _MV_CATS = ['Operaciones','Proveedores','Nómina','Servicios','Impuestos',
@@ -21761,11 +21762,11 @@ function _mvWithBalance(sorted) {
   const asc     = [...sorted].reverse()
   let   bal     = 0
   const withBal = asc.map(m => {
-    if (m.estado !== 'cancelado') {
-      // Balance usa NETO (bruto − comisión) = lo que realmente se mueve en la cuenta del cliente
+    // Pendiente y cancelado NO impactan saldo (sólo "hecho" se contabiliza)
+    if (m.estado === 'hecho' || (!m.estado && m.estado !== 'cancelado' && m.estado !== 'pendiente')) {
       bal += m.tipo === 'entrada' ? _mvNetoAmount(m) : -_mvNetoAmount(m)
     }
-    return { ...m, _balance: Math.round(bal * 100) / 100 }
+    return { ...m, _balance: Math.round(bal * 100) / 100, _pending: m.estado === 'pendiente' }
   })
   return withBal.reverse()
 }
@@ -22009,22 +22010,34 @@ async function renderMovimientos() {
       }).join('')
     : `<span style="color:var(--text-dim);font-size:12px;">Sin orquestadores — crea uno primero</span>`
 
-  // ── KPI strip ──
+  // ── KPI strip (compact, mobile-first: 2 col en móvil, 4-5 en desktop) ──
   const kpiCard = (icon, label, value, color, prefix='$') => `
-    <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px 20px;cursor:default;transition:transform 0.2s,box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 20px rgba(0,0,0,0.3)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <span style="color:${color};opacity:0.7;">${lx(icon,13)}</span>
-        <span style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;">${label}</span>
+    <div class="mv-kpi-card" style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:11px;padding:9px 11px;cursor:default;">
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+        <span style="color:${color};opacity:0.75;display:inline-flex;">${lx(icon,11)}</span>
+        <span style="font-size:9px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;">${label}</span>
       </div>
-      <div style="font-size:19px;font-weight:800;color:${color};font-family:'JetBrains Mono',monospace;">${prefix}${_mvFmt$(value)}</div>
+      <div class="mv-kpi-val" style="font-size:14px;font-weight:800;color:${color};font-family:'JetBrains Mono',monospace;line-height:1.15;word-break:break-all;">${prefix}${_mvFmt$(value)}</div>
     </div>`
 
   const kpiHtml = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;">
-      ${kpiCard('TrendingUp',   'Entradas MXN',         kpis.entradas,  '#4ade80')}
-      ${kpiCard('TrendingDown', 'Salidas MXN',           kpis.salidas,   '#f87171')}
-      ${kpiCard('BarChart2',    'Saldo Neto',            Math.abs(kpis.net), kpis.net >= 0 ? '#4ade80' : '#f87171')}
-      ${kpis.comisiones > 0 ? kpiCard('Percent', 'Comisiones (interno)', kpis.comisiones, '#fbbf24') : ''}
+    <style>
+      .mv-kpi-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:14px;}
+      @media(min-width:640px){.mv-kpi-grid{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px;}.mv-kpi-card{padding:12px 14px;border-radius:13px;}.mv-kpi-val{font-size:17px !important;}}
+      .mv-charts-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:14px;}
+      @media(min-width:640px){.mv-charts-grid{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:18px;}}
+      .mv-chart-panel{background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:12px;padding:10px 12px;}
+      @media(min-width:640px){.mv-chart-panel{padding:14px 16px;border-radius:14px;}}
+      .mv-charts-toggle{display:flex;justify-content:flex-end;margin-bottom:6px;}
+      @media(min-width:640px){.mv-charts-toggle{display:none;}}
+      details.mv-charts-details > summary{list-style:none;cursor:pointer;}
+      details.mv-charts-details > summary::-webkit-details-marker{display:none;}
+    </style>
+    <div class="mv-kpi-grid">
+      ${kpiCard('TrendingUp',   'Entradas',   kpis.entradas,  '#4ade80')}
+      ${kpiCard('TrendingDown', 'Salidas',    kpis.salidas,   '#f87171')}
+      ${kpiCard('BarChart2',    'Saldo neto', Math.abs(kpis.net), kpis.net >= 0 ? '#4ade80' : '#f87171')}
+      ${kpis.comisiones > 0 ? kpiCard('Percent', 'Comisiones', kpis.comisiones, '#fbbf24') : ''}
       ${kpis.pendiente  !== 0 ? kpiCard('Clock', 'Pendiente', Math.abs(kpis.pendiente), '#a78bfa') : ''}
     </div>`
 
@@ -22153,7 +22166,13 @@ async function renderMovimientos() {
               </td>
               <td style="padding:10px 12px;text-align:right;color:${balColor};font-weight:900;font-family:'JetBrains Mono',monospace;white-space:nowrap;font-size:13px;">${isCan?'<span style="color:#475569">—</span>':(m._balance>=0?'':'-')+' $'+_mvFmt$(Math.abs(m._balance))}</td>
               <td style="padding:10px 12px;text-align:center;">${_mvEstadoBadge(m.estado)}</td>
-              <td style="padding:10px 12px;text-align:center;">${m.comprobante_url ? `<a href="${_mvEsc(m.comprobante_url)}" target="_blank" onclick="event.stopPropagation()" style="color:#00f0ff;" title="Ver comprobante">${lx('ExternalLink',13)}</a>` : '<span style="color:#334155;">—</span>'}</td>
+              <td style="padding:10px 12px;text-align:center;">${(()=>{
+                const arr = Array.isArray(m.comprobantes) ? m.comprobantes : []
+                const head = arr[0]?.url || m.comprobante_url
+                if (!head) return '<span style="color:#334155;">—</span>'
+                const n = Math.max(arr.length, m.comprobante_url ? 1 : 0)
+                return `<a href="${_mvEsc(head)}" target="_blank" onclick="event.stopPropagation()" style="color:#00f0ff;display:inline-flex;align-items:center;gap:3px;" title="Ver comprobante${n>1?'s ('+n+')':''}">${lx('ExternalLink',13)}${n>1?`<span style="font-size:10px;font-weight:700;background:rgba(0,246,255,0.15);padding:1px 5px;border-radius:6px;">${n}</span>`:''}</a>`
+              })()}</td>
               <td style="padding:10px 6px;text-align:center;">
                 <button onclick="event.stopPropagation();mvDeleteMov('${m.id}')" style="background:none;border:none;color:var(--text-dim);cursor:pointer;padding:4px;border-radius:4px;transition:all 0.15s;" onmouseover="this.style.color='#f87171';this.style.background='rgba(248,113,113,0.1)'" onmouseout="this.style.color='var(--text-dim)';this.style.background=''">
                   ${lx('Trash2',13)}
@@ -22187,21 +22206,27 @@ async function renderMovimientos() {
     </div>
     ${kpiHtml + actionsHtml}
     ${_mvActiveOrqId ? `
-      <!-- Gráficas panel -->
-      <div id="mv-charts-panel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:20px;">
-        <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px;">${lx('TrendingUp',11,'',{color:'#00f0ff'})} Evolución de Saldo</div>
-          <canvas id="mv-chart-balance" height="120"></canvas>
+      <!-- Gráficas panel — colapsable en móvil para no estorbar -->
+      <details class="mv-charts-details" ${_mvChartsOpen()?'open':''} ontoggle="_mvSaveChartsState(this.open)" style="margin-bottom:14px;">
+        <summary style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:rgba(255,255,255,0.03);border:1px solid var(--glass-border);border-radius:10px;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;">
+          <span style="display:flex;align-items:center;gap:6px;">${lx('BarChart2',12,'',{color:'#00f0ff'})} Gráficas</span>
+          <span style="font-size:10px;color:var(--text-dim);">tap para ocultar / mostrar</span>
+        </summary>
+        <div id="mv-charts-panel" class="mv-charts-grid" style="margin-top:8px;">
+          <div class="mv-chart-panel">
+            <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px;">${lx('TrendingUp',10,'',{color:'#00f0ff'})} Evolución de saldo</div>
+            <canvas id="mv-chart-balance" height="90"></canvas>
+          </div>
+          <div class="mv-chart-panel">
+            <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px;">${lx('PieChart',10,'',{color:'#fbbf24'})} Por moneda</div>
+            <canvas id="mv-chart-moneda" height="90"></canvas>
+          </div>
+          <div class="mv-chart-panel">
+            <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:7px;">${lx('BarChart2',10,'',{color:'#4ade80'})} Tendencia mensual</div>
+            <canvas id="mv-chart-mensual" height="90"></canvas>
+          </div>
         </div>
-        <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px;">${lx('PieChart',11,'',{color:'#fbbf24'})} Por Moneda</div>
-          <canvas id="mv-chart-moneda" height="120"></canvas>
-        </div>
-        <div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:14px;padding:16px;">
-          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px;">${lx('BarChart2',11,'',{color:'#4ade80'})} Tendencia Mensual</div>
-          <canvas id="mv-chart-mensual" height="120"></canvas>
-        </div>
-      </div>
+      </details>
     ` : ''}
     ${_mvActiveOrqId ? filterHtml : ''}
     ${_mvActiveOrqId ? `<div style="background:var(--bg-panel);border:1px solid var(--glass-border);border-radius:16px;padding:20px;">
@@ -22210,9 +22235,26 @@ async function renderMovimientos() {
   `
   requestAnimationFrame(refreshIcons)
 
-  // ── Renderizar gráficas Chart.js ──
-  if (_mvActiveOrqId && withBal.length) {
+  // ── Renderizar gráficas Chart.js (sólo si el panel está abierto) ──
+  if (_mvActiveOrqId && withBal.length && _mvChartsOpen()) {
     requestAnimationFrame(() => _mvRenderCharts(withBal))
+  }
+}
+
+// Charts panel state (default cerrado en móvil ≤640px, abierto en desktop)
+function _mvChartsOpen() {
+  const saved = localStorage.getItem('nexus_mv_charts_open')
+  if (saved === '1') return true
+  if (saved === '0') return false
+  // default: open si pantalla ancha
+  return typeof window !== 'undefined' && window.innerWidth > 640
+}
+window._mvSaveChartsState = (open) => {
+  localStorage.setItem('nexus_mv_charts_open', open ? '1' : '0')
+  // si lo abren por primera vez, renderiza
+  if (open && _mvActiveOrqId) {
+    const withBal = _mvWithBalance(_mvFiltered())
+    if (withBal.length) requestAnimationFrame(() => _mvRenderCharts(withBal))
   }
 }
 
@@ -22361,6 +22403,15 @@ window.mvFetchTcAndRender = async () => {
 window.mvOpenModal = async (id = null) => {
   _mvEditingId = id; _mvPendingFile = null
   const mov = id ? _mvMovs.find(m => m.id === id) : null
+  // Hidrata _mvComprobantes (multi-adjuntos). Backward-compat: si solo hay
+  // comprobante_url, lo monta como primer item.
+  if (Array.isArray(mov?.comprobantes) && mov.comprobantes.length) {
+    _mvComprobantes = mov.comprobantes.map(c => ({ ...c }))
+  } else if (mov?.comprobante_url) {
+    _mvComprobantes = [{ type: 'url', url: mov.comprobante_url, label: '' }]
+  } else {
+    _mvComprobantes = []
+  }
   _mvFetchTc()
   const fld = (label, inner) =>
     `<div><label style="display:block;font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">${label}</label>${inner}</div>`
@@ -22476,26 +22527,19 @@ window.mvOpenModal = async (id = null) => {
           ${fld('Notas', `<textarea id="mv-notas" placeholder="Referencia, concepto, observaciones..." rows="2" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit;">${_mvEsc(mov?.notas||'')}</textarea>`)}
         </div>
 
-        <!-- Comprobante -->
+        <!-- Comprobantes (múltiples links + archivos) -->
         <div style="margin-bottom:22px;">
-          ${fld('Comprobante', `
-            ${mov?.comprobante_url ? `<div style="margin-bottom:10px;padding:8px 12px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:8px;display:flex;align-items:center;gap:8px;"><a href="${_mvEsc(mov.comprobante_url)}" target="_blank" style="color:#00f0ff;font-size:12px;display:flex;align-items:center;gap:5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lx('ExternalLink',12)} ${_mvEsc(mov.comprobante_url)}</a></div>` : ''}
-            <!-- Opción 1: URL directa -->
-            <div style="margin-bottom:10px;">
-              <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;display:flex;align-items:center;gap:5px;">${lx('Link',11,'',{color:'#00f0ff'})} Pegar enlace</div>
-              <input type="url" id="mv-comp-url" value="${_mvEsc(mov?.comprobante_url&&!mov.comprobante_url.startsWith('http')?'':mov?.comprobante_url||'')}" placeholder="https://tronscan.org/#/... · drive.google.com · photos.app.goo.gl..." oninput="mvOnUrlInput()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:12px;outline:none;box-sizing:border-box;font-family:'JetBrains Mono',monospace;transition:border-color 0.2s;" onfocus="this.style.borderColor='rgba(0,246,255,0.4)'" onblur="this.style.borderColor='rgba(255,255,255,0.1)'" />
+          ${fld('Comprobantes', `
+            <div id="mv-comp-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+              <input type="url" id="mv-comp-url" placeholder="Pega un link y dale +"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();mvAddCompUrl()}"
+                style="flex:1;min-width:160px;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:12px;outline:none;box-sizing:border-box;font-family:'JetBrains Mono',monospace;" />
+              <button type="button" onclick="mvAddCompUrl()" style="padding:10px 16px;background:rgba(0,246,255,0.12);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;min-width:48px;">+ Link</button>
+              <button type="button" onclick="document.getElementById('mv-file-inp').click()" style="padding:10px 16px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;">${lx('Upload',13)} Archivo</button>
             </div>
-            <!-- Separador -->
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-              <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
-              <span style="font-size:11px;color:var(--text-dim);font-weight:600;">O</span>
-              <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
-            </div>
-            <!-- Opción 2: Archivo -->
-            <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;display:flex;align-items:center;gap:5px;">${lx('Upload',11,'',{color:'#64748b'})} Subir archivo</div>
-            <div id="mv-drop-zone" ondrop="mvHandleDrop(event)" ondragover="event.preventDefault();this.style.borderColor='rgba(0,246,255,0.5)'" ondragleave="this.style.borderColor='rgba(255,255,255,0.1)'" onclick="document.getElementById('mv-file-inp').click()" style="border:2px dashed rgba(255,255,255,0.1);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:border-color 0.2s;">
-              ${lx('Upload',16,'',{color:'#64748b'})}
-              <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">Arrastra o haz clic — JPG · PNG · PDF · 5MB máx.</div>
+            <div id="mv-drop-zone" ondrop="mvHandleDrop(event)" ondragover="event.preventDefault();this.style.borderColor='rgba(0,246,255,0.5)'" ondragleave="this.style.borderColor='rgba(255,255,255,0.1)'" onclick="document.getElementById('mv-file-inp').click()" style="border:1px dashed rgba(255,255,255,0.1);border-radius:8px;padding:8px;text-align:center;cursor:pointer;font-size:10px;color:var(--text-dim);transition:border-color 0.2s;">
+              o arrastra aquí · JPG · PNG · PDF · 5 MB máx · puedes agregar varios
             </div>
             <input type="file" id="mv-file-inp" accept="image/*,.pdf" style="display:none;" onchange="mvHandleFile(event)" />
             <div id="mv-file-st" style="margin-top:6px;font-size:11px;color:#4ade80;"></div>
@@ -22515,6 +22559,7 @@ window.mvOpenModal = async (id = null) => {
   setTimeout(() => {
     _mvToggleComision()
     mvCalcMxn()
+    _mvRenderCompList()
     // Si hay TC cacheado para la moneda del modal, auto-rellenar si TC está vacío
     if (!mov) {
       const ms = document.getElementById('mv-moneda')
@@ -22526,6 +22571,52 @@ window.mvOpenModal = async (id = null) => {
       }
     }
   }, 40)
+}
+
+// ── Multi-comprobantes: render + add/remove ────────────────────────────────────
+function _mvRenderCompList() {
+  const wrap = document.getElementById('mv-comp-list')
+  if (!wrap) return
+  if (!_mvComprobantes.length) {
+    wrap.innerHTML = '<div style="font-size:11px;color:var(--text-dim);padding:6px 2px;">Sin comprobantes aún. Pega links o sube archivos.</div>'
+    return
+  }
+  wrap.innerHTML = _mvComprobantes.map((c, i) => {
+    const isFile = c.type === 'file'
+    const label  = c.label || c.url || ''
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(0,246,255,0.05);border:1px solid rgba(0,246,255,0.15);border-radius:8px;">
+      <span style="color:${isFile?'#fbbf24':'#00f0ff'};display:inline-flex;">${lx(isFile?'Paperclip':'Link',12)}</span>
+      ${c.url ? `<a href="${_mvEsc(c.url)}" target="_blank" style="color:#00f0ff;font-size:12px;text-decoration:none;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_mvEsc(label)}</a>` : `<span style="color:#fbbf24;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">⏳ pendiente subir · ${_mvEsc(label)}</span>`}
+      <button type="button" onclick="mvRemoveComp(${i})" title="Quitar" style="background:none;border:none;color:var(--text-dim);cursor:pointer;padding:2px 4px;border-radius:4px;" onmouseover="this.style.color='#f87171'" onmouseout="this.style.color='var(--text-dim)'">${lx('X',12)}</button>
+    </div>`
+  }).join('')
+  refreshIcons()
+}
+
+window.mvAddCompUrl = () => {
+  const inp = document.getElementById('mv-comp-url')
+  if (!inp) return
+  const url = inp.value.trim()
+  if (!url) return
+  // Validación mínima
+  if (!/^https?:\/\//i.test(url)) { showToast('⚠ El link debe empezar con http(s)://'); return }
+  if (_mvComprobantes.some(c => c.url === url)) { showToast('Ya está agregado'); inp.value=''; return }
+  _mvComprobantes.push({ type:'url', url, label: _mvShortLabel(url) })
+  inp.value = ''
+  _mvRenderCompList()
+}
+
+window.mvRemoveComp = (idx) => {
+  _mvComprobantes.splice(idx, 1)
+  _mvRenderCompList()
+}
+
+function _mvShortLabel(url) {
+  try {
+    const u = new URL(url)
+    const tail = (u.pathname.split('/').pop() || u.hostname).slice(0, 60)
+    return decodeURIComponent(tail || u.hostname)
+  } catch { return url.slice(0, 60) }
 }
 
 window.mvCloseModal  = () => { document.getElementById('mv-modal-overlay')?.remove(); _mvEditingId = null }
@@ -22642,22 +22733,30 @@ window.mvOnUrlInput = () => {
 
 window.mvHandleDrop = (e) => {
   e.preventDefault(); document.getElementById('mv-drop-zone').style.borderColor = 'rgba(255,255,255,0.1)'
-  const f = e.dataTransfer.files?.[0]; if (f) _mvSetFile(f)
+  const files = Array.from(e.dataTransfer.files || [])
+  files.forEach(_mvSetFile)
 }
-window.mvHandleFile = (e) => { const f = e.target.files?.[0]; if (f) _mvSetFile(f) }
+window.mvHandleFile = (e) => {
+  const files = Array.from(e.target.files || [])
+  files.forEach(_mvSetFile)
+  e.target.value = ''   // permite re-seleccionar el mismo
+}
 
+// Encola un archivo en _mvComprobantes como pending (sin URL todavía).
+// Se sube al guardar el movimiento.
 function _mvSetFile(file) {
-  if (file.size > 5 * 1024 * 1024) { showToast('⚠ Archivo mayor a 5MB'); return }
-  _mvPendingFile = file
+  if (file.size > 5 * 1024 * 1024) { showToast('⚠ ' + file.name + ' > 5MB'); return }
+  _mvComprobantes.push({ type:'file', url:null, label: file.name, _file: file })
+  _mvRenderCompList()
   const st = document.getElementById('mv-file-st')
-  if (st) st.textContent = `📎 ${file.name} (${(file.size/1024).toFixed(0)} KB)`
+  if (st) st.textContent = `📎 ${file.name} encolado (${(file.size/1024).toFixed(0)} KB)`
 }
 
-async function _mvUploadFile(userId, movId) {
-  if (!_mvPendingFile) return null
-  const ext  = _mvPendingFile.name.split('.').pop()
-  const path = `${userId}/${movId}.${ext}`
-  const { error } = await supabase.storage.from('comprobantes').upload(path, _mvPendingFile, { upsert: true })
+async function _mvUploadFile(userId, movId, file, suffix='') {
+  if (!file) return null
+  const ext  = (file.name.split('.').pop() || 'bin').toLowerCase()
+  const path = `${userId}/${movId}${suffix ? '_'+suffix : ''}.${ext}`
+  const { error } = await supabase.storage.from('comprobantes').upload(path, file, { upsert: true })
   if (error) { console.warn('[mv] upload', error); return null }
   const { data } = supabase.storage.from('comprobantes').getPublicUrl(path)
   return data?.publicUrl || null
@@ -22680,8 +22779,15 @@ window.mvSaveMov = async () => {
                       ? Math.round((1 - comisionPct / 100) * 10000) / 10000
                       : null
 
-  // URL manual (solo se usa si no hay archivo pendiente)
-  const manualUrl = !_mvPendingFile ? (g('mv-comp-url')?.value.trim() || null) : null
+  // Si quedó texto en el input de URL, lo agregamos al vuelo
+  const pendingTyped = g('mv-comp-url')?.value.trim()
+  if (pendingTyped && /^https?:\/\//i.test(pendingTyped) && !_mvComprobantes.some(c => c.url === pendingTyped)) {
+    _mvComprobantes.push({ type:'url', url: pendingTyped, label: _mvShortLabel(pendingTyped) })
+  }
+
+  // comprobante_url (legacy) = primer URL ya resuelto. Los archivos suben tras
+  // tener movId, así que aquí solo cuenta el primer link "url".
+  const firstUrl = _mvComprobantes.find(c => c.type === 'url')?.url || null
 
   const bancoOrigen  = g('mv-banco-origen')?.value.trim()  || null
   const clabeOrigen  = g('mv-clabe-origen')?.value.trim()  || null
@@ -22704,7 +22810,8 @@ window.mvSaveMov = async () => {
     cantidad: cant, moneda, tc,
     monto_mxn: Math.round(cant * tc * 100) / 100,
     comision,
-    comprobante_url: manualUrl,   // se sobreescribe con Storage URL si hay archivo
+    comprobante_url: firstUrl,    // espejo del primer link para compat
+    comprobantes:    _mvComprobantes.filter(c => c.type === 'url').map(c => ({ type:c.type, url:c.url, label:c.label||null })),
     estado:    g('mv-estado')?.value    || 'hecho',
     notas:     g('mv-notas')?.value.trim()    || null,
     categoria: g('mv-categoria')?.value.trim() || null,
@@ -22726,30 +22833,36 @@ window.mvSaveMov = async () => {
     }
   }
 
-  // Comprobante: archivo tiene prioridad sobre URL manual
-  let comprobanteFinal = null
-  if (_mvPendingFile && movId) {
-    const url = await _mvUploadFile(currentUser.id, movId)
-    if (url) {
-      await supabase.from('movimientos').update({ comprobante_url: url }).eq('id', movId)
-      comprobanteFinal = url
-    }
-    _mvPendingFile = null
-  } else {
-    const manualUrl = g('mv-comp-url')?.value.trim()
-    if (manualUrl && movId) {
-      await supabase.from('movimientos').update({ comprobante_url: manualUrl }).eq('id', movId)
-      comprobanteFinal = manualUrl
+  // Sube cada archivo encolado y construye la lista final de comprobantes
+  const finalComps = []
+  let fileIdx = 0
+  for (const c of _mvComprobantes) {
+    if (c.type === 'url') {
+      finalComps.push({ type:'url', url:c.url, label:c.label || null })
+    } else if (c.type === 'file' && c._file && movId) {
+      const url = await _mvUploadFile(currentUser.id, movId, c._file, String(fileIdx++))
+      if (url) finalComps.push({ type:'file', url, label: c.label || c._file.name })
     }
   }
+  _mvPendingFile = null
 
-  // Si subimos comprobante DESPUÉS del insert, re-dispara con la URL del PDF/foto
-  if (comprobanteFinal && !_mvEditingId && window.nexusN8n?.dispatchMovement) {
+  // Persistir comprobantes + actualizar comprobante_url al primero (url o file)
+  if (movId && finalComps.length) {
+    const head = finalComps[0]
+    await supabase.from('movimientos').update({
+      comprobantes: finalComps,
+      comprobante_url: head?.url || null,
+    }).eq('id', movId)
+  }
+
+  // Si quedó algún comprobante, re-dispara webhook con datos frescos
+  if (finalComps.length && !_mvEditingId && window.nexusN8n?.dispatchMovement) {
     try {
       const { data: full } = await supabase.from('movimientos').select('*').eq('id', movId).single()
       if (full) window.nexusN8n.dispatchMovement('movimiento', full)
     } catch (e) { /* silent */ }
   }
+  _mvComprobantes = []
 
   mvCloseModal()
   await _mvLoadMovs()
