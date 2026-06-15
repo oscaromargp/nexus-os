@@ -417,6 +417,9 @@ export async function renderAFP() {
         ` : ''}
       </div>
       ` : ''}
+
+      <!-- 📜 HISTÓRICO MES A MES (placeholder, hidratado async) -->
+      <div id="afp-history" data-afp-history style="margin-top:20px;"></div>
     </div>
   `
 
@@ -429,12 +432,88 @@ export async function renderAFP() {
   // Hidrata paneles asíncronos y se suscribe a cambios de saldo
   _hydrateRealBalances()
   _hydrateWeekPlan()
+  _hydrateHistory()
+  _maybeAutoSnapshot()
   if (!window._afpBalanceSub) {
     window._afpBalanceSub = window.nexusBalance?.onChange?.(() => {
       _hydrateRealBalances()
       _hydrateWeekPlan()
     })
   }
+}
+
+// ── Histórico mes a mes ─────────────────────────────────────────────────────
+async function _hydrateHistory() {
+  const mount = document.querySelector('[data-afp-history]')
+  if (!mount) return
+  let snapshots
+  try {
+    const r = await _api('afp_history_list')
+    snapshots = r.snapshots || []
+  } catch (e) {
+    mount.innerHTML = `<div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:10px;padding:12px;font-size:11px;color:#f87171;">⚠ Histórico: ${_esc(e.message)}</div>`
+    return
+  }
+  const MODE_EMOJI = { survival:'🩹', debt:'🔥', build:'🏗️', accumulate:'🌱', balance:'⚖️' }
+  const _fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-MX')
+  const fmtMonth = (m) => {
+    const [y, mo] = m.split('-').map(Number)
+    return new Date(y, mo - 1, 1).toLocaleDateString('es-MX', { month: 'short', year: 'numeric' })
+  }
+
+  if (!snapshots.length) {
+    mount.innerHTML = `
+      <details style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:0;overflow:hidden;">
+        <summary style="cursor:pointer;padding:12px 14px;font-size:13px;font-weight:700;color:#94a3b8;display:flex;align-items:center;justify-content:space-between;">
+          <span>📜 Histórico mes a mes</span>
+          <span style="font-size:11px;color:#475569;">cuando termine el mes, su cierre aparecerá aquí</span>
+        </summary>
+        <div style="padding:14px;font-size:12px;color:#6b7280;border-top:1px solid rgba(255,255,255,0.06);">Aún no hay cierres registrados. Al cambiar de mes, AFP guarda automáticamente cómo te fue.</div>
+      </details>`
+    return
+  }
+
+  const rowsHtml = snapshots.map(s => {
+    const emoji = MODE_EMOJI[s.mode] || '·'
+    const complColor = s.compliance_pct >= 90 ? '#34d399' : s.compliance_pct >= 60 ? '#fbbf24' : '#f87171'
+    return `
+      <div style="display:grid;grid-template-columns:84px 1fr 1fr 1fr 60px;gap:8px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px;align-items:center;">
+        <div style="font-weight:700;color:#e5e7eb;">${fmtMonth(s.month)}</div>
+        <div style="color:#94a3b8;"><span style="font-size:14px;">${emoji}</span> ${_esc(s.mode_label || s.mode)}</div>
+        <div style="font-family:'JetBrains Mono',monospace;color:#cbd5e1;">${_fmt(s.total_dispersed)} <span style="color:#475569;">/ ${_fmt(s.total_planned)}</span></div>
+        <div style="font-family:'JetBrains Mono',monospace;color:#34d399;">${_fmt(s.cushion_end)}</div>
+        <div style="text-align:right;font-weight:800;color:${complColor};">${s.compliance_pct}%</div>
+      </div>`
+  }).join('')
+
+  mount.innerHTML = `
+    <details ${snapshots.length === 1 ? 'open' : ''} style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;overflow:hidden;">
+      <summary style="cursor:pointer;padding:12px 14px;font-size:13px;font-weight:700;color:#cbd5e1;display:flex;align-items:center;justify-content:space-between;">
+        <span>📜 Histórico mes a mes <span style="font-size:11px;color:#6b7280;font-weight:500;">· ${snapshots.length} mes${snapshots.length>1?'es':''} cerrado${snapshots.length>1?'s':''}</span></span>
+        <span style="font-size:11px;color:#475569;">tap para ${snapshots.length===1?'colapsar':'expandir'}</span>
+      </summary>
+      <div style="border-top:1px solid rgba(255,255,255,0.06);">
+        <div style="display:grid;grid-template-columns:84px 1fr 1fr 1fr 60px;gap:8px;padding:8px 12px;background:rgba(255,255,255,0.02);font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;">
+          <div>Mes</div><div>Modo</div><div>Dispersado / Plan</div><div>Colchón fin</div><div style="text-align:right;">Cump.</div>
+        </div>
+        ${rowsHtml}
+      </div>
+    </details>`
+}
+
+// Auto-snapshot del mes anterior si todavía no existe (idempotente).
+async function _maybeAutoSnapshot() {
+  try {
+    const r = await _api('afp_history_list')
+    const snaps = r.snapshots || []
+    const prevMonth = (() => {
+      const d = new Date(); d.setMonth(d.getMonth() - 1)
+      return d.toISOString().substring(0, 7)
+    })()
+    if (snaps.some(s => s.month === prevMonth)) return
+    await _api('afp_snapshot_save', { month: prevMonth })
+    _hydrateHistory()
+  } catch (e) { console.warn('[afp] auto-snapshot', e.message) }
 }
 
 // ── Plan semanal · instrucciones nombre+razón ───────────────────────────────

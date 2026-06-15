@@ -626,6 +626,79 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, weekplan: result })
     }
 
+    // AFP · histórico mensual
+    if (action === 'afp_history_list') {
+      const { data, error } = await admin.from('afp_month_snapshots')
+        .select('*').eq('owner_id', userId)
+        .order('month', { ascending: false }).limit(24)
+      if (error) throw error
+      return res.status(200).json({ ok: true, snapshots: data || [] })
+    }
+
+    // AFP · guarda snapshot del mes (default: mes anterior)
+    if (action === 'afp_snapshot_save') {
+      const { month: bodyMonth, notes } = req.body || {}
+      const targetMonth = bodyMonth || (() => {
+        const d = new Date(); d.setMonth(d.getMonth() - 1)
+        return d.toISOString().substring(0, 7)
+      })()
+      const _nextMonth = (m) => {
+        const [y, mo] = m.split('-').map(Number)
+        const d = new Date(y, mo, 1)
+        return d.toISOString().substring(0, 7)
+      }
+
+      const [incRes, fixedRes, cushionRes, movsRes] = await Promise.all([
+        admin.from('afp_incomes').select('*').eq('owner_id', userId).eq('is_active', true),
+        admin.from('afp_fixed_expenses').select('*').eq('owner_id', userId).eq('is_active', true),
+        admin.from('afp_cushion').select('*').eq('owner_id', userId).maybeSingle(),
+        admin.from('movimientos').select('tipo,estado,monto_mxn,fecha,proyecto')
+          .eq('owner_id', userId).gte('fecha', targetMonth + '-01').lt('fecha', _nextMonth(targetMonth) + '-01'),
+      ])
+      const incomes = incRes.data || []
+      const fixed = fixedRes.data || []
+      const cushion = cushionRes.data || { current_balance: 0, target_months: 3 }
+      const movs = movsRes.data || []
+
+      const monthlyIncome = incomes.reduce((s, i) => s + toMonthly(i.amount, i.frequency), 0)
+      const monthlyFixed  = fixed.reduce((s, f) => s + toMonthly(f.amount, f.frequency), 0)
+      const monthlySacred = fixed.filter(f => f.is_sacred)
+        .reduce((s, f) => s + toMonthly(f.amount, f.frequency), 0)
+      const cushionTarget = monthlyFixed * Number(cushion.target_months || 3)
+
+      const afpMovs = movs.filter(m => (m.proyecto || '').startsWith('afp:'))
+      const executed  = afpMovs.filter(m => m.estado === 'hecho')
+      const committed = afpMovs.filter(m => m.estado === 'pendiente')
+      const totalDispersed = executed.reduce((s, m) => s + Number(m.monto_mxn || 0), 0)
+      const totalPlanned   = afpMovs.reduce((s, m) => s + Number(m.monto_mxn || 0), 0)
+      const compliancePct  = totalPlanned > 0 ? Math.round((totalDispersed / totalPlanned) * 100) : 0
+
+      const plan = await buildWeekPlan(admin, userId, user.user_metadata || {})
+
+      const payload = {
+        owner_id: userId, month: targetMonth,
+        mode: plan.mode, mode_label: plan.modeLabel,
+        monthly_income: Math.round(monthlyIncome),
+        monthly_fixed:  Math.round(monthlyFixed),
+        monthly_sacred: Math.round(monthlySacred),
+        cushion_start:  Number(cushion.current_balance || 0),
+        cushion_end:    Number(cushion.current_balance || 0),
+        cushion_target: Math.round(cushionTarget),
+        commits_planned:   afpMovs.length,
+        commits_executed:  executed.length,
+        commits_committed: committed.length,
+        total_dispersed: Math.round(totalDispersed),
+        total_planned:   Math.round(totalPlanned),
+        compliance_pct:  compliancePct,
+        goals_advanced:  [],
+        notes: notes || null,
+      }
+      const { data, error } = await admin.from('afp_month_snapshots')
+        .upsert(payload, { onConflict: 'owner_id,month' }).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, snapshot: data })
+    }
+
     if (action === 'afp_save_config') {
       const { config } = req.body
       if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config requerida' })
