@@ -34,7 +34,7 @@ Chart.register(
 )
 
 // ── PDF Reports Engine ────────────────────────────────────────────────────────
-import { pdfEstadoCuenta, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensual,
+import { pdfEstadoCuenta, pdfEstadoCuentaCliente, pdfDispersionOTC, pdfReporteProyecto, pdfResumenMensual,
          pdfProrroga, pdfPagare, pdfRecibo, pdfCartaPoder,
          pdfContratoServicios, pdfNotaVenta, pdfPresupuesto,
          pdfPresupuestoPro, pdfNotaVentaPro,
@@ -22124,7 +22124,8 @@ async function renderMovimientos() {
   const actionsHtml = `
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
       <button onclick="mvOpenModal()" style="display:flex;align-items:center;gap:7px;padding:9px 18px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.background='rgba(0,246,255,0.2)'" onmouseout="this.style.background='rgba(0,246,255,0.1)'">${lx('Plus',15)} Nuevo</button>
-      <button onclick="mvExportEstadoCuenta()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;transition:background 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.16)'" onmouseout="this.style.background='rgba(74,222,128,0.08)'">${lx('FileText',14)} Estado de Cuenta</button>
+      <button onclick="mvExportEstadoCuenta()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;transition:background 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.16)'" onmouseout="this.style.background='rgba(74,222,128,0.08)'" title="Estado de Cuenta interno (vista de gestión)">${lx('FileText',14)} Estado de Cuenta</button>
+      <button onclick="mvExportReporteCliente()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;transition:background 0.2s;" onmouseover="this.style.background='rgba(34,211,238,0.18)'" onmouseout="this.style.background='rgba(34,211,238,0.08)'" title="Reporte limpio para enviar al cliente (sin branding ni datos internos)">${lx('UserCheck',14)} Reporte Cliente</button>
       ${gBtn('CSV','Download','mvExportCSV()')}
       <label style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx('Upload',14)} Importar<input type="file" accept=".csv" style="display:none;" onchange="mvImportCSV(this)" /></label>
       <button onclick="mvDownloadTemplate()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'" title="Descargar plantilla CSV para importación masiva">${lx('FileDown',14)} Plantilla</button>
@@ -23080,6 +23081,24 @@ window.mvExportEstadoCuenta = async () => {
   } catch (e) {
     console.error('pdfEstadoCuenta:', e)
     showToast('❌ Error al generar PDF: ' + e.message)
+  }
+}
+
+// ── Reporte Cliente — PDF limpio sin branding ni datos internos ───────────────
+window.mvExportReporteCliente = async () => {
+  const list = _mvWithBalance(_mvFiltered())
+  if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
+  const orq = _mvOrqs.find(o => o.id === _mvActiveOrqId)
+  showToast('⏳ Generando reporte cliente…')
+  try {
+    await pdfEstadoCuentaCliente(orq, list, {
+      dateFrom: _mvFilters.dateFrom,
+      dateTo:   _mvFilters.dateTo,
+    })
+    showToast('✅ Reporte descargado')
+  } catch (e) {
+    console.error('pdfEstadoCuentaCliente:', e)
+    showToast('❌ Error: ' + e.message)
   }
 }
 

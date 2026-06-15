@@ -818,6 +818,380 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// 1B. ESTADO DE CUENTA — VISTA CLIENTE (limpio, sin branding Nexus)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Diferencias vs pdfEstadoCuenta interno:
+//   - Header solo dice "Estado de Cuenta · {cuenta}" (sin folio Nexus, sin QR)
+//   - 3 tarjetas: Saldo Disponible, Pendientes de Dispersión, Brecha Financiera
+//   - Tabla 4 columnas (Fecha · Concepto · Salida/Entrada · Saldo) con strip
+//     de caracteres de control en notas/nombres
+//   - Filas pendientes en amarillo SIN alterar el saldo corriente
+//   - Sección "Flujo y Volumen" con barras horizontales de top destinatarios
+//     (solo salidas ejecutadas)
+//   - Footer minimal: solo fecha de emisión + paginación
+//
+// Helper de transformación pura — testeable, sin efectos:
+
+/** Quita \r \n \t y normaliza espacios múltiples. */
+function _scrub(s) {
+  return String(s ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+}
+
+/** Calcula neto MXN del movimiento (bruto − comisión si aplica). */
+function _movNetoMxn(m) {
+  const bruto  = m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
+  const comMxn = (m.tipo === 'entrada' && m.comision != null)
+    ? Math.round(bruto * (1 - m.comision) * 100) / 100 : 0
+  return Math.round((bruto - comMxn) * 100) / 100
+}
+
+/**
+ * Prepara datos limpios para el reporte cliente.
+ * Recibe `list` con balance ya calculado (provista por _mvWithBalance).
+ * Devuelve { rows, dashboard, topDestinatarios }.
+ */
+export function buildClientReportData(list) {
+  const safeList = (list || []).filter(Boolean)
+
+  // Saldo Disponible = último balance del movimiento más reciente (hecho).
+  // list viene newest-first; tomamos el primer item con balance calculado.
+  const headHecho = safeList.find(m => m.estado === 'hecho' || (!m.estado && m.estado !== 'cancelado'))
+  const saldoDisponible = headHecho ? (headHecho._balance ?? 0) : 0
+
+  // Pendientes — separa entradas vs salidas para mostrar brecha real.
+  let pendSalidas = 0, pendEntradas = 0
+  for (const m of safeList) {
+    if (m.estado !== 'pendiente') continue
+    const neto = _movNetoMxn(m)
+    if (m.tipo === 'entrada') pendEntradas += neto
+    else                       pendSalidas  += neto
+  }
+  pendSalidas  = Math.round(pendSalidas  * 100) / 100
+  pendEntradas = Math.round(pendEntradas * 100) / 100
+
+  const pendientesNet = Math.round((pendSalidas - pendEntradas) * 100) / 100
+  const brecha = Math.round(Math.max(0, pendSalidas - pendEntradas - saldoDisponible) * 100) / 100
+  const superavit = saldoDisponible - (pendSalidas - pendEntradas)
+
+  // Top destinatarios — solo salidas EJECUTADAS, agrupado por beneficiario.
+  const byBenef = new Map()
+  for (const m of safeList) {
+    if (m.tipo !== 'salida' || m.estado !== 'hecho') continue
+    const nombre = _scrub(m.beneficiario || m.ordenante || 'Sin contacto')
+    const neto = _movNetoMxn(m)
+    const prev = byBenef.get(nombre) || { nombre, total: 0, count: 0 }
+    prev.total += neto
+    prev.count++
+    byBenef.set(nombre, prev)
+  }
+  const topDestinatarios = [...byBenef.values()]
+    .map(d => ({ ...d, total: Math.round(d.total * 100) / 100 }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 8)
+
+  // Filas limpias para la tabla.
+  const rows = safeList.map(m => {
+    const neto = _movNetoMxn(m)
+    const isPen = m.estado === 'pendiente'
+    const isCan = m.estado === 'cancelado'
+    const nombre = _scrub(m.tipo === 'entrada' ? (m.ordenante || 'Depósito') : (m.beneficiario || 'Retiro'))
+    const notas  = _scrub((m.notas || '').replace(/https?:\/\/\S+/g, ''))   // urls van como chips
+    const concepto = notas ? `${nombre} · ${notas.slice(0, 90)}` : nombre
+
+    // Recolecta URLs (comprobantes nuevos + legacy + notas).
+    const urls = []
+    if (Array.isArray(m.comprobantes)) m.comprobantes.forEach(c => c?.url && urls.push(c.url))
+    if (m.comprobante_url && !urls.includes(m.comprobante_url)) urls.unshift(m.comprobante_url)
+    ;(m.notas || '').match(/https?:\/\/\S+/g)?.forEach(u => { if (!urls.includes(u)) urls.push(u) })
+
+    return {
+      fecha: m.fecha,
+      tipo:  m.tipo,
+      estado: m.estado,
+      isPen, isCan,
+      concepto,
+      neto,
+      balance: m._balance,
+      urls,
+      _src: m,
+    }
+  })
+
+  return {
+    rows,
+    topDestinatarios,
+    dashboard: {
+      saldoDisponible,
+      pendSalidas, pendEntradas, pendientesNet,
+      brecha,
+      superavit: Math.round(superavit * 100) / 100,
+      movimientos: rows.length,
+      ejecutados:  rows.filter(r => r.estado === 'hecho').length,
+      pendientes:  rows.filter(r => r.isPen).length,
+    },
+  }
+}
+
+/**
+ * Reporte PDF del Estado de Cuenta — Vista Cliente.
+ *
+ * @param {object} orq    - Cuenta (orquestador) con { nombre, descripcion, moneda_principal }
+ * @param {Array}  list   - Movimientos con _balance ya calculado
+ * @param {object} opts   - { dateFrom, dateTo }
+ */
+export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
+  if (!list?.length) return
+  const { dateFrom = '', dateTo = '' } = opts
+  const accountName = _scrub(orq?.nombre || 'Cuenta')
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W   = doc.internal.pageSize.getWidth()    // 210
+  const H   = doc.internal.pageSize.getHeight()   // 297
+  const now = new Date()
+
+  const data = buildClientReportData(list)
+  const { rows, topDestinatarios, dashboard } = data
+
+  // ── HEADER ─────────────────────────────────────────────────────────────────
+  // Banda oscura simple, SOLO nombre de la cuenta. Sin Nexus.
+  const headerH = 22
+  doc.setFillColor(...T.ink)
+  doc.rect(0, 0, W, headerH, 'F')
+  doc.setFillColor(...T.cyan)
+  doc.rect(0, headerH, W, 0.8, 'F')   // línea cyan inferior
+
+  doc.setTextColor(...T.textMid)
+  doc.setFont(T.font, 'normal'); doc.setFontSize(8)
+  doc.text('ESTADO DE CUENTA', T.mX, 9)
+
+  doc.setTextColor(...T.white)
+  doc.setFont(T.font, 'bold'); doc.setFontSize(16)
+  doc.text(accountName, T.mX, 17)
+
+  // Periodo / fecha de emisión a la derecha
+  const periodTxt = (dateFrom || dateTo)
+    ? `${dateFrom || 'Inicio'} → ${dateTo || 'Hoy'}`
+    : 'Histórico completo'
+  doc.setTextColor(...T.textMid); doc.setFontSize(7)
+  doc.text(periodTxt, W - T.mX, 9, { align: 'right' })
+  doc.text('Emitido: ' + now.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }),
+    W - T.mX, 14, { align: 'right' })
+
+  let y = headerH + 8
+
+  // ── 3 TARJETAS DASHBOARD ──────────────────────────────────────────────────
+  const cardGap = 4
+  const cardW   = (W - T.mX * 2 - cardGap * 2) / 3
+  const cardH   = 30
+
+  const drawCard = (x, label, value, sub, color) => {
+    doc.setFillColor(252, 253, 255)
+    doc.roundedRect(x, y, cardW, cardH, 2.5, 2.5, 'F')
+    doc.setDrawColor(220, 228, 240); doc.setLineWidth(0.2)
+    doc.roundedRect(x, y, cardW, cardH, 2.5, 2.5, 'S')
+    // Barra superior de color (4mm)
+    doc.setFillColor(...color)
+    doc.rect(x, y, cardW, 1.2, 'F')
+
+    doc.setTextColor(...T.textMid); doc.setFont(T.font, 'normal'); doc.setFontSize(7)
+    doc.text(label.toUpperCase(), x + 4, y + 7)
+
+    doc.setTextColor(...color); doc.setFont(T.font, 'bold'); doc.setFontSize(14)
+    doc.text(value, x + 4, y + 17)
+
+    if (sub) {
+      doc.setTextColor(...T.textMid); doc.setFont(T.font, 'normal'); doc.setFontSize(6.5)
+      doc.text(sub, x + 4, y + 24)
+    }
+  }
+
+  const positiveBalance = dashboard.saldoDisponible >= 0
+  drawCard(
+    T.mX,
+    'Saldo Disponible',
+    '$' + fmt$(dashboard.saldoDisponible) + ' MXN',
+    'Líquido al corte',
+    positiveBalance ? T.greenD : T.redD,
+  )
+  drawCard(
+    T.mX + cardW + cardGap,
+    'Pendientes de Dispersión',
+    '$' + fmt$(dashboard.pendSalidas) + ' MXN',
+    dashboard.pendientes + ' movimiento' + (dashboard.pendientes !== 1 ? 's' : '') + ' por ejecutar',
+    T.yellow,
+  )
+  const brechaColor = dashboard.brecha > 0 ? T.redD : T.greenD
+  const brechaLabel = dashboard.brecha > 0 ? 'Brecha Financiera' : 'Cobertura'
+  const brechaValue = dashboard.brecha > 0
+    ? '−$' + fmt$(dashboard.brecha) + ' MXN'
+    : '$' + fmt$(Math.abs(dashboard.superavit)) + ' MXN'
+  const brechaSub = dashboard.brecha > 0
+    ? 'Faltante para cubrir pendientes'
+    : 'Saldo cubre los pendientes'
+  drawCard(T.mX + (cardW + cardGap) * 2, brechaLabel, brechaValue, brechaSub, brechaColor)
+
+  y += cardH + 8
+
+  // ── TABLA 4 COLUMNAS ──────────────────────────────────────────────────────
+  autoTable(doc, {
+    startY: y,
+    margin: { left: T.mX, right: T.mX, top: headerH + 6 },
+    head: [['Fecha', 'Concepto', 'Salida / Entrada', 'Saldo']],
+    body: rows.map(r => {
+      const isPen = r.isPen, isCan = r.isCan
+      const movStr = isCan ? 'CANCELADO'
+        : r.tipo === 'entrada' ? '+ $' + fmt$(r.neto) + (isPen ? ' (pend.)' : '')
+        : '− $' + fmt$(r.neto) + (isPen ? ' (pend.)' : '')
+      const balStr = isPen || isCan ? '—' : '$' + fmt$(r.balance ?? 0)
+      // Concepto puede llevar uno o más espacios al final para reservar línea de chips
+      const conc = r.urls.length ? r.concepto + '\n ' : r.concepto
+      return [r.fecha, conc, movStr, balStr]
+    }),
+    styles: {
+      fontSize: 8, cellPadding: 3, lineColor: [228, 232, 240], lineWidth: 0.15,
+      overflow: 'linebreak', valign: 'top',
+    },
+    headStyles: {
+      fillColor: T.ink, textColor: T.cyan, fontSize: 7.5, fontStyle: 'bold',
+      cellPadding: { top: 4, bottom: 4, left: 3, right: 3 },
+    },
+    bodyStyles: { textColor: T.textInk },
+    alternateRowStyles: { fillColor: [250, 251, 253] },
+    columnStyles: {
+      0: { cellWidth: 22, halign: 'center', fontSize: 7.5 },
+      1: { cellWidth: 95, fontSize: 8 },
+      2: { cellWidth: 38, halign: 'right', fontStyle: 'bold', fontSize: 8 },
+      3: { cellWidth: 25, halign: 'right', fontStyle: 'bold', fontSize: 8.5 },
+    },
+    didParseCell: (cell) => {
+      if (cell.section !== 'body') return
+      const r = rows[cell.row.index]
+      if (!r) return
+      if (r.isPen) {
+        cell.cell.styles.fillColor = [254, 249, 195]   // amber-100
+        cell.cell.styles.textColor = [120, 53, 15]
+      } else if (r.isCan) {
+        cell.cell.styles.textColor = [100, 116, 139]
+      } else if (cell.column.index === 2) {
+        cell.cell.styles.textColor = r.tipo === 'entrada' ? T.greenD : T.redD
+      } else if (cell.column.index === 3) {
+        const bal = r.balance ?? 0
+        cell.cell.styles.textColor = bal >= 0 ? T.greenD : T.redD
+      }
+    },
+    didDrawCell: (cell) => {
+      if (cell.section !== 'body' || cell.column.index !== 1) return
+      const r = rows[cell.row.index]
+      if (!r || !r.urls.length) return
+      const padX = 3
+      const baseY = cell.cell.y + cell.cell.height - 3.2
+      let cx = cell.cell.x + padX
+      doc.setFont(T.font, 'bold'); doc.setFontSize(7); doc.setTextColor(...T.cyan)
+      r.urls.forEach((url, i) => {
+        const label = `🔗 #${i + 1}`
+        const w = doc.getTextWidth(label) + 1.5
+        if (cx + w > cell.cell.x + cell.cell.width - padX) return
+        doc.text(label, cx, baseY)
+        doc.link(cx, baseY - 2.8, w, 3.6, { url })
+        cx += w + 2
+      })
+      doc.setTextColor(...T.textInk); doc.setFontSize(8); doc.setFont(T.font, 'normal')
+    },
+    didDrawPage: () => {
+      // Re-pinta header en cada página
+      doc.setFillColor(...T.ink)
+      doc.rect(0, 0, W, headerH, 'F')
+      doc.setFillColor(...T.cyan); doc.rect(0, headerH, W, 0.8, 'F')
+      doc.setTextColor(...T.textMid); doc.setFontSize(8); doc.setFont(T.font, 'normal')
+      doc.text('ESTADO DE CUENTA', T.mX, 9)
+      doc.setTextColor(...T.white); doc.setFontSize(14); doc.setFont(T.font, 'bold')
+      doc.text(accountName, T.mX, 17)
+      doc.setTextColor(...T.textMid); doc.setFontSize(7); doc.setFont(T.font, 'normal')
+      doc.text(periodTxt, W - T.mX, 9, { align: 'right' })
+
+      // Footer minimal
+      const total = doc.internal.getNumberOfPages()
+      const pg    = doc.internal.getCurrentPageInfo().pageNumber
+      doc.setDrawColor(220, 228, 240); doc.setLineWidth(0.15)
+      doc.line(T.mX, H - 12, W - T.mX, H - 12)
+      doc.setTextColor(...T.textMid); doc.setFontSize(7)
+      doc.text(`Página ${pg} de ${total}`, W - T.mX, H - 7, { align: 'right' })
+      doc.text('Emitido el ' + now.toLocaleDateString('es-MX'), T.mX, H - 7)
+    },
+  })
+
+  // ── SECCIÓN: FLUJO Y VOLUMEN ──────────────────────────────────────────────
+  let topY = (doc.lastAutoTable?.finalY || y) + 8
+
+  // Nueva página si no caben ~50mm
+  if (topY + 50 > H - 18) {
+    doc.addPage()
+    topY = headerH + 10
+  }
+
+  if (topDestinatarios.length) {
+    // Encabezado de sección
+    doc.setFillColor(...T.ink)
+    doc.rect(T.mX, topY, W - T.mX * 2, 8, 'F')
+    doc.setTextColor(...T.cyan); doc.setFont(T.font, 'bold'); doc.setFontSize(9)
+    doc.text('FLUJO Y VOLUMEN · A quién se dispersó dinero', T.mX + 4, topY + 5.3)
+    topY += 12
+
+    const maxTotal = topDestinatarios[0].total || 1
+    const ROW_H    = 11
+    const labelW   = 62
+    const amtW     = 32
+    const barX     = T.mX + labelW + 2
+    const barMaxW  = W - T.mX * 2 - labelW - amtW - 6
+
+    topDestinatarios.forEach((d, i) => {
+      const rowY = topY + i * ROW_H
+      const midY = rowY + ROW_H / 2
+
+      // Avatar circular con inicial
+      const palette = [T.cyan, T.violet, T.orange, T.green, T.blue, T.red, T.yellow, T.greenD]
+      const clr = palette[i % palette.length]
+      doc.setFillColor(...clr)
+      doc.circle(T.mX + 3, midY, 2.6, 'F')
+      doc.setTextColor(...T.white); doc.setFontSize(6); doc.setFont(T.font, 'bold')
+      doc.text((d.nombre[0] || '?').toUpperCase(), T.mX + 3, midY + 1.1, { align: 'center' })
+
+      // Nombre
+      doc.setTextColor(...T.textInk); doc.setFontSize(8.5); doc.setFont(T.font, 'bold')
+      doc.text(doc.splitTextToSize(d.nombre, labelW - 8)[0] || '—', T.mX + 8, midY + 1)
+      // Conteo
+      doc.setTextColor(...T.textMid); doc.setFontSize(6.5); doc.setFont(T.font, 'normal')
+      doc.text(d.count + ' op.', T.mX + 8, midY + 4.4)
+
+      // Barra
+      const pct = d.total / maxTotal
+      doc.setFillColor(232, 238, 246)
+      doc.roundedRect(barX, midY - 2, barMaxW, 4, 1, 1, 'F')
+      doc.setFillColor(...clr)
+      doc.roundedRect(barX, midY - 2, Math.max(0.5, barMaxW * pct), 4, 1, 1, 'F')
+
+      // Monto a la derecha
+      doc.setTextColor(...T.textInk); doc.setFontSize(8.5); doc.setFont(T.font, 'bold')
+      doc.text('$' + fmt$(d.total), W - T.mX, midY + 1, { align: 'right' })
+    })
+
+    topY += topDestinatarios.length * ROW_H + 4
+
+    // Resumen al pie de la sección
+    const totalDispersado = topDestinatarios.reduce((s, d) => s + d.total, 0)
+    doc.setTextColor(...T.textMid); doc.setFontSize(7); doc.setFont(T.font, 'italic')
+    doc.text(`Total dispersado a estos ${topDestinatarios.length} contactos: $${fmt$(totalDispersado)} MXN · Solo operaciones ejecutadas.`,
+      T.mX, topY + 4)
+  } else {
+    doc.setTextColor(...T.textMid); doc.setFontSize(8); doc.setFont(T.font, 'italic')
+    doc.text('Sin dispersiones registradas en el periodo.', T.mX, topY + 6)
+  }
+
+  doc.save(`estado-cuenta-cliente-${accountName.replace(/\s+/g, '-').toLowerCase()}-${now.toISOString().slice(0, 10)}.pdf`)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // 2. DISPERSIÓN OTC
 // ═══════════════════════════════════════════════════════════════════════════════
 export function pdfDispersionOTC(data, fecha = new Date(), emisor = {}) {
