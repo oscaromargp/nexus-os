@@ -222,6 +222,11 @@ export async function renderAFP() {
         </div>
       </div>
 
+      <!-- 🎯 ESTA SEMANA · plan accionable (placeholder, se hidrata async) -->
+      <div id="afp-weekplan" data-afp-weekplan style="margin-bottom:20px;">
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;font-size:13px;color:#94a3b8;">⏳ Calculando tu plan semanal…</div>
+      </div>
+
       <!-- SCORE + METRICS -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
         <div style="background:linear-gradient(135deg,rgba(${_hexRgb(health.color)},0.04),rgba(${_hexRgb(health.color)},0.12));border:1px solid ${health.color}44;border-radius:14px;padding:16px;text-align:center;">
@@ -421,11 +426,123 @@ export async function renderAFP() {
   document.getElementById('afp-adjust-btn')?.addEventListener('click', () => _openAdjustmentModal(data))
   document.getElementById('afp-cushion-btn')?.addEventListener('click', () => _openCushionModal(data))
 
-  // Hidrata el panel de Saldos Reales y se suscribe a cambios
+  // Hidrata paneles asíncronos y se suscribe a cambios de saldo
   _hydrateRealBalances()
+  _hydrateWeekPlan()
   if (!window._afpBalanceSub) {
-    window._afpBalanceSub = window.nexusBalance?.onChange?.(() => _hydrateRealBalances())
+    window._afpBalanceSub = window.nexusBalance?.onChange?.(() => {
+      _hydrateRealBalances()
+      _hydrateWeekPlan()
+    })
   }
+}
+
+// ── Plan semanal · instrucciones nombre+razón ───────────────────────────────
+async function _hydrateWeekPlan() {
+  const mount = document.querySelector('[data-afp-weekplan]')
+  if (!mount) return
+  let plan
+  try {
+    const r = await _api('afp_weekplan_get')
+    plan = r.weekplan
+  } catch (e) {
+    mount.innerHTML = `<div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:12px;padding:14px;font-size:12px;color:#f87171;">⚠ ${_esc(e.message)}</div>`
+    return
+  }
+
+  const MODE_CFG = {
+    survival:   { color: '#f87171', emoji: '🩹', label: 'Supervivencia' },
+    debt:       { color: '#fb923c', emoji: '🔥', label: 'Liquidación' },
+    build:      { color: '#fbbf24', emoji: '🏗️', label: 'Construcción' },
+    accumulate: { color: '#34d399', emoji: '🌱', label: 'Acumulación' },
+    balance:    { color: '#22d3ee', emoji: '⚖️', label: 'Equilibrio' },
+  }
+  const mc = MODE_CFG[plan.mode] || MODE_CFG.balance
+  const _fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-MX')
+
+  // Lista de compromisos ordenada: sagrado > colchón > deudas > metas
+  const allCommitments = [
+    ...plan.sacred.map(x  => ({ ...x, prio: 1, color: '#f59e0b' })),
+    ...plan.cushion.map(x => ({ ...x, prio: 2, color: '#fbbf24' })),
+    ...plan.debts.map(x   => ({ ...x, prio: 3, color: '#fb923c' })),
+    ...plan.goals.map(x   => ({ ...x, prio: 4, color: '#a78bfa' })),
+  ].filter(x => x.amount > 0)
+
+  const _commitHtml = (c) => `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid ${c.color}30;border-left:3px solid ${c.color};border-radius:8px;">
+      <input type="checkbox" disabled style="width:18px;height:18px;margin-top:1px;flex-shrink:0;accent-color:${c.color};opacity:0.4;cursor:not-allowed;" title="Marca como hecho desde Movimientos (próximamente en 1 tap)" />
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <div style="font-size:13px;font-weight:700;color:#e5e7eb;">${_esc(c.label)}</div>
+          <div style="font-size:14px;font-weight:800;color:${c.color};font-family:'JetBrains Mono',monospace;">${_fmt(c.amount)}${c.reduced ? ' ⬇' : ''}</div>
+        </div>
+        <div style="font-size:11px;color:#94a3b8;line-height:1.4;margin-top:2px;">${_esc(c.reason)}</div>
+      </div>
+    </div>`
+
+  const _incomeHtml = (i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.2);border-radius:8px;">
+      <div style="font-size:12px;color:#e5e7eb;"><span style="color:#34d399;font-weight:700;">+ ${_esc(i.label)}</span> <span style="color:#94a3b8;">· ${_esc(i.reason)}</span></div>
+      <div style="font-size:13px;font-weight:800;color:#34d399;font-family:'JetBrains Mono',monospace;">${_fmt(i.amount)}</div>
+    </div>`
+
+  const livingOK = plan.free_amount >= plan.min_living_weekly
+  const livingColor = livingOK ? '#34d399' : '#fb923c'
+
+  mount.innerHTML = `
+    <div style="background:linear-gradient(135deg,${mc.color}10,${mc.color}05);border:2px solid ${mc.color}50;border-radius:16px;padding:18px;">
+      <!-- Header del plan -->
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:11px;color:${mc.color};text-transform:uppercase;letter-spacing:0.1em;font-weight:700;">Esta semana · ${plan.week_start.slice(5)} → ${plan.week_end.slice(5)}</div>
+          <h3 style="margin:4px 0 0;font-size:18px;font-weight:800;color:#fff;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:22px;">${mc.emoji}</span>
+            <span>Modo ${mc.label}</span>
+          </h3>
+          <p style="margin:6px 0 0;font-size:12px;color:#cbd5e1;line-height:1.5;">${_esc(plan.modeReason)}</p>
+        </div>
+        ${plan.primary_account_label ? `
+          <div style="text-align:right;background:rgba(0,0,0,0.25);padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,0.05);">
+            <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">Saldo real ${_esc(plan.primary_account_label)}</div>
+            <div style="font-size:18px;font-weight:800;color:${plan.real_balance >= 0 ? '#22d3ee' : '#f87171'};font-family:'JetBrains Mono',monospace;">${_fmt(plan.real_balance)}</div>
+          </div>` : `
+          <div style="font-size:10px;color:#fb923c;background:rgba(251,146,60,0.08);padding:6px 10px;border-radius:8px;border:1px solid rgba(251,146,60,0.25);max-width:240px;">⚠ Marca una cuenta principal abajo (★) para que AFP use tu saldo real.</div>`}
+      </div>
+
+      <!-- Ingresos esperados -->
+      ${plan.income.length ? `
+        <div style="margin-bottom:14px;">
+          <div style="font-size:10px;color:#34d399;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;margin-bottom:6px;">📥 Ingresos esperados</div>
+          <div style="display:flex;flex-direction:column;gap:5px;">${plan.income.map(_incomeHtml).join('')}</div>
+        </div>` : `
+        <div style="font-size:11px;color:#94a3b8;padding:8px 12px;background:rgba(255,255,255,0.02);border-radius:8px;margin-bottom:14px;">Sin ingresos programados esta semana.</div>`}
+
+      <!-- Compromisos -->
+      ${allCommitments.length ? `
+        <div style="margin-bottom:14px;">
+          <div style="font-size:10px;color:${mc.color};text-transform:uppercase;letter-spacing:0.08em;font-weight:700;margin-bottom:6px;">🎯 Dispersiones (pase lo que pase)</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">${allCommitments.map(_commitHtml).join('')}</div>
+        </div>` : `
+        <div style="font-size:11px;color:#94a3b8;padding:8px 12px;background:rgba(255,255,255,0.02);border-radius:8px;margin-bottom:14px;">Sin dispersiones obligatorias esta semana.</div>`}
+
+      <!-- Libre para vivir -->
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:${livingColor}10;border:1px solid ${livingColor}40;border-radius:10px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:160px;">
+          <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Libre para ti</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:2px;">mínimo respetado: ${_fmt(plan.min_living_weekly)} · ${livingOK ? 'ok' : 'ajustamos metas'}</div>
+        </div>
+        <div style="font-size:22px;font-weight:800;color:${livingColor};font-family:'JetBrains Mono',monospace;">${_fmt(plan.free_amount)}</div>
+      </div>
+
+      ${plan.warnings.length ? `
+        <div style="margin-top:10px;padding:10px 12px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.25);border-radius:8px;font-size:11px;color:#fb923c;line-height:1.5;">
+          ${plan.warnings.map(w => '⚠ ' + _esc(w)).join('<br>')}
+        </div>` : ''}
+
+      <div style="margin-top:10px;text-align:right;">
+        <span style="font-size:10px;color:#6b7280;">comprometido $${plan.total_committed.toLocaleString()} de $${plan.total_income.toLocaleString()} esperados · ejecuta tap-a-tap próximamente</span>
+      </div>
+    </div>`
 }
 
 // ── Saldos Reales · lee del balance-engine y pinta ───────────────────────────
