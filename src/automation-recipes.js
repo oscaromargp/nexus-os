@@ -1323,6 +1323,134 @@ return [{ json: { reply: '📧 Email SAT — workflow placeholder activo.\\n\\nP
       }
     },
   },
+
+  // ── AFP · Plan semanal Domingo → Telegram ─────────────────────────────
+  {
+    id: 'afp_weekplan_telegram',
+    name: '📐 AFP · Plan semanal → Telegram',
+    desc: 'Cada domingo a la hora que elijas, te llega tu plan financiero AFP de la próxima semana: modo detectado, ingresos esperados, dispersiones obligatorias con razón explícita, y cuánto te queda libre para vivir.',
+    category: 'finance',
+    icon: '📐',
+    color: '#22d3ee',
+    paramsSchema: [
+      { key: 'hour', label: 'Hora (24h, domingo)', type: 'number', min: 0, max: 23, default: 20 },
+      { key: 'dow',  label: 'Día de la semana (0=dom, 1=lun, …)', type: 'number', min: 0, max: 6, default: 0 },
+    ],
+    generateWorkflow(params, ctx) {
+      const { hour = 20, dow = 0 } = params
+      const { telegramChatId, userId, apiBase, serviceSecret } = ctx
+      const apiUrl = (apiBase || 'https://nexus-os.vercel.app') + '/api/financial'
+      const code = `
+const helpers = this.helpers;
+const r = await helpers.httpRequest({
+  method: 'POST',
+  url: ${JSON.stringify(apiUrl)},
+  headers: {
+    'Content-Type': 'application/json',
+    'x-nexus-service-secret': ${JSON.stringify(serviceSecret || '')},
+  },
+  body: { action: 'afp_weekplan_get', user_id: ${JSON.stringify(userId)} },
+  json: true,
+});
+const text = r?.formatted_telegram || '_(sin plan: configura ingresos/gastos en AFP)_';
+return [{ json: { chatId: ${telegramChatId}, reply: text } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 📐 AFP plan semanal',
+        nodes: [
+          cronNode('cron', 'Cron Domingo ' + hour + 'h', [240, 300], `0 ${hour} * * ${dow}`),
+          codeNode('fetch', 'Fetch AFP plan', [460, 300], code),
+          tgSendNode('tg', 'Telegram Send', [680, 300], '={{ $json.chatId }}', '={{ $json.reply }}'),
+        ],
+        connections: mergeConns(
+          conn('Cron Domingo ' + hour + 'h', 'Fetch AFP plan'),
+          conn('Fetch AFP plan', 'Telegram Send'),
+        ),
+        settings: { executionOrder: 'v1' },
+      }
+    },
+    afterEnable(_workflow, _ctx) {
+      return {
+        instruction: 'Listo. Cada domingo a la hora elegida recibes tu plan AFP. Recuerda marcar tu cuenta principal AFP (★) en Movimientos para que el saldo real aparezca.',
+      }
+    },
+  },
+
+  // ── AFP · Alarma día-antes de dispersión crítica ─────────────────────
+  {
+    id: 'afp_alarma_dispersion',
+    name: '⏰ AFP · Alarma de dispersiones pendientes',
+    desc: 'Cada mañana revisa si tienes movimientos AFP pendientes para los próximos N días (compromisos que comprometiste pero aún no marcas como pagados). Si los hay, recibes un recordatorio en Telegram.',
+    category: 'finance',
+    icon: '⏰',
+    color: '#fb923c',
+    paramsSchema: [
+      { key: 'hour',       label: 'Hora del recordatorio', type: 'number', min: 0, max: 23, default: 8 },
+      { key: 'ahead_days', label: 'Avisar de pendientes en los próximos N días', type: 'number', min: 1, max: 14, default: 2 },
+    ],
+    generateWorkflow(params, ctx) {
+      const { hour = 8, ahead_days = 2 } = params
+      const { supabaseUrl, supabaseKey, telegramChatId, userId } = ctx
+      const code = `
+const SB_URL = ${JSON.stringify(supabaseUrl)};
+const SB_KEY = ${JSON.stringify(supabaseKey)};
+const helpers = this.helpers;
+const H = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY };
+const sb = async (p) => helpers.httpRequest({ method:'GET', url: SB_URL+'/rest/v1/'+p, headers: H, json: true });
+
+const today = new Date(); today.setHours(0,0,0,0);
+const todayStr = today.toISOString().slice(0,10);
+const aheadStr = new Date(today.getTime() + ${ahead_days}*86400000).toISOString().slice(0,10);
+
+const movs = await sb('movimientos?select=fecha,tipo,beneficiario,monto_mxn,notas,proyecto,estado'
+  + '&owner_id=eq.${userId}&estado=eq.pendiente'
+  + '&proyecto=like.afp:*'
+  + '&fecha=gte.' + todayStr + '&fecha=lte.' + aheadStr
+  + '&order=fecha.asc').catch(() => []);
+
+if (!movs.length) {
+  return [{ json: { skip: true } }];
+}
+
+const lines = ['⏰ *AFP · dispersiones pendientes*', ''];
+movs.slice(0, 10).forEach(m => {
+  const monto = '$' + Number(m.monto_mxn || 0).toLocaleString('es-MX');
+  const nombre = (m.beneficiario || 'pendiente').slice(0, 40);
+  const days = Math.round((new Date(m.fecha) - today) / 86400000);
+  const when = days === 0 ? 'hoy' : days === 1 ? 'mañana' : 'en ' + days + 'd';
+  lines.push('• ' + nombre + ' · *' + monto + '* · _' + when + '_');
+});
+lines.push('');
+lines.push('_Marca como pagado desde AFP o desde Movimientos._');
+
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: false } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] ⏰ AFP alarma dispersión',
+        nodes: [
+          cronNode('cron', 'Cron diario ' + hour + 'h', [240, 300], `0 ${hour} * * *`),
+          codeNode('check', 'Check pendientes AFP', [460, 300], code),
+          {
+            parameters: { conditions: { string: [{ value1: '={{ $json.skip }}', operation: 'equal', value2: 'false' }] } },
+            id: 'gate', name: 'Si hay pendientes', type: 'n8n-nodes-base.if',
+            typeVersion: 1, position: [680, 300],
+          },
+          tgSendNode('tg', 'Telegram Send', [900, 300], '={{ $json.chatId }}', '={{ $json.reply }}'),
+        ],
+        connections: mergeConns(
+          conn('Cron diario ' + hour + 'h', 'Check pendientes AFP'),
+          conn('Check pendientes AFP', 'Si hay pendientes'),
+          { 'Si hay pendientes': { main: [[{ node: 'Telegram Send', type:'main', index:0 }], []] } },
+        ),
+        settings: { executionOrder: 'v1' },
+      }
+    },
+    afterEnable(_workflow, _ctx) {
+      return {
+        instruction: 'Listo. Cada mañana, si tienes movimientos AFP marcados pendientes con fecha en los próximos días, te llega un recordatorio.',
+      }
+    },
+  },
 ]
 
 export const CATEGORIES = [

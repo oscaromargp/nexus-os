@@ -121,6 +121,8 @@ export default async function handler(req, res) {
         telegramChatId: params?.telegram_chat_id || TG_CHAT_ID,
         userId,
         n8nBaseUrl: N8N_BASE,
+        apiBase: process.env.NEXUS_API_BASE || 'https://nexus-os.vercel.app',
+        serviceSecret: process.env.NEXUS_WEBHOOK_SECRET || '',
       }
       if (!ctx.telegramChatId) {
         return res.status(400).json({ error: 'No hay chat_id de Telegram configurado. Define TELEGRAM_CHAT_ID en env o pásalo en params.' })

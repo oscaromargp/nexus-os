@@ -7,7 +7,7 @@
 // Auth: JWT Bearer del usuario.
 
 import { createClient } from '@supabase/supabase-js'
-import { buildWeekPlan } from './_lib/afp.js'
+import { buildWeekPlan, formatWeekPlanTelegram } from './_lib/afp.js'
 
 function getSupabase(authToken) {
   const url  = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
@@ -605,14 +605,31 @@ export default async function handler(req, res) {
   try {
     const { action } = req.body || {}
 
-    // Auth
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
-    if (!token) return res.status(401).json({ error: 'Sin token' })
-    const sb = getSupabase(token)
-    const { data: { user }, error: uErr } = await sb.auth.getUser()
-    if (uErr || !user) return res.status(401).json({ error: 'Token inválido' })
-    const userId = user.id
-    const admin = getAdminSupabase()
+    // ── Auth: doble vía ───────────────────────────────────────────
+    // (1) JWT del usuario en Authorization Bearer (cliente normal)
+    // (2) Service secret + user_id en body — solo para acciones read-only
+    //     listadas, usado por crons/n8n sin sesión del usuario.
+    const SERVICE_ACTIONS_RO = new Set(['afp_weekplan_get'])
+    const serviceSecret = req.headers['x-nexus-service-secret']
+    const SERVICE_SECRET = process.env.NEXUS_WEBHOOK_SECRET
+
+    let userId, user, admin = getAdminSupabase()
+    if (serviceSecret && SERVICE_SECRET && serviceSecret === SERVICE_SECRET && SERVICE_ACTIONS_RO.has(action)) {
+      const reqUserId = req.body?.user_id
+      if (!reqUserId) return res.status(400).json({ error: 'user_id requerido con service secret' })
+      const { data: u, error: uErr } = await admin.auth.admin.getUserById(reqUserId)
+      if (uErr || !u?.user) return res.status(400).json({ error: 'user_id inválido' })
+      userId = u.user.id
+      user = u.user
+    } else {
+      const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
+      if (!token) return res.status(401).json({ error: 'Sin token' })
+      const sb = getSupabase(token)
+      const { data: { user: u }, error: uErr } = await sb.auth.getUser()
+      if (uErr || !u) return res.status(401).json({ error: 'Token inválido' })
+      userId = u.id
+      user = u
+    }
 
     // ── AFP ─────────────────────────────────────────────────────
     if (action === 'afp_diagnose') {
@@ -623,7 +640,11 @@ export default async function handler(req, res) {
     // AFP · plan semanal con instrucciones nombre+razón
     if (action === 'afp_weekplan_get') {
       const result = await buildWeekPlan(admin, userId, user.user_metadata || {})
-      return res.status(200).json({ ok: true, weekplan: result })
+      return res.status(200).json({
+        ok: true,
+        weekplan: result,
+        formatted_telegram: formatWeekPlanTelegram(result),
+      })
     }
 
     // AFP · histórico mensual
