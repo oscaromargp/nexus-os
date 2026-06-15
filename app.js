@@ -22121,23 +22121,42 @@ async function renderMovimientos() {
   const gBtn = (label, icon, onclick) =>
     `<button onclick="${onclick}" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx(icon,14)} ${label}</button>`
 
+  // Toolbar simplificada mobile-first: 3 botones primarios + kebab con el resto.
+  // Acciones secundarias (CSV, Importar, Plantilla, Editar/Eliminar cuenta) viven
+  // dentro del menú "⋯" para no saturar la pantalla.
   const actionsHtml = `
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;align-items:center;">
-      <button onclick="mvOpenModal()" style="display:flex;align-items:center;gap:7px;padding:9px 18px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.background='rgba(0,246,255,0.2)'" onmouseout="this.style.background='rgba(0,246,255,0.1)'">${lx('Plus',15)} Nuevo</button>
-      <button onclick="mvExportEstadoCuenta()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.25);color:#4ade80;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;transition:background 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.16)'" onmouseout="this.style.background='rgba(74,222,128,0.08)'" title="Estado de Cuenta interno (vista de gestión)">${lx('FileText',14)} Estado de Cuenta</button>
-      <button onclick="mvExportReporteCliente()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;transition:background 0.2s;" onmouseover="this.style.background='rgba(34,211,238,0.18)'" onmouseout="this.style.background='rgba(34,211,238,0.08)'" title="Reporte limpio para enviar al cliente (sin branding ni datos internos)">${lx('UserCheck',14)} Reporte Cliente</button>
-      ${gBtn('CSV','Download','mvExportCSV()')}
-      <label style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx('Upload',14)} Importar<input type="file" accept=".csv" style="display:none;" onchange="mvImportCSV(this)" /></label>
-      <button onclick="mvDownloadTemplate()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'" title="Descargar plantilla CSV para importación masiva">${lx('FileDown',14)} Plantilla</button>
-      <button onclick="mvGoToLanding()" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.04)'">${lx('LayoutGrid',14)} Mis Cuentas</button>
-      <button onclick="mvOpenOrqModal('${_mvActiveOrqId}',false)" title="Editar esta cuenta" style="display:flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,246,255,0.08)';this.style.color='#00f0ff'" onmouseout="this.style.background='rgba(255,255,255,0.04)';this.style.color='var(--text-muted)'">${lx('Pencil',13)} Editar</button>
-      <button onclick="mvDeleteOrq('${_mvActiveOrqId}')" title="Eliminar esta cuenta y todos sus movimientos" style="display:flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;transition:background 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.08)';this.style.color='#f87171'" onmouseout="this.style.background='rgba(255,255,255,0.04)';this.style.color='var(--text-muted)'">${lx('Trash2',13)}</button>
-      <!-- Toggle vista Cards / Tabla -->
-      <div style="display:flex;gap:2px;padding:3px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-left:auto;">
-        <button onclick="mvSetView('tabla')"  style="padding:6px 13px;border-radius:8px;border:none;background:${_mvView==='tabla'?'rgba(0,246,255,0.15)':'transparent'};color:${_mvView==='tabla'?'#00f0ff':'var(--text-dim)'};font-size:12px;font-weight:${_mvView==='tabla'?700:400};cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:5px;">${lx('AlignJustify',12)} Tabla</button>
-        <button onclick="mvSetView('cards')" style="padding:6px 13px;border-radius:8px;border:none;background:${_mvView==='cards'?'rgba(0,246,255,0.15)':'transparent'};color:${_mvView==='cards'?'#00f0ff':'var(--text-dim)'};font-size:12px;font-weight:${_mvView==='cards'?700:400};cursor:pointer;transition:all 0.15s;display:flex;align-items:center;gap:5px;">${lx('LayoutList',12)} Cards</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center;position:relative;">
+      <button onclick="mvOpenModal()" style="display:flex;align-items:center;gap:6px;padding:9px 16px;background:rgba(0,246,255,0.1);border:1px solid rgba(0,246,255,0.3);color:#00f0ff;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">${lx('Plus',15)} Nuevo</button>
+      <button onclick="mvExportEstadoCuenta()" style="display:flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(34,211,238,0.08);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:10px;cursor:pointer;font-size:12px;font-weight:700;" title="Generar Estado de Cuenta en PDF">${lx('FileText',14)} PDF</button>
+      <button onclick="mvGoToLanding()" style="display:flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:12px;">${lx('LayoutGrid',14)} Mis Cuentas</button>
+
+      <!-- Menú kebab: acciones secundarias -->
+      <button id="mv-kebab-btn" onclick="event.stopPropagation();document.getElementById('mv-kebab-menu').style.display=document.getElementById('mv-kebab-menu').style.display==='block'?'none':'block'"
+        title="Más acciones" style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-muted);border-radius:10px;cursor:pointer;font-size:16px;line-height:1;">⋯</button>
+      <div id="mv-kebab-menu" onclick="event.stopPropagation()" style="display:none;position:absolute;top:46px;left:260px;background:#0f172a;border:1px solid #1f2937;border-radius:10px;box-shadow:0 12px 32px rgba(0,0,0,0.6);z-index:80;min-width:220px;padding:4px;">
+        <button onclick="mvOpenOrqModal('${_mvActiveOrqId}',false);document.getElementById('mv-kebab-menu').style.display='none'" style="display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;background:none;border:none;color:#e5e7eb;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">${lx('Pencil',13)} Editar cuenta</button>
+        <button onclick="mvExportCSV();document.getElementById('mv-kebab-menu').style.display='none'" style="display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;background:none;border:none;color:#e5e7eb;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">${lx('Download',13)} Exportar CSV</button>
+        <div style="height:1px;background:rgba(255,255,255,0.06);margin:4px 6px;"></div>
+        <div style="padding:6px 12px 4px;font-size:9px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;">Importación masiva</div>
+        <label style="display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;background:none;border:none;color:#e5e7eb;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">${lx('Upload',13)} Importar CSV<input type="file" accept=".csv" style="display:none;" onchange="mvImportCSV(this);document.getElementById('mv-kebab-menu').style.display='none'" /></label>
+        <button onclick="mvDownloadTemplate();document.getElementById('mv-kebab-menu').style.display='none'" style="display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;background:none;border:none;color:#e5e7eb;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">${lx('FileDown',13)} Plantilla CSV</button>
+        <div style="height:1px;background:rgba(255,255,255,0.06);margin:4px 6px;"></div>
+        <button onclick="mvDeleteOrq('${_mvActiveOrqId}');document.getElementById('mv-kebab-menu').style.display='none'" style="display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;background:none;border:none;color:#f87171;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(248,113,113,0.08)'" onmouseout="this.style.background='none'">${lx('Trash2',13)} Eliminar cuenta…</button>
       </div>
-    </div>`
+
+      <!-- Toggle vista Tabla / Cards -->
+      <div style="display:flex;gap:2px;padding:3px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;margin-left:auto;">
+        <button onclick="mvSetView('tabla')" style="padding:6px 12px;border-radius:7px;border:none;background:${_mvView==='tabla'?'rgba(0,246,255,0.15)':'transparent'};color:${_mvView==='tabla'?'#00f0ff':'var(--text-dim)'};font-size:11px;font-weight:${_mvView==='tabla'?700:400};cursor:pointer;display:flex;align-items:center;gap:4px;">${lx('AlignJustify',11)} Tabla</button>
+        <button onclick="mvSetView('cards')" style="padding:6px 12px;border-radius:7px;border:none;background:${_mvView==='cards'?'rgba(0,246,255,0.15)':'transparent'};color:${_mvView==='cards'?'#00f0ff':'var(--text-dim)'};font-size:11px;font-weight:${_mvView==='cards'?700:400};cursor:pointer;display:flex;align-items:center;gap:4px;">${lx('LayoutList',11)} Cards</button>
+      </div>
+    </div>
+    <script>
+      // Cierra el kebab al click fuera (una sola vez)
+      if (!window._mvKebabBound) {
+        window._mvKebabBound = true
+        document.addEventListener('click', () => { const m = document.getElementById('mv-kebab-menu'); if (m) m.style.display = 'none' })
+      }
+    </script>`
 
   // ── Filter bar ──
   const sel = (key, val, opts, ph) =>
@@ -23068,39 +23087,25 @@ window.mvExportCSV = () => {
   a.click()
 }
 
-// ── Estado de Cuenta — PDF profesional via pdf-reports engine ────────────────
+// ── Estado de Cuenta — PDF único (limpio, listo para enviar al cliente) ──────
 window.mvExportEstadoCuenta = async () => {
   const list = _mvWithBalance(_mvFiltered())
   if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
-  const orq  = _mvOrqs.find(o => o.id === _mvActiveOrqId)
-  const kpis = _mvKpis(list)
-  showToast('⏳ Generando PDF...')
-  try {
-    await pdfEstadoCuenta(orq, list, kpis, _mvTcCache, _mvFilters, getEmisor())
-    showToast('✅ PDF descargado')
-  } catch (e) {
-    console.error('pdfEstadoCuenta:', e)
-    showToast('❌ Error al generar PDF: ' + e.message)
-  }
-}
-
-// ── Reporte Cliente — PDF limpio sin branding ni datos internos ───────────────
-window.mvExportReporteCliente = async () => {
-  const list = _mvWithBalance(_mvFiltered())
-  if (!list.length) { showToast('⚠ Sin datos para exportar'); return }
   const orq = _mvOrqs.find(o => o.id === _mvActiveOrqId)
-  showToast('⏳ Generando reporte cliente…')
+  showToast('⏳ Generando PDF…')
   try {
     await pdfEstadoCuentaCliente(orq, list, {
       dateFrom: _mvFilters.dateFrom,
       dateTo:   _mvFilters.dateTo,
     })
-    showToast('✅ Reporte descargado')
+    showToast('✅ PDF descargado')
   } catch (e) {
     console.error('pdfEstadoCuentaCliente:', e)
-    showToast('❌ Error: ' + e.message)
+    showToast('❌ Error al generar PDF: ' + e.message)
   }
 }
+// Compat: alias para que el código viejo siga sirviendo
+window.mvExportReporteCliente = () => window.mvExportEstadoCuenta()
 
 // ── Export PDF básico (alias) ─────────────────────────────────────────────────
 window.mvExportPDF = () => window.mvExportEstadoCuenta()

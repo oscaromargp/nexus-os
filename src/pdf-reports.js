@@ -833,9 +833,26 @@ export async function pdfEstadoCuenta(orq, list, kpis, tcCache = {}, filters = {
 //
 // Helper de transformación pura — testeable, sin efectos:
 
-/** Quita \r \n \t y normaliza espacios múltiples. */
+/**
+ * Quita \r \n \t, normaliza espacios y elimina caracteres que jsPDF + Helvetica
+ * (WinAnsi) no puede pintar (emojis, flechas Unicode, símbolos exóticos).
+ * También sustituye comillas curvas, em-dash y otros por sus equivalentes ASCII.
+ */
 function _scrub(s) {
-  return String(s ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+  return String(s ?? '')
+    .replace(/[\r\n\t]+/g, ' ')
+    // Sustituciones comunes a ASCII
+    .replace(/[‘’]/g, "'")           // ' '
+    .replace(/[“”]/g, '"')           // " "
+    .replace(/[–—]/g, '-')           // – —
+    .replace(/[→➔➜]/g, '->')    // → ➔ ➜
+    .replace(/[←]/g, '<-')                // ←
+    .replace(/[•]/g, '*')                 // •
+    .replace(/[…]/g, '...')               // …
+    // Cualquier char fuera de Latin-1 extendido (incluye emojis) → fuera
+    .replace(/[^ -ÿ]/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
 }
 
 /** Calcula neto MXN del movimiento (bruto − comisión si aplica). */
@@ -970,9 +987,11 @@ export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
   doc.text(accountName, T.mX, 17)
 
   // Periodo / fecha de emisión a la derecha
+  // (jsPDF + Helvetica usa WinAnsi: NO soporta U+2192 → ni emojis;
+  //  por eso usamos guion ASCII en su lugar)
   const periodTxt = (dateFrom || dateTo)
-    ? `${dateFrom || 'Inicio'} → ${dateTo || 'Hoy'}`
-    : 'Histórico completo'
+    ? `${dateFrom || 'Inicio'}  -  ${dateTo || 'Hoy'}`
+    : 'Historico completo'
   doc.setTextColor(...T.textMid); doc.setFontSize(7)
   doc.text(periodTxt, W - T.mX, 9, { align: 'right' })
   doc.text('Emitido: ' + now.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }),
@@ -1040,10 +1059,12 @@ export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
     head: [['Fecha', 'Concepto', 'Salida / Entrada', 'Saldo']],
     body: rows.map(r => {
       const isPen = r.isPen, isCan = r.isCan
+      // Nota: usamos "-" ASCII en lugar de minus Unicode "−" para evitar
+      // glyph faltante en Helvetica.
       const movStr = isCan ? 'CANCELADO'
-        : r.tipo === 'entrada' ? '+ $' + fmt$(r.neto) + (isPen ? ' (pend.)' : '')
-        : '− $' + fmt$(r.neto) + (isPen ? ' (pend.)' : '')
-      const balStr = isPen || isCan ? '—' : '$' + fmt$(r.balance ?? 0)
+        : r.tipo === 'entrada' ? '+ $' + fmt$(r.neto) + (isPen ? '  (pendiente)' : '')
+        :                       '- $' + fmt$(r.neto) + (isPen ? '  (pendiente)' : '')
+      const balStr = isPen || isCan ? '--' : '$' + fmt$(r.balance ?? 0)
       // Concepto puede llevar uno o más espacios al final para reservar línea de chips
       const conc = r.urls.length ? r.concepto + '\n ' : r.concepto
       return [r.fecha, conc, movStr, balStr]
@@ -1089,12 +1110,16 @@ export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
       let cx = cell.cell.x + padX
       doc.setFont(T.font, 'bold'); doc.setFontSize(7); doc.setTextColor(...T.cyan)
       r.urls.forEach((url, i) => {
-        const label = `🔗 #${i + 1}`
+        // Sin emojis (Helvetica no los soporta). "Ver #N" subrayado simula link.
+        const label = `Ver evidencia #${i + 1}`
         const w = doc.getTextWidth(label) + 1.5
         if (cx + w > cell.cell.x + cell.cell.width - padX) return
         doc.text(label, cx, baseY)
+        // Subrayado del link (3 décimas debajo del baseline)
+        doc.setDrawColor(...T.cyan); doc.setLineWidth(0.15)
+        doc.line(cx, baseY + 0.6, cx + w - 1.5, baseY + 0.6)
         doc.link(cx, baseY - 2.8, w, 3.6, { url })
-        cx += w + 2
+        cx += w + 3
       })
       doc.setTextColor(...T.textInk); doc.setFontSize(8); doc.setFont(T.font, 'normal')
     },
@@ -1135,7 +1160,7 @@ export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
     doc.setFillColor(...T.ink)
     doc.rect(T.mX, topY, W - T.mX * 2, 8, 'F')
     doc.setTextColor(...T.cyan); doc.setFont(T.font, 'bold'); doc.setFontSize(9)
-    doc.text('FLUJO Y VOLUMEN · A quién se dispersó dinero', T.mX + 4, topY + 5.3)
+    doc.text('FLUJO Y VOLUMEN  ·  A quien se ha dispersado dinero', T.mX + 4, topY + 5.3)
     topY += 12
 
     const maxTotal = topDestinatarios[0].total || 1
