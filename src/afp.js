@@ -468,17 +468,43 @@ async function _hydrateWeekPlan() {
     ...plan.goals.map(x   => ({ ...x, prio: 4, color: '#a78bfa' })),
   ].filter(x => x.amount > 0)
 
-  const _commitHtml = (c) => `
-    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid ${c.color}30;border-left:3px solid ${c.color};border-radius:8px;">
-      <input type="checkbox" disabled style="width:18px;height:18px;margin-top:1px;flex-shrink:0;accent-color:${c.color};opacity:0.4;cursor:not-allowed;" title="Marca como hecho desde Movimientos (próximamente en 1 tap)" />
-      <div style="flex:1;min-width:0;">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-          <div style="font-size:13px;font-weight:700;color:#e5e7eb;">${_esc(c.label)}</div>
-          <div style="font-size:14px;font-weight:800;color:${c.color};font-family:'JetBrains Mono',monospace;">${_fmt(c.amount)}${c.reduced ? ' ⬇' : ''}</div>
+  // Carga estado de items ya comprometidos esta semana
+  const commitMap = _loadWeekCommits(plan.week)
+
+  const _commitHtml = (c, idx) => {
+    const key = _commitKey(c)
+    const state = commitMap[key]   // null | 'committed' | 'paid'
+    const isPaid = state?.status === 'paid'
+    const isCommitted = state?.status === 'committed'
+    const hasPrimary = !!plan.primary_account_label
+
+    let btn = ''
+    if (!hasPrimary) {
+      btn = `<button disabled title="Marca una cuenta principal primero" style="padding:6px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:#475569;border-radius:7px;font-size:11px;cursor:not-allowed;">Comprometer</button>`
+    } else if (isPaid) {
+      btn = `<span style="padding:5px 10px;background:rgba(52,211,153,0.15);color:#34d399;border-radius:7px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;">✓ Pagado</span>`
+    } else if (isCommitted) {
+      btn = `<button data-wk-act="pay" data-wk-key="${key}" data-wk-mov="${state.mov_id}" style="padding:6px 10px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);color:#34d399;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">Marcar pagado</button>
+              <button data-wk-act="undo" data-wk-key="${key}" data-wk-mov="${state.mov_id}" title="Deshacer compromiso" style="padding:6px 8px;background:none;border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:7px;font-size:11px;cursor:pointer;">✕</button>`
+    } else {
+      btn = `<button data-wk-act="commit" data-wk-idx="${idx}" style="padding:6px 12px;background:${c.color}20;border:1px solid ${c.color}60;color:${c.color};border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">Comprometer</button>`
+    }
+
+    const opacity = isPaid ? 0.55 : 1
+    const lineThrough = isPaid ? 'text-decoration:line-through;' : ''
+
+    return `
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid ${c.color}30;border-left:3px solid ${c.color};border-radius:8px;opacity:${opacity};">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <div style="font-size:13px;font-weight:700;color:#e5e7eb;${lineThrough}">${_esc(c.label)}</div>
+            <div style="font-size:14px;font-weight:800;color:${c.color};font-family:'JetBrains Mono',monospace;${lineThrough}">${_fmt(c.amount)}${c.reduced ? ' ⬇' : ''}</div>
+          </div>
+          <div style="font-size:11px;color:#94a3b8;line-height:1.4;margin-top:2px;">${_esc(c.reason)}</div>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">${btn}</div>
         </div>
-        <div style="font-size:11px;color:#94a3b8;line-height:1.4;margin-top:2px;">${_esc(c.reason)}</div>
-      </div>
-    </div>`
+      </div>`
+  }
 
   const _incomeHtml = (i) => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;background:rgba(52,211,153,0.06);border:1px solid rgba(52,211,153,0.2);border-radius:8px;">
@@ -540,9 +566,109 @@ async function _hydrateWeekPlan() {
         </div>` : ''}
 
       <div style="margin-top:10px;text-align:right;">
-        <span style="font-size:10px;color:#6b7280;">comprometido $${plan.total_committed.toLocaleString()} de $${plan.total_income.toLocaleString()} esperados · ejecuta tap-a-tap próximamente</span>
+        <span style="font-size:10px;color:#6b7280;">comprometido $${plan.total_committed.toLocaleString()} de $${plan.total_income.toLocaleString()} esperados</span>
       </div>
     </div>`
+
+  // ── Bind acciones de los items ─────────────────────────────────────────────
+  const primaryOrqId = await window.nexusBalance?.primary?.()
+  mount.querySelectorAll('[data-wk-act]').forEach(btn => {
+    const act = btn.dataset.wkAct
+    if (act === 'commit') {
+      btn.addEventListener('click', async () => {
+        if (!primaryOrqId) { alert('Marca primero una cuenta principal AFP'); return }
+        const idx = Number(btn.dataset.wkIdx)
+        const item = allCommitments[idx]
+        btn.disabled = true; btn.textContent = '⏳'
+        try {
+          const movId = await _createPendingMov(primaryOrqId, plan.week, item)
+          _saveWeekCommit(plan.week, item, { status: 'committed', mov_id: movId })
+          window.nexusBalance?.invalidate?.(primaryOrqId)
+          _hydrateWeekPlan()
+        } catch (e) { alert('Error: ' + e.message); btn.disabled = false; btn.textContent = 'Comprometer' }
+      })
+    } else if (act === 'pay') {
+      btn.addEventListener('click', async () => {
+        const movId = btn.dataset.wkMov
+        const key = btn.dataset.wkKey
+        btn.disabled = true; btn.textContent = '⏳'
+        try {
+          await supabase.from('movimientos').update({ estado: 'hecho' }).eq('id', movId)
+          _updateWeekCommitStatus(plan.week, key, 'paid')
+          window.nexusBalance?.invalidate?.(primaryOrqId)
+          _hydrateWeekPlan()
+        } catch (e) { alert('Error: ' + e.message); btn.disabled = false; btn.textContent = 'Marcar pagado' }
+      })
+    } else if (act === 'undo') {
+      btn.addEventListener('click', async () => {
+        if (!confirm('¿Deshacer este compromiso? Se elimina el movimiento pendiente.')) return
+        const movId = btn.dataset.wkMov
+        const key = btn.dataset.wkKey
+        try {
+          await supabase.from('movimientos').delete().eq('id', movId)
+          _clearWeekCommit(plan.week, key)
+          window.nexusBalance?.invalidate?.(primaryOrqId)
+          _hydrateWeekPlan()
+        } catch (e) { alert('Error: ' + e.message) }
+      })
+    }
+  })
+}
+
+// ── Helpers de persistencia (localStorage por usuario+semana) ────────────────
+function _commitKey(item) {
+  const slug = String(item.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)
+  return `${item.kind}:${slug}`
+}
+function _wkStorageKey(week) {
+  return `nexus_afp_commits_${week}`
+}
+function _loadWeekCommits(week) {
+  try { return JSON.parse(localStorage.getItem(_wkStorageKey(week)) || '{}') } catch { return {} }
+}
+function _saveWeekCommit(week, item, payload) {
+  const map = _loadWeekCommits(week)
+  map[_commitKey(item)] = { ...payload, committed_at: new Date().toISOString() }
+  localStorage.setItem(_wkStorageKey(week), JSON.stringify(map))
+}
+function _updateWeekCommitStatus(week, key, status) {
+  const map = _loadWeekCommits(week)
+  if (map[key]) { map[key].status = status; localStorage.setItem(_wkStorageKey(week), JSON.stringify(map)) }
+}
+function _clearWeekCommit(week, key) {
+  const map = _loadWeekCommits(week)
+  delete map[key]
+  localStorage.setItem(_wkStorageKey(week), JSON.stringify(map))
+}
+
+// ── Crea movimiento pendiente en la cuenta primaria ──────────────────────────
+async function _createPendingMov(orqId, week, item) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Sin sesión')
+  const isIncome = item.kind === 'income'
+  const payload = {
+    owner_id: user.id,
+    orquestador_id: orqId,
+    tipo: isIncome ? 'entrada' : 'salida',
+    fecha: new Date().toISOString().slice(0, 10),
+    cantidad: item.amount,
+    moneda: 'MXN',
+    tc: 1,
+    monto_mxn: item.amount,
+    estado: 'pendiente',
+    categoria: item.category || _afpCategoryFromKind(item.kind),
+    proyecto: `afp:${week}`,
+    notas: `AFP plan ${week} · ${item.label} · ${item.reason}`,
+    beneficiario: !isIncome ? item.label : null,
+    ordenante:    isIncome  ? item.label : null,
+  }
+  const { data, error } = await supabase.from('movimientos').insert(payload).select().single()
+  if (error) throw new Error(error.message)
+  return data.id
+}
+
+function _afpCategoryFromKind(kind) {
+  return ({ sacred: 'Cripto/Sagrado', cushion: 'Colchón Fiat', debt: 'Deuda', goal: 'Meta', income: 'Ingreso' })[kind] || 'AFP'
 }
 
 // ── Saldos Reales · lee del balance-engine y pinta ───────────────────────────
