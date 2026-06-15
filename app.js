@@ -11,6 +11,7 @@ import './src/shortcuts-help.js'
 import './src/drive-backup.js'
 import './src/google-gis.js'
 import './src/n8n-webhooks.js'
+import './src/balance-engine.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -22960,6 +22961,9 @@ window.mvSaveMov = async () => {
   }
   _mvComprobantes = []
 
+  // Invalida cache del balance-engine para esta cuenta
+  try { window.nexusBalance?.invalidate?.(_mvActiveOrqId) } catch {}
+
   mvCloseModal()
   await _mvLoadMovs()
   renderMovimientos()
@@ -22972,6 +22976,7 @@ window.mvDeleteMov = async (id) => {
   if (error) { showToast('⚠ Error al eliminar'); return }
   _mvMovs = _mvMovs.filter(m => m.id !== id)
   _mvOrqSummaries = {}   // invalidar cache del landing
+  try { window.nexusBalance?.invalidate?.(_mvActiveOrqId) } catch {}
   renderMovimientos()
   showToast('🗑 Movimiento eliminado')
 }

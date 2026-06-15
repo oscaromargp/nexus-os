@@ -324,6 +324,11 @@ export async function renderAFP() {
         `
       })()}
 
+      <!-- 💵 SALDO REAL EN CUENTAS DE MOVIMIENTOS — placeholder hidratado al cargar -->
+      <div id="afp-real-balances" data-afp-real-balances style="margin-bottom:20px;">
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;font-size:12px;color:#6b7280;">⏳ Leyendo saldos reales…</div>
+      </div>
+
       <!-- ESTRATEGIA + DISPERSIÓN -->
       ${m.monthly_disposable > 0 ? `
       <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:20px;">
@@ -415,6 +420,85 @@ export async function renderAFP() {
   document.getElementById('afp-config-btn')?.addEventListener('click', () => _openConfigModal())
   document.getElementById('afp-adjust-btn')?.addEventListener('click', () => _openAdjustmentModal(data))
   document.getElementById('afp-cushion-btn')?.addEventListener('click', () => _openCushionModal(data))
+
+  // Hidrata el panel de Saldos Reales y se suscribe a cambios
+  _hydrateRealBalances()
+  if (!window._afpBalanceSub) {
+    window._afpBalanceSub = window.nexusBalance?.onChange?.(() => _hydrateRealBalances())
+  }
+}
+
+// ── Saldos Reales · lee del balance-engine y pinta ───────────────────────────
+async function _hydrateRealBalances() {
+  const mount = document.querySelector('[data-afp-real-balances]')
+  if (!mount) return
+  try {
+    const { accounts, totals } = await window.nexusBalance.getAll()
+    if (!accounts.length) {
+      mount.innerHTML = `
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;font-size:12px;color:#6b7280;">
+          Sin cuentas en Movimientos. Crea una para ver tu Saldo Real aquí.
+        </div>`
+      return
+    }
+    const primary = await window.nexusBalance.primary()
+
+    const _fmt = (n) => '$' + (n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const _badge = (lbl, val, color) => `
+      <div style="text-align:center;flex:1;min-width:90px;">
+        <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:2px;">${lbl}</div>
+        <div style="font-size:14px;font-weight:800;color:${color};font-family:'JetBrains Mono',monospace;">${_fmt(val)}</div>
+      </div>`
+
+    // Encabezado con totales
+    let html = `
+      <div style="background:linear-gradient(135deg,rgba(34,211,238,0.06),rgba(167,139,250,0.04));border:1px solid rgba(34,211,238,0.2);border-radius:12px;padding:14px 16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <div style="font-size:14px;font-weight:800;color:#22d3ee;display:flex;align-items:center;gap:6px;">💵 Saldo Real · todas tus cuentas</div>
+          <span style="font-size:10px;color:#6b7280;">basado en Movimientos · pendientes ya restados</span>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:10px;">
+          ${_badge('Disponible', totals.disponible, '#34d399')}
+          ${_badge('Pendiente salida', totals.pendienteOut, '#fbbf24')}
+          ${_badge('Pendiente entrada', totals.pendienteIn, '#60a5fa')}
+          ${_badge('SALDO REAL', totals.real, totals.real >= 0 ? '#22d3ee' : '#f87171')}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">`
+
+    for (const a of accounts) {
+      const isPrim = a.orqId === primary
+      html += `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid ${isPrim?'rgba(34,211,238,0.35)':'rgba(255,255,255,0.06)'};border-radius:8px;">
+          <button data-afp-set-primary="${a.orqId}" title="Marcar como cuenta principal AFP"
+            style="background:none;border:none;cursor:pointer;font-size:14px;color:${isPrim?'#22d3ee':'#475569'};padding:2px;">${isPrim?'★':'☆'}</button>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:#e5e7eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(a.nombre)}</div>
+            <div style="font-size:10px;color:#6b7280;">${a.count} mov · ${_esc(a.moneda_principal || 'MXN')}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:13px;font-weight:800;color:${a.real >= 0 ? '#22d3ee' : '#f87171'};font-family:'JetBrains Mono',monospace;">${_fmt(a.real)}</div>
+            <div style="font-size:9px;color:#94a3b8;">
+              <span style="color:#34d399;">${_fmt(a.disponible)}</span>
+              ${a.pendienteOut > 0 ? ` <span style="color:#fbbf24;">- ${_fmt(a.pendienteOut)}</span>` : ''}
+              ${a.pendienteIn  > 0 ? ` <span style="color:#60a5fa;">+ ${_fmt(a.pendienteIn)}</span>` : ''}
+            </div>
+          </div>
+        </div>`
+    }
+    html += `</div></div>`
+    mount.innerHTML = html
+
+    // Bind: marcar cuenta principal
+    mount.querySelectorAll('[data-afp-set-primary]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.afpSetPrimary
+        await window.nexusBalance.setPrimary(id === primary ? null : id)
+        _hydrateRealBalances()
+      })
+    })
+  } catch (e) {
+    mount.innerHTML = `<div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:12px;padding:12px;font-size:12px;color:#f87171;">⚠ ${_esc(e.message)}</div>`
+  }
 }
 
 // ── PDF EXPORT v4 — rediseñado con secciones, tablas y gráficas ──
