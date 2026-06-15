@@ -16760,7 +16760,79 @@ function _renderProjResumen(d) {
   // ── Descripción ────────────────────────────────────────────────────────────
   const descHTML = m.desc ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:var(--text-secondary);line-height:1.6;border-left:3px solid rgba(255,255,255,0.1);">${esc(m.desc)}</div>` : ''
 
-  return descHTML + alertsHTML + heroHTML + kpiStripHTML + gridHTML + cotsCompactHTML + teamHTML + tareasHTML
+  // ── Widget Pulso RSS: contenedor + carga async (mobile-first) ──────────────
+  const rssPulseHTML = `
+    <div id="rss-pulse-${p.id}" data-rss-pulse-pid="${p.id}" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:130px;">
+        <span style="font-size:18px;">📡</span>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;">Pulso RSS</div>
+          <div style="font-size:11px;color:var(--text-muted);">cargando…</div>
+        </div>
+      </div>
+      <button onclick="switchProjTab('rss')" style="font-size:11px;padding:6px 12px;background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:7px;cursor:pointer;font-weight:600;flex-shrink:0;">Ir a RSS →</button>
+    </div>`
+
+  // Hidratar widget tras pintar
+  setTimeout(() => _hydrateRssPulse(p.id), 30)
+
+  return descHTML + rssPulseHTML + alertsHTML + heroHTML + kpiStripHTML + gridHTML + cotsCompactHTML + teamHTML + tareasHTML
+}
+
+// Hidrata el card Pulso RSS leyendo snapshot del módulo de RSS.
+async function _hydrateRssPulse(pid) {
+  const card = document.getElementById('rss-pulse-' + pid)
+  if (!card) return
+  try {
+    const snap = await window.nexusRss?.snapshot?.(pid)
+    if (!snap) return
+    const _kpi = (val, label, color) => `
+      <div style="text-align:center;padding:6px 10px;background:${color}10;border:1px solid ${color}30;border-radius:8px;min-width:60px;">
+        <div style="font-size:17px;font-weight:800;color:${color};font-family:'JetBrains Mono',monospace;line-height:1;">${val}</div>
+        <div style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-top:3px;">${label}</div>
+      </div>`
+    const isErr = !snap.ok
+    if (isErr) {
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;flex:1;">
+          <span style="font-size:18px;">⚠️</span>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#f87171;text-transform:uppercase;letter-spacing:0.06em;">Pulso RSS</div>
+            <div style="font-size:11px;color:var(--text-muted);">No se pudo leer · ${esc(snap.error || 'error')}</div>
+          </div>
+        </div>
+        <button onclick="switchProjTab('rss')" style="font-size:11px;padding:6px 12px;background:rgba(248,113,113,0.08);border:1px solid rgba(248,113,113,0.25);color:#f87171;border-radius:7px;cursor:pointer;font-weight:600;">Reintentar →</button>`
+      return
+    }
+    if (!snap.sourcesTotal) {
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;flex:1;">
+          <span style="font-size:18px;">📡</span>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;">Pulso RSS</div>
+            <div style="font-size:11px;color:var(--text-muted);">Sin fuentes registradas todavía</div>
+          </div>
+        </div>
+        <button onclick="switchProjTab('rss')" style="font-size:11px;padding:6px 12px;background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:7px;cursor:pointer;font-weight:600;">+ Agregar →</button>`
+      return
+    }
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;flex:1 1 100%;min-width:0;margin-bottom:2px;">
+        <span style="font-size:16px;">📡</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;">Pulso RSS</div>
+          <div style="font-size:10px;color:var(--text-muted);">${snap.sourcesTotal} fuente${snap.sourcesTotal>1?'s':''}${snap.sourceErrors?` · <span style="color:#f87171;">${snap.sourceErrors} con fallos</span>`:''}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex:1;flex-wrap:wrap;">
+        ${_kpi(snap.pending, 'Pendientes', snap.pending > 0 ? '#fbbf24' : '#64748b')}
+        ${_kpi(snap.publishedToday, 'Pub hoy', snap.publishedToday > 0 ? '#34d399' : '#64748b')}
+        ${_kpi(snap.sourceErrors, 'Errores', snap.sourceErrors > 0 ? '#f87171' : '#64748b')}
+      </div>
+      <button onclick="switchProjTab('rss')" style="font-size:11px;padding:6px 12px;background:rgba(0,246,255,0.08);border:1px solid rgba(0,246,255,0.25);color:#00f6ff;border-radius:7px;cursor:pointer;font-weight:600;flex-shrink:0;">Ir a RSS →</button>`
+  } catch (e) {
+    console.warn('[rss-pulse]', e)
+  }
 }
 
 // ── TAB: FINANZAS ────────────────────────────────────────────────────────────
@@ -18136,6 +18208,10 @@ window.saveBitacoraEntry = async function() {
 
   if (error) { showToast('❌ Error al guardar: ' + error.message); console.error(error); return }
   showToast(isEdit ? '✅ Actividad actualizada' : '✅ Actividad registrada en bitácora')
+  // Dispara webhook n8n (solo en inserciones nuevas, no en edits)
+  if (!isEdit) {
+    try { window.nexusN8n?.dispatchBitacora?.('manual', node) } catch {}
+  }
   _projBitacoraEditId   = null
   _projBitacoraFormOpen = false
   switchProjTab('bitacora')

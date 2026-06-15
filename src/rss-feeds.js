@@ -38,18 +38,45 @@ const STATUS_CFG = {
 const PLATFORM_BY_ID = Object.fromEntries(PLATFORMS.map(p => [p.id, p]))
 
 // Estado por proyecto (in-memory)
-const _state = {}  // projectId → { sources, items, filterStatus, filterPlatform }
+const _state = {}  // projectId → { sources, items, filterStatus, filterPlatform, lastError, loading }
+let _lastRenderedPid = null   // ← último projectId que pintamos; sirve para invalidar al cambiar
 
-async function _api(action, payload = {}) {
+/** Limpia cache de un proyecto (o de todos si pid=null). Útil al cambiar proyecto. */
+export function invalidateRssCache(pid) {
+  if (pid) delete _state[pid]
+  else for (const k of Object.keys(_state)) delete _state[k]
+}
+
+async function _api(action, payload = {}, { retried = false } = {}) {
   const { data: { session } } = await supabase.auth.getSession()
   const headers = { 'Content-Type': 'application/json' }
   if (session) headers.Authorization = 'Bearer ' + session.access_token
-  const r = await fetch('/api/rss', {
-    method: 'POST', headers,
-    body: JSON.stringify({ action, ...payload }),
-  })
-  const j = await r.json()
-  if (!r.ok || !j.ok) throw new Error(j.error || 'API fail')
+  let r
+  try {
+    r = await fetch('/api/rss', {
+      method: 'POST', headers,
+      body: JSON.stringify({ action, ...payload }),
+      signal: AbortSignal.timeout(15000),
+    })
+  } catch (netErr) {
+    throw new Error('Sin conexión a /api/rss · ' + netErr.message)
+  }
+
+  // 401/403 → refresca token UNA vez y reintenta. Evita el loop de fallos.
+  if ((r.status === 401 || r.status === 403) && !retried) {
+    try { await supabase.auth.refreshSession() } catch {}
+    return _api(action, payload, { retried: true })
+  }
+
+  let j
+  try { j = await r.json() }
+  catch { throw new Error(`HTTP ${r.status} sin JSON`) }
+  if (!r.ok || !j.ok) {
+    const code = j?.error || `HTTP ${r.status}`
+    const err = new Error(code)
+    err.status = r.status
+    throw err
+  }
   return j
 }
 
@@ -60,8 +87,37 @@ async function _refresh(projectId) {
   ])
   _state[projectId] = {
     ..._state[projectId],
-    sources: s.sources || [],
-    items:   i.items || [],
+    sources:   s.sources || [],
+    items:     i.items   || [],
+    lastError: null,
+    fetchedAt: Date.now(),
+  }
+}
+
+/** Lectura ligera para widgets externos (sin pintar UI ni reintentar).
+ *  Usa cache si está fresca (<60s); si no, refresca silenciosamente. */
+export async function getRssSnapshot(projectId, { forceRefresh = false } = {}) {
+  const cached = _state[projectId]
+  const fresh  = cached && (Date.now() - (cached.fetchedAt || 0) < 60_000)
+  if (!fresh || forceRefresh) {
+    try { await _refresh(projectId) }
+    catch (e) {
+      return { ok: false, error: e.message, pending: 0, publishedToday: 0, sourceErrors: 0, total: 0 }
+    }
+  }
+  const items   = _state[projectId]?.items   || []
+  const sources = _state[projectId]?.sources || []
+  const today   = new Date().toISOString().slice(0, 10)
+  return {
+    ok: true,
+    total:           items.length,
+    pending:         items.filter(i => i.status === 'pending').length,
+    accepted:        items.filter(i => i.status === 'accepted').length,
+    scheduled:       items.filter(i => i.status === 'scheduled').length,
+    publishedToday:  items.filter(i => i.status === 'published' && (i.updated_at || i.created_at || '').slice(0, 10) === today).length,
+    sourceErrors:    sources.filter(s => s.fail_count > 0 || s.last_error).length,
+    sourcesTotal:    sources.length,
+    fetchedAt:       _state[projectId]?.fetchedAt || null,
   }
 }
 
@@ -81,6 +137,13 @@ function _timeAgo(iso) {
 
 // ── Render principal ──────────────────────────────────────────────
 export async function renderProjectRssTab(projectId) {
+  // Si cambiamos de proyecto, invalida el cache del anterior para no mostrar
+  // datos viejos ni quedar en estado vacío. Force-refresh del nuevo.
+  if (_lastRenderedPid && _lastRenderedPid !== projectId) {
+    invalidateRssCache(_lastRenderedPid)
+  }
+  _lastRenderedPid = projectId
+
   if (!_state[projectId]) _state[projectId] = { sources: [], items: [], filterStatus: '', filterPlatform: '' }
   const state = _state[projectId]
 
@@ -96,7 +159,20 @@ export async function renderProjectRssTab(projectId) {
   try {
     await _refresh(projectId)
   } catch (e) {
-    mount.innerHTML = `<div style="padding:20px;color:#f87171;">Error: ${_esc(e.message)}</div>`
+    const is403 = e.status === 401 || e.status === 403 || /token|unauth/i.test(e.message || '')
+    state.lastError = e.message
+    mount.innerHTML = `
+      <div style="padding:20px;background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.25);border-radius:12px;color:#fca5a5;display:flex;flex-direction:column;gap:10px;max-width:520px;margin:20px auto;">
+        <div style="display:flex;align-items:center;gap:8px;font-weight:700;color:#f87171;font-size:14px;">
+          ${is403 ? '🔒' : '⚠️'} ${is403 ? 'Sesión expirada' : 'No pudimos cargar los feeds'}
+        </div>
+        <div style="font-size:12px;color:#fcd5d5;line-height:1.5;">${_esc(e.message)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button data-rss-act="reload" data-pid="${projectId}" style="flex:1;min-width:120px;padding:8px 14px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:#22c55e;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">🔄 Reintentar</button>
+          ${is403 ? `<button data-rss-act="relogin" style="flex:1;min-width:120px;padding:8px 14px;background:rgba(96,165,250,0.1);border:1px solid rgba(96,165,250,0.3);color:#60a5fa;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">🔑 Reconectar</button>` : ''}
+        </div>
+      </div>`
+    _attachHandlers(mount, projectId)
     return ''
   }
 
@@ -246,14 +322,24 @@ function _renderItemCard(it, projectId) {
         </a>
         ${it.description ? `<div style="font-size:12px;color:#9ca3af;line-height:1.4;max-height:34px;overflow:hidden;">${_esc(it.description.slice(0, 200))}</div>` : ''}
         ${it.notes ? `<div style="margin-top:6px;font-size:11px;color:#fbbf24;padding:4px 8px;background:rgba(251,191,36,0.08);border-left:2px solid #fbbf24;border-radius:0 4px 4px 0;">📝 ${_esc(it.notes.slice(0, 200))}</div>` : ''}
-        <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">
+        <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;align-items:center;">
           ${it.status !== 'accepted' ? `<button data-rss-act="set-status" data-id="${it.id}" data-pid="${projectId}" data-val="accepted" style="padding:4px 8px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.25);color:#22c55e;border-radius:5px;font-size:11px;cursor:pointer;">✓ Aceptar</button>` : ''}
-          ${it.status !== 'rejected' ? `<button data-rss-act="set-status" data-id="${it.id}" data-pid="${projectId}" data-val="rejected" style="padding:4px 8px;background:rgba(148,163,184,0.08);border:1px solid rgba(148,163,184,0.2);color:#94a3b8;border-radius:5px;font-size:11px;cursor:pointer;">✗ Rechazar</button>` : ''}
+          <button data-rss-act="publish-and-log" data-id="${it.id}" data-pid="${projectId}" title="Marca publicado + crea entrada de Bitácora"
+            style="padding:4px 8px;background:linear-gradient(135deg,rgba(52,211,153,0.2),rgba(34,197,94,0.2));border:1px solid rgba(52,211,153,0.4);color:#34d399;border-radius:5px;font-size:11px;cursor:pointer;font-weight:700;">🚀📝 Publicar + Bitácora</button>
           <button data-rss-act="gen-draft" data-id="${it.id}" data-pid="${projectId}" style="padding:4px 8px;background:linear-gradient(135deg,rgba(167,139,250,0.18),rgba(96,165,250,0.18));border:1px solid rgba(167,139,250,0.35);color:#c4b5fd;border-radius:5px;font-size:11px;cursor:pointer;font-weight:700;">🤖 ${it.draft_content ? 'Ver draft' : 'Draft IA'}</button>
-          <button data-rss-act="edit-notes" data-id="${it.id}" data-pid="${projectId}" style="padding:4px 8px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2);color:#a78bfa;border-radius:5px;font-size:11px;cursor:pointer;">📝 Nota</button>
-          <button data-rss-act="schedule" data-id="${it.id}" data-pid="${projectId}" style="padding:4px 8px;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);color:#fb923c;border-radius:5px;font-size:11px;cursor:pointer;">📅 Programar</button>
-          <button data-rss-act="publish" data-id="${it.id}" data-pid="${projectId}" style="padding:4px 8px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);color:#34d399;border-radius:5px;font-size:11px;cursor:pointer;">🚀 Publicado</button>
           ${it.url ? `<a href="${_esc(it.url)}" target="_blank" style="padding:4px 8px;background:rgba(96,165,250,0.08);border:1px solid rgba(96,165,250,0.2);color:#60a5fa;border-radius:5px;font-size:11px;text-decoration:none;">↗ Abrir</a>` : ''}
+          <!-- Kebab: acciones secundarias (Programar / Nota / Solo a Bitácora / Solo publicado / Rechazar) -->
+          <div style="position:relative;display:inline-block;">
+            <button data-rss-act="kebab" data-id="${it.id}" data-pid="${projectId}" title="Más acciones"
+              style="padding:4px 8px;background:rgba(148,163,184,0.08);border:1px solid rgba(148,163,184,0.2);color:#94a3b8;border-radius:5px;font-size:14px;cursor:pointer;line-height:1;">⋯</button>
+            <div data-rss-kebab-menu="${it.id}" style="display:none;position:absolute;top:100%;right:0;margin-top:4px;background:#0f172a;border:1px solid #1f2937;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.5);z-index:50;min-width:200px;padding:4px;">
+              <button data-rss-act="log-only" data-id="${it.id}" data-pid="${projectId}" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;background:none;border:none;color:#34d399;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">📝 Solo a Bitácora</button>
+              <button data-rss-act="publish" data-id="${it.id}" data-pid="${projectId}" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;background:none;border:none;color:#34d399;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">🚀 Solo marcar publicado</button>
+              <button data-rss-act="edit-notes" data-id="${it.id}" data-pid="${projectId}" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;background:none;border:none;color:#a78bfa;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">✏️ Editar nota</button>
+              <button data-rss-act="schedule" data-id="${it.id}" data-pid="${projectId}" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;background:none;border:none;color:#fb923c;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">📅 Programar</button>
+              ${it.status !== 'rejected' ? `<button data-rss-act="set-status" data-id="${it.id}" data-pid="${projectId}" data-val="rejected" style="display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;background:none;border:none;color:#94a3b8;font-size:12px;cursor:pointer;text-align:left;border-radius:6px;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='none'">✗ Rechazar</button>` : ''}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -326,6 +412,53 @@ function _attachHandlers(root, projectId) {
         try { await _api('update_item', { item_id: el.dataset.id, patch: { status: 'published', blog_post_url: url || null } }) }
         catch (e) { alert('Error: ' + e.message); return }
         renderProjectRssTab(projectId)
+      })
+    } else if (act === 'publish-and-log') {
+      el.addEventListener('click', async () => {
+        const item = _state[projectId].items.find(i => i.id === el.dataset.id)
+        if (!item) return
+        const url = prompt('URL del post publicado (opcional):', item.blog_post_url || '')
+        if (url === null) return  // cancel
+        try {
+          await _api('update_item', { item_id: item.id, patch: { status: 'published', blog_post_url: url || null } })
+        } catch (e) { alert('Error al publicar: ' + e.message); return }
+        // Crea entrada de bitácora con evidencia
+        try {
+          await _createBitacoraFromItem({ ...item, blog_post_url: url || item.blog_post_url }, projectId)
+          if (window.showToast) window.showToast('✅ Publicado + Bitácora registrada')
+        } catch (e) {
+          alert('Marcado publicado, pero falló bitácora: ' + e.message)
+        }
+        renderProjectRssTab(projectId)
+      })
+    } else if (act === 'log-only') {
+      el.addEventListener('click', async () => {
+        const item = _state[projectId].items.find(i => i.id === el.dataset.id)
+        if (!item) return
+        try {
+          await _createBitacoraFromItem(item, projectId)
+          if (window.showToast) window.showToast('✅ Registrado en Bitácora')
+        } catch (e) { alert('Error: ' + e.message); return }
+        // Cierra el kebab
+        document.querySelectorAll('[data-rss-kebab-menu]').forEach(m => m.style.display = 'none')
+      })
+    } else if (act === 'kebab') {
+      el.addEventListener('click', (ev) => {
+        ev.stopPropagation()
+        const id = el.dataset.id
+        const menu = root.querySelector(`[data-rss-kebab-menu="${id}"]`)
+        if (!menu) return
+        // Cierra otros
+        document.querySelectorAll('[data-rss-kebab-menu]').forEach(m => { if (m !== menu) m.style.display = 'none' })
+        menu.style.display = menu.style.display === 'block' ? 'none' : 'block'
+      })
+    } else if (act === 'relogin') {
+      el.addEventListener('click', async () => {
+        try {
+          await supabase.auth.refreshSession()
+          invalidateRssCache(projectId)
+          renderProjectRssTab(projectId)
+        } catch (e) { alert('No fue posible reconectar: ' + e.message) }
       })
     } else if (act === 'gen-draft') {
       el.addEventListener('click', async () => {
@@ -742,6 +875,71 @@ function _openEditSourceModal(projectId, source) {
   })
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Helper: crea una entrada de Bitácora a partir de un item RSS y dispara webhook.
+// Usa la misma forma que el form manual: type='bitacora', metadata con
+// modulo_contexto='CONTENIDO_POST'. Auto-pobla detalles_clave con datos del feed.
+// ─────────────────────────────────────────────────────────────────────
+async function _createBitacoraFromItem(item, projectId) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('Sin sesión')
+
+  const platform = item.source?.platform || 'rss'
+  const platformLabel = (PLATFORM_BY_ID[platform] || {}).label || platform
+  const artist = item.source?.artist_name || item.source?.label || ''
+  const title  = (item.title || '(sin título)').slice(0, 200)
+  const urlEvidencia = item.blog_post_url || item.url || null
+  const today = new Date().toISOString().slice(0, 10)
+  const hora  = new Date().toISOString().slice(11, 16)
+
+  const node = {
+    id:       (crypto.randomUUID ? crypto.randomUUID() : ('rss-' + Date.now())),
+    type:     'bitacora',
+    content:  `Publicación RSS: ${title}${artist ? ' · ' + artist : ''}`,
+    owner_id: user.id,
+    metadata: {
+      proyecto_id: projectId,
+      modulo_contexto: 'CONTENIDO_POST',
+      fecha_ejecucion: today,
+      detalles_clave: {
+        plataforma:        platformLabel,
+        tipo_contenido:    'RSS / Publicación',
+        titulo_tema:       title,
+        keywords:          [],
+        hora_publicacion:  hora,
+        url_publicado:     urlEvidencia || '',
+      },
+      enlace_evidencia:  urlEvidencia,
+      impacto_metricas:  { vistas: 0, clics: 0, compartidos: 0 },
+      origen_rss_item_id: item.id,   // ← trazabilidad reversa
+    },
+  }
+
+  const { error } = await supabase.from('nodes').insert(node)
+  if (error) throw new Error(error.message)
+
+  // Inyecta al cache global de la app para que la pestaña Bitácora lo vea sin reload
+  try { if (Array.isArray(window.allNodes)) window.allNodes.unshift(node) } catch {}
+
+  // Dispara webhook n8n si está configurado (best-effort, no bloquea)
+  try { window.nexusN8n?.dispatchBitacora?.('rss', node) } catch {}
+
+  return node
+}
+
+// Click fuera de un kebab → cierra todos
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest?.('[data-rss-act="kebab"]') && !e.target.closest?.('[data-rss-kebab-menu]')) {
+      document.querySelectorAll('[data-rss-kebab-menu]').forEach(m => { m.style.display = 'none' })
+    }
+  })
+}
+
 if (typeof window !== 'undefined') {
-  window.nexusRss = { renderProjectTab: renderProjectRssTab }
+  window.nexusRss = {
+    renderProjectTab: renderProjectRssTab,
+    invalidate:       invalidateRssCache,
+    snapshot:         getRssSnapshot,
+  }
 }

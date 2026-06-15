@@ -17,6 +17,7 @@ const EVENT_TYPES = [
   { id: 'backup_completed',  label: '📦 Backup completado',     desc: 'Cuando termina un backup a Drive' },
   { id: 'daily_summary',     label: '☀️ Resumen diario',         desc: 'Cron cada mañana con resumen del día' },
   { id: 'movement_created',  label: '💰 Movimiento registrado',  desc: 'Cuando capturas un ingreso o gasto en Bio-Finanzas o Movimientos' },
+  { id: 'bitacora_created',  label: '📝 Bitácora · nueva actividad', desc: 'Cuando se registra una actividad en la bitácora de un proyecto (manual o automático desde RSS)' },
 ]
 
 function _key(eventId) { return 'nexus_n8n_webhook_' + eventId }
@@ -135,12 +136,36 @@ export function dispatchMovement(source, node) {
   dispatchEvent('movement_created', payload).catch(() => { /* silent */ })
 }
 
+/**
+ * Bitácora: dispara webhook 'bitacora_created'.
+ * `source` distingue origen ('manual', 'rss', 'auto'). Best-effort.
+ */
+export function dispatchBitacora(source, node) {
+  const url = getWebhook('bitacora_created')
+  if (!url) return
+  const md = node?.metadata || {}
+  const payload = {
+    source,                           // 'manual' | 'rss' | 'auto'
+    bitacora_id:     node.id,
+    proyecto_id:     md.proyecto_id || null,
+    modulo_contexto: md.modulo_contexto || null,
+    actividad:       node.content || '',
+    fecha_ejecucion: md.fecha_ejecucion || null,
+    detalles_clave:  md.detalles_clave || {},
+    enlace_evidencia: md.enlace_evidencia || null,
+    impacto_metricas: md.impacto_metricas || {},
+    origen_rss_item_id: md.origen_rss_item_id || null,
+  }
+  dispatchEvent('bitacora_created', payload).catch(() => { /* silent */ })
+}
+
 export { EVENT_TYPES }
 
 if (typeof window !== 'undefined') {
   window.nexusN8n = {
     dispatch: dispatchEvent,
     dispatchMovement,
+    dispatchBitacora,
     get: getWebhook,
     set: setWebhook,
     all: getAllWebhooks,
