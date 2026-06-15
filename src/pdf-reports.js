@@ -1043,7 +1043,7 @@ export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
   const brechaColor = dashboard.brecha > 0 ? T.redD : T.greenD
   const brechaLabel = dashboard.brecha > 0 ? 'Brecha Financiera' : 'Cobertura'
   const brechaValue = dashboard.brecha > 0
-    ? '−$' + fmt$(dashboard.brecha) + ' MXN'
+    ? '- $' + fmt$(dashboard.brecha) + ' MXN'
     : '$' + fmt$(Math.abs(dashboard.superavit)) + ' MXN'
   const brechaSub = dashboard.brecha > 0
     ? 'Faltante para cubrir pendientes'
