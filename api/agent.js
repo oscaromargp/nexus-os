@@ -223,6 +223,22 @@ const TOOLS = [
     },
   },
   {
+    name: 'get_afp_weekplan',
+    description: 'Devuelve el plan financiero AFP de la semana del usuario (modo adaptativo, ingresos esperados, dispersiones obligatorias, libre para vivir). Usar cuando el usuario pregunte "cuál es mi plan", "/plan", "mi plan de la semana", "qué hago con mi dinero esta semana", o similar.',
+    parameters: { type: 'object', properties: {} },
+    handler: async (admin, userId) => {
+      // Carga metadata del usuario (necesita primary orq + min_living)
+      const { data: { user } } = await admin.auth.admin.getUserById(userId)
+      const { buildWeekPlan, formatWeekPlanTelegram } = await import('./_lib/afp.js')
+      const plan = await buildWeekPlan(admin, userId, user?.user_metadata || {})
+      return {
+        ok: true,
+        formatted_telegram: formatWeekPlanTelegram(plan),
+        plan,
+      }
+    },
+  },
+  {
     name: 'create_task',
     description: 'Crea tarea/cita en Kanban.',
     parameters: {
@@ -724,6 +740,7 @@ TOOLS:
 - search_leads → solicitudes de info
 - search_tasks → tareas pendientes
 - get_today_briefing → resumen del día
+- get_afp_weekplan → plan financiero AFP de la semana (modo, ingresos, dispersiones, libre). USAR cuando pregunte "mi plan", "/plan", "qué hago con mi dinero", "cuánto me queda libre".
 - create_task, create_movement, create_note → agregar
 - update_lead_status, update_property_status → modificar
 - generate_property_link → URL pública
