@@ -235,6 +235,9 @@ export async function renderAFP() {
         <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;font-size:12px;color:#6b7280;">⏳ Leyendo tu situación de hoy…</div>
       </div>
 
+      <!-- 📅 CALENDARIO DEL MES · pagos cronológicos (estilo Excel) -->
+      <div id="afp-calendar" data-afp-calendar style="margin-bottom:20px;"></div>
+
       <!-- 🎁 LISTA DE DESEOS · placeholder hidratado async -->
       <div id="afp-wishlist" data-afp-wishlist style="margin-bottom:20px;"></div>
 
@@ -436,6 +439,7 @@ export async function renderAFP() {
   _hydrateStreaks()
   _hydrateWishlist()
   _hydrateAchievements()
+  _hydrateCalendar()
   _maybeAutoSnapshot()
   if (!window._afpBalanceSub) {
     window._afpBalanceSub = window.nexusBalance?.onChange?.(() => {
@@ -563,6 +567,71 @@ async function _hydrateWishlist() {
     })
   })
   mount.querySelector('[data-wish-add]')?.addEventListener('click', _openWishModal)
+}
+
+// ── BLOQUE: Calendario del mes (estilo Excel: día → pago → monto → a dónde)
+async function _hydrateCalendar() {
+  const mount = document.querySelector('[data-afp-calendar]')
+  if (!mount) return
+  try {
+    const r = await _api('afp_calendar_month')
+    const cal = r.calendar
+    if (!cal.items.length) {
+      mount.innerHTML = `<div style="font-size:11px;color:#6b7280;padding:10px;text-align:center;background:rgba(255,255,255,0.02);border-radius:10px;">Configura tus ingresos y gastos fijos para ver el calendario del mes.</div>`
+      return
+    }
+    const KIND_CFG = {
+      income:  { color: '#34d399', icon: '↘', label: 'Ingreso',  sign: '+' },
+      savings: { color: '#fbbf24', icon: '🛡', label: 'Ahorro',   sign: '-' },
+      sacred:  { color: '#f59e0b', icon: '🔒', label: 'Sagrado',  sign: '-' },
+      fixed:   { color: '#94a3b8', icon: '🏠', label: 'Fijo',     sign: '-' },
+      debt:    { color: '#f87171', icon: '💳', label: 'Deuda',    sign: '-' },
+    }
+    const _fmt = (n) => '$' + Math.round(n || 0).toLocaleString('es-MX')
+    const todayDay = cal.today_day
+    const monthLabel = new Date(cal.month + '-01').toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
+
+    const rowHtml = (it) => {
+      const cfg = KIND_CFG[it.kind] || KIND_CFG.fixed
+      const past = it.day < todayDay
+      const isToday = it.day === todayDay
+      return `
+        <div style="display:grid;grid-template-columns:42px 1fr auto;gap:10px;padding:8px 12px;background:${isToday?'rgba(34,211,238,0.08)':past?'rgba(255,255,255,0.01)':'rgba(255,255,255,0.03)'};border:1px solid ${isToday?'rgba(34,211,238,0.35)':'rgba(255,255,255,0.05)'};border-radius:8px;opacity:${past?0.55:1};border-left:3px solid ${cfg.color};">
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+            <div style="font-size:18px;font-weight:800;color:${isToday?'#22d3ee':'#e5e7eb'};line-height:1;">${it.day}</div>
+            <div style="font-size:8px;color:#94a3b8;text-transform:uppercase;font-weight:700;">${cfg.label}</div>
+          </div>
+          <div style="min-width:0;">
+            <div style="font-size:12px;font-weight:700;color:#e5e7eb;display:flex;align-items:center;gap:5px;">
+              <span>${cfg.icon}</span>
+              <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(it.name)}</span>
+              ${past ? '<span style="font-size:9px;color:#34d399;background:rgba(52,211,153,0.15);padding:1px 5px;border-radius:4px;">pasó</span>' : ''}
+            </div>
+            <div style="font-size:10px;color:#94a3b8;line-height:1.4;margin-top:1px;">
+              ${_esc(it.reason)}${it.target && it.target !== '—' ? ` <span style="color:#6b7280;">→</span> <span style="color:#cbd5e1;">${_esc(it.target)}</span>` : ''}
+            </div>
+          </div>
+          <div style="text-align:right;font-size:13px;font-weight:800;color:${cfg.color};font-family:'JetBrains Mono',monospace;white-space:nowrap;">
+            ${cfg.sign}${_fmt(it.amount)}
+          </div>
+        </div>`
+    }
+
+    mount.innerHTML = `
+      <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <div style="font-size:14px;font-weight:800;color:#e5e7eb;display:flex;align-items:center;gap:6px;">📅 Calendario de ${monthLabel}</div>
+          <div style="font-size:11px;color:#94a3b8;">
+            <span style="color:#34d399;">${_fmt(cal.total_in)} entran</span> · <span style="color:#f87171;">${_fmt(cal.total_out)} salen</span> · <span style="color:${cal.libre>=0?'#22d3ee':'#f87171'};">Libre: ${_fmt(cal.libre)}</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px;max-height:480px;overflow-y:auto;">
+          ${cal.items.map(rowHtml).join('')}
+        </div>
+      </div>`
+  } catch (e) {
+    mount.innerHTML = `<div style="font-size:11px;color:#f87171;padding:10px;">⚠ Calendario: ${_esc(e.message)}</div>`
+  }
 }
 
 // ── BLOQUE: Logros · XP + Nivel + recientes ─────────────────────────────────
@@ -957,66 +1026,103 @@ async function _hydrateRealBalances() {
   const mount = document.querySelector('[data-afp-real-balances]')
   if (!mount) return
   try {
-    const { accounts, totals } = await window.nexusBalance.getAll()
-    if (!accounts.length) {
+    // Trae TODAS las cuentas (Bio + Movs + Crypto) sin filtro
+    const { accounts: allAccounts } = await window.nexusBalance.getAll()
+    if (!allAccounts.length) {
       mount.innerHTML = `
         <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;font-size:12px;color:#6b7280;">
-          Sin cuentas en Movimientos. Crea una para ver tu Saldo Real aquí.
+          Aún no tienes cuentas registradas. Crea cuentas en Bio-Finanzas, Movimientos o Cripto y aparecen acá.
         </div>`
       return
     }
     const primary = await window.nexusBalance.primary()
+    const tracked = await window.nexusBalance.trackedList()
+    const trackedSet = new Set(tracked.map(t => `${t.source}:${t.id}`))
 
-    const _fmt = (n) => '$' + (n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    // Si no hay nada marcado, por default cuentan TODAS hasta que el usuario decida
+    const isCounted = (a) => trackedSet.size === 0 || trackedSet.has(`${a.source}:${a.id}`)
+    const countedAccounts = allAccounts.filter(isCounted)
+
+    const totals = countedAccounts.reduce((acc, a) => ({
+      disponible:  Math.round((acc.disponible + a.disponible) * 100) / 100,
+      pendienteOut: Math.round((acc.pendienteOut + a.pendienteOut) * 100) / 100,
+      pendienteIn:  Math.round((acc.pendienteIn + a.pendienteIn) * 100) / 100,
+      real:         Math.round((acc.real + a.real) * 100) / 100,
+    }), { disponible: 0, pendienteOut: 0, pendienteIn: 0, real: 0 })
+
+    const _fmt = (n) => '$' + (n || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
     const _badge = (lbl, val, color) => `
       <div style="text-align:center;flex:1;min-width:90px;">
         <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:2px;">${lbl}</div>
         <div style="font-size:14px;font-weight:800;color:${color};font-family:'JetBrains Mono',monospace;">${_fmt(val)}</div>
       </div>`
 
-    // Encabezado con totales
+    const SRC_CFG = {
+      bio:    { label: 'Finanzas',   color: '#34d399', icon: '🏦' },
+      movs:   { label: 'Movimientos', color: '#a78bfa', icon: '🔄' },
+      crypto: { label: 'Cripto',      color: '#fbbf24', icon: '₿' },
+    }
+
+    // Agrupar por source
+    const grouped = { bio: [], movs: [], crypto: [] }
+    allAccounts.forEach(a => grouped[a.source]?.push(a))
+
     let html = `
       <div style="background:linear-gradient(135deg,rgba(34,211,238,0.06),rgba(167,139,250,0.04));border:1px solid rgba(34,211,238,0.2);border-radius:12px;padding:14px 16px;">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-          <div style="font-size:14px;font-weight:800;color:#22d3ee;display:flex;align-items:center;gap:6px;">💵 Saldo Real · todas tus cuentas</div>
-          <span style="font-size:10px;color:#6b7280;">basado en Movimientos · pendientes ya restados</span>
+          <div style="font-size:14px;font-weight:800;color:#22d3ee;display:flex;align-items:center;gap:6px;">💵 Mi dinero ahorita</div>
+          <span style="font-size:10px;color:#6b7280;">${countedAccounts.length} de ${allAccounts.length} cuentas contabilizando</span>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.06);margin-bottom:10px;">
           ${_badge('Disponible', totals.disponible, '#34d399')}
-          ${_badge('Pendiente salida', totals.pendienteOut, '#fbbf24')}
-          ${_badge('Pendiente entrada', totals.pendienteIn, '#60a5fa')}
+          ${_badge('Pend. salida', totals.pendienteOut, '#fbbf24')}
+          ${_badge('Pend. entrada', totals.pendienteIn, '#60a5fa')}
           ${_badge('SALDO REAL', totals.real, totals.real >= 0 ? '#22d3ee' : '#f87171')}
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;">`
+        <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">tap el ✓ para incluir/excluir del saldo · ★ marca cuenta principal del plan</div>`
 
-    for (const a of accounts) {
-      const isPrim = a.orqId === primary
+    for (const src of ['bio', 'movs', 'crypto']) {
+      const items = grouped[src]
+      if (!items.length) continue
+      const cfg = SRC_CFG[src]
       html += `
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,0.03);border:1px solid ${isPrim?'rgba(34,211,238,0.35)':'rgba(255,255,255,0.06)'};border-radius:8px;">
-          <button data-afp-set-primary="${a.orqId}" title="Marcar como cuenta principal AFP"
-            style="background:none;border:none;cursor:pointer;font-size:14px;color:${isPrim?'#22d3ee':'#475569'};padding:2px;">${isPrim?'★':'☆'}</button>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;color:#e5e7eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(a.nombre)}</div>
-            <div style="font-size:10px;color:#6b7280;">${a.count} mov · ${_esc(a.moneda_principal || 'MXN')}</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-size:13px;font-weight:800;color:${a.real >= 0 ? '#22d3ee' : '#f87171'};font-family:'JetBrains Mono',monospace;">${_fmt(a.real)}</div>
-            <div style="font-size:9px;color:#94a3b8;">
-              <span style="color:#34d399;">${_fmt(a.disponible)}</span>
-              ${a.pendienteOut > 0 ? ` <span style="color:#fbbf24;">- ${_fmt(a.pendienteOut)}</span>` : ''}
-              ${a.pendienteIn  > 0 ? ` <span style="color:#60a5fa;">+ ${_fmt(a.pendienteIn)}</span>` : ''}
+        <div style="margin-top:10px;">
+          <div style="font-size:10px;color:${cfg.color};font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px;">${cfg.icon} ${cfg.label}</div>
+          <div style="display:flex;flex-direction:column;gap:5px;">`
+      for (const a of items) {
+        const counted = isCounted(a)
+        const isPrim = src === 'movs' && a.id === primary
+        html += `
+          <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:rgba(255,255,255,0.03);border:1px solid ${isPrim?'rgba(34,211,238,0.35)':counted?'rgba(255,255,255,0.06)':'rgba(255,255,255,0.02)'};border-radius:8px;opacity:${counted?1:0.45};">
+            <button data-afp-toggle-tracked='${src}::${a.id}' title="${counted?'Excluir del saldo':'Incluir en saldo'}" style="background:none;border:1.5px solid ${counted?cfg.color:'#475569'};border-radius:4px;cursor:pointer;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;padding:0;color:${counted?cfg.color:'transparent'};font-size:12px;font-weight:900;line-height:1;">${counted?'✓':''}</button>
+            ${src === 'movs' ? `<button data-afp-set-primary="${a.id}" title="Marcar como cuenta principal AFP" style="background:none;border:none;cursor:pointer;font-size:14px;color:${isPrim?'#22d3ee':'#475569'};padding:2px;">${isPrim?'★':'☆'}</button>` : '<span style="width:18px;"></span>'}
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;color:#e5e7eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(a.name)}</div>
+              <div style="font-size:10px;color:#6b7280;">${a.kind ? _esc(a.kind) + ' · ' : ''}${a.provider ? _esc(a.provider) + ' · ' : ''}${_esc(a.currency || 'MXN')}</div>
             </div>
-          </div>
-        </div>`
+            <div style="text-align:right;">
+              <div style="font-size:12px;font-weight:800;color:${a.real >= 0 ? cfg.color : '#f87171'};font-family:'JetBrains Mono',monospace;">${_fmt(a.real)}</div>
+              ${a.pendienteOut > 0 ? `<div style="font-size:9px;color:#fbbf24;">−${_fmt(a.pendienteOut)} pend</div>` : ''}
+            </div>
+          </div>`
+      }
+      html += `</div></div>`
     }
-    html += `</div></div>`
+    html += `</div>`
     mount.innerHTML = html
 
-    // Bind: marcar cuenta principal
+    // Bindings
     mount.querySelectorAll('[data-afp-set-primary]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const id = btn.dataset.afpSetPrimary
         await window.nexusBalance.setPrimary(id === primary ? null : id)
+        _hydrateRealBalances()
+      })
+    })
+    mount.querySelectorAll('[data-afp-toggle-tracked]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const [source, id] = btn.dataset.afpToggleTracked.split('::')
+        await window.nexusBalance.toggleTracked(source, id)
         _hydrateRealBalances()
       })
     })

@@ -651,6 +651,131 @@ export default async function handler(req, res) {
       })
     }
 
+    // ── AFP v6 · Calendario del mes (lista cronológica estilo Excel) ──
+    if (action === 'afp_calendar_month') {
+      const today = new Date()
+      const monthStr = today.toISOString().substring(0, 7)
+      const meta = user.user_metadata || {}
+      const savingsPct = Number(meta.afp?.savings_pct || 10)
+      const savingsFloor = Number(meta.afp?.savings_floor || 0)
+
+      const [incRes, fixedRes, debtRes] = await Promise.all([
+        admin.from('afp_incomes').select('*').eq('owner_id', userId).eq('is_active', true),
+        admin.from('afp_fixed_expenses').select('*').eq('owner_id', userId).eq('is_active', true),
+        admin.from('afp_debts').select('*').eq('owner_id', userId).eq('is_active', true),
+      ])
+      const incomes = incRes.data || []
+      const fixed = fixedRes.data || []
+      const debts = debtRes.data || []
+
+      // Construir TODOS los items del mes en formato cronológico
+      const items = []
+      const monthDays = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()
+
+      // Ingresos esperados
+      incomes.forEach(i => {
+        if (i.frequency === 'weekly') {
+          // 4 sábados aproximados (días 1-7, 8-14, 15-21, 22-28)
+          for (let week = 0; week < 4; week++) {
+            const day = Math.min(monthDays, 6 + week * 7)  // sábados aprox
+            items.push({
+              kind: 'income', day, name: i.name, amount: Number(i.amount),
+              reason: 'sueldo semanal', target: i.category || 'cuenta',
+            })
+          }
+        } else if (i.frequency === 'biweekly') {
+          items.push({ kind: 'income', day: 1,  name: i.name, amount: Number(i.amount), reason: 'quincenal', target: i.category || 'cuenta' })
+          items.push({ kind: 'income', day: 15, name: i.name, amount: Number(i.amount), reason: 'quincenal', target: i.category || 'cuenta' })
+        } else if (i.frequency === 'monthly') {
+          items.push({ kind: 'income', day: 1, name: i.name, amount: Number(i.amount), reason: 'mensual', target: i.category || 'cuenta' })
+        }
+      })
+
+      // Ahorro forzado — uno por cada ingreso semanal/quincenal
+      incomes.forEach(i => {
+        const baseAmt = Number(i.amount)
+        const saveAmt = Math.max(Math.round(baseAmt * savingsPct / 100), savingsFloor)
+        if (saveAmt <= 0) return
+        if (i.frequency === 'weekly') {
+          for (let week = 0; week < 4; week++) {
+            const day = Math.min(monthDays, 6 + week * 7)
+            items.push({
+              kind: 'savings', day, name: 'Apartar a Respaldo',
+              amount: saveAmt,
+              reason: `${savingsPct}% del cobro · línea inamovible`,
+              target: 'Respaldo Líquido + Cold Wallet',
+            })
+          }
+        } else if (i.frequency === 'biweekly') {
+          for (const day of [1, 15]) {
+            items.push({
+              kind: 'savings', day, name: 'Apartar a Respaldo',
+              amount: saveAmt, reason: `${savingsPct}% del cobro · línea inamovible`,
+              target: 'Respaldo Líquido + Cold Wallet',
+            })
+          }
+        }
+      })
+
+      // Gastos fijos
+      fixed.forEach(f => {
+        const monthlyEq = toMonthly(f.amount, f.frequency)
+        // Para mensuales: 1 evento en su due_day
+        if (f.frequency === 'monthly') {
+          items.push({
+            kind: f.is_sacred ? 'sacred' : 'fixed', day: f.due_day || 1,
+            name: f.name, amount: monthlyEq,
+            reason: f.is_sacred ? 'compromiso sagrado' : 'pago fijo mensual',
+            target: f.category || '—',
+          })
+        } else if (f.frequency === 'weekly') {
+          // 4 ocurrencias en el mes (sábados aprox.)
+          for (let week = 0; week < 4; week++) {
+            const day = Math.min(monthDays, 6 + week * 7)
+            items.push({
+              kind: f.is_sacred ? 'sacred' : 'fixed', day, name: f.name,
+              amount: Number(f.amount),
+              reason: f.is_sacred ? 'sagrado semanal' : 'pago fijo semanal',
+              target: f.category || '—',
+            })
+          }
+        } else if (f.frequency === 'biweekly') {
+          for (const day of [1, 15]) {
+            items.push({
+              kind: f.is_sacred ? 'sacred' : 'fixed', day, name: f.name,
+              amount: Number(f.amount), reason: f.is_sacred ? 'sagrado quincenal' : 'pago fijo quincenal',
+              target: f.category || '—',
+            })
+          }
+        }
+      })
+
+      // Mínimos de deudas
+      debts.forEach(d => {
+        const minPay = Number(d.min_payment || 0)
+        if (minPay <= 0) return
+        items.push({
+          kind: 'debt', day: d.due_day || 15,
+          name: d.name, amount: minPay,
+          reason: d.interest_rate ? `mínimo · TAE ${d.interest_rate}%` : 'mínimo de la deuda',
+          target: d.name,
+        })
+      })
+
+      // Ordena por día
+      items.sort((a, b) => a.day - b.day)
+
+      const totalIn = items.filter(i => i.kind === 'income').reduce((s, i) => s + i.amount, 0)
+      const totalOut = items.filter(i => i.kind !== 'income').reduce((s, i) => s + i.amount, 0)
+
+      return res.status(200).json({
+        ok: true, calendar: {
+          month: monthStr, today_day: today.getDate(),
+          items, total_in: totalIn, total_out: totalOut, libre: totalIn - totalOut,
+        },
+      })
+    }
+
     // ── AFP v6 · Situación de hoy (datos secos, reemplaza score) ──
     if (action === 'afp_situation_today') {
       const data = await buildSituationToday(admin, userId, user.user_metadata || {})
