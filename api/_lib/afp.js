@@ -200,6 +200,270 @@ export async function buildWeekPlan(admin, userId, userMetadata = {}) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// AFP v6 · Gamificación + situación de hoy
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Niveles del jugador (ascendentes). */
+export const XP_LEVELS = [
+  { lvl: 1, xp: 0,      name: 'Recién empezando' },
+  { lvl: 2, xp: 500,    name: 'Aprendiz' },
+  { lvl: 3, xp: 1500,   name: 'Disciplinado' },
+  { lvl: 4, xp: 4000,   name: 'Constante' },
+  { lvl: 5, xp: 10000,  name: 'Maestro del flujo' },
+  { lvl: 6, xp: 25000,  name: 'Arquitecto' },
+  { lvl: 7, xp: 60000,  name: 'Inmovible' },
+]
+
+/** Catálogo de acciones que dan XP. xp_delta positivo siempre (no castigamos). */
+export const XP_ACTIONS = {
+  pay_on_time:          { xp: 15,  label: 'Pago a tiempo' },
+  save_forced:          { xp: 50,  label: 'Ahorro forzado del cobro' },
+  streak_4w_save:       { xp: 200, label: 'Racha 4 semanas ahorrando' },
+  plan_100:             { xp: 500, label: 'Plan del mes completo' },
+  no_touch_cold_30d:    { xp: 300, label: '30 días sin tocar Cold Wallet' },
+  register_expense:     { xp: 5,   label: 'Gasto registrado el mismo día' },
+  honest_no_money:      { xp: 10,  label: 'Honestidad: no me alcanzó' },
+  pay_late:             { xp: 5,   label: 'Pago tardío (igual cuenta)' },
+  unlock_wish:          { xp: 0,   label: 'Deseo desbloqueado' },
+}
+
+export function levelFor(totalXp) {
+  let curr = XP_LEVELS[0]
+  let next = XP_LEVELS[XP_LEVELS.length - 1]
+  for (let i = 0; i < XP_LEVELS.length; i++) {
+    if (totalXp >= XP_LEVELS[i].xp) curr = XP_LEVELS[i]
+    if (XP_LEVELS[i].xp > totalXp)  { next = XP_LEVELS[i]; break }
+  }
+  const isMax = curr.lvl === XP_LEVELS[XP_LEVELS.length - 1].lvl
+  const progress = isMax ? 100
+    : Math.round(((totalXp - curr.xp) / (next.xp - curr.xp)) * 100)
+  return { current: curr, next: isMax ? null : next, progress }
+}
+
+/** Suma XP idempotente. Si (action, ref_kind, ref_id) ya existe, no duplica. */
+export async function awardXp(admin, userId, action, refKind = null, refId = null, notes = null) {
+  const def = XP_ACTIONS[action]
+  if (!def) return { ok: false, error: 'acción desconocida' }
+  const payload = {
+    owner_id: userId, action, xp_delta: def.xp,
+    ref_kind: refKind, ref_id: refId ? String(refId) : null, notes,
+  }
+  // ON CONFLICT do nothing (gracias al unique index parcial)
+  const { data, error } = await admin.from('afp_xp_log')
+    .upsert(payload, { onConflict: 'owner_id,action,ref_kind,ref_id', ignoreDuplicates: true })
+    .select()
+  if (error && !/duplicate/i.test(error.message)) return { ok: false, error: error.message }
+  return { ok: true, awarded: data?.length ? def.xp : 0 }
+}
+
+export async function getXpSummary(admin, userId) {
+  const { data: all } = await admin.from('afp_xp_log')
+    .select('xp_delta').eq('owner_id', userId)
+  const total = (all || []).reduce((s, r) => s + Number(r.xp_delta || 0), 0)
+  const lvl = levelFor(total)
+  const { data: recent } = await admin.from('afp_xp_log')
+    .select('*').eq('owner_id', userId)
+    .order('created_at', { ascending: false }).limit(20)
+  return { total, level: lvl, recent: recent || [] }
+}
+
+// ── Rachas ──────────────────────────────────────────────────────────────────
+function _isoWeekKey(d) {
+  const dt = new Date(d)
+  dt.setUTCHours(0, 0, 0, 0)
+  const day = dt.getUTCDay() || 7
+  dt.setUTCDate(dt.getUTCDate() + 4 - day)
+  const year = dt.getUTCFullYear()
+  const yearStart = new Date(Date.UTC(year, 0, 1))
+  const week = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7)
+  return year + '-W' + String(week).padStart(2, '0')
+}
+
+function _dayKey(d) { return new Date(d).toISOString().slice(0, 10) }
+
+function _prevIsoWeek(weekKey) {
+  // Dado 2026-W24 → devuelve 2026-W23 (con manejo de cambio de año aproximado)
+  const [y, w] = weekKey.split('-W').map(Number)
+  if (w === 1) return (y - 1) + '-W52'
+  return y + '-W' + String(w - 1).padStart(2, '0')
+}
+
+export async function getStreaks(admin, userId, meta = {}) {
+  // Streak 1: semanas ahorrando — XP logs action=save_forced agrupados por semana
+  const { data: saves } = await admin.from('afp_xp_log')
+    .select('created_at').eq('owner_id', userId).eq('action', 'save_forced')
+    .order('created_at', { ascending: false })
+  const saveWeeks = new Set((saves || []).map(r => _isoWeekKey(r.created_at)))
+  let streakSave = 0
+  let recordSave = 0
+  if (saveWeeks.size) {
+    // Racha actual desde la semana en curso
+    let cursor = _isoWeekKey(new Date())
+    while (saveWeeks.has(cursor)) { streakSave++; cursor = _prevIsoWeek(cursor) }
+    // Récord: corrida más larga en histórico
+    const sortedWeeks = [...saveWeeks].sort()
+    let run = 1; recordSave = 1
+    for (let i = 1; i < sortedWeeks.length; i++) {
+      if (sortedWeeks[i] === _nextIsoWeek(sortedWeeks[i - 1])) { run++; recordSave = Math.max(recordSave, run) }
+      else run = 1
+    }
+    recordSave = Math.max(recordSave, streakSave)
+  }
+
+  // Streak 2: días sin gasto FUERA DE PLAN en la cuenta primaria
+  // Heurística: gasto fuera de plan = movimiento tipo='salida' que NO está taggeado proyecto LIKE 'afp:%'
+  let streakNoOff = 0, recordNoOff = 0
+  const primaryOrqId = meta.afp_primary_orq_id || null
+  if (primaryOrqId) {
+    const { data: lastOff } = await admin.from('movimientos')
+      .select('fecha').eq('orquestador_id', primaryOrqId)
+      .eq('tipo', 'salida').not('proyecto', 'like', 'afp:%')
+      .order('fecha', { ascending: false }).limit(1)
+    if (!lastOff?.length) {
+      // Sin gastos fuera de plan registrados — racha = días desde creación de cuenta o 30 default
+      streakNoOff = 30
+    } else {
+      const lastDate = new Date(lastOff[0].fecha)
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      streakNoOff = Math.max(0, Math.floor((today - lastDate) / 86400000))
+    }
+    recordNoOff = streakNoOff  // primer pase: récord = actual
+  }
+
+  // Streak 3: días sin tocar Cold Wallet — best-effort, busca movs etiquetados con cold
+  let streakCold = 0, recordCold = 0
+  const coldLabel = meta.afp?.cold_wallet_label || null
+  if (coldLabel) {
+    const { data: lastCold } = await admin.from('movimientos')
+      .select('fecha').eq('owner_id', userId).eq('tipo', 'salida')
+      .or(`notas.ilike.%${coldLabel}%,beneficiario.ilike.%${coldLabel}%`)
+      .order('fecha', { ascending: false }).limit(1)
+    if (!lastCold?.length) {
+      streakCold = 90  // placeholder optimista si no hay retiros
+    } else {
+      const lastDate = new Date(lastCold[0].fecha)
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+      streakCold = Math.max(0, Math.floor((today - lastDate) / 86400000))
+    }
+    recordCold = streakCold
+  }
+
+  return {
+    save_weeks:    { current: streakSave,  record: recordSave,  unit: 'semanas', label: 'ahorrando' },
+    no_off_plan:   { current: streakNoOff, record: recordNoOff, unit: 'días',    label: 'sin gasto fuera de plan' },
+    no_cold_touch: { current: streakCold,  record: recordCold,  unit: 'días',    label: 'sin tocar Cold Wallet' },
+  }
+}
+
+function _nextIsoWeek(weekKey) {
+  const [y, w] = weekKey.split('-W').map(Number)
+  if (w === 52 || w === 53) return (y + 1) + '-W01'
+  return y + '-W' + String(w + 1).padStart(2, '0')
+}
+
+// ── Situación de hoy · datos secos sin score ────────────────────────────────
+export async function buildSituationToday(admin, userId, meta = {}) {
+  const today = new Date()
+  const todayStr = today.toISOString().slice(0, 10)
+  const monthStr = todayStr.slice(0, 7)
+
+  const [incRes, fixedRes, debtRes, cushionRes, primMovsRes, xpThisWeekRes] = await Promise.all([
+    admin.from('afp_incomes').select('*').eq('owner_id', userId).eq('is_active', true),
+    admin.from('afp_fixed_expenses').select('*').eq('owner_id', userId).eq('is_active', true),
+    admin.from('afp_debts').select('*').eq('owner_id', userId).eq('is_active', true),
+    admin.from('afp_cushion').select('*').eq('owner_id', userId).maybeSingle(),
+    meta.afp_primary_orq_id
+      ? admin.from('movimientos').select('estado,fecha,tipo,monto_mxn,proyecto')
+          .eq('orquestador_id', meta.afp_primary_orq_id)
+          .gte('fecha', monthStr + '-01')
+      : Promise.resolve({ data: [] }),
+    admin.from('afp_xp_log').select('xp_delta,action,created_at')
+      .eq('owner_id', userId)
+      .gte('created_at', new Date(today.getTime() - 7 * 86400000).toISOString()),
+  ])
+  const incomes = incRes.data || []
+  const fixed   = fixedRes.data || []
+  const debts   = debtRes.data || []
+  const cushion = cushionRes.data || { current_balance: 0 }
+  const movs    = primMovsRes.data || []
+
+  // Saldo disponible (cuentas primaria, estado=hecho)
+  let disponible = 0
+  for (const m of movs) {
+    if (m.estado !== 'hecho') continue
+    const monto = Number(m.monto_mxn || 0)
+    disponible += m.tipo === 'entrada' ? monto : -monto
+  }
+  disponible = Math.round(disponible * 100) / 100
+
+  // Pagos del mes: ítems del plan + sus checks
+  const monthFixed = fixed.map(f => ({
+    name: f.name, amount: toMonthly(f.amount, f.frequency),
+    due_day: f.due_day || null, is_sacred: f.is_sacred,
+  }))
+  const totalFixedMonth = monthFixed.reduce((s, f) => s + f.amount, 0)
+
+  // Cuántos movs AFP planeados en este mes están done
+  const afpMovs = movs.filter(m => (m.proyecto || '').startsWith('afp:'))
+  const doneAfp = afpMovs.filter(m => m.estado === 'hecho').length
+  const pendAfp = afpMovs.filter(m => m.estado === 'pendiente').length
+
+  // Total pendiente por pagar en lo que resta del mes
+  const today_day = today.getDate()
+  const upcomingFixed = monthFixed.filter(f => f.due_day && f.due_day >= today_day)
+  const totalUpcomingFixed = upcomingFixed.reduce((s, f) => s + f.amount, 0)
+  const totalUpcomingDebts = debts.reduce((s, d) => s + Number(d.min_payment || 0), 0)
+  const totalUpcomingAll = totalUpcomingFixed + totalUpcomingDebts
+
+  // Ahorro esta semana (xp action save_forced en los últimos 7 días)
+  const xpEvents = xpThisWeekRes.data || []
+  const savedThisWeek = xpEvents.filter(e => e.action === 'save_forced').length > 0
+  // Monto exacto ahorrado lo podemos derivar del proyecto:afp pendiente o hecho con kind 'cushion'/'sacred'
+  // por simplicidad estimamos: 10% del último cobro semanal
+  const savingsPct = Number(meta.afp?.savings_pct || 10)
+  const savingsFloor = Number(meta.afp?.savings_floor || 0)
+  const lastWeeklyIncome = incomes.find(i => i.frequency === 'weekly')?.amount || 0
+  const savedAmt = Math.max(Math.round(lastWeeklyIncome * savingsPct / 100), savingsFloor)
+
+  // Frase corta y seca
+  const lines = []
+  const dayName = today.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+  lines.push(`Hoy es ${dayName}.`)
+  if (afpMovs.length) {
+    lines.push(`Llevas ${doneAfp} de ${afpMovs.length} pagos del mes${pendAfp ? ` · ${pendAfp} pendientes` : ''}.`)
+  }
+  if (disponible) {
+    if (totalUpcomingAll > 0) {
+      const after = disponible - totalUpcomingAll
+      lines.push(`Tienes $${disponible.toLocaleString('es-MX')} · te faltan ${upcomingFixed.length + debts.length} pagos por $${Math.round(totalUpcomingAll).toLocaleString('es-MX')}.`)
+      if (after < 0) lines.push(`⚠ Cubrir lo que falta requiere $${Math.abs(Math.round(after)).toLocaleString('es-MX')} más. NO gastes fuera de plan esta semana.`)
+      else lines.push(`Después de cubrirlos: $${Math.round(after).toLocaleString('es-MX')} libres.`)
+    } else {
+      lines.push(`Tienes $${disponible.toLocaleString('es-MX')} disponibles · ya cubriste todos los pagos fijos del mes.`)
+    }
+  }
+  if (savedThisWeek) {
+    lines.push(`Esta semana apartaste tu ahorro forzado ($${savedAmt.toLocaleString('es-MX')}). ✓`)
+  } else if (lastWeeklyIncome) {
+    lines.push(`Tu ahorro forzado de esta semana ($${savedAmt.toLocaleString('es-MX')}) aún no se aparta.`)
+  }
+
+  return {
+    today: todayStr,
+    disponible,
+    pagos_done: doneAfp,
+    pagos_pendientes: pendAfp,
+    pagos_total: afpMovs.length,
+    upcoming_total: Math.round(totalUpcomingAll),
+    upcoming_count: upcomingFixed.length + debts.length,
+    saved_this_week: savedThisWeek,
+    save_amount_target: savedAmt,
+    cushion_balance: Number(cushion.current_balance || 0),
+    summary: lines,
+  }
+}
+
 /** Formatea el plan para Telegram (Markdown). */
 export function formatWeekPlanTelegram(plan) {
   const MODE = {

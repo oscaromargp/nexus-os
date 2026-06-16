@@ -7,7 +7,11 @@
 // Auth: JWT Bearer del usuario.
 
 import { createClient } from '@supabase/supabase-js'
-import { buildWeekPlan, formatWeekPlanTelegram } from './_lib/afp.js'
+import {
+  buildWeekPlan, formatWeekPlanTelegram,
+  awardXp, getXpSummary, getStreaks, buildSituationToday,
+  XP_ACTIONS, XP_LEVELS,
+} from './_lib/afp.js'
 
 function getSupabase(authToken) {
   const url  = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
@@ -645,6 +649,117 @@ export default async function handler(req, res) {
         weekplan: result,
         formatted_telegram: formatWeekPlanTelegram(result),
       })
+    }
+
+    // ── AFP v6 · Situación de hoy (datos secos, reemplaza score) ──
+    if (action === 'afp_situation_today') {
+      const data = await buildSituationToday(admin, userId, user.user_metadata || {})
+      return res.status(200).json({ ok: true, situation: data })
+    }
+
+    // ── AFP v6 · XP summary + nivel ──
+    if (action === 'afp_xp_summary') {
+      const data = await getXpSummary(admin, userId)
+      return res.status(200).json({ ok: true, ...data, actions: XP_ACTIONS, levels: XP_LEVELS })
+    }
+
+    // ── AFP v6 · Otorgar XP manual o automático ──
+    if (action === 'afp_xp_award') {
+      const { xp_action, ref_kind, ref_id, notes } = req.body || {}
+      if (!xp_action) return res.status(400).json({ error: 'xp_action requerido' })
+      const r = await awardXp(admin, userId, xp_action, ref_kind, ref_id, notes)
+      return res.status(r.ok ? 200 : 400).json(r)
+    }
+
+    // ── AFP v6 · Rachas ──
+    if (action === 'afp_streaks') {
+      const data = await getStreaks(admin, userId, user.user_metadata || {})
+      return res.status(200).json({ ok: true, streaks: data })
+    }
+
+    // ── AFP v6 · Wishlist CRUD ──
+    if (action === 'afp_wishlist_list') {
+      const { data, error } = await admin.from('afp_wishlist')
+        .select('*').eq('owner_id', userId).order('created_at', { ascending: true })
+      if (error) throw error
+      return res.status(200).json({ ok: true, items: data || [] })
+    }
+    if (action === 'afp_wishlist_add') {
+      const { name, price, xp_cost, category, emoji, notes } = req.body || {}
+      if (!name) return res.status(400).json({ error: 'name requerido' })
+      const { data, error } = await admin.from('afp_wishlist').insert({
+        owner_id: userId, name,
+        price: Number(price || 0),
+        xp_cost: Number(xp_cost || 0),
+        category: category || null,
+        emoji: emoji || '🎁',
+        notes: notes || null,
+      }).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, item: data })
+    }
+    if (action === 'afp_wishlist_update') {
+      const { id, ...patch } = req.body || {}
+      if (!id) return res.status(400).json({ error: 'id requerido' })
+      patch.updated_at = new Date().toISOString()
+      const { data, error } = await admin.from('afp_wishlist')
+        .update(patch).eq('id', id).eq('owner_id', userId).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, item: data })
+    }
+    if (action === 'afp_wishlist_delete') {
+      const { id } = req.body || {}
+      if (!id) return res.status(400).json({ error: 'id requerido' })
+      const { error } = await admin.from('afp_wishlist').delete()
+        .eq('id', id).eq('owner_id', userId)
+      if (error) throw error
+      return res.status(200).json({ ok: true })
+    }
+    if (action === 'afp_wishlist_unlock') {
+      // Marca un deseo como desbloqueado + crea evento XP
+      const { id } = req.body || {}
+      if (!id) return res.status(400).json({ error: 'id requerido' })
+      const { data: wish } = await admin.from('afp_wishlist')
+        .select('*').eq('id', id).eq('owner_id', userId).maybeSingle()
+      if (!wish) return res.status(404).json({ error: 'deseo no encontrado' })
+      const { data, error } = await admin.from('afp_wishlist').update({
+        is_unlocked: true,
+        unlocked_at: new Date().toISOString(),
+        fund_balance: Math.max(0, Number(wish.fund_balance) - Number(wish.price)),
+      }).eq('id', id).select().single()
+      if (error) throw error
+      await awardXp(admin, userId, 'unlock_wish', 'wish', id, wish.name)
+      return res.status(200).json({ ok: true, item: data })
+    }
+    if (action === 'afp_wishlist_seed') {
+      // Inicializa 4 deseos sugeridos si la lista está vacía
+      const { data: existing } = await admin.from('afp_wishlist').select('id').eq('owner_id', userId).limit(1)
+      if (existing?.length) return res.status(200).json({ ok: true, seeded: false })
+      const seeds = [
+        { name: 'Cena especial', price: 800,   xp_cost: 100,  category: 'cena',   emoji: '🍽️' },
+        { name: 'Gadget que quiero', price: 3500, xp_cost: 400, category: 'gadget', emoji: '🎮' },
+        { name: 'Salida con familia', price: 2000, xp_cost: 250, category: 'experiencia', emoji: '🎢' },
+        { name: 'Ropa nueva', price: 1500,  xp_cost: 200,  category: 'ropa',   emoji: '👕' },
+      ]
+      const { error } = await admin.from('afp_wishlist').insert(
+        seeds.map(s => ({ ...s, owner_id: userId }))
+      )
+      if (error) throw error
+      return res.status(200).json({ ok: true, seeded: true })
+    }
+    if (action === 'afp_wishlist_fund') {
+      // Añade $X al fondo de un deseo (al apartar ahorro, el % wishlist_fund_pct se distribuye)
+      const { id, amount } = req.body || {}
+      if (!id || !amount) return res.status(400).json({ error: 'id+amount requeridos' })
+      const { data: wish } = await admin.from('afp_wishlist').select('fund_balance').eq('id', id).eq('owner_id', userId).maybeSingle()
+      if (!wish) return res.status(404).json({ error: 'deseo no encontrado' })
+      const newBal = Number(wish.fund_balance) + Number(amount)
+      const { data, error } = await admin.from('afp_wishlist').update({
+        fund_balance: newBal,
+        updated_at: new Date().toISOString(),
+      }).eq('id', id).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, item: data })
     }
 
     // AFP · histórico mensual
