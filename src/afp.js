@@ -227,67 +227,18 @@ export async function renderAFP() {
         <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;font-size:13px;color:#94a3b8;">⏳ Calculando tu plan semanal…</div>
       </div>
 
-      <!-- SCORE + METRICS -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-        <div style="background:linear-gradient(135deg,rgba(${_hexRgb(health.color)},0.04),rgba(${_hexRgb(health.color)},0.12));border:1px solid ${health.color}44;border-radius:14px;padding:16px;text-align:center;">
-          <div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;">Salud financiera</div>
-          ${_speedometer(score, health.color)}
-          <div style="font-size:18px;font-weight:800;color:${health.color};margin-top:-10px;">${health.label}</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          ${_metricCard('🌱', 'Ahorro mensual', m.savings_rate_pct + '%', `${sb.ahorro}/40 pts · Margen libre ${_fmt(m.monthly_disposable)}/mes`, '#34d399')}
-          ${_metricCard('💳', 'Deuda', m.debt_to_income_pct + '%', `${sb.deuda}/30 pts · Saldo total ${_fmt(m.total_debt_balance)}`, '#f87171')}
-          ${_metricCard('⚖️', 'Equilibrio', (100 - m.commitment_ratio_pct).toFixed(0) + '%', `${sb.equilibrio}/30 pts · Comprometido ${m.commitment_ratio_pct.toFixed(0)}%`, '#fb923c')}
-        </div>
+      <!-- 🔥 RACHAS · placeholder hidratado async -->
+      <div id="afp-streaks" data-afp-streaks style="margin-bottom:14px;"></div>
+
+      <!-- 📈 SITUACIÓN DE HOY · datos secos, sin score -->
+      <div id="afp-situation" data-afp-situation style="margin-bottom:20px;">
+        <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;font-size:12px;color:#6b7280;">⏳ Leyendo tu situación de hoy…</div>
       </div>
 
-      ${topRec.title ? `
-        <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.3);border-radius:12px;padding:16px;margin-bottom:20px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:14px;background:${topRec.priority==='alta'?'#ef4444':topRec.priority==='media'?'#fbbf24':'#94a3b8'}33;color:${topRec.priority==='alta'?'#fca5a5':topRec.priority==='media'?'#fde68a':'#cbd5e1'};padding:2px 10px;border-radius:6px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">${topRec.priority}</span>
-            <strong style="color:#e5e7eb;font-size:16px;">💡 ${_esc(topRec.title)}</strong>
-          </div>
-          <p style="margin:6px 0 0;color:#cbd5e1;font-size:13px;line-height:1.6;">${_esc(topRec.detail)}</p>
-        </div>
-      ` : ''}
+      <!-- 🎁 LISTA DE DESEOS · placeholder hidratado async -->
+      <div id="afp-wishlist" data-afp-wishlist style="margin-bottom:20px;"></div>
 
-      <!-- PLAN DEL MES — RESUMEN -->
-      <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.25);border-radius:14px;padding:18px;margin-bottom:20px;">
-        <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:14px;">Plan de ${monthLabel}</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;">
-          <div style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:12px;">
-            <div style="font-size:11px;color:#86efac;font-weight:700;text-transform:uppercase;">💵 Ingresos</div>
-            <div style="font-size:22px;font-weight:800;color:#86efac;margin-top:4px;">${_fmt(m.monthly_income)}</div>
-            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">${incomes.length} fuente${incomes.length===1?'':'s'}</div>
-          </div>
-          <div style="background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.2);border-radius:8px;padding:12px;">
-            <div style="font-size:11px;color:#fb923c;font-weight:700;text-transform:uppercase;">🏠 Fijos</div>
-            <div style="font-size:22px;font-weight:800;color:#fb923c;margin-top:4px;">${_fmt(m.monthly_fixed)}</div>
-            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">${fixed_expenses.length} concepto${fixed_expenses.length===1?'':'s'}</div>
-          </div>
-          ${m.monthly_plan > 0 ? `
-          <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.2);border-radius:8px;padding:12px;">
-            <div style="font-size:11px;color:#a78bfa;font-weight:700;text-transform:uppercase;">📅 Plan mes</div>
-            <div style="font-size:22px;font-weight:800;color:#a78bfa;margin-top:4px;">${_fmt(m.monthly_plan)}</div>
-            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">${monthly_plan.length} item${monthly_plan.length===1?'':'s'}</div>
-          </div>
-          ` : ''}
-          ${m.monthly_min_debt > 0 ? `
-          <div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px;">
-            <div style="font-size:11px;color:#f87171;font-weight:700;text-transform:uppercase;">💳 Mínimos deuda</div>
-            <div style="font-size:22px;font-weight:800;color:#f87171;margin-top:4px;">${_fmt(m.monthly_min_debt)}</div>
-            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">${debts.length} deuda${debts.length===1?'':'s'}</div>
-          </div>
-          ` : ''}
-          <div style="background:rgba(${m.monthly_disposable>=0?'34,197,94':'239,68,68'},0.1);border:1px solid rgba(${m.monthly_disposable>=0?'34,197,94':'239,68,68'},0.35);border-radius:8px;padding:12px;">
-            <div style="font-size:11px;color:${m.monthly_disposable>=0?'#22c55e':'#ef4444'};font-weight:700;text-transform:uppercase;">${m.monthly_disposable>=0?'✓ Libre':'⚠ Déficit'}</div>
-            <div style="font-size:22px;font-weight:800;color:${m.monthly_disposable>=0?'#22c55e':'#ef4444'};margin-top:4px;">${_fmt(m.monthly_disposable)}</div>
-            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">${m.monthly_disposable>=0?'para ahorro/metas':'NO te alcanza'}</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- COLCHÓN FIAT -->
+      <!-- RESPALDO LÍQUIDO -->
       ${(() => {
         const cur = cushion?.current_balance || 0
         const tgt = cushion?.target_amount || 0
@@ -300,7 +251,7 @@ export async function renderAFP() {
         <div style="background:rgba(52,211,153,0.04);border:1px solid rgba(52,211,153,0.25);border-radius:12px;padding:16px;margin-bottom:20px;">
           <div style="display:flex;align-items:start;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
             <div>
-              <div style="font-size:14px;font-weight:800;color:#34d399;display:flex;align-items:center;gap:6px;">🛡️ Colchón Fiat ${cushion?.account_label ? `<span style="font-size:11px;color:#94a3b8;font-weight:500;">· ${_esc(cushion.account_label)}</span>` : ''}</div>
+              <div style="font-size:14px;font-weight:800;color:#34d399;display:flex;align-items:center;gap:6px;">🛡️ Respaldo Líquido ${cushion?.account_label ? `<span style="font-size:11px;color:#94a3b8;font-weight:500;">· ${_esc(cushion.account_label)}</span>` : ''}</div>
               <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Fondo de emergencia — el suelo que te sostiene si algo falla</div>
             </div>
             <button id="afp-cushion-btn" style="padding:7px 12px;background:rgba(52,211,153,0.15);border:1px solid rgba(52,211,153,0.4);color:#34d399;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;">💵 Depositar/Retirar</button>
@@ -334,11 +285,15 @@ export async function renderAFP() {
         <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;font-size:12px;color:#6b7280;">⏳ Leyendo saldos reales…</div>
       </div>
 
-      <!-- ESTRATEGIA + DISPERSIÓN -->
+      <!-- ESTRATEGIA + DISPERSIÓN (plegado, ya no es el corazón) -->
       ${m.monthly_disposable > 0 ? `
-      <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:16px;margin-bottom:20px;">
-        <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:8px;">Dispersión sugerida con tu margen libre · ${_esc(strategy.name)}</div>
-        <p style="margin:0 0 14px;color:#94a3b8;font-size:12px;">Si tienes <strong style="color:#e5e7eb;">${_fmt(m.monthly_disposable)} libres</strong> al mes, distribúyelos así (teórico):</p>
+      <details style="margin-bottom:14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;">
+        <summary style="cursor:pointer;padding:12px 16px;font-size:13px;font-weight:700;color:#cbd5e1;display:flex;align-items:center;justify-content:space-between;">
+          <span>📊 Estrategia ${_esc(strategy.name)} · dispersión teórica</span>
+          <span style="font-size:11px;color:#475569;">tap para abrir</span>
+        </summary>
+        <div style="padding:14px 16px;border-top:1px solid rgba(255,255,255,0.06);">
+        <p style="margin:0 0 14px;color:#94a3b8;font-size:12px;">Si tienes <strong style="color:#e5e7eb;">${_fmt(m.monthly_disposable)} libres</strong> al mes, distribúyelos así:</p>
         <div style="display:grid;grid-template-columns:repeat(${dispersionEntries.length},1fr);gap:10px;">
           ${dispersionEntries.map(([key, val]) => {
             const proportion = m.monthly_disposable > 0 ? Math.round(val * m.monthly_disposable / m.monthly_income) : 0
@@ -357,13 +312,47 @@ export async function renderAFP() {
             `
           }).join('')}
         </div>
-      </div>
+        </div>
+      </details>
       ` : ''}
+
+      <!-- DETALLES PLEGADOS · solo visibles cuando los buscas -->
+      <details style="margin-bottom:14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
+        <summary style="cursor:pointer;padding:12px 16px;font-size:13px;font-weight:700;color:#cbd5e1;display:flex;align-items:center;justify-content:space-between;">
+          <span>📊 Mi plan del mes (resumen + estrategia)</span>
+          <span style="font-size:11px;color:#475569;">tap para abrir</span>
+        </summary>
+        <div style="padding:14px 16px;border-top:1px solid rgba(255,255,255,0.06);">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;">
+            <div style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:10px;">
+              <div style="font-size:9px;color:#86efac;font-weight:700;text-transform:uppercase;">Ingresos/mes</div>
+              <div style="font-size:16px;font-weight:800;color:#86efac;margin-top:2px;">${_fmt(m.monthly_income)}</div>
+            </div>
+            <div style="background:rgba(251,146,60,0.06);border:1px solid rgba(251,146,60,0.2);border-radius:8px;padding:10px;">
+              <div style="font-size:9px;color:#fb923c;font-weight:700;text-transform:uppercase;">Fijos/mes</div>
+              <div style="font-size:16px;font-weight:800;color:#fb923c;margin-top:2px;">${_fmt(m.monthly_fixed)}</div>
+            </div>
+            ${m.monthly_min_debt > 0 ? `
+            <div style="background:rgba(248,113,113,0.06);border:1px solid rgba(248,113,113,0.2);border-radius:8px;padding:10px;">
+              <div style="font-size:9px;color:#f87171;font-weight:700;text-transform:uppercase;">Mínimos deuda</div>
+              <div style="font-size:16px;font-weight:800;color:#f87171;margin-top:2px;">${_fmt(m.monthly_min_debt)}</div>
+            </div>` : ''}
+            <div style="background:rgba(${m.monthly_disposable>=0?'34,197,94':'239,68,68'},0.08);border:1px solid rgba(${m.monthly_disposable>=0?'34,197,94':'239,68,68'},0.3);border-radius:8px;padding:10px;">
+              <div style="font-size:9px;color:${m.monthly_disposable>=0?'#22c55e':'#ef4444'};font-weight:700;text-transform:uppercase;">${m.monthly_disposable>=0?'Libre':'Déficit'}</div>
+              <div style="font-size:16px;font-weight:800;color:${m.monthly_disposable>=0?'#22c55e':'#ef4444'};margin-top:2px;">${_fmt(m.monthly_disposable)}</div>
+            </div>
+          </div>
+        </div>
+      </details>
 
       <!-- METAS -->
       ${goals.length ? `
-      <div style="margin-bottom:20px;">
-        <div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:10px;">🎯 Mis metas (${goals.length})</div>
+      <details style="margin-bottom:14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
+        <summary style="cursor:pointer;padding:12px 16px;font-size:13px;font-weight:700;color:#cbd5e1;display:flex;align-items:center;justify-content:space-between;">
+          <span>🎯 Mis metas a futuro (${goals.length})</span>
+          <span style="font-size:11px;color:#475569;">tap para abrir</span>
+        </summary>
+        <div style="padding:14px 16px;border-top:1px solid rgba(255,255,255,0.06);">
         <div style="display:flex;flex-direction:column;gap:10px;">
           ${goals.map(g => `
             <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;${g.achievable?'border-left:3px solid #22c55e;':'border-left:3px solid #f87171;'}">
@@ -388,13 +377,19 @@ export async function renderAFP() {
             </div>
           `).join('')}
         </div>
-      </div>
+        </div>
+      </details>
       ` : ''}
 
       <!-- DEUDAS — ESTRATEGIA -->
       ${debts.length ? `
-      <div style="background:rgba(248,113,113,0.04);border:1px solid rgba(248,113,113,0.2);border-radius:12px;padding:16px;margin-bottom:20px;">
-        <div style="font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1.5px;font-weight:700;margin-bottom:10px;">💳 Tus deudas (${debts.length})</div>
+      <details style="margin-bottom:14px;background:rgba(248,113,113,0.04);border:1px solid rgba(248,113,113,0.2);border-radius:12px;">
+        <summary style="cursor:pointer;padding:12px 16px;font-size:13px;font-weight:700;color:#fca5a5;display:flex;align-items:center;justify-content:space-between;">
+          <span>💳 Tus deudas (${debts.length})</span>
+          <span style="font-size:11px;color:#475569;">tap para abrir</span>
+        </summary>
+        <div style="padding:14px 16px;border-top:1px solid rgba(255,255,255,0.06);">
+        <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">orden por TAE descendente</div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
           ${debts.map(d => `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:10px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:8px;flex-wrap:wrap;gap:8px;">
@@ -415,11 +410,15 @@ export async function renderAFP() {
           ${debt_strategies.avalanche.map((d,i) => `<div>${i+1}. <strong>${_esc(d.name)}</strong> — ${d.interest_rate}% — ${_fmt(d.balance)}</div>`).join('')}
         </div>
         ` : ''}
-      </div>
+        </div>
+      </details>
       ` : ''}
 
+      <!-- 🏆 LOGROS · panel plegado con XP, nivel y acciones recientes -->
+      <div id="afp-achievements" data-afp-achievements style="margin-top:14px;"></div>
+
       <!-- 📜 HISTÓRICO MES A MES (placeholder, hidratado async) -->
-      <div id="afp-history" data-afp-history style="margin-top:20px;"></div>
+      <div id="afp-history" data-afp-history style="margin-top:14px;"></div>
     </div>
   `
 
@@ -433,13 +432,211 @@ export async function renderAFP() {
   _hydrateRealBalances()
   _hydrateWeekPlan()
   _hydrateHistory()
+  _hydrateSituationToday()
+  _hydrateStreaks()
+  _hydrateWishlist()
+  _hydrateAchievements()
   _maybeAutoSnapshot()
   if (!window._afpBalanceSub) {
     window._afpBalanceSub = window.nexusBalance?.onChange?.(() => {
       _hydrateRealBalances()
       _hydrateWeekPlan()
+      _hydrateSituationToday()
+      _hydrateStreaks()
     })
   }
+}
+
+// ── BLOQUE: Situación de hoy · datos secos ──────────────────────────────────
+async function _hydrateSituationToday() {
+  const mount = document.querySelector('[data-afp-situation]')
+  if (!mount) return
+  try {
+    const r = await _api('afp_situation_today')
+    const s = r.situation
+    const lines = s.summary.map(l => `<div style="margin-bottom:4px;">${_esc(l)}</div>`).join('')
+    mount.innerHTML = `
+      <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.2);border-radius:12px;padding:14px 16px;">
+        <div style="font-size:10px;color:#22d3ee;text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin-bottom:8px;">📍 Tu situación de hoy</div>
+        <div style="font-size:13px;color:#e5e7eb;line-height:1.65;">${lines}</div>
+      </div>`
+  } catch (e) {
+    mount.innerHTML = `<div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px;font-size:11px;color:#6b7280;">No pudimos leer tu situación: ${_esc(e.message)}</div>`
+  }
+}
+
+// ── BLOQUE: Rachas · 3 chips con récord ─────────────────────────────────────
+async function _hydrateStreaks() {
+  const mount = document.querySelector('[data-afp-streaks]')
+  if (!mount) return
+  try {
+    const r = await _api('afp_streaks')
+    const s = r.streaks
+    const chip = (data, color, emoji) => `
+      <div style="flex:1;min-width:140px;padding:10px 12px;background:${color}10;border:1px solid ${color}30;border-radius:10px;display:flex;align-items:center;gap:10px;">
+        <div style="font-size:22px;">${emoji}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:18px;font-weight:800;color:${color};line-height:1;font-family:'JetBrains Mono',monospace;">${data.current} <span style="font-size:11px;color:#94a3b8;font-weight:500;">${data.unit}</span></div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px;">${data.label} · récord ${data.record}</div>
+        </div>
+      </div>`
+    mount.innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${chip(s.save_weeks, '#fbbf24', '🔥')}
+        ${chip(s.no_off_plan, '#34d399', '🛡')}
+        ${chip(s.no_cold_touch, '#60a5fa', '❄️')}
+      </div>`
+  } catch { /* silencio */ }
+}
+
+// ── BLOQUE: Lista de deseos ─────────────────────────────────────────────────
+async function _hydrateWishlist() {
+  const mount = document.querySelector('[data-afp-wishlist]')
+  if (!mount) return
+  let items
+  try {
+    let r = await _api('afp_wishlist_list')
+    items = r.items
+    if (!items.length) {
+      // Primera vez: siembra los 4 sugeridos
+      await _api('afp_wishlist_seed').catch(() => {})
+      r = await _api('afp_wishlist_list')
+      items = r.items
+    }
+  } catch (e) {
+    mount.innerHTML = `<div style="font-size:11px;color:#f87171;">⚠ Lista de deseos: ${_esc(e.message)}</div>`
+    return
+  }
+
+  const active = items.filter(w => !w.is_unlocked)
+  const fundTotal = active.reduce((s, w) => s + Number(w.fund_balance || 0), 0)
+  const priceTotal = active.reduce((s, w) => s + Number(w.price || 0), 0)
+
+  const cardHtml = (w) => {
+    const price = Number(w.price)
+    const fund  = Number(w.fund_balance || 0)
+    const pct = price > 0 ? Math.min(100, Math.round((fund / price) * 100)) : 0
+    const ready = fund >= price
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;${ready?'border-color:#34d39955;background:rgba(52,211,153,0.06);':''}">
+        <div style="font-size:22px;">${w.emoji || '🎁'}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <div style="font-size:13px;font-weight:700;color:#e5e7eb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(w.name)}</div>
+            <div style="font-size:11px;color:#94a3b8;font-family:'JetBrains Mono',monospace;flex-shrink:0;">$${Math.round(fund).toLocaleString('es-MX')} / $${Math.round(price).toLocaleString('es-MX')}</div>
+          </div>
+          <div style="margin-top:6px;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${ready?'#34d399':'#22d3ee'};border-radius:3px;transition:width 0.5s;"></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px;font-size:10px;color:#94a3b8;">
+            <span>${pct}% · costo ${w.xp_cost} XP</span>
+            ${ready ? `<button data-wish-unlock="${w.id}" style="padding:4px 10px;background:rgba(52,211,153,0.2);border:1px solid #34d399;color:#34d399;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">🎁 Desbloquear</button>` : `<button data-wish-delete="${w.id}" title="Eliminar" style="background:none;border:none;color:#475569;cursor:pointer;font-size:14px;">✕</button>`}
+          </div>
+        </div>
+      </div>`
+  }
+
+  mount.innerHTML = `
+    <div style="background:rgba(167,139,250,0.04);border:1px solid rgba(167,139,250,0.2);border-radius:14px;padding:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+        <div style="font-size:14px;font-weight:800;color:#a78bfa;display:flex;align-items:center;gap:6px;">🎁 Lista de Deseos</div>
+        <div style="font-size:11px;color:#94a3b8;">fondo: $${Math.round(fundTotal).toLocaleString('es-MX')} / $${Math.round(priceTotal).toLocaleString('es-MX')}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${active.map(cardHtml).join('') || '<div style="text-align:center;color:#6b7280;font-size:12px;padding:12px;">Lista vacía. Agrega tu primer deseo.</div>'}
+      </div>
+      <button data-wish-add style="margin-top:10px;width:100%;padding:8px;background:rgba(167,139,250,0.08);border:1px dashed rgba(167,139,250,0.35);color:#c4b5fd;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">+ Agregar deseo</button>
+    </div>`
+
+  // Bindings
+  mount.querySelectorAll('[data-wish-delete]').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (!confirm('¿Eliminar este deseo?')) return
+      try { await _api('afp_wishlist_delete', { id: b.dataset.wishDelete }); _hydrateWishlist() }
+      catch (e) { alert(e.message) }
+    })
+  })
+  mount.querySelectorAll('[data-wish-unlock]').forEach(b => {
+    b.addEventListener('click', async () => {
+      try { await _api('afp_wishlist_unlock', { id: b.dataset.wishUnlock }); _hydrateWishlist(); _hydrateStreaks() }
+      catch (e) { alert(e.message) }
+    })
+  })
+  mount.querySelector('[data-wish-add]')?.addEventListener('click', _openWishModal)
+}
+
+// ── BLOQUE: Logros · XP + Nivel + recientes ─────────────────────────────────
+async function _hydrateAchievements() {
+  const mount = document.querySelector('[data-afp-achievements]')
+  if (!mount) return
+  try {
+    const r = await _api('afp_xp_summary')
+    const total = r.total
+    const { current, next, progress } = r.level
+    const recent = r.recent || []
+    const ACTIONS = r.actions || {}
+    const _fmtDate = (s) => new Date(s).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' })
+
+    const nextHtml = next ? `
+      <div style="margin-top:8px;height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;">
+        <div style="height:100%;width:${progress}%;background:linear-gradient(90deg,#a78bfa,#22d3ee);border-radius:3px;transition:width 0.6s;"></div>
+      </div>
+      <div style="font-size:10px;color:#94a3b8;margin-top:4px;text-align:right;">Faltan ${next.xp - total} XP para "${_esc(next.name)}"</div>
+    ` : `<div style="font-size:11px;color:#22d3ee;margin-top:6px;text-align:right;">⭐ Nivel máximo</div>`
+
+    mount.innerHTML = `
+      <details style="background:linear-gradient(135deg,rgba(167,139,250,0.06),rgba(34,211,238,0.04));border:1px solid rgba(167,139,250,0.2);border-radius:12px;">
+        <summary style="cursor:pointer;padding:12px 16px;font-size:13px;font-weight:700;color:#c4b5fd;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <span style="display:flex;align-items:center;gap:8px;">⚡ Logros · Nivel ${current.lvl} <span style="font-size:11px;color:#94a3b8;font-weight:500;">${_esc(current.name)}</span></span>
+          <span style="font-size:14px;font-weight:800;color:#a78bfa;font-family:'JetBrains Mono',monospace;">${total} XP</span>
+        </summary>
+        <div style="padding:14px 16px;border-top:1px solid rgba(167,139,250,0.15);">
+          ${nextHtml}
+          <div style="margin-top:14px;font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">Actividad reciente</div>
+          ${recent.length ? recent.slice(0, 8).map(r => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px;">
+              <span style="color:#cbd5e1;">${_esc(ACTIONS[r.action]?.label || r.action)}</span>
+              <span style="color:#94a3b8;font-size:10px;">${_fmtDate(r.created_at)} · <strong style="color:#a78bfa;">+${r.xp_delta}</strong></span>
+            </div>
+          `).join('') : '<div style="font-size:11px;color:#6b7280;text-align:center;padding:8px;">Aún sin XP. Comprometé y marca pagos para empezar.</div>'}
+        </div>
+      </details>`
+  } catch { /* silencio */ }
+}
+
+function _openWishModal() {
+  const overlay = document.createElement('div')
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;'
+  overlay.innerHTML = `
+    <div style="background:#0f1419;border:1px solid #1f2937;border-radius:14px;padding:20px;max-width:380px;width:100%;color:#e5e7eb;">
+      <h3 style="margin:0 0 12px;font-size:16px;font-weight:800;">🎁 Nuevo deseo</h3>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <input id="wish-name" placeholder="¿Qué quieres?" style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e5e7eb;font-size:13px;" />
+        <input id="wish-emoji" placeholder="🎁 (emoji opcional)" value="🎁" style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e5e7eb;font-size:13px;" />
+        <input id="wish-price" type="number" placeholder="Precio en pesos" style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e5e7eb;font-size:13px;" />
+        <input id="wish-xp" type="number" placeholder="Costo en XP (sugerido: precio/10)" style="padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e5e7eb;font-size:13px;" />
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;">
+        <button id="wish-cancel" style="flex:1;padding:9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;">Cancelar</button>
+        <button id="wish-save" style="flex:1;padding:9px;background:linear-gradient(135deg,#a78bfa,#c4b5fd);border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;">Agregar</button>
+      </div>
+    </div>`
+  document.body.appendChild(overlay)
+  const close = () => document.body.removeChild(overlay)
+  overlay.querySelector('#wish-cancel').addEventListener('click', close)
+  overlay.addEventListener('click', e => { if (e.target === overlay) close() })
+  overlay.querySelector('#wish-save').addEventListener('click', async () => {
+    const name = overlay.querySelector('#wish-name').value.trim()
+    const price = Number(overlay.querySelector('#wish-price').value)
+    const xp_cost = Number(overlay.querySelector('#wish-xp').value) || Math.max(50, Math.round(price / 10))
+    const emoji = overlay.querySelector('#wish-emoji').value.trim() || '🎁'
+    if (!name || !price) { alert('Nombre y precio son requeridos'); return }
+    try {
+      await _api('afp_wishlist_add', { name, price, xp_cost, emoji })
+      close()
+      _hydrateWishlist()
+    } catch (e) { alert(e.message) }
+  })
 }
 
 // ── Histórico mes a mes ─────────────────────────────────────────────────────
@@ -675,7 +872,12 @@ async function _hydrateWeekPlan() {
           await supabase.from('movimientos').update({ estado: 'hecho' }).eq('id', movId)
           _updateWeekCommitStatus(plan.week, key, 'paid')
           window.nexusBalance?.invalidate?.(primaryOrqId)
+          // 🎮 XP: pago a tiempo + bonus si es ahorro forzado
+          const itemKind = key.split(':')[0]
+          const xpAction = itemKind === 'cushion' || itemKind === 'sacred' ? 'save_forced' : 'pay_on_time'
+          _api('afp_xp_award', { xp_action: xpAction, ref_kind: 'weekplan_item', ref_id: movId }).catch(() => {})
           _hydrateWeekPlan()
+          setTimeout(() => { _hydrateStreaks(); _hydrateSituationToday() }, 600)
         } catch (e) { alert('Error: ' + e.message); btn.disabled = false; btn.textContent = 'Marcar pagado' }
       })
     } else if (act === 'undo') {
@@ -1664,7 +1866,7 @@ async function _openCushionModal(data) {
   modal.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
       <div>
-        <h3 style="margin:0;font-size:18px;font-weight:800;">🛡️ Colchón Fiat</h3>
+        <h3 style="margin:0;font-size:18px;font-weight:800;">🛡️ Respaldo Líquido</h3>
         <p style="margin:4px 0 0;font-size:12px;color:#94a3b8;">Tu fondo de emergencia — depósitos y retiros con motivo.</p>
       </div>
       <button id="cush-close" style="background:transparent;border:none;color:#94a3b8;font-size:22px;cursor:pointer;line-height:1;">×</button>
