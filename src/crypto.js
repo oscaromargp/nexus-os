@@ -714,6 +714,14 @@ async function _openWalletsModal() {
             ${w.provider ? `<span style="font-size:11px;color:#94a3b8;">${_esc(w.provider)}</span>` : ''}
             <button data-del-wallet="${w.id}" style="margin-left:auto;background:transparent;border:none;color:#6b7280;cursor:pointer;font-size:14px;">🗑</button>
           </div>
+
+          <!-- Saldo equivalente MXN (para AFP) -->
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:8px 10px;background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.15);border-radius:8px;">
+            <span style="font-size:11px;color:#94a3b8;">💵 Saldo MXN:</span>
+            <input data-wallet-bal="${w.id}" type="number" step="any" placeholder="0" value="${Number(w.manual_balance_mxn || 0)}" style="flex:1;padding:5px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:5px;color:#22d3ee;font-family:monospace;font-size:13px;font-weight:700;outline:none;" />
+            <button data-save-bal="${w.id}" style="padding:5px 12px;background:rgba(34,211,238,0.15);border:1px solid rgba(34,211,238,0.35);color:#22d3ee;border-radius:5px;cursor:pointer;font-size:11px;font-weight:700;">Guardar</button>
+            <span style="font-size:10px;color:#6b7280;">para AFP</span>
+          </div>
           <!-- Direcciones -->
           <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">
             ${(w.addresses || []).map(a => `
@@ -745,6 +753,18 @@ async function _openWalletsModal() {
       list.querySelectorAll('[data-del-addr]').forEach(btn => btn.addEventListener('click', async () => {
         try { await _api('crypto_address_delete', { id: btn.dataset.delAddr }); renderList() }
         catch (e) { alert('⚠ ' + e.message) }
+      }))
+      list.querySelectorAll('[data-save-bal]').forEach(btn => btn.addEventListener('click', async () => {
+        const wid = btn.dataset.saveBal
+        const inp = list.querySelector(`[data-wallet-bal="${wid}"]`)
+        const val = parseFloat(inp.value) || 0
+        try {
+          await _api('crypto_wallet_update', { id: wid, manual_balance_mxn: val })
+          btn.textContent = '✓ ok'; btn.style.background = 'rgba(52,211,153,0.2)'
+          setTimeout(() => { btn.textContent = 'Guardar'; btn.style.background = 'rgba(34,211,238,0.15)' }, 1500)
+          // Refresca el balance-engine
+          try { window.nexusBalance?.invalidate?.() } catch {}
+        } catch (e) { alert('⚠ ' + e.message) }
       }))
       list.querySelectorAll('[data-add-addr]').forEach(btn => btn.addEventListener('click', async () => {
         const wid = btn.dataset.addAddr

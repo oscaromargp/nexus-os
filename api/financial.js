@@ -1250,6 +1250,18 @@ export default async function handler(req, res) {
       if (error) throw error
       return res.status(200).json({ ok: true, wallet: data })
     }
+    if (action === 'crypto_wallet_update') {
+      const { id, ...patch } = req.body
+      if (!id) return res.status(400).json({ error: 'id requerido' })
+      const allowed = ['name', 'kind', 'provider', 'notes', 'manual_balance_mxn', 'is_active']
+      const payload = {}
+      for (const k of allowed) if (k in patch) payload[k] = patch[k]
+      payload.updated_at = new Date().toISOString()
+      const { data, error } = await admin.from('crypto_wallets')
+        .update(payload).eq('id', id).eq('owner_id', userId).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, wallet: data })
+    }
     if (action === 'crypto_wallet_delete') {
       const { id } = req.body
       if (!id) return res.status(400).json({ error: 'id requerido' })

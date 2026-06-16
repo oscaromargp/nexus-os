@@ -591,12 +591,31 @@ async function _hydrateCalendar() {
     const todayDay = cal.today_day
     const monthLabel = new Date(cal.month + '-01').toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
 
-    const rowHtml = (it) => {
+    // Estado local de items hechos (localStorage por mes)
+    const calKey = `nexus_afp_cal_${cal.month}`
+    const doneMap = JSON.parse(localStorage.getItem(calKey) || '{}')
+    const itemSig = (it) => `${it.day}:${it.kind}:${it.name.toLowerCase().replace(/\s+/g, '-')}`
+
+    const rowHtml = (it, idx) => {
       const cfg = KIND_CFG[it.kind] || KIND_CFG.fixed
       const past = it.day < todayDay
       const isToday = it.day === todayDay
+      const sig = itemSig(it)
+      const isDone = !!doneMap[sig]
+      const opacity = isDone ? 0.55 : past ? 0.7 : 1
+      const isIncome = it.kind === 'income'
+
+      // Botón de acción: ingreso=registrar entrada, otros=marcar pagado
+      let actionBtn = ''
+      if (isDone) {
+        actionBtn = `<button data-cal-undo="${idx}" title="Deshacer" style="padding:5px 10px;background:rgba(52,211,153,0.15);border:1px solid #34d399;color:#34d399;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;display:flex;align-items:center;gap:4px;">✓ Hecho</button>`
+      } else {
+        const label = isIncome ? 'Marcar recibido' : 'Marcar hecho'
+        actionBtn = `<button data-cal-done="${idx}" style="padding:5px 10px;background:${cfg.color}20;border:1px solid ${cfg.color}60;color:${cfg.color};border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">${label}</button>`
+      }
+
       return `
-        <div style="display:grid;grid-template-columns:42px 1fr auto;gap:10px;padding:8px 12px;background:${isToday?'rgba(34,211,238,0.08)':past?'rgba(255,255,255,0.01)':'rgba(255,255,255,0.03)'};border:1px solid ${isToday?'rgba(34,211,238,0.35)':'rgba(255,255,255,0.05)'};border-radius:8px;opacity:${past?0.55:1};border-left:3px solid ${cfg.color};">
+        <div style="display:grid;grid-template-columns:42px 1fr auto;gap:8px;padding:8px 12px;background:${isToday?'rgba(34,211,238,0.08)':past?'rgba(255,255,255,0.01)':'rgba(255,255,255,0.03)'};border:1px solid ${isToday?'rgba(34,211,238,0.35)':'rgba(255,255,255,0.05)'};border-radius:8px;opacity:${opacity};border-left:3px solid ${cfg.color};${isDone?'text-decoration:line-through;':''}">
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
             <div style="font-size:18px;font-weight:800;color:${isToday?'#22d3ee':'#e5e7eb'};line-height:1;">${it.day}</div>
             <div style="font-size:8px;color:#94a3b8;text-transform:uppercase;font-weight:700;">${cfg.label}</div>
@@ -605,15 +624,16 @@ async function _hydrateCalendar() {
             <div style="font-size:12px;font-weight:700;color:#e5e7eb;display:flex;align-items:center;gap:5px;">
               <span>${cfg.icon}</span>
               <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_esc(it.name)}</span>
-              ${past ? '<span style="font-size:9px;color:#34d399;background:rgba(52,211,153,0.15);padding:1px 5px;border-radius:4px;">pasó</span>' : ''}
             </div>
             <div style="font-size:10px;color:#94a3b8;line-height:1.4;margin-top:1px;">
               ${_esc(it.reason)}${it.target && it.target !== '—' ? ` <span style="color:#6b7280;">→</span> <span style="color:#cbd5e1;">${_esc(it.target)}</span>` : ''}
             </div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              ${actionBtn}
+              <span style="font-size:13px;font-weight:800;color:${cfg.color};font-family:'JetBrains Mono',monospace;white-space:nowrap;">${cfg.sign}${_fmt(it.amount)}</span>
+            </div>
           </div>
-          <div style="text-align:right;font-size:13px;font-weight:800;color:${cfg.color};font-family:'JetBrains Mono',monospace;white-space:nowrap;">
-            ${cfg.sign}${_fmt(it.amount)}
-          </div>
+          <div></div>
         </div>`
     }
 
@@ -626,9 +646,67 @@ async function _hydrateCalendar() {
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:5px;max-height:480px;overflow-y:auto;">
-          ${cal.items.map(rowHtml).join('')}
+          ${cal.items.map((it, idx) => rowHtml(it, idx)).join('')}
         </div>
       </div>`
+
+    // Bind handlers
+    const onMark = async (idx) => {
+      const item = cal.items[idx]
+      if (!item) return
+      const sig = itemSig(item)
+
+      // Si tiene cuenta primaria, crea movimiento real; si no, solo marca localStorage
+      const primaryOrqId = await window.nexusBalance?.primary?.()
+      let movId = null
+      if (primaryOrqId) {
+        try {
+          const isIncome = item.kind === 'income'
+          const { data: { user } } = await supabase.auth.getUser()
+          const today = new Date(); today.setDate(item.day)
+          const payload = {
+            owner_id: user.id, orquestador_id: primaryOrqId,
+            tipo: isIncome ? 'entrada' : 'salida',
+            fecha: today.toISOString().slice(0, 10),
+            cantidad: item.amount, moneda: 'MXN', tc: 1,
+            monto_mxn: item.amount, estado: 'hecho',
+            categoria: _afpCategoryFromKind(item.kind),
+            proyecto: `afp:cal:${cal.month}`,
+            notas: `Plan AFP · ${item.name} · ${item.reason}`,
+            beneficiario: !isIncome ? item.target : null,
+            ordenante:    isIncome  ? item.name : null,
+          }
+          const { data } = await supabase.from('movimientos').insert(payload).select().single()
+          movId = data?.id
+          window.nexusBalance?.invalidate?.(primaryOrqId)
+        } catch (e) { console.warn('cal mark:', e) }
+      }
+      doneMap[sig] = { mov_id: movId, at: Date.now() }
+      localStorage.setItem(calKey, JSON.stringify(doneMap))
+
+      // XP
+      const xpAction = item.kind === 'savings' || item.kind === 'sacred' ? 'save_forced' : 'pay_on_time'
+      _api('afp_xp_award', { xp_action: xpAction, ref_kind: 'cal_item', ref_id: sig }).catch(() => {})
+      _hydrateCalendar(); _hydrateStreaks(); _hydrateSituationToday(); _hydrateAchievements()
+    }
+    const onUndo = async (idx) => {
+      const item = cal.items[idx]
+      const sig = itemSig(item)
+      const rec = doneMap[sig]
+      if (rec?.mov_id) {
+        try { await supabase.from('movimientos').delete().eq('id', rec.mov_id) } catch {}
+      }
+      delete doneMap[sig]
+      localStorage.setItem(calKey, JSON.stringify(doneMap))
+      window.nexusBalance?.invalidate?.()
+      _hydrateCalendar()
+    }
+    mount.querySelectorAll('[data-cal-done]').forEach(b => {
+      b.addEventListener('click', () => onMark(Number(b.dataset.calDone)))
+    })
+    mount.querySelectorAll('[data-cal-undo]').forEach(b => {
+      b.addEventListener('click', () => onUndo(Number(b.dataset.calUndo)))
+    })
   } catch (e) {
     mount.innerHTML = `<div style="font-size:11px;color:#f87171;padding:10px;">⚠ Calendario: ${_esc(e.message)}</div>`
   }
