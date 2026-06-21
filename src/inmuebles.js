@@ -16,7 +16,6 @@ import { renderDocumentos, loadPropertyDocs } from './docs-inmuebles.js'
 import { loadMxLocations, renderEstadoMunicipioSelects } from './mx-locations.js'
 import { openMapPicker } from './map-picker.js'
 import { loadLinksFor, renderLinksBlock, persistLinks, fetchLinksFor } from './property-links.js'
-import './report-modal.js'
 import './property-compare.js'
 import { ensureNexusFolder, uploadToDrive, hasDriveAccess, driveDirectImageUrl } from './drive-storage.js'
 
@@ -142,6 +141,13 @@ function _coloniasList() {
 
 function _getThumb(p) {
   const fotos = p.fotos || []
+  // Si el usuario marcó foto principal, esa gana
+  const mainUrl = p.metadata?.main_image_url
+  if (mainUrl) {
+    const m = fotos.find(f => (f.url || f.thumb_url) === mainUrl)
+    if (m) return m.thumb_url || m.url
+    return mainUrl
+  }
   const first = fotos[0]
   if (!first) return null
   return first.thumb_url || first.url || null
@@ -174,7 +180,7 @@ export async function loadTrash() {
   return data || []
 }
 
-// Soft delete
+// Soft delete · funciona tanto desde la lista como desde el detalle modal
 window.propDelete = async (id) => {
   const p = _props.find(x => x.id === id)
   if (!p) return
@@ -186,9 +192,10 @@ window.propDelete = async (id) => {
     .eq('id', id)
   if (error) { window.showToast?.('❌ No se pudo eliminar: ' + error.message); return }
   _props = _props.filter(x => x.id !== id)
-  window.showToast?.('🗑️ Inmueble enviado a papelera')
-  if (window.propBackToList) window.propBackToList()
-  else window.renderInmuebles?.()
+  // Cierra el overlay de detalle si está abierto
+  document.getElementById('prop-detail-overlay')?.remove()
+  window.showToast?.('🗑️ Inmueble enviado a papelera (recupéralo en 30 días)')
+  window.renderInmuebles?.()
 }
 
 // Restaurar desde papelera
@@ -1598,10 +1605,6 @@ export async function openPropDetail(id) {
           <button onclick="openPropModal('${p.id}')"
             style="padding:6px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
             color:#94a3b8;border-radius:8px;cursor:pointer;font-size:12px;">✏️ Editar</button>
-          <button onclick="propOpenReportModal('${p.id}')"
-            title="Generar reporte geomarketing"
-            style="padding:6px 12px;background:rgba(250,204,21,0.1);border:1px solid rgba(250,204,21,0.3);
-            color:#facc15;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🌟 Reporte</button>
           <button onclick="propDelete('${p.id}')"
             title="Enviar a papelera"
             style="padding:6px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
@@ -1615,7 +1618,7 @@ export async function openPropDetail(id) {
       <!-- ── HERO GALLERY ───────────────────────────────────────────────────── -->
       ${fotos.length ? `
         <div style="position:relative;background:#000;overflow:hidden;">
-          <img id="hero-img-${p.id}" src="${_esc(fotos[0].url||fotos[0].thumb_url||'')}"
+          <img id="hero-img-${p.id}" src="${_esc(_getThumb(p) || fotos[0].url || fotos[0].thumb_url || '')}"
             style="width:100%;height:310px;object-fit:cover;display:block;cursor:zoom-in;transition:opacity 0.2s;"
             onclick="propOpenLightbox('${p.id}',0)"/>
           <!-- Badge foto count -->
@@ -1743,7 +1746,7 @@ export async function openPropDetail(id) {
 
         <!-- ── TABS ──────────────────────────────────────────────────────── -->
         <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:18px;overflow-x:auto;scrollbar-width:none;">
-          ${[['info','📋 Info'],['galeria','🖼 Galería'+(fotos.length?` (${fotos.length})`:'')],['crm','📞 CRM'],['leads','📩 Leads'],['docs','📄 Docs'],['reportes','🌟 Reportes']].map(([tab,label])=>`
+          ${[['info','📋 Info'],['galeria','🖼 Galería'+(fotos.length?` (${fotos.length})`:'')],['crm','📞 CRM'],['leads','📩 Leads'],['docs','📄 Docs']].map(([tab,label])=>`
             <button onclick="propDetailTab('${tab}','${p.id}')" id="dtab-${tab}"
               style="padding:10px 14px;border:none;background:transparent;cursor:pointer;font-size:12px;font-weight:600;
               color:${tab==='info'?'#22d3ee':'#64748b'};border-bottom:2px solid ${tab==='info'?'#22d3ee':'transparent'};
@@ -1862,22 +1865,32 @@ export async function openPropDetail(id) {
         <!-- ── TAB GALERÍA ────────────────────────────────────────────────── -->
         <div id="dpanel-galeria" style="display:none;">
           <div style="font-size:12px;color:#64748b;margin-bottom:12px;">Arrastra para reordenar · Clic para zoom</div>
-          <div id="gallery-sortable-${p.id}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:14px;">
-            ${fotos.map((f,i)=>`
-              <div data-index="${i}" data-url="${_esc(f.url||f.thumb_url||'')}"
-                style="position:relative;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);
-                cursor:grab;aspect-ratio:4/3;background:rgba(14,20,34,0.8);">
+          <div id="gallery-sortable-${p.id}" data-prop-grid="${p.id}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:14px;">
+            ${fotos.map((f,i)=>{
+              const url = f.url || f.thumb_url || ''
+              const mainUrl = p.metadata?.main_image_url
+              const isMain = (mainUrl && mainUrl === url) || (!mainUrl && i === 0)
+              return `
+              <div data-index="${i}" data-url="${_esc(url)}"
+                style="position:relative;border-radius:10px;overflow:hidden;border:1px solid ${isMain?'#facc15':'rgba(255,255,255,0.08)'};
+                cursor:grab;aspect-ratio:4/3;background:rgba(14,20,34,0.8);${isMain?'box-shadow:0 0 0 2px rgba(250,204,21,0.25);':''}">
                 <img src="${_esc(f.thumb_url||f.url||'')}" style="width:100%;height:100%;object-fit:cover;"
                   onclick="propOpenLightbox('${p.id}',${i})"/>
                 ${f.categoria ? `
                   <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 6px;
                   background:rgba(0,0,0,0.7);font-size:9px;color:#22d3ee;font-weight:700;text-transform:uppercase;">${_esc(f.categoria)}</div>` : ''}
-                <button onclick="propDeleteFoto('${p.id}',${i})"
+                <!-- ⭐ Marcar principal -->
+                <button data-prop-main-star data-url="${_esc(url)}"
+                  onclick="event.stopPropagation();propSetMainPhoto('${_esc(url)}','${p.id}')"
+                  title="${isMain?'Foto principal':'Marcar como principal'}"
+                  style="position:absolute;top:4px;left:4px;width:22px;height:22px;border-radius:50%;
+                  background:rgba(0,0,0,0.7);border:none;color:${isMain?'#facc15':'#64748b'};cursor:pointer;font-size:14px;line-height:1;">${isMain?'★':'☆'}</button>
+                <!-- 🗑 Eliminar -->
+                <button onclick="event.stopPropagation();propRemoveFotoByUrl('${_esc(url)}','${p.id}')"
+                  title="Eliminar foto"
                   style="position:absolute;top:4px;right:4px;width:22px;height:22px;border-radius:50%;
                   background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:12px;line-height:1;">✕</button>
-                ${i===0?`<div style="position:absolute;top:4px;left:4px;background:rgba(34,211,238,0.9);
-                  color:#0d0f1f;font-size:8px;font-weight:800;padding:2px 6px;border-radius:4px;">PORTADA</div>`:''}
-              </div>`).join('')}
+              </div>`}).join('')}
           </div>
           ${fotos.length===0?`<div style="text-align:center;padding:30px;color:#475569;">Sin fotos aún</div>`:''}
           <!-- Agregar por URL -->
@@ -1916,10 +1929,6 @@ export async function openPropDetail(id) {
         </div>
 
         <!-- ── TAB REPORTES ───────────────────────────────────────────────── -->
-        <div id="dpanel-reportes" data-prop-id="${p.id}" style="display:none;">
-          <div style="text-align:center;padding:20px;color:#475569;font-size:13px;">Cargando reportes…</div>
-        </div>
-
       </div>
     </div>
   `
@@ -2198,7 +2207,13 @@ export async function propHandleFiles(files, propId) {
         url = driveDirectImageUrl(driveFile.id)
       } catch (e) {
         console.error('[drive] upload fail, fallback Supabase:', e)
-        window.showToast?.('⚠ Drive falló, subiendo a Supabase: ' + e.message)
+        // Mensaje amigable según el tipo de error
+        const isAuth = /401|403|token|unauthor/i.test(e.message || '')
+        if (isAuth) {
+          window.showToast?.('🔌 Tu Google Drive se desconectó — guardando en Nexus mientras. Reconecta desde Configuración → Drive.')
+        } else {
+          window.showToast?.('⚠ Drive falló, subiendo a Nexus: ' + e.message)
+        }
       }
     }
 
@@ -2219,7 +2234,7 @@ export async function propHandleFiles(files, propId) {
         <div style="position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden;border:1px solid rgba(34,211,238,0.3);">
           <img src="${url}" style="width:100%;height:100%;object-fit:cover;"/>
           <div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);font-size:8px;color:#22d3ee;text-align:center;padding:2px;">${cat}</div>
-          <button onclick="propRemoveFotoByUrl('${url}')"
+          <button onclick="propRemoveFotoByUrl('${url}','${propId||''}')"
             style="position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;
             background:rgba(0,0,0,0.7);border:none;color:#f87171;cursor:pointer;font-size:10px;line-height:1;">✕</button>
         </div>`
@@ -2409,9 +2424,64 @@ window.propRemoveFoto = (idx) => {
   thumbs[idx]?.remove()
 }
 
-window.propRemoveFotoByUrl = (url) => {
-  const all = document.querySelectorAll('#prop-fotos-preview > div')
-  all.forEach(el => { if (el.querySelector('img')?.src === url) el.remove() })
+// Borra una foto del array `fotos` de la propiedad + del Storage/Drive + del DOM.
+// Si la foto era la principal, promueve la siguiente disponible como principal.
+window.propRemoveFotoByUrl = async (url, propId) => {
+  // 1. Quita visualmente (optimista)
+  const grids = document.querySelectorAll('#prop-fotos-preview > div, [data-prop-grid] > div')
+  grids.forEach(el => { if (el.querySelector('img')?.src === url) el.remove() })
+
+  // 2. Si no hay propId, era un upload sin guardar todavía — listo
+  if (!propId) return
+
+  const existing = _props.find(p => p.id === propId)
+  if (!existing) return
+  const fotos = existing.fotos || []
+  const found = fotos.find(f => (f.url || f.thumb_url) === url)
+  const newFotos = fotos.filter(f => (f.url || f.thumb_url) !== url)
+
+  // 3. Si era la foto principal, promueve la siguiente disponible
+  let mainUpdate = {}
+  if (existing.metadata?.main_image_url === url) {
+    mainUpdate.metadata = { ...(existing.metadata || {}), main_image_url: newFotos[0]?.url || null }
+  }
+
+  // 4. Persist BD
+  const { error } = await supabase.from('properties').update({ fotos, ...mainUpdate }).eq('id', propId)
+  if (error) { window.showToast?.('❌ ' + error.message); return }
+  existing.fotos = newFotos
+  if (mainUpdate.metadata) existing.metadata = mainUpdate.metadata
+
+  // 5. Borra del Storage / Drive (best-effort, no bloquea UI si falla)
+  if (found?.storage_path) {
+    supabase.storage.from('nexus-media').remove([found.storage_path]).catch(() => {})
+  }
+  if (found?.drive_id) {
+    try {
+      const { deleteDriveFile } = await import('./drive-storage.js')
+      deleteDriveFile?.(found.drive_id).catch(() => {})
+    } catch {}
+  }
+
+  window.showToast?.('🗑 Foto eliminada')
+}
+
+// Marca una foto como "principal" — persiste en metadata.main_image_url
+window.propSetMainPhoto = async (url, propId) => {
+  if (!propId) return
+  const existing = _props.find(p => p.id === propId)
+  if (!existing) return
+  const metadata = { ...(existing.metadata || {}), main_image_url: url }
+  const { error } = await supabase.from('properties').update({ metadata }).eq('id', propId)
+  if (error) { window.showToast?.('❌ ' + error.message); return }
+  existing.metadata = metadata
+  window.showToast?.('⭐ Foto principal actualizada')
+  // Repinta la galería si está abierta para que el ⭐ se mueva
+  document.querySelectorAll('[data-prop-main-star]').forEach(s => {
+    const isMain = s.dataset.url === url
+    s.textContent = isMain ? '★' : '☆'
+    s.style.color = isMain ? '#facc15' : '#64748b'
+  })
 }
 
 // Genera el link público con OG-friendly URL.
@@ -2452,7 +2522,7 @@ window.propWhatsApp = (id) => {
 // ─── Handlers modal de detalle ────────────────────────────────────────────────
 
 window.propDetailTab = (tab, propId) => {
-  ;['info', 'galeria', 'crm', 'leads', 'docs', 'reportes'].forEach(p => {
+  ;['info', 'galeria', 'crm', 'leads', 'docs'].forEach(p => {
     const panel = document.getElementById('dpanel-' + p)
     const btn   = document.getElementById('dtab-' + p)
     const active = p === tab
@@ -2462,7 +2532,6 @@ window.propDetailTab = (tab, propId) => {
       btn.style.borderBottom = active ? '2px solid #22d3ee' : '2px solid transparent'
     }
   })
-  if (tab === 'reportes') _loadReportesPanel(propId)
   if (tab === 'leads') _loadLeadsPanel(propId)
 }
 
@@ -2526,70 +2595,6 @@ async function _loadLeadsPanel(propId) {
 window.propLeadStatus = async (leadId, propId, newStatus) => {
   await supabase.from('property_leads').update({ status: newStatus }).eq('id', leadId)
   window.showToast?.('✓ Estado actualizado')
-}
-
-async function _loadReportesPanel(propId) {
-  const el = document.getElementById('dpanel-reportes')
-  if (!el || el.dataset.loaded === '1') return
-  const { data, error } = await supabase
-    .from('property_reports')
-    .select('id, presenter_data, proposito, model, generated_at')
-    .eq('property_id', propId)
-    .order('generated_at', { ascending: false })
-  if (error) {
-    el.innerHTML = `<div style="padding:20px;color:#ef4444;font-size:12px;">Error: ${_esc(error.message)}</div>`
-    return
-  }
-  el.dataset.loaded = '1'
-  const reports = data || []
-  el.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
-      <div style="font-size:12px;color:#94a3b8;">${reports.length} reporte${reports.length===1?'':'s'} generado${reports.length===1?'':'s'}</div>
-      <button onclick="propOpenReportModal('${propId}')"
-        style="padding:7px 14px;background:linear-gradient(135deg,#facc15,#f59e0b);border:none;color:#0a0e1f;border-radius:8px;cursor:pointer;font-size:12px;font-weight:800;">
-        🌟 Generar nuevo
-      </button>
-    </div>
-    ${reports.length === 0 ? `
-      <div style="text-align:center;padding:40px 20px;color:#64748b;font-size:13px;">
-        <div style="font-size:48px;margin-bottom:12px;opacity:0.4;">🌟</div>
-        Aún no hay reportes geomarketing para este inmueble.<br>
-        Click en "Generar nuevo" arriba para crear uno con IA.
-      </div>` : `
-      <div style="display:grid;gap:8px;">
-        ${reports.map(r => {
-          const presenter = r.presenter_data?.nombre || '—'
-          const fecha = new Date(r.generated_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })
-          return `
-            <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:11px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-              <div style="font-size:22px;">🌟</div>
-              <div style="flex:1;min-width:200px;">
-                <div style="font-weight:700;color:#f1f5f9;font-size:13px;">${_esc(r.proposito || 'Reporte')}</div>
-                <div style="font-size:11px;color:#64748b;margin-top:2px;">
-                  Presentador: ${_esc(presenter)} · ${fecha} · ${_esc(r.model||'gemini')}
-                </div>
-              </div>
-              <a href="/reporte?id=${r.id}" target="_blank" rel="noopener"
-                style="padding:6px 12px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);
-                color:#22d3ee;border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;">↗ Abrir</a>
-              <button onclick="propDeleteReport('${r.id}','${propId}')"
-                style="padding:6px 10px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
-                color:#ef4444;border-radius:8px;cursor:pointer;font-size:12px;">🗑</button>
-            </div>`
-        }).join('')}
-      </div>`}
-  `
-}
-
-window.propDeleteReport = async (reportId, propId) => {
-  if (!confirm('¿Eliminar este reporte? La acción no se puede deshacer.')) return
-  const { error } = await supabase.from('property_reports').delete().eq('id', reportId)
-  if (error) { window.showToast?.('❌ ' + error.message); return }
-  // Forzar reload del panel
-  const el = document.getElementById('dpanel-reportes')
-  if (el) el.dataset.loaded = ''
-  _loadReportesPanel(propId)
-  window.showToast?.('🗑 Reporte eliminado')
 }
 
 window.propSaveGalleryOrder = async (propId) => {

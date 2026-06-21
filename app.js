@@ -13572,7 +13572,7 @@ function _initDatosTab() {
       btn.textContent = '⏳ Generando…'
       try {
         const result = await window.nexusBackup.export()
-        if (statusEl) statusEl.innerHTML = `✅ Descargado: <code style="color:#4ade80;">${result.filename}</code> · ${result.counts.nodes} nodos · ${result.counts.properties} inmuebles · ${result.counts.property_reports} reportes`
+        if (statusEl) statusEl.innerHTML = `✅ Descargado: <code style="color:#4ade80;">${result.filename}</code> · ${result.counts.nodes} nodos · ${result.counts.properties} inmuebles`
         showToast?.('✓ Backup descargado')
       } catch (e) {
         if (statusEl) statusEl.innerHTML = `❌ ${e.message}`

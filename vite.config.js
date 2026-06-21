@@ -15,7 +15,6 @@ export default defineConfig({
         privacy:        resolve(__dirname, 'privacy.html'),
         terms:          resolve(__dirname, 'terms.html'),
         resetPassword:  resolve(__dirname, 'reset-password.html'),
-        reporte:        resolve(__dirname, 'reporte.html'),
       },
       output: {
         // Separar vendors pesados en chunks independientes que el browser cachea por separado.

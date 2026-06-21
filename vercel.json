@@ -3,14 +3,11 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
-    "api/generate-report.js": { "maxDuration": 60 },
-    "api/property-context.js": { "maxDuration": 30 },
     "api/agent.js":            { "maxDuration": 60 }
   },
   "rewrites": [
     { "source": "/app",            "destination": "/app.html" },
     { "source": "/reset-password", "destination": "/reset-password.html" },
-    { "source": "/reporte",        "destination": "/reporte.html" },
     { "source": "/propiedad/:id",  "destination": "/api/propiedad?id=:id" },
     { "source": "/p/:id",          "destination": "/api/propiedad?id=:id" }
   ]
