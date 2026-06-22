@@ -31,16 +31,12 @@ function fmt$(n) {
   return '$' + Number(n).toLocaleString('es-MX', { maximumFractionDigits: 0 })
 }
 
-function buildOgImage(p) {
-  // 1) Si tiene seo_image_url explícito
-  if (p.seo_image_url) return p.seo_image_url
-  // 2) Primera foto del array fotos
-  if (Array.isArray(p.fotos) && p.fotos.length > 0) {
-    const first = p.fotos[0]
-    return typeof first === 'string' ? first : (first?.url || '')
-  }
-  // 3) Imagen default genérica (el logo o un placeholder)
-  return 'https://nexus-os-chi.vercel.app/icons/icon-512.png'
+// La imagen OG ahora SIEMPRE pasa por nuestro proxy /api/og-image.
+// El proxy resuelve la mejor imagen (foto ⭐ > seo_image_url > primera) y la
+// re-sirve desde nuestro dominio con headers correctos — funciona en WhatsApp
+// y Facebook incluso si la foto original está en Google Drive.
+function buildOgImage(p, baseUrl) {
+  return `${baseUrl}/api/og-image?id=${encodeURIComponent(p.slug || p.id)}`
 }
 
 function buildOgTitle(p) {
@@ -55,6 +51,7 @@ function buildOgTitle(p) {
 
 function buildOgDescription(p) {
   if (p.seo_description) return p.seo_description
+  if (p.seo_excerpt) return p.seo_excerpt
   const parts = []
   if (p.recamaras) parts.push(`${p.recamaras} rec`)
   if (p.banos) parts.push(`${p.banos} baños`)
@@ -70,7 +67,7 @@ function buildOgDescription(p) {
 function renderHtml(p, baseUrl, spaUrl) {
   const ogTitle = buildOgTitle(p)
   const ogDesc  = buildOgDescription(p)
-  const ogImage = buildOgImage(p)
+  const ogImage = buildOgImage(p, baseUrl)
   const ogUrl   = baseUrl + '/propiedad/' + (p.slug || p.id)
   const titulo  = p.titulo || 'Inmueble'
   const precio  = p.operacion === 'renta' ? p.precio_renta : p.precio_venta
@@ -178,7 +175,7 @@ export default async function handler(req, res) {
     const sb = getAdminSupabase()
     const { data: p, error } = await sb
       .from('properties')
-      .select('id, slug, titulo, tipo, operacion, precio_venta, precio_renta, moneda, descripcion, fotos, calle, numero, municipio, estado_rep, cp, recamaras, banos, sup_construida, sup_terreno, estacionamientos, seo_title, seo_description, seo_keywords, seo_image_url, deleted_at')
+      .select('id, slug, titulo, tipo, operacion, precio_venta, precio_renta, moneda, descripcion, fotos, calle, numero, municipio, estado_rep, cp, recamaras, banos, sup_construida, sup_terreno, estacionamientos, seo_title, seo_description, seo_keywords, seo_image_url, seo_excerpt, metadata, deleted_at')
       .eq(lookupField, id)
       .is('deleted_at', null)
       .maybeSingle()

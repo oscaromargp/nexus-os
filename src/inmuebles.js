@@ -141,8 +141,8 @@ function _coloniasList() {
 
 function _getThumb(p) {
   const fotos = p.fotos || []
-  // Si el usuario marcó foto principal, esa gana
-  const mainUrl = p.metadata?.main_image_url
+  // Si el usuario marcó foto principal, esa gana (columna dedicada main_image_url)
+  const mainUrl = p.main_image_url
   if (mainUrl) {
     const m = fotos.find(f => (f.url || f.thumb_url) === mainUrl)
     if (m) return m.thumb_url || m.url
@@ -1746,7 +1746,7 @@ export async function openPropDetail(id) {
 
         <!-- ── TABS ──────────────────────────────────────────────────────── -->
         <div style="display:flex;gap:0;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:18px;overflow-x:auto;scrollbar-width:none;">
-          ${[['info','📋 Info'],['galeria','🖼 Galería'+(fotos.length?` (${fotos.length})`:'')],['crm','📞 CRM'],['leads','📩 Leads'],['docs','📄 Docs']].map(([tab,label])=>`
+          ${[['info','📋 Info'],['galeria','🖼 Galería'+(fotos.length?` (${fotos.length})`:'')],['crm','📞 CRM'],['leads','📩 Leads'],['docs','📄 Docs'],['seo','🔎 SEO']].map(([tab,label])=>`
             <button onclick="propDetailTab('${tab}','${p.id}')" id="dtab-${tab}"
               style="padding:10px 14px;border:none;background:transparent;cursor:pointer;font-size:12px;font-weight:600;
               color:${tab==='info'?'#22d3ee':'#64748b'};border-bottom:2px solid ${tab==='info'?'#22d3ee':'transparent'};
@@ -1868,7 +1868,7 @@ export async function openPropDetail(id) {
           <div id="gallery-sortable-${p.id}" data-prop-grid="${p.id}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:14px;">
             ${fotos.map((f,i)=>{
               const url = f.url || f.thumb_url || ''
-              const mainUrl = p.metadata?.main_image_url
+              const mainUrl = p.main_image_url
               const isMain = (mainUrl && mainUrl === url) || (!mainUrl && i === 0)
               return `
               <div data-index="${i}" data-url="${_esc(url)}"
@@ -1926,6 +1926,11 @@ export async function openPropDetail(id) {
         <!-- ── TAB LEADS ──────────────────────────────────────────────────── -->
         <div id="dpanel-leads" data-prop-id="${p.id}" style="display:none;">
           <div style="text-align:center;padding:20px;color:#475569;font-size:13px;">Cargando leads…</div>
+        </div>
+
+        <!-- ── TAB SEO ────────────────────────────────────────────────────── -->
+        <div id="dpanel-seo" data-prop-id="${p.id}" style="display:none;">
+          ${_renderSeoPanel(p)}
         </div>
 
         <!-- ── TAB REPORTES ───────────────────────────────────────────────── -->
@@ -2442,15 +2447,15 @@ window.propRemoveFotoByUrl = async (url, propId) => {
 
   // 3. Si era la foto principal, promueve la siguiente disponible
   let mainUpdate = {}
-  if (existing.metadata?.main_image_url === url) {
-    mainUpdate.metadata = { ...(existing.metadata || {}), main_image_url: newFotos[0]?.url || null }
+  if (existing.main_image_url === url) {
+    mainUpdate.main_image_url = newFotos[0]?.url || null
   }
 
   // 4. Persist BD
   const { error } = await supabase.from('properties').update({ fotos, ...mainUpdate }).eq('id', propId)
   if (error) { window.showToast?.('❌ ' + error.message); return }
   existing.fotos = newFotos
-  if (mainUpdate.metadata) existing.metadata = mainUpdate.metadata
+  if ('main_image_url' in mainUpdate) existing.main_image_url = mainUpdate.main_image_url
 
   // 5. Borra del Storage / Drive (best-effort, no bloquea UI si falla)
   if (found?.storage_path) {
@@ -2466,15 +2471,14 @@ window.propRemoveFotoByUrl = async (url, propId) => {
   window.showToast?.('🗑 Foto eliminada')
 }
 
-// Marca una foto como "principal" — persiste en metadata.main_image_url
+// Marca una foto como "principal" — persiste en columna main_image_url
 window.propSetMainPhoto = async (url, propId) => {
   if (!propId) return
   const existing = _props.find(p => p.id === propId)
   if (!existing) return
-  const metadata = { ...(existing.metadata || {}), main_image_url: url }
-  const { error } = await supabase.from('properties').update({ metadata }).eq('id', propId)
+  const { error } = await supabase.from('properties').update({ main_image_url: url }).eq('id', propId)
   if (error) { window.showToast?.('❌ ' + error.message); return }
-  existing.metadata = metadata
+  existing.main_image_url = url
   window.showToast?.('⭐ Foto principal actualizada')
   // Repinta la galería si está abierta para que el ⭐ se mueva
   document.querySelectorAll('[data-prop-main-star]').forEach(s => {
@@ -2492,6 +2496,112 @@ window.propSetMainPhoto = async (url, propId) => {
 function _propPublicUrl(p) {
   const ref = p?.slug || p?.id
   return `${location.origin}/propiedad/${ref}`
+}
+
+// ── Panel SEO con preview en vivo (pestaña 🔎 SEO del detalle) ───────────────
+function _renderSeoPanel(p) {
+  const url       = _propPublicUrl(p)
+  const ogImg     = `${location.origin}/api/og-image?id=${encodeURIComponent(p.slug || p.id)}`
+  const titulo    = p.titulo || 'Inmueble'
+  const tipo      = p.tipo ? p.tipo[0].toUpperCase() + p.tipo.slice(1) : 'Inmueble'
+  const op        = p.operacion === 'renta' ? 'en renta' : 'en venta'
+  const precio    = p.operacion === 'renta' ? p.precio_renta : p.precio_venta
+  const precioStr = precio ? '$' + Number(precio).toLocaleString('es-MX') : ''
+  // Defaults sugeridos
+  const defTitle  = p.seo_title || [titulo, precioStr].filter(Boolean).join(' · ')
+  const ubic      = [p.municipio, p.estado_rep].filter(Boolean).join(', ')
+  const defDesc   = p.seo_description || [`${tipo} ${op}`, ubic, (p.descripcion||'').slice(0,80)].filter(Boolean).join(' · ')
+  const defExcerpt= p.seo_excerpt || (p.descripcion || '').slice(0, 160)
+  const keywords  = p.seo_keywords || ''
+
+  const _in = (id, label, val, ph, max, multiline) => `
+    <div style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+        <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">${label}</label>
+        ${max ? `<span data-seo-count="${id}" style="font-size:10px;color:#64748b;">${(val||'').length}/${max}</span>` : ''}
+      </div>
+      ${multiline
+        ? `<textarea id="${id}" rows="3" oninput="_seoLivePreview('${p.id}')" placeholder="${_esc(ph)}" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;outline:none;resize:vertical;font-family:inherit;box-sizing:border-box;">${_esc(val||'')}</textarea>`
+        : `<input type="text" id="${id}" value="${_esc(val||'')}" oninput="_seoLivePreview('${p.id}')" placeholder="${_esc(ph)}" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;outline:none;box-sizing:border-box;" />`}
+    </div>`
+
+  return `
+    <div style="max-width:680px;">
+      <div style="font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:18px;padding:10px 14px;background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.15);border-radius:10px;">
+        Configura cómo se verá esta propiedad al compartirla en WhatsApp, Facebook y Google. La imagen ⭐ que marcaste en Galería es la que aparece.
+      </div>
+
+      <!-- Preview tarjeta en vivo (estilo WhatsApp/FB) -->
+      <div style="margin-bottom:20px;">
+        <div style="font-size:11px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Vista previa al compartir</div>
+        <div style="max-width:420px;border:1px solid rgba(255,255,255,0.1);border-radius:12px;overflow:hidden;background:#0f1419;">
+          <img id="seo-pv-img" src="${_esc(ogImg)}" style="width:100%;height:200px;object-fit:cover;background:#1a2332;" onerror="this.style.display='none'" />
+          <div style="padding:12px 14px;">
+            <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;" id="seo-pv-url">${_esc(url.replace(/^https?:\/\//,''))}</div>
+            <div style="font-size:14px;font-weight:700;color:#e8f0f9;line-height:1.3;margin-bottom:4px;" id="seo-pv-title">${_esc(defTitle)}</div>
+            <div style="font-size:12px;color:#94a3b8;line-height:1.4;" id="seo-pv-desc">${_esc(defDesc)}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Campos editables -->
+      ${_in('seo-f-title', 'Meta-título', defTitle, 'Casa en venta Tulum · $3,500,000', 60)}
+      ${_in('seo-f-desc', 'Meta-descripción', defDesc, 'Hermosa casa de 3 recámaras en zona...', 155, true)}
+      ${_in('seo-f-excerpt', 'Extracto (resumen corto)', defExcerpt, 'Resumen breve para listados internos', 160, true)}
+      ${_in('seo-f-keywords', 'Etiquetas / Keywords (separadas por coma)', keywords, 'casa tulum, venta, 3 recamaras, alberca', 0)}
+
+      <!-- URL slug preview -->
+      <div style="margin-bottom:16px;">
+        <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:5px;">URL pública</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <code style="flex:1;font-size:12px;color:#22d3ee;background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.15);border-radius:8px;padding:9px 12px;font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_esc(url)}</code>
+          <button onclick="navigator.clipboard.writeText('${_esc(url)}').then(()=>window.showToast?.('🔗 Link copiado'))" style="padding:9px 14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;font-size:12px;">📋 Copiar</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:20px;">
+        <button onclick="_saveSeoPanel('${p.id}')" style="flex:1;padding:11px;background:linear-gradient(135deg,#22d3ee,#06b6d4);border:none;color:#000;font-weight:800;border-radius:10px;cursor:pointer;font-size:13px;">💾 Guardar SEO</button>
+        <button onclick="window.open('https://wa.me/?text='+encodeURIComponent('${_esc(url)}'),'_blank')" style="padding:11px 18px;background:rgba(37,211,102,0.12);border:1px solid rgba(37,211,102,0.3);color:#25d366;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">📱 Probar en WA</button>
+      </div>
+    </div>`
+}
+
+// Actualiza la tarjeta de preview en vivo mientras el usuario escribe
+window._seoLivePreview = (propId) => {
+  const g = (id) => document.getElementById(id)?.value || ''
+  const title = g('seo-f-title')
+  const desc  = g('seo-f-desc')
+  if (g('seo-f-title') !== undefined) {
+    const pvTitle = document.getElementById('seo-pv-title')
+    const pvDesc  = document.getElementById('seo-pv-desc')
+    if (pvTitle) pvTitle.textContent = title || '(sin título)'
+    if (pvDesc)  pvDesc.textContent = desc || '(sin descripción)'
+  }
+  // Actualiza contadores
+  ;[['seo-f-title',60],['seo-f-desc',155],['seo-f-excerpt',160]].forEach(([id,max]) => {
+    const el = document.getElementById(id)
+    const counter = document.querySelector(`[data-seo-count="${id}"]`)
+    if (el && counter) {
+      const len = el.value.length
+      counter.textContent = `${len}/${max}`
+      counter.style.color = len > max ? '#f87171' : '#64748b'
+    }
+  })
+}
+
+window._saveSeoPanel = async (propId) => {
+  const g = (id) => document.getElementById(id)?.value?.trim() || null
+  const payload = {
+    seo_title:       g('seo-f-title'),
+    seo_description: g('seo-f-desc'),
+    seo_excerpt:     g('seo-f-excerpt'),
+    seo_keywords:    g('seo-f-keywords'),
+  }
+  const { error } = await supabase.from('properties').update(payload).eq('id', propId)
+  if (error) { window.showToast?.('❌ ' + error.message); return }
+  const existing = _props.find(p => p.id === propId)
+  if (existing) Object.assign(existing, payload)
+  window.showToast?.('✅ SEO guardado')
 }
 
 window.propCopyLink = (id, slug) => {
@@ -2522,7 +2632,7 @@ window.propWhatsApp = (id) => {
 // ─── Handlers modal de detalle ────────────────────────────────────────────────
 
 window.propDetailTab = (tab, propId) => {
-  ;['info', 'galeria', 'crm', 'leads', 'docs'].forEach(p => {
+  ;['info', 'galeria', 'crm', 'leads', 'docs', 'seo'].forEach(p => {
     const panel = document.getElementById('dpanel-' + p)
     const btn   = document.getElementById('dtab-' + p)
     const active = p === tab
