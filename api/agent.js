@@ -223,6 +223,66 @@ const TOOLS = [
     },
   },
   {
+    name: 'get_crypto_wallet',
+    description: 'Devuelve la dirección de wallet/cuenta cripto del usuario. Usar cuando pregunte "dame la wallet de X", "dirección de Y", "wallet de ledger XRP", "dame mi dirección de USDT en bitso". Filtra por nombre de wallet (Ledger/Trezor/Bitso/Cold/Hot) y/o símbolo de moneda (XRP/USDT/BTC/ETH/TRX/SOL).',
+    parameters: {
+      type: 'object',
+      properties: {
+        wallet_query:  { type: 'string', description: 'Nombre o parte del nombre del wallet (ej. "ledger", "bitso", "trezor", "cold"). Opcional.' },
+        symbol:        { type: 'string', description: 'Símbolo de la moneda (ej. "XRP", "USDT", "BTC"). Opcional pero recomendado.' },
+        network:       { type: 'string', description: 'Red específica si hay varias (ej. "TRC20", "ERC20", "XRP"). Opcional.' },
+      },
+    },
+    handler: async (admin, userId, args) => {
+      const wallet_query = (args.wallet_query || '').toLowerCase()
+      const symbol  = (args.symbol  || '').toUpperCase()
+      const network = (args.network || '').toUpperCase()
+
+      const { data: wallets } = await admin.from('crypto_wallets')
+        .select('id, name, kind, provider, manual_balance_mxn')
+        .eq('owner_id', userId).eq('is_active', true)
+      const { data: addrs } = await admin.from('crypto_wallet_addresses')
+        .select('id, wallet_id, symbol, network, address, label, is_active')
+        .eq('owner_id', userId).eq('is_active', true)
+      if (!wallets?.length) {
+        return { error: 'No tienes wallets registrados. Crea uno en el módulo Cripto.' }
+      }
+
+      // Filtra wallets por query
+      const matchedWallets = wallets.filter(w => {
+        if (!wallet_query) return true
+        const blob = `${w.name} ${w.kind} ${w.provider || ''}`.toLowerCase()
+        return blob.includes(wallet_query)
+      })
+      if (!matchedWallets.length) {
+        return { error: `No encontré wallet "${wallet_query}". Tienes: ${wallets.map(w => w.name).join(', ')}.` }
+      }
+
+      // Junta addresses por wallet matched + filtra por symbol/network si se pidió
+      const results = []
+      for (const w of matchedWallets) {
+        const walletAddrs = addrs.filter(a => a.wallet_id === w.id)
+          .filter(a => !symbol  || a.symbol.toUpperCase() === symbol)
+          .filter(a => !network || a.network.toUpperCase().includes(network))
+        if (walletAddrs.length) {
+          results.push({
+            wallet: { name: w.name, kind: w.kind, provider: w.provider },
+            addresses: walletAddrs.map(a => ({
+              symbol: a.symbol, network: a.network,
+              address: a.address, label: a.label,
+            })),
+          })
+        }
+      }
+
+      if (!results.length) {
+        const queryDesc = [wallet_query, symbol, network].filter(Boolean).join(' / ')
+        return { error: `No encontré direcciones que coincidan con "${queryDesc}". Revisa que la wallet/moneda existan en el módulo Cripto.` }
+      }
+      return { ok: true, results }
+    },
+  },
+  {
     name: 'get_afp_weekplan',
     description: 'Devuelve el plan financiero AFP de la semana del usuario (modo adaptativo, ingresos esperados, dispersiones obligatorias, libre para vivir). Usar cuando el usuario pregunte "cuál es mi plan", "/plan", "mi plan de la semana", "qué hago con mi dinero esta semana", o similar.',
     parameters: { type: 'object', properties: {} },
@@ -741,6 +801,7 @@ TOOLS:
 - search_tasks → tareas pendientes
 - get_today_briefing → resumen del día
 - get_afp_weekplan → plan financiero AFP de la semana (modo, ingresos, dispersiones, libre). USAR cuando pregunte "mi plan", "/plan", "qué hago con mi dinero", "cuánto me queda libre".
+- get_crypto_wallet → direcciones de wallets cripto. USAR cuando pida "dame la wallet de X", "dirección de Y", "wallet de ledger XRP". Parámetros: wallet_query (ledger/bitso/trezor/cold), symbol (XRP/USDT/BTC), network opcional.
 - create_task, create_movement, create_note → agregar
 - update_lead_status, update_property_status → modificar
 - generate_property_link → URL pública

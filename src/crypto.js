@@ -417,7 +417,10 @@ export async function renderCrypto() {
             <div style="font-size:14px;font-weight:800;color:#e5e7eb;">🔐 Mis wallets y direcciones</div>
             <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Cold wallet (Ledger), Hot wallet (Bitso), etc.</div>
           </div>
-          <button id="crypto-wallets-btn" style="padding:7px 12px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">+ Gestionar wallets</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button id="crypto-bitso-cold-btn" title="Registra una transferencia de Bitso a tu Cold Wallet (entrada+salida+comprobante)" style="padding:7px 12px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34d399;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">🔄 Bitso → Cold</button>
+            <button id="crypto-wallets-btn" style="padding:7px 12px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;">+ Gestionar wallets</button>
+          </div>
         </div>
         <div id="crypto-wallets-content" style="padding:12px 16px;color:#6b7280;font-size:12px;">⏳</div>
       </div>
@@ -476,6 +479,7 @@ export async function renderCrypto() {
   document.getElementById('crypto-strategy-btn')?.addEventListener('click', () => _requestStrategy(items, summary))
   document.getElementById('crypto-dispersion-btn')?.addEventListener('click', () => _openDispersionModal(items, summary))
   document.getElementById('crypto-wallets-btn')?.addEventListener('click', () => _openWalletsModal())
+  document.getElementById('crypto-bitso-cold-btn')?.addEventListener('click', () => _openBitsoToColdModal())
   if (items.length) _loadWalletsPreview()
 }
 
@@ -1174,6 +1178,174 @@ function _openJournalModal(entries, holdingSymbols) {
   })
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🔄 BITSO → COLD WALLET · flujo guiado en 1 paso (S6)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Registra una transferencia de Bitso al Cold Wallet en un solo formulario:
+//   - Cantidad cripto (ej. 100 XRP)
+//   - Precio en MXN (auto desde TC actual si está disponible)
+//   - Wallet destino (selector entre tus wallets cold)
+//   - Comprobante (URL del tronscan / xrpl explorer / etc.)
+//
+// Al guardar crea 2 movimientos en una sola operación:
+//   1) SALIDA en cuenta primaria (Bitso) con monto MXN + comprobante
+//   2) INCREMENTA el manual_balance_mxn del wallet cold elegido
+//
+// Esto evita que el usuario tenga que:
+//   - Ir a Movimientos a registrar la salida
+//   - Volver a Cripto a editar el saldo del wallet cold
+//   - Pegar el comprobante por separado
+
+async function _openBitsoToColdModal() {
+  let wallets
+  try {
+    const w = await _api('crypto_wallets_list')
+    wallets = (w.wallets || []).filter(x => x.is_active !== false)
+  } catch (e) {
+    alert('No pude cargar wallets: ' + e.message)
+    return
+  }
+  const coldWallets = wallets.filter(w => w.kind === 'cold' || w.kind === 'paper')
+  if (!coldWallets.length) {
+    if (!confirm('No tienes wallets etiquetados como "cold" o "paper". ¿Crear uno ahora?')) return
+    return _openWalletsModal()
+  }
+
+  const overlay = document.createElement('div')
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);backdrop-filter:blur(4px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;'
+  overlay.innerHTML = `
+    <div style="background:#0f1419;border:1px solid #1f2937;border-radius:16px;padding:24px;max-width:520px;width:100%;color:#e5e7eb;max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <h3 style="margin:0;font-size:18px;font-weight:800;display:flex;align-items:center;gap:8px;">🔄 Bitso → Cold Wallet</h3>
+        <button id="b2c-close" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px;">✕</button>
+      </div>
+      <p style="margin:0 0 16px;font-size:12px;color:#94a3b8;line-height:1.55;">
+        Registras la transferencia en una sola operación: se crea movimiento de salida en tu cuenta primaria + se actualiza el saldo del wallet cold.
+      </p>
+
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">🪙 Moneda</label>
+          <select id="b2c-symbol" class="modal-input">
+            <option value="XRP">XRP</option><option value="USDT">USDT</option>
+            <option value="BTC">BTC</option><option value="ETH">ETH</option>
+            <option value="TRX">TRX</option><option value="SOL">SOL</option>
+            <option value="DOGE">DOGE</option><option value="LTC">LTC</option>
+          </select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Cantidad cripto</label>
+            <input type="number" step="any" id="b2c-amount" class="modal-input" placeholder="100" />
+          </div>
+          <div>
+            <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">Total MXN equivalente</label>
+            <input type="number" step="any" id="b2c-mxn" class="modal-input" placeholder="2500" />
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">📥 Wallet destino (cold)</label>
+          <select id="b2c-wallet" class="modal-input">
+            ${coldWallets.map(w => `<option value="${w.id}">${_esc(w.name)} (${w.kind})</option>`).join('')}
+          </select>
+        </div>
+
+        <div>
+          <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">📎 Comprobante (tronscan / xrpscan / etc.)</label>
+          <input type="url" id="b2c-evidence" class="modal-input" placeholder="https://tronscan.org/#/transaction/..." />
+        </div>
+
+        <div>
+          <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">📅 Fecha</label>
+          <input type="date" id="b2c-date" class="modal-input" value="${new Date().toISOString().slice(0,10)}" />
+        </div>
+
+        <div>
+          <label style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;display:block;margin-bottom:4px;">📝 Nota (opcional)</label>
+          <input type="text" id="b2c-notes" class="modal-input" placeholder="Compra mensual respaldo" />
+        </div>
+      </div>
+
+      <div id="b2c-status" style="margin-top:14px;font-size:12px;color:#94a3b8;min-height:18px;"></div>
+
+      <div style="display:flex;gap:10px;margin-top:8px;">
+        <button id="b2c-cancel" style="flex:1;padding:11px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:10px;cursor:pointer;">Cancelar</button>
+        <button id="b2c-save" style="flex:2;padding:11px;background:linear-gradient(135deg,#34d399,#10b981);border:none;color:#000;font-weight:800;border-radius:10px;cursor:pointer;">🔄 Registrar transferencia</button>
+      </div>
+    </div>`
+  document.body.appendChild(overlay)
+  const cleanup = () => document.body.removeChild(overlay)
+  overlay.querySelector('#b2c-close').addEventListener('click', cleanup)
+  overlay.querySelector('#b2c-cancel').addEventListener('click', cleanup)
+
+  overlay.querySelector('#b2c-save').addEventListener('click', async () => {
+    const symbol = overlay.querySelector('#b2c-symbol').value
+    const amount = parseFloat(overlay.querySelector('#b2c-amount').value)
+    const mxn = parseFloat(overlay.querySelector('#b2c-mxn').value)
+    const walletId = overlay.querySelector('#b2c-wallet').value
+    const evidence = overlay.querySelector('#b2c-evidence').value.trim()
+    const fecha = overlay.querySelector('#b2c-date').value
+    const notas = overlay.querySelector('#b2c-notes').value.trim()
+    const statusEl = overlay.querySelector('#b2c-status')
+
+    if (!amount || amount <= 0) { statusEl.textContent = '⚠ Cantidad cripto requerida'; return }
+    if (!mxn || mxn <= 0) { statusEl.textContent = '⚠ Total MXN requerido'; return }
+    if (!walletId) { statusEl.textContent = '⚠ Selecciona wallet destino'; return }
+
+    statusEl.style.color = '#fbbf24'
+    statusEl.textContent = '⏳ Registrando movimiento de salida en cuenta primaria...'
+
+    try {
+      // 1) Obtener cuenta primaria del balance-engine
+      const primaryOrqId = await window.nexusBalance?.primary?.()
+      let movId = null
+      if (primaryOrqId) {
+        const { supabase } = await import('./supabase.js')
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const payload = {
+            owner_id: user.id, orquestador_id: primaryOrqId,
+            tipo: 'salida', fecha,
+            ordenante: 'Bitso',
+            beneficiario: `Cold wallet · ${symbol}`,
+            cantidad: amount, moneda: symbol,
+            tc: mxn / amount,
+            monto_mxn: mxn,
+            estado: 'hecho',
+            categoria: 'Cripto/Sagrado',
+            proyecto: 'cripto:cold',
+            notas: notas || `Bitso → Cold · ${amount} ${symbol}`,
+            comprobante_url: evidence || null,
+            comprobantes: evidence ? [{ type: 'url', url: evidence, label: 'Comprobante on-chain' }] : [],
+          }
+          const { data, error } = await supabase.from('movimientos').insert(payload).select().single()
+          if (error) throw new Error('Movimiento: ' + error.message)
+          movId = data?.id
+          window.nexusBalance?.invalidate?.(primaryOrqId)
+        }
+      }
+
+      statusEl.textContent = '⏳ Actualizando saldo del wallet cold...'
+
+      // 2) Sumar el MXN al wallet cold (manual_balance_mxn)
+      const target = wallets.find(w => w.id === walletId)
+      const currentBal = Number(target?.manual_balance_mxn || 0)
+      const newBal = Math.round((currentBal + mxn) * 100) / 100
+      await _api('crypto_wallet_update', { id: walletId, manual_balance_mxn: newBal })
+      window.nexusBalance?.invalidate?.()
+
+      statusEl.style.color = '#34d399'
+      statusEl.textContent = `✓ Listo. Movimiento ${movId ? '#' + String(movId).slice(0, 8) : 'creado'} · Cold +$${mxn.toLocaleString('es-MX')}`
+      setTimeout(() => { cleanup(); renderCrypto() }, 1200)
+    } catch (e) {
+      statusEl.style.color = '#f87171'
+      statusEl.textContent = '⚠ ' + e.message
+    }
+  })
+}
+
 if (typeof window !== 'undefined') {
-  window.nexusCrypto = { render: renderCrypto }
+  window.nexusCrypto = { render: renderCrypto, openBitsoToCold: _openBitsoToColdModal }
 }
