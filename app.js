@@ -13,6 +13,7 @@ import './src/google-gis.js'
 import './src/n8n-webhooks.js'
 import './src/balance-engine.js'
 import './src/autosave.js'
+import './src/tools-extra.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
