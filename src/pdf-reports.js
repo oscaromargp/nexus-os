@@ -1052,22 +1052,33 @@ export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
 
   y += cardH + 8
 
-  // ── TABLA 4 COLUMNAS ──────────────────────────────────────────────────────
+  // ── TABLA 5 COLUMNAS · Salidas y Entradas separadas (estilo banco) ──────────
+  // Pre-calcular cuántos renglones extra reservar en la celda Concepto para los
+  // chips de comprobantes (cada chip "Ver evidencia #N" mide ~24mm).
+  const CHIP_W_MM    = 24
+  const CONCEPTO_W   = 78   // mm — ancho efectivo de la columna Concepto
+  const CHIPS_PER_LN = Math.max(1, Math.floor((CONCEPTO_W - 6) / CHIP_W_MM))   // ~3 por renglón
+  const _chipLines = (n) => Math.ceil(n / CHIPS_PER_LN)
+
   autoTable(doc, {
     startY: y,
     margin: { left: T.mX, right: T.mX, top: headerH + 6 },
-    head: [['Fecha', 'Concepto', 'Salida / Entrada', 'Saldo']],
+    head: [['Fecha', 'Concepto', 'Salida', 'Entrada', 'Saldo']],
     body: rows.map(r => {
       const isPen = r.isPen, isCan = r.isCan
-      // Nota: usamos "-" ASCII en lugar de minus Unicode "−" para evitar
-      // glyph faltante en Helvetica.
-      const movStr = isCan ? 'CANCELADO'
-        : r.tipo === 'entrada' ? '+ $' + fmt$(r.neto) + (isPen ? '  (pendiente)' : '')
-        :                       '- $' + fmt$(r.neto) + (isPen ? '  (pendiente)' : '')
+      // Salida y Entrada separadas: una de las dos siempre vacía.
+      const salidaStr  = isCan ? 'CANCELADO'
+        : (r.tipo === 'salida'  ? '- $' + fmt$(r.neto) + (isPen ? ' (pend)' : '') : '')
+      const entradaStr = isCan ? ''
+        : (r.tipo === 'entrada' ? '+ $' + fmt$(r.neto) + (isPen ? ' (pend)' : '') : '')
       const balStr = isPen || isCan ? '--' : '$' + fmt$(r.balance ?? 0)
-      // Concepto puede llevar uno o más espacios al final para reservar línea de chips
-      const conc = r.urls.length ? r.concepto + '\n ' : r.concepto
-      return [r.fecha, conc, movStr, balStr]
+
+      // Reserva renglones para chips de comprobantes (uno por línea de chips).
+      const linesReserved = r.urls.length ? _chipLines(r.urls.length) : 0
+      const conc = r.concepto + (linesReserved ? '\n' + ' '.repeat(2) : '') +
+                   (linesReserved > 1 ? '\n'.repeat(linesReserved - 1) : '')
+
+      return [r.fecha, conc, salidaStr, entradaStr, balStr]
     }),
     styles: {
       fontSize: 8, cellPadding: 3, lineColor: [228, 232, 240], lineWidth: 0.15,
@@ -1081,9 +1092,10 @@ export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
     alternateRowStyles: { fillColor: [250, 251, 253] },
     columnStyles: {
       0: { cellWidth: 22, halign: 'center', fontSize: 7.5 },
-      1: { cellWidth: 95, fontSize: 8 },
-      2: { cellWidth: 38, halign: 'right', fontStyle: 'bold', fontSize: 8 },
-      3: { cellWidth: 25, halign: 'right', fontStyle: 'bold', fontSize: 8.5 },
+      1: { cellWidth: 78, fontSize: 8 },
+      2: { cellWidth: 28, halign: 'right', fontStyle: 'bold', fontSize: 8 },
+      3: { cellWidth: 28, halign: 'right', fontStyle: 'bold', fontSize: 8 },
+      4: { cellWidth: 26, halign: 'right', fontStyle: 'bold', fontSize: 8.5 },
     },
     didParseCell: (cell) => {
       if (cell.section !== 'body') return
@@ -1095,8 +1107,12 @@ export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
       } else if (r.isCan) {
         cell.cell.styles.textColor = [100, 116, 139]
       } else if (cell.column.index === 2) {
-        cell.cell.styles.textColor = r.tipo === 'entrada' ? T.greenD : T.redD
+        // Salida siempre roja
+        cell.cell.styles.textColor = T.redD
       } else if (cell.column.index === 3) {
+        // Entrada siempre verde
+        cell.cell.styles.textColor = T.greenD
+      } else if (cell.column.index === 4) {
         const bal = r.balance ?? 0
         cell.cell.styles.textColor = bal >= 0 ? T.greenD : T.redD
       }
@@ -1106,16 +1122,24 @@ export function pdfEstadoCuentaCliente(orq, list, opts = {}) {
       const r = rows[cell.row.index]
       if (!r || !r.urls.length) return
       const padX = 3
-      const baseY = cell.cell.y + cell.cell.height - 3.2
+      const lineH = 3.6   // mm entre renglones de chips
+      // baseY = parte inferior del área reservada para chips
+      const reservedLines = _chipLines(r.urls.length)
+      const totalReservedH = reservedLines * lineH
+      let baseY = cell.cell.y + cell.cell.height - 3.2 - (totalReservedH - lineH)
       let cx = cell.cell.x + padX
+      const xMax = cell.cell.x + cell.cell.width - padX
+
       doc.setFont(T.font, 'bold'); doc.setFontSize(7); doc.setTextColor(...T.cyan)
       r.urls.forEach((url, i) => {
-        // Sin emojis (Helvetica no los soporta). "Ver #N" subrayado simula link.
         const label = `Ver evidencia #${i + 1}`
         const w = doc.getTextWidth(label) + 1.5
-        if (cx + w > cell.cell.x + cell.cell.width - padX) return
+        // Wrap a siguiente renglón si no cabe
+        if (cx + w > xMax) {
+          cx = cell.cell.x + padX
+          baseY += lineH
+        }
         doc.text(label, cx, baseY)
-        // Subrayado del link (3 décimas debajo del baseline)
         doc.setDrawColor(...T.cyan); doc.setLineWidth(0.15)
         doc.line(cx, baseY + 0.6, cx + w - 1.5, baseY + 0.6)
         doc.link(cx, baseY - 2.8, w, 3.6, { url })
