@@ -22992,8 +22992,30 @@ window.mvSaveMov = async () => {
     showToast('⚠ Primero entra a una cuenta (orquestador). Ve a "Mis Cuentas" y selecciona una.')
     return
   }
-  if (!currentUser?.id) {
-    showToast('⚠ Sesión no detectada. Recarga la página e inicia sesión de nuevo.')
+
+  // ── Auth robusto: usamos el UID REAL autenticado (no el cacheado) y
+  // refrescamos la sesión si está por expirar. Esto evita el fallo RLS
+  // "new row violates row-level security" cuando el token caducó. ──
+  let authUid = currentUser?.id
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      showToast('⚠ Tu sesión expiró. Recarga la página e inicia sesión de nuevo.')
+      return
+    }
+    // Refresca si expira en menos de 60s
+    const expSoon = session.expires_at && (session.expires_at * 1000 - Date.now() < 60000)
+    if (expSoon) {
+      const { data: refreshed } = await supabase.auth.refreshSession()
+      authUid = refreshed?.user?.id || session.user?.id || authUid
+    } else {
+      authUid = session.user?.id || authUid
+    }
+  } catch (e) {
+    console.warn('[mvSaveMov] auth check', e)
+  }
+  if (!authUid || /admin-uuid-bypass/.test(authUid)) {
+    showToast('⚠ Sesión no válida para guardar. Recarga la página e inicia sesión.')
     return
   }
 
@@ -23026,7 +23048,7 @@ window.mvSaveMov = async () => {
   const legacyClabe = tipo === 'entrada' ? (clabeOrigen || clabeDestino) : (clabeDestino || clabeOrigen)
 
   const payload = {
-    owner_id: currentUser.id, orquestador_id: _mvActiveOrqId,
+    owner_id: authUid, orquestador_id: _mvActiveOrqId,
     tipo, fecha,
     ordenante:    g('mv-ordenante')?.value.trim()    || null,
     beneficiario: g('mv-beneficiario')?.value.trim() || null,
@@ -23075,7 +23097,7 @@ window.mvSaveMov = async () => {
     if (c.type === 'url') {
       finalComps.push({ type:'url', url:c.url, label:c.label || null })
     } else if (c.type === 'file' && c._file && movId) {
-      const url = await _mvUploadFile(currentUser.id, movId, c._file, String(fileIdx++))
+      const url = await _mvUploadFile(authUid, movId, c._file, String(fileIdx++))
       if (url) finalComps.push({ type:'file', url, label: c.label || c._file.name })
     }
   }
