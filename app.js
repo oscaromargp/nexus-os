@@ -15,6 +15,7 @@ import './src/balance-engine.js'
 import './src/autosave.js'
 import './src/tools-extra.js'
 import './src/mobile-ux.js'
+import './src/notes-v2.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -2860,6 +2861,7 @@ function _buildNoteEditorHTML(id) {
       <div style="display:flex;gap:8px;">
         <button onclick="exportNote_fp('print')" class="btn-ghost" style="font-size:12px;padding:7px 14px;display:flex;align-items:center;gap:5px;">🖨️ Imprimir</button>
         <button onclick="exportNote_fp('markdown')" class="btn-ghost" style="font-size:12px;padding:7px 14px;display:flex;align-items:center;gap:5px;">📋 Copiar MD</button>
+        <button onclick="shareNoteWhatsApp('${id}')" style="font-size:12px;padding:7px 14px;display:flex;align-items:center;gap:5px;background:rgba(37,211,102,0.12);border:1px solid rgba(37,211,102,0.3);color:#25d366;border-radius:8px;cursor:pointer;" title="Compartir por WhatsApp">📱 WhatsApp</button>
       </div>
       <div style="display:flex;gap:8px;">
         <button onclick="deleteNote_fp('${id}')" class="btn-danger" style="font-size:12px;padding:7px 18px;">🗑 Eliminar</button>
@@ -3058,29 +3060,68 @@ function renderNotes(nodes) {
 
   // ── Grid mode (default) ────────────────────────────────
   root.style.display = ''
-  root.className = 'notes-grid'
+  root.className = ''   // restauramos luego
 
-  const notes = nodes
+  const allUserNotes = nodes.filter(n =>
+    n.type === 'note' && !n.metadata?.project_tag && !n.metadata?.archived
+  )
+
+  // Tag chips filter — agregamos los más usados arriba del grid
+  const tagCounts = new Map()
+  for (const n of allUserNotes) {
+    for (const t of (n.metadata?.tags || [])) {
+      const key = String(t).toLowerCase()
+      tagCounts.set(key, (tagCounts.get(key) || 0) + 1)
+    }
+  }
+  const topTags = [...tagCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)
+  const activeTag = window._noteTagFilter || null
+
+  // Filtra por tag activo si hay uno
+  const notes = allUserNotes
     .filter(n => {
-      if (n.type !== 'note') return false
-      if (n.metadata?.project_tag) return false
-      if (n.metadata?.archived) return false
-      return true
+      if (!activeTag) return true
+      const tags = (n.metadata?.tags || []).map(t => String(t).toLowerCase())
+      return tags.includes(activeTag)
     })
     .sort((a, b) => (b.metadata?.pinned ? 1 : 0) - (a.metadata?.pinned ? 1 : 0))
 
+  // Render filter chips si hay tags disponibles
+  if (topTags.length) {
+    const chipHtml = topTags.map(([t, count]) => {
+      const isActive = activeTag === t
+      return `<button onclick="window._noteTagFilter='${t === activeTag ? '' : t}';window._noteTagFilter=window._noteTagFilter||null;renderNotes(window.allNodes||[])"
+        style="padding:5px 11px;border-radius:14px;border:1px solid ${isActive?'#22d3ee':'rgba(255,255,255,0.08)'};background:${isActive?'rgba(34,211,238,0.15)':'rgba(255,255,255,0.03)'};color:${isActive?'#22d3ee':'var(--text-muted)'};font-size:11px;font-weight:${isActive?700:500};cursor:pointer;transition:all 0.15s;">${t} <span style="opacity:0.6;">${count}</span></button>`
+    }).join('')
+    const clearChip = activeTag ?
+      `<button onclick="window._noteTagFilter=null;renderNotes(window.allNodes||[])" style="padding:5px 11px;border-radius:14px;border:1px solid rgba(248,113,113,0.25);background:rgba(248,113,113,0.08);color:#f87171;font-size:11px;cursor:pointer;">✕ Limpiar</button>` : ''
+    const chipsBar = `
+      <div data-notes-tag-filter style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;padding:8px 0;align-items:center;">
+        <span style="font-size:10px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-right:6px;">🏷 tags</span>
+        ${chipHtml}${clearChip}
+      </div>`
+    root.innerHTML = chipsBar + '<div class="notes-grid" id="notes-grid-inner"></div>'
+    root.className = ''
+  } else {
+    root.innerHTML = '<div class="notes-grid" id="notes-grid-inner"></div>'
+    root.className = ''
+  }
+  // El render del grid se hace abajo en el div interno
+  const innerGrid = document.getElementById('notes-grid-inner')
+  const targetRoot = innerGrid || root
+
   if (notes.length === 0) {
-    root.innerHTML = nxEmptyState({
+    targetRoot.innerHTML = nxEmptyState({
       img: '/empty/no-notes.svg',
-      title: 'Bóveda Neural vacía',
-      sub: 'Escribe tu primer pensamiento en el panel de comandos o usa el atajo rápido',
+      title: activeTag ? `Sin notas con tag "${activeTag}"` : 'Bóveda Neural vacía',
+      sub: activeTag ? 'Selecciona otro tag o limpia el filtro' : 'Escribe tu primer pensamiento en el panel de comandos o usa el atajo rápido',
       cta: `<button onclick="document.getElementById('cmd-input')?.focus()" style="margin-top:4px;padding:8px 18px;border-radius:8px;background:rgba(0,240,255,0.1);border:1px solid rgba(0,240,255,0.25);color:var(--accent-cyan);font-size:12px;font-weight:600;cursor:pointer;">${lx('Plus',13)} Nueva nota</button>`
     })
     if (_showArchivedNotes) _renderArchivedNotes()
     return
   }
 
-  root.innerHTML = notes.map(n => {
+  targetRoot.innerHTML = notes.map(n => {
     const color = n.metadata?.color || ''
     const colorStyle = NOTE_COLORS[color] || ''
     const isPinned = n.metadata?.pinned
