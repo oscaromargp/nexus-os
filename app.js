@@ -16,6 +16,7 @@ import './src/autosave.js'
 import './src/tools-extra.js'
 import './src/mobile-ux.js'
 import './src/notes-v2.js'
+import './src/pomodoro.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -940,6 +941,11 @@ function renderKanban(nodes) {
       if (hasAttach) meta.push(`<span style="font-size:10px;color:var(--text-dim);">📎 ${m.attachments.length}</span>`)
       if (projNode) meta.push(`<span style="font-size:10px;background:rgba(45,212,191,0.1);color:#2dd4bf;border-radius:4px;padding:1px 6px;">🏗️ ${esc(projNode.metadata?.label||projTag)}</span>`)
       if ((m.comments||[]).length > 0) meta.push(`<span style="font-size:10px;color:var(--text-dim);">💬 ${m.comments.length}</span>`)
+      // S7: badge de pomodoros invertidos (lee del módulo o de metadata persistida)
+      const pomoStats = window.nexusPomodoro?.stats?.(n.id) || { count: m.pomodoros || 0, minutes: m.pomodoro_minutes || 0 }
+      if (pomoStats.count > 0) {
+        meta.push(`<span style="font-size:10px;color:#fb923c;background:rgba(251,146,60,0.1);border-radius:4px;padding:1px 5px;font-weight:700;">🍅 ${pomoStats.count} · ${pomoStats.minutes}m</span>`)
+      }
 
       const otherTags = (m.tags || [])
         .filter(t => t.toLowerCase() !== '#tarea' && t.toLowerCase() !== `#${(m.project_tag||'__')}`)
@@ -1187,12 +1193,35 @@ window.openCardModal = (id) => {
   document.getElementById('card-modal').classList.remove('hidden')
   // Sprint 14: render connections
   renderCardConnections(id)
+  // S7: render Pomodoro CTA badge + button
+  _renderPomodoroSection(id, m.label || node.content)
   // Reset link search
   const lsBox = document.getElementById('tm-link-search-box')
   if (lsBox) lsBox.style.display = 'none'
 }
 
 window.closeCardModal = () => { document.getElementById('card-modal').classList.add('hidden'); editingCardId = null; }
+
+// S7 · Pomodoro: pinta la sección dentro del modal de tarjeta Kanban
+function _renderPomodoroSection(cardId, label) {
+  const mount = document.getElementById('tm-pomodoro-section')
+  if (!mount) return
+  const stats = window.nexusPomodoro?.stats?.(cardId) || { count: 0, minutes: 0 }
+  mount.innerHTML = `
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:linear-gradient(135deg,rgba(251,146,60,0.08),rgba(34,211,238,0.05));border:1px solid rgba(251,146,60,0.25);border-radius:10px;flex-wrap:wrap;">
+      <div style="font-size:22px;">🍅</div>
+      <div style="flex:1;min-width:160px;">
+        <div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">Pomodoros invertidos</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text-main);font-family:'JetBrains Mono',monospace;">
+          ${stats.count} ${stats.count === 1 ? 'sesión' : 'sesiones'} · ${stats.minutes} min
+        </div>
+      </div>
+      <button onclick="window.startPomodoro('${cardId}', ${JSON.stringify(label).replace(/"/g, '&quot;')})"
+        style="padding:8px 16px;background:#fb923c;border:none;color:#000;font-weight:800;border-radius:8px;cursor:pointer;font-size:13px;">▶ Pomodoro</button>
+      <button onclick="window.openPomodoroSettings()" title="Configurar 25/5"
+        style="padding:8px 10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;font-size:13px;">⚙</button>
+    </div>`
+}
 
 function renderActivity(comments) {
   const root = document.getElementById('tm-activity-feed')
