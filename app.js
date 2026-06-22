@@ -22981,7 +22981,21 @@ window.mvSaveMov = async () => {
   const tipo  = g('mv-tipo')?.value
   const fecha = g('mv-fecha')?.value
   const cant  = parseFloat(g('mv-cantidad')?.value)
-  if (!tipo || !fecha || !cant || cant <= 0) { showToast('⚠ Tipo, fecha y cantidad son obligatorios'); return }
+
+  // Validaciones con mensajes específicos para que el usuario sepa QUÉ falta
+  if (!cant || isNaN(cant) || cant <= 0) { showToast('⚠ Falta la CANTIDAD (mayor a 0)'); g('mv-cantidad')?.focus(); return }
+  if (!fecha) { showToast('⚠ Falta la FECHA'); g('mv-fecha')?.focus(); return }
+  if (!tipo)  { showToast('⚠ Selecciona Entrada o Salida'); return }
+
+  // Guarda crítica: sin cuenta activa no se puede insertar (orquestador_id NOT NULL)
+  if (!_mvActiveOrqId) {
+    showToast('⚠ Primero entra a una cuenta (orquestador). Ve a "Mis Cuentas" y selecciona una.')
+    return
+  }
+  if (!currentUser?.id) {
+    showToast('⚠ Sesión no detectada. Recarga la página e inicia sesión de nuevo.')
+    return
+  }
 
   const tc     = parseFloat(g('mv-tc')?.value) || 1
   const moneda = g('mv-moneda')?.value || 'MXN'
@@ -23034,17 +23048,24 @@ window.mvSaveMov = async () => {
   }
 
   let movId = _mvEditingId
-  if (_mvEditingId) {
-    const { error } = await supabase.from('movimientos').update(payload).eq('id', _mvEditingId)
-    if (error) { showToast('⚠ ' + error.message); return }
-  } else {
-    const { data, error } = await supabase.from('movimientos').insert(payload).select().single()
-    if (error) { showToast('⚠ ' + error.message); return }
-    movId = data.id
-    // 💰 Disparar webhook de movement_created (best-effort, sin comprobante aún)
-    if (window.nexusN8n?.dispatchMovement) {
-      try { window.nexusN8n.dispatchMovement('movimiento', data) } catch (e) { /* silent */ }
+  try {
+    if (_mvEditingId) {
+      const { error } = await supabase.from('movimientos').update(payload).eq('id', _mvEditingId)
+      if (error) { console.error('[mvSaveMov] update error:', error); showToast('❌ No se guardó: ' + error.message); return }
+    } else {
+      const { data, error } = await supabase.from('movimientos').insert(payload).select().single()
+      if (error) { console.error('[mvSaveMov] insert error:', error, 'payload:', payload); showToast('❌ No se guardó: ' + error.message); return }
+      if (!data?.id) { console.error('[mvSaveMov] insert sin data:', data); showToast('❌ No se guardó (sin respuesta del servidor)'); return }
+      movId = data.id
+      // 💰 Disparar webhook de movement_created (best-effort, sin comprobante aún)
+      if (window.nexusN8n?.dispatchMovement) {
+        try { window.nexusN8n.dispatchMovement('movimiento', data) } catch (e) { /* silent */ }
+      }
     }
+  } catch (e) {
+    console.error('[mvSaveMov] excepción:', e)
+    showToast('❌ Error al guardar: ' + (e.message || e))
+    return
   }
 
   // Sube cada archivo encolado y construye la lista final de comprobantes
