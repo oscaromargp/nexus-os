@@ -12,6 +12,7 @@ import './src/drive-backup.js'
 import './src/google-gis.js'
 import './src/n8n-webhooks.js'
 import './src/balance-engine.js'
+import './src/autosave.js'
 
 // ── Modular imports — Nexus OS v6 ─────────────────────────────────────────────
 import { parseNode as _parseNodeV2, extractDate, extractPriority } from './src/parser.js'
@@ -2889,7 +2890,9 @@ window.closeNoteEditor = function() {
   document.getElementById('notes-root')?.scrollIntoView({ behavior:'smooth', block:'start' })
 }
 
-window.saveNote_fp = async function(id) {
+// Acepta opciones para distinguir guardado manual (toast + re-render) vs autosave (silencioso)
+window.saveNote_fp = async function(id, opts = {}) {
+  const { silent = false } = opts
   const node = allNodes.find(n => n.id === id)
   if (!node) return
   const title = (document.getElementById('nfp-title')?.value || '').trim()
@@ -2909,9 +2912,10 @@ window.saveNote_fp = async function(id) {
   if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
     await supabase.from('nodes').update({ content: body, metadata: node.metadata }).eq('id', id)
   }
-  showToast('✅ Nota guardada')
-  // Re-render the editor with updated data
-  renderNotes(allNodes)
+  if (!silent) {
+    showToast('✅ Nota guardada')
+    renderNotes(allNodes)
+  }
 }
 
 window.deleteNote_fp = async function(id) {
@@ -3024,6 +3028,25 @@ function renderNotes(nodes) {
       syncRichEditor('nfp-body')
       // Render attachments
       renderAttachments(node.metadata?.images || [], 'nfp')
+
+      // 🛟 Auto-save universal: guarda en debounce 2.5s tras dejar de escribir
+      try { window._nfpAutoSave?.detach?.() } catch {}
+      const titleEl  = document.getElementById('nfp-title')
+      const tagsEl   = document.getElementById('nfp-tags')
+      const bodyEl   = document.getElementById('nfp-body-editor') || _richEditors['nfp-body']
+      const headerEl = root.querySelector('.note-editor-header, [data-note-header]') || root.querySelector('h1, h2, h3') || titleEl?.parentElement
+      window._nfpAutoSave = window.nexusAutoSave?.attach?.({
+        scope: root,
+        fields: [
+          { key: 'title', el: titleEl },
+          { key: 'tags',  el: tagsEl  },
+          ...(bodyEl ? [{ key: 'body', el: bodyEl }] : []),
+        ].filter(f => f.el),
+        status: headerEl,
+        draftKey: 'note_' + _noteProfileId,
+        debounceMs: 2500,
+        save: async () => { await window.saveNote_fp(_noteProfileId, { silent: true }) },
+      })
     }, 50)
     // Hide archived section when in editor mode
     const archSec = document.getElementById('notes-archived-section')
@@ -12019,6 +12042,22 @@ window.openContactModal = (id = null) => {
   document.getElementById('cm-delete').style.display = c ? 'inline-flex' : 'none'
   updateAvatarPreview()
   document.getElementById('contact-modal').classList.remove('hidden')
+
+  // 🛟 Auto-save universal — guarda automático en debounce 2.5s
+  setTimeout(() => {
+    try { window._cmAutoSave?.detach?.() } catch {}
+    const modal = document.getElementById('contact-modal')
+    const titleEl = modal?.querySelector('#contact-modal-title')
+    const draftKey = 'contact_' + (id || 'new')
+    const fields = [
+      { key: 'name',  el: document.getElementById('cm-name')  },
+      { key: 'notes', el: document.getElementById('cm-notes') },
+    ].filter(f => f.el)
+    window._cmAutoSave = window.nexusAutoSave?.attach?.({
+      scope: modal, fields, status: titleEl, draftKey, debounceMs: 2500,
+      save: async () => { if (typeof window.saveContact === 'function') await window.saveContact({ silent: true }) },
+    })
+  }, 80)
 }
 
 window.closeContactModal = () => {
@@ -12337,9 +12376,11 @@ window.cmToggleAccountFields = function(id, type) {
 }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
-window.saveContact = async () => {
+// Acepta { silent } para que autosave no muestre toast ni cierre el modal.
+window.saveContact = async (opts = {}) => {
+  const { silent = false } = opts
   const name = document.getElementById('cm-name')?.value.trim()
-  if (!name) { showToast('⚠️ El nombre es obligatorio'); return }
+  if (!name) { if (!silent) showToast('⚠️ El nombre es obligatorio'); return }
 
   const roles = ['persona','proveedor','cliente','colaborador'].filter(r => document.getElementById(`cm-role-${r}`)?.checked)
   if (!roles.length) roles.push('persona')
@@ -12405,7 +12446,7 @@ window.saveContact = async () => {
     if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
       await supabase.from('nodes').update({ content: name, metadata: meta }).eq('id', _currentContactId)
     }
-    showToast('✅ Contacto actualizado')
+    if (!silent) showToast('✅ Contacto actualizado')
   } else {
     const newNode = {
       id: uid(),
@@ -12419,11 +12460,15 @@ window.saveContact = async () => {
     if (localStorage.getItem('nexus_admin_bypass') !== 'true') {
       await supabase.from('nodes').insert([{ id: newNode.id, owner_id: currentUser?.id, content: name, type: 'persona', metadata: meta }])
     }
-    showToast('✅ Contacto creado')
+    // En autosave del modal "Nuevo Contacto", el primer save promueve el modal a "Editar"
+    _currentContactId = newNode.id
+    if (!silent) showToast('✅ Contacto creado')
   }
 
-  closeContactModal()
-  renderContacts()
+  if (!silent) {
+    closeContactModal()
+    renderContacts()
+  }
 }
 
 window.deleteContact = async () => {
