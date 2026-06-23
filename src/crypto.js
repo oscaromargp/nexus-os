@@ -98,6 +98,8 @@ function _pieChart(items) {
 
 let _allTxs = []
 let _currentPrices = {}  // cache de precios actuales para auto-conv MXN/USD
+let _cryptoAccountId = 'all'   // cuenta/portafolio activa ('all' = todas)
+let _cryptoAccounts = []       // lista de cuentas del usuario
 
 // ── Feed lectura: persistencia local de IDs leídos ────────────
 const READ_FEED_KEY = 'nexus_crypto_news_read'
@@ -160,17 +162,19 @@ export async function renderCrypto() {
   if (!root) return
   root.innerHTML = `<div style="padding:24px;color:#94a3b8;">⏳ Calculando portfolio y consultando precios…</div>`
 
-  let data, txData, journalData, newsData = { items: [] }
+  let data, txData, journalData, accountsData, newsData = { items: [] }
   try {
-    [data, txData, journalData] = await Promise.all([
-      _api('crypto_list'),
-      _api('crypto_transactions'),
+    [data, txData, journalData, accountsData] = await Promise.all([
+      _api('crypto_list', { account_id: _cryptoAccountId }),
+      _api('crypto_transactions', { account_id: _cryptoAccountId }),
       _api('journal_list'),
+      _api('crypto_account_list'),
     ])
   } catch (e) {
     root.innerHTML = `<div style="padding:24px;color:#f87171;">⚠ ${e.message}</div>`
     return
   }
+  _cryptoAccounts = accountsData?.accounts || []
 
   // Cache de precios para conversión MXN↔USD
   _currentPrices = {}
@@ -219,6 +223,18 @@ export async function renderCrypto() {
           <button id="crypto-journal-btn" style="padding:9px 14px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.3);color:#a78bfa;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;">📓 Journal</button>
           <button id="crypto-add-tx-btn" style="padding:9px 14px;background:linear-gradient(135deg,#f7931a,#fb923c);border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;font-size:13px;">+ Nueva transacción</button>
         </div>
+      </div>
+
+      <!-- SELECTOR DE CUENTAS (portafolios separados) -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+        <span style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-right:4px;">💼 Cuentas:</span>
+        <button data-crypto-acc="all" style="padding:6px 13px;border-radius:16px;border:1px solid ${_cryptoAccountId==='all'?'#22d3ee':'rgba(255,255,255,0.08)'};background:${_cryptoAccountId==='all'?'rgba(34,211,238,0.15)':'rgba(255,255,255,0.03)'};color:${_cryptoAccountId==='all'?'#22d3ee':'#94a3b8'};font-size:12px;font-weight:${_cryptoAccountId==='all'?700:500};cursor:pointer;">Todas</button>
+        ${_cryptoAccounts.map(a => `
+          <button data-crypto-acc="${a.id}" style="padding:6px 13px;border-radius:16px;border:1px solid ${_cryptoAccountId===a.id?(a.color||'#22d3ee'):'rgba(255,255,255,0.08)'};background:${_cryptoAccountId===a.id?(a.color||'#22d3ee')+'22':'rgba(255,255,255,0.03)'};color:${_cryptoAccountId===a.id?(a.color||'#22d3ee'):'#94a3b8'};font-size:12px;font-weight:${_cryptoAccountId===a.id?700:500};cursor:pointer;display:inline-flex;align-items:center;gap:5px;">
+            ${_esc(a.name)}
+            ${_cryptoAccountId===a.id?`<span data-crypto-acc-del="${a.id}" title="Eliminar cuenta" style="opacity:0.6;font-size:11px;">✕</span>`:''}
+          </button>`).join('')}
+        <button id="crypto-acc-add" style="padding:6px 12px;border-radius:16px;border:1px dashed rgba(52,211,153,0.4);background:rgba(52,211,153,0.06);color:#34d399;font-size:12px;font-weight:600;cursor:pointer;">+ Cuenta</button>
       </div>
 
       <!-- TOTAL CARD -->
@@ -457,6 +473,29 @@ export async function renderCrypto() {
   root.innerHTML = html
   document.getElementById('crypto-add-tx-btn')?.addEventListener('click', () => _openTxModal(null))
   document.getElementById('crypto-journal-btn')?.addEventListener('click', () => _openJournalModal(journalData.entries, items.map(i => i.symbol)))
+
+  // ── Selector de cuentas (portafolios) ──
+  root.querySelectorAll('[data-crypto-acc]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      if (e.target.closest('[data-crypto-acc-del]')) return  // el ✕ tiene su propio handler
+      _cryptoAccountId = btn.dataset.cryptoAcc
+      renderCrypto()
+    })
+  })
+  root.querySelectorAll('[data-crypto-acc-del]').forEach(x => {
+    x.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const id = x.dataset.cryptoAccDel
+      const acc = _cryptoAccounts.find(a => a.id === id)
+      if (!confirm(`¿Eliminar la cuenta "${acc?.name || ''}"?\n\nLas transacciones NO se borran, quedan sin cuenta asignada (visibles en "Todas").`)) return
+      try {
+        await _api('crypto_account_delete', { id })
+        _cryptoAccountId = 'all'
+        renderCrypto()
+      } catch (err) { alert('⚠ ' + err.message) }
+    })
+  })
+  document.getElementById('crypto-acc-add')?.addEventListener('click', _openAccountModal)
   root.querySelectorAll('[data-del-tx]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const tx = _allTxs.find(t => t.id === btn.dataset.delTx)
@@ -1005,6 +1044,14 @@ function _openTxModal(existingTx) {
       <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">Notas (opcional)</label>
       <input id="tx-notes" type="text" value="${_esc(v.notes || '')}" placeholder="Tx hash, recibo, etc." style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:13px;"/>
     </div>
+    ${_cryptoAccounts.length ? `
+    <div style="margin-top:10px;">
+      <label style="display:block;font-size:11px;color:#94a3b8;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;font-weight:700;">💼 Cuenta / Portafolio</label>
+      <select id="tx-account" style="width:100%;padding:9px;background:#1f2937;border:1px solid #374151;border-radius:8px;color:#e5e7eb;font-size:13px;">
+        <option value="">Sin asignar</option>
+        ${_cryptoAccounts.map(a => `<option value="${a.id}" ${(v.account_id===a.id || (!v.account_id && _cryptoAccountId===a.id))?'selected':''}>${_esc(a.name)}</option>`).join('')}
+      </select>
+    </div>` : ''}
     <div style="display:flex;gap:8px;margin-top:18px;">
       <button id="tx-cancel" style="flex:1;padding:11px;background:transparent;border:1px solid #374151;color:#94a3b8;border-radius:10px;cursor:pointer;font-size:14px;">Cancelar</button>
       <button id="tx-save" style="flex:2;padding:11px;background:linear-gradient(135deg,#f7931a,#fb923c);border:none;color:#000;font-weight:700;border-radius:10px;cursor:pointer;font-size:14px;">${isEdit ? '💾 Actualizar' : '+ Registrar transacción'}</button>
@@ -1081,6 +1128,7 @@ function _openTxModal(existingTx) {
 
   modal.querySelector('#tx-save').addEventListener('click', async () => {
     const get = id => modal.querySelector('#' + id).value.trim()
+    const accSel = modal.querySelector('#tx-account')
     const payload = {
       type: get('tx-type'),
       symbol: get('tx-symbol'),
@@ -1092,6 +1140,7 @@ function _openTxModal(existingTx) {
       reasoning: get('tx-reasoning') || null,
       notes: get('tx-notes') || null,
       date: get('tx-date'),
+      account_id: accSel ? accSel.value : (_cryptoAccountId !== 'all' ? _cryptoAccountId : null),
     }
     if (!payload.quantity || Number(payload.quantity) <= 0) { alert('Cantidad requerida'); return }
     try {
@@ -1344,6 +1393,49 @@ async function _openBitsoToColdModal() {
       statusEl.textContent = '⚠ ' + e.message
     }
   })
+}
+
+// ── Modal: nueva cuenta / portafolio cripto ──────────────────────────────────
+function _openAccountModal() {
+  const colors = ['#22d3ee', '#f7931a', '#a78bfa', '#34d399', '#f87171', '#fbbf24', '#60a5fa', '#ec4899']
+  const overlay = document.createElement('div')
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;'
+  overlay.innerHTML = `
+    <div style="background:#0f1419;border:1px solid #1f2937;border-radius:14px;padding:20px;max-width:380px;width:100%;color:#e5e7eb;" onclick="event.stopPropagation()">
+      <h3 style="margin:0 0 4px;font-size:16px;font-weight:800;">💼 Nueva cuenta cripto</h3>
+      <p style="margin:0 0 14px;font-size:11px;color:#94a3b8;line-height:1.5;">Separa tus criptos en portafolios distintos (ej. "Largo plazo", "Trading", "Familia"). Cada transacción se asigna a una cuenta.</p>
+      <label style="font-size:12px;color:#94a3b8;">Nombre <input id="ca-name" placeholder="Largo plazo" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e5e7eb;font-size:13px;margin-top:4px;box-sizing:border-box;"/></label>
+      <div style="margin-top:12px;">
+        <label style="font-size:12px;color:#94a3b8;display:block;margin-bottom:6px;">Color</label>
+        <div id="ca-colors" style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${colors.map((c, i) => `<button data-ca-color="${c}" style="width:28px;height:28px;border-radius:50%;background:${c};border:2px solid ${i===0?'#fff':'transparent'};cursor:pointer;"></button>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button id="ca-cancel" style="flex:1;padding:9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;">Cancelar</button>
+        <button id="ca-save" style="flex:1;padding:9px;background:#34d399;border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;">Crear</button>
+      </div>
+    </div>`
+  document.body.appendChild(overlay)
+  const close = () => document.body.removeChild(overlay)
+  overlay.addEventListener('click', e => { if (e.target === overlay) close() })
+  let chosenColor = colors[0]
+  overlay.querySelectorAll('[data-ca-color]').forEach(b => b.addEventListener('click', () => {
+    chosenColor = b.dataset.caColor
+    overlay.querySelectorAll('[data-ca-color]').forEach(x => x.style.border = '2px solid transparent')
+    b.style.border = '2px solid #fff'
+  }))
+  overlay.querySelector('#ca-cancel').onclick = close
+  overlay.querySelector('#ca-save').onclick = async () => {
+    const name = overlay.querySelector('#ca-name').value.trim()
+    if (!name) { alert('Nombre requerido'); return }
+    try {
+      const r = await _api('crypto_account_add', { name, color: chosenColor })
+      close()
+      _cryptoAccountId = r.account?.id || 'all'
+      renderCrypto()
+    } catch (e) { alert('⚠ ' + e.message) }
+  }
 }
 
 if (typeof window !== 'undefined') {

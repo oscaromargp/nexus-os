@@ -468,12 +468,15 @@ async function getCryptoPrices(admin, symbols) {
   return fresh
 }
 
-async function cryptoListHoldings(admin, userId) {
-  const { data: txs, error } = await admin
+async function cryptoListHoldings(admin, userId, accountId = null) {
+  let q = admin
     .from('crypto_transactions')
     .select('*')
     .eq('owner_id', userId)
     .order('date', { ascending: true })
+  // Filtra por cuenta si se especifica (accountId='all' o null = todas)
+  if (accountId && accountId !== 'all') q = q.eq('account_id', accountId)
+  const { data: txs, error } = await q
   if (error) throw error
 
   // Aggregate by symbol
@@ -1065,29 +1068,58 @@ export default async function handler(req, res) {
 
     // ── CRIPTO PORTFOLIO ────────────────────────────────────────
     if (action === 'crypto_list') {
-      const result = await cryptoListHoldings(admin, userId)
+      const result = await cryptoListHoldings(admin, userId, req.body?.account_id || null)
       return res.status(200).json({ ok: true, ...result })
     }
 
+    // ── Cripto · Cuentas (portafolios separados) ──
+    if (action === 'crypto_account_list') {
+      const { data, error } = await admin.from('crypto_accounts')
+        .select('*').eq('owner_id', userId).eq('is_active', true).order('created_at')
+      if (error) throw error
+      return res.status(200).json({ ok: true, accounts: data || [] })
+    }
+    if (action === 'crypto_account_add') {
+      const { name, kind, color, notes } = req.body
+      if (!name) return res.status(400).json({ error: 'name requerido' })
+      const { data, error } = await admin.from('crypto_accounts').insert({
+        owner_id: userId, name, kind: kind || 'portfolio',
+        color: color || '#22d3ee', notes: notes || null,
+      }).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, account: data })
+    }
+    if (action === 'crypto_account_delete') {
+      const { id } = req.body
+      if (!id) return res.status(400).json({ error: 'id requerido' })
+      // Las transacciones quedan con account_id NULL (ON DELETE SET NULL)
+      const { error } = await admin.from('crypto_accounts').delete().eq('id', id).eq('owner_id', userId)
+      if (error) throw error
+      return res.status(200).json({ ok: true })
+    }
+
     if (action === 'crypto_transactions') {
-      const { data, error } = await admin
+      let q = admin
         .from('crypto_transactions')
         .select('*')
         .eq('owner_id', userId)
         .order('date', { ascending: false })
         .limit(100)
+      if (req.body?.account_id && req.body.account_id !== 'all') q = q.eq('account_id', req.body.account_id)
+      const { data, error } = await q
       if (error) throw error
       return res.status(200).json({ ok: true, transactions: data || [] })
     }
 
     if (action === 'crypto_add_tx') {
-      const { symbol, name, type, quantity, price_mxn, price_usd, fee_mxn, fee_usd, exchange, network, notes, reasoning, date } = req.body
+      const { symbol, name, type, quantity, price_mxn, price_usd, fee_mxn, fee_usd, exchange, network, notes, reasoning, date, account_id } = req.body
       if (!symbol || !type || !quantity) return res.status(400).json({ error: 'symbol + type + quantity requeridos' })
       const q = Number(quantity)
       const pMxn = price_mxn != null ? Number(price_mxn) : null
       const total = pMxn != null ? q * pMxn + Number(fee_mxn || 0) : null
       const { data, error } = await admin.from('crypto_transactions').insert({
         owner_id: userId,
+        account_id: account_id && account_id !== 'all' ? account_id : null,
         symbol: String(symbol).toUpperCase(),
         name: name || null,
         type, quantity: q,
