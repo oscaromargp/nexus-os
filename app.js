@@ -26,6 +26,7 @@ import { renderAutomations } from './src/automations.js'
 import { renderProjectRssTab } from './src/rss-feeds.js'
 import { renderAFP } from './src/afp.js'
 import { renderCrypto } from './src/crypto.js'
+import { renderHealth } from './src/health.js'
 import { renderModulesPanel, applyModulesToSidebar } from './src/modules.js'
 import Sortable from 'sortablejs'
 import {
@@ -2497,6 +2498,7 @@ const VIEW_RENDER_MAP = {
   automations:  ()      => { if (window.nexusAutomations?.render) window.nexusAutomations.render() },
   afp:          ()      => renderAFP(),
   crypto:       ()      => renderCrypto(),
+  salud:        ()      => renderHealth(),
   // Vistas adicionales — evitan que caigan al fallback costoso
   tags:         (nodes) => { if (typeof renderTagsView === 'function') renderTagsView(nodes) },
   herramientas: ()      => {},
@@ -22680,7 +22682,7 @@ window.mvOpenModal = async (id = null) => {
 
         <!-- Cantidad / Moneda / TC -->
         <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-bottom:14px;">
-          ${fld('Cantidad *', `<input type="number" id="mv-cantidad" value="${mov?.cantidad||''}" placeholder="0.00" step="0.0001" min="0" oninput="mvCalcMxn()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
+          ${fld('Cantidad *', `<input type="number" id="mv-cantidad" value="${mov?.cantidad||''}" placeholder="0.00000000" step="any" min="0" inputmode="decimal" oninput="mvCalcMxn()" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;outline:none;box-sizing:border-box;" />`)}
           ${fld('Moneda', `<select id="mv-moneda" onchange="mvOnMonedaChange()" style="width:100%;padding:9px 12px;background:var(--bg-panel);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:var(--text-primary);font-size:13px;cursor:pointer;outline:none;box-sizing:border-box;">
             <option value="MXN"  ${(mov?.moneda||'MXN')==='MXN' ?'selected':''}>🇲🇽 MXN</option>
             <option value="USD"  ${mov?.moneda==='USD' ?'selected':''}>🇺🇸 USD</option>

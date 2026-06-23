@@ -28,6 +28,9 @@ export const MODULES = [
   // Inversiones
   { id: 'crypto',       name: 'Cripto Portfolio',icon: '₿',  category: 'invest',  sidebar: 'crypto',     desc: 'Tracking manual con precios live + journal' },
 
+  // Bienestar
+  { id: 'salud',        name: 'Salud Física',    icon: '🩺', category: 'wellness', sidebar: 'salud',     desc: 'Metas diarias, hábitos con rachas, análisis médicos con tendencias y resumen IA' },
+
   // Inmobiliario
   { id: 'inmuebles',    name: 'Inmuebles',       icon: '🏠', category: 'realestate', sidebar: 'inmuebles', desc: 'CRM inmobiliario + leads + reportes IA' },
 
@@ -42,6 +45,7 @@ export const CATEGORIES = [
   { id: 'core',        label: '🧠 Esenciales',       desc: 'Las bases del sistema' },
   { id: 'finance',     label: '💰 Finanzas',          desc: 'Para controlar tu dinero' },
   { id: 'invest',      label: '📈 Inversiones',       desc: 'Para hacer crecer tu patrimonio' },
+  { id: 'wellness',    label: '🩺 Bienestar',         desc: 'Para cuidar tu salud física' },
   { id: 'realestate',  label: '🏠 Inmobiliario',      desc: 'CRM + reportes para agentes' },
   { id: 'automation',  label: '⚡ Automatización',    desc: 'Flujos sin programar' },
   { id: 'utility',     label: '🛠️ Utilidades',        desc: 'Herramientas accesorias' },
