@@ -71,6 +71,72 @@ ${rawText.slice(0, 6000)}`
   return { ok: false, error: 'Sin proveedor de IA disponible (configura GROQ_API_KEY o GEMINI_API_KEY).' }
 }
 
+// ── IA Visión: extrae valores de la FOTO de un estudio (Gemini 2.0 Flash) ──
+async function extractLabsFromImage(base64, mimeType) {
+  const geminiKey = process.env.GEMINI_API_KEY
+  if (!geminiKey) return { ok: false, error: 'GEMINI_API_KEY no configurada' }
+
+  const prompt = `Eres un asistente que LEE un estudio de laboratorio clínico desde una imagen y extrae sus valores.
+Devuelve EXCLUSIVAMENTE un array JSON (sin texto extra, sin fences). Cada elemento:
+{
+  "marker": "nombre del análisis en español (ej: Glucosa en ayunas, Colesterol total, Presión arterial, Hemoglobina)",
+  "value": número,
+  "value2": número o null,   // SOLO para presión arterial (ej 120/80 → value=120, value2=80). Si no aplica, null.
+  "unit": "unidad tal como aparece (mg/dL, %, U/L...) o cadena vacía",
+  "ref_low": número o null,  // límite inferior del rango de referencia si aparece
+  "ref_high": número o null  // límite superior del rango de referencia si aparece
+}
+Reglas:
+- NO inventes valores. Solo extrae lo que se vea claramente en la imagen.
+- Si un valor no es legible, omítelo.
+- Convierte comas decimales a punto (0,95 → 0.95).
+- Si la imagen NO es un estudio o no hay valores, devuelve [].`
+
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [
+          { text: prompt },
+          { inline_data: { mime_type: mimeType || 'image/jpeg', data: base64 } },
+        ] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.1, maxOutputTokens: 2048 },
+      }),
+      signal: AbortSignal.timeout(45000),
+    })
+    if (!r.ok) {
+      const t = await r.text()
+      return { ok: false, error: 'Gemini ' + r.status + ': ' + t.slice(0, 200) }
+    }
+    const j = await r.json()
+    let raw = j.candidates?.[0]?.content?.parts?.[0]?.text || '[]'
+    let arr
+    try { arr = JSON.parse(raw) }
+    catch {
+      const m = raw.match(/\[[\s\S]*\]/)
+      arr = m ? JSON.parse(m[0]) : []
+    }
+    if (!Array.isArray(arr)) arr = []
+    // Normaliza y limpia
+    const clean = arr
+      .filter(x => x && x.marker && x.value != null && x.value !== '')
+      .slice(0, 60)
+      .map(x => ({
+        marker: String(x.marker).slice(0, 120),
+        value: Number(String(x.value).replace(',', '.')),
+        value2: x.value2 != null && x.value2 !== '' ? Number(String(x.value2).replace(',', '.')) : null,
+        unit: x.unit ? String(x.unit).slice(0, 20) : '',
+        ref_low: x.ref_low != null && x.ref_low !== '' ? Number(String(x.ref_low).replace(',', '.')) : null,
+        ref_high: x.ref_high != null && x.ref_high !== '' ? Number(String(x.ref_high).replace(',', '.')) : null,
+      }))
+      .filter(x => !isNaN(x.value))
+    return { ok: true, readings: clean }
+  } catch (e) {
+    return { ok: false, error: e.name === 'AbortError' ? 'La imagen tardó demasiado. Intenta con una foto más pequeña.' : e.message }
+  }
+}
+
 // ── Cálculo de rachas a partir de health_logs ──
 function computeStreaks(logs, goals) {
   // logs: [{ goal_kind, log_date, value }]
@@ -108,6 +174,9 @@ function computeStreaks(logs, goals) {
   return result
 }
 
+// La extracción por foto (Gemini visión) puede tardar; pedimos margen a Vercel.
+export const config = { maxDuration: 60 }
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -142,9 +211,17 @@ export default async function handler(req, res) {
 
       // Tendencias: agrupa lecturas por marker
       const trends = {}
+      const trendMeta = {}   // marker → { category, unit } (último conocido)
       for (const r of readings) {
         if (!trends[r.marker]) trends[r.marker] = []
-        trends[r.marker].push({ value: Number(r.value), unit: r.unit, date: r.measured_at, ref_low: r.ref_low, ref_high: r.ref_high })
+        trends[r.marker].push({
+          value: Number(r.value),
+          value2: r.value2 != null ? Number(r.value2) : null,
+          unit: r.unit, date: r.measured_at,
+          ref_low: r.ref_low, ref_high: r.ref_high,
+          category: r.category || null, source: r.source || 'manual',
+        })
+        if (!trendMeta[r.marker]) trendMeta[r.marker] = { category: r.category || null, unit: r.unit || null }
       }
       // Ordena cada marker por fecha ascendente para graficar
       for (const k of Object.keys(trends)) trends[k].reverse()
@@ -159,7 +236,7 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true,
         goals, today_progress: todayLogs,
-        studies, trends, streaks,
+        studies, trends, trend_meta: trendMeta, streaks,
         next_checkup: nextCheckups[0] || null,
         today,
       })
@@ -227,23 +304,64 @@ export default async function handler(req, res) {
 
     // ── LECTURAS (valores para tendencias) ──
     if (action === 'health_reading_add') {
-      const { study_id, marker, value, unit, ref_low, ref_high, measured_at } = req.body
+      const { study_id, marker, value, value2, unit, ref_low, ref_high, measured_at, category, source } = req.body
       if (!marker || value == null) return res.status(400).json({ error: 'marker + value requeridos' })
       const { data, error } = await sb.from('health_readings').insert({
         owner_id: userId, study_id: study_id || null, marker,
-        value: Number(value), unit: unit || null,
-        ref_low: ref_low != null ? Number(ref_low) : null,
-        ref_high: ref_high != null ? Number(ref_high) : null,
+        value: Number(value),
+        value2: value2 != null && value2 !== '' ? Number(value2) : null,
+        unit: unit || null,
+        category: category || null,
+        source: source || 'manual',
+        ref_low: ref_low != null && ref_low !== '' ? Number(ref_low) : null,
+        ref_high: ref_high != null && ref_high !== '' ? Number(ref_high) : null,
         measured_at: measured_at || new Date().toISOString().slice(0, 10),
       }).select().single()
       if (error) throw error
       return res.status(200).json({ ok: true, reading: data })
+    }
+    // ── LECTURAS EN LOTE (confirmación de la foto→IA) ──
+    if (action === 'health_readings_bulk') {
+      const { readings, study_id, measured_at, source } = req.body
+      if (!Array.isArray(readings) || !readings.length) return res.status(400).json({ error: 'readings (array) requerido' })
+      const date = measured_at || new Date().toISOString().slice(0, 10)
+      const rows = readings
+        .filter(r => r && r.marker && r.value != null && r.value !== '')
+        .slice(0, 60)
+        .map(r => ({
+          owner_id: userId, study_id: study_id || null, marker: String(r.marker).slice(0, 120),
+          value: Number(r.value),
+          value2: r.value2 != null && r.value2 !== '' ? Number(r.value2) : null,
+          unit: r.unit || null,
+          category: r.category || null,
+          source: source || 'photo_ai',
+          ref_low: r.ref_low != null && r.ref_low !== '' ? Number(r.ref_low) : null,
+          ref_high: r.ref_high != null && r.ref_high !== '' ? Number(r.ref_high) : null,
+          measured_at: r.measured_at || date,
+        }))
+        .filter(r => !isNaN(r.value))
+      if (!rows.length) return res.status(400).json({ error: 'Ninguna lectura válida' })
+      const { data, error } = await sb.from('health_readings').insert(rows).select()
+      if (error) throw error
+      return res.status(200).json({ ok: true, inserted: data?.length || 0, readings: data })
     }
     if (action === 'health_reading_delete') {
       const { id } = req.body
       const { error } = await sb.from('health_readings').delete().eq('id', id).eq('owner_id', userId)
       if (error) throw error
       return res.status(200).json({ ok: true })
+    }
+
+    // ── IA VISIÓN: extrae valores de la FOTO de un estudio ──
+    if (action === 'health_extract_labs') {
+      let { image_base64, mime_type } = req.body
+      if (!image_base64) return res.status(400).json({ error: 'image_base64 requerido' })
+      // Si viene con prefijo data:..;base64, lo quitamos
+      const m = String(image_base64).match(/^data:([^;]+);base64,(.*)$/)
+      if (m) { mime_type = mime_type || m[1]; image_base64 = m[2] }
+      const r = await extractLabsFromImage(image_base64, mime_type)
+      if (!r.ok) return res.status(502).json(r)
+      return res.status(200).json({ ok: true, readings: r.readings })
     }
 
     // ── IA: resumen de análisis ──

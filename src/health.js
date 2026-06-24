@@ -25,6 +25,72 @@ function _fmtDate(d) {
   return new Date(d + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// ── Catálogo de marcadores comunes (México) ────────────────────────
+// Unidad + rango de referencia pre-cargados → captura manual de 1 toque.
+// El usuario elige categoría y marcador; o usa "Otro…" para personalizado.
+const HEALTH_CATS = [
+  { id: 'vitales',   label: 'Signos vitales',        emoji: '🫀' },
+  { id: 'antropo',   label: 'Peso y medidas',        emoji: '⚖️' },
+  { id: 'biometria', label: 'Biometría hemática',    emoji: '🩸' },
+  { id: 'quimica',   label: 'Química sanguínea',     emoji: '🧪' },
+  { id: 'lipidos',   label: 'Perfil de lípidos',     emoji: '🩸' },
+  { id: 'higado',    label: 'Función hepática',      emoji: '🫁' },
+  { id: 'tiroides',  label: 'Tiroides',              emoji: '🦋' },
+  { id: 'orina',     label: 'Examen de orina',       emoji: '💧' },
+  { id: 'vitaminas', label: 'Vitaminas y minerales', emoji: '💊' },
+  { id: 'otro',      label: 'Otro (personalizado)',  emoji: '✏️' },
+]
+const HEALTH_CAT_BY_ID = Object.fromEntries(HEALTH_CATS.map(c => [c.id, c]))
+
+const HEALTH_MARKERS = [
+  // Signos vitales
+  { name: 'Presión arterial',     unit: 'mmHg',  low: 90,  high: 120, cat: 'vitales', dual: true, label2: 'Diastólica', low2: 60, high2: 80 },
+  { name: 'Frecuencia cardiaca',  unit: 'lpm',   low: 60,  high: 100, cat: 'vitales' },
+  { name: 'Saturación O₂',        unit: '%',     low: 95,  high: 100, cat: 'vitales' },
+  { name: 'Temperatura',          unit: '°C',    low: 36,  high: 37.5, cat: 'vitales' },
+  { name: 'Glucosa capilar',      unit: 'mg/dL', low: 70,  high: 100, cat: 'vitales' },
+  // Peso y medidas
+  { name: 'Peso',                 unit: 'kg',    cat: 'antropo' },
+  { name: 'Estatura',             unit: 'cm',    cat: 'antropo' },
+  { name: 'IMC',                  unit: 'kg/m²', low: 18.5, high: 24.9, cat: 'antropo' },
+  { name: 'Cintura',              unit: 'cm',    cat: 'antropo' },
+  { name: '% Grasa corporal',     unit: '%',     cat: 'antropo' },
+  // Biometría hemática
+  { name: 'Hemoglobina',          unit: 'g/dL',  low: 13.5, high: 17.5, cat: 'biometria' },
+  { name: 'Hematocrito',          unit: '%',     low: 38,  high: 50, cat: 'biometria' },
+  { name: 'Leucocitos',           unit: '10³/µL', low: 4,  high: 11, cat: 'biometria' },
+  { name: 'Plaquetas',            unit: '10³/µL', low: 150, high: 450, cat: 'biometria' },
+  // Química sanguínea
+  { name: 'Glucosa en ayunas',    unit: 'mg/dL', low: 70,  high: 100, cat: 'quimica' },
+  { name: 'Hemoglobina glucosilada (HbA1c)', unit: '%', low: 4, high: 5.6, cat: 'quimica' },
+  { name: 'Urea',                 unit: 'mg/dL', low: 15,  high: 45, cat: 'quimica' },
+  { name: 'Creatinina',           unit: 'mg/dL', low: 0.7, high: 1.3, cat: 'quimica' },
+  { name: 'Ácido úrico',          unit: 'mg/dL', low: 3.5, high: 7.2, cat: 'quimica' },
+  // Lípidos
+  { name: 'Colesterol total',     unit: 'mg/dL', low: 0,   high: 200, cat: 'lipidos' },
+  { name: 'Colesterol HDL',       unit: 'mg/dL', low: 40,  high: 200, cat: 'lipidos', higher: true },
+  { name: 'Colesterol LDL',       unit: 'mg/dL', low: 0,   high: 100, cat: 'lipidos' },
+  { name: 'Triglicéridos',        unit: 'mg/dL', low: 0,   high: 150, cat: 'lipidos' },
+  // Hígado
+  { name: 'AST / TGO',            unit: 'U/L',   low: 0,   high: 40, cat: 'higado' },
+  { name: 'ALT / TGP',            unit: 'U/L',   low: 0,   high: 41, cat: 'higado' },
+  { name: 'Bilirrubina total',    unit: 'mg/dL', low: 0.1, high: 1.2, cat: 'higado' },
+  // Tiroides
+  { name: 'TSH',                  unit: 'µUI/mL', low: 0.4, high: 4.0, cat: 'tiroides' },
+  { name: 'T4 libre',             unit: 'ng/dL', low: 0.8, high: 1.8, cat: 'tiroides' },
+  // Orina
+  { name: 'pH urinario',          unit: '',      low: 4.5, high: 8, cat: 'orina' },
+  { name: 'Densidad urinaria',    unit: '',      low: 1.005, high: 1.030, cat: 'orina' },
+  // Vitaminas y minerales
+  { name: 'Vitamina D',           unit: 'ng/mL', low: 30,  high: 100, cat: 'vitaminas' },
+  { name: 'Vitamina B12',         unit: 'pg/mL', low: 200, high: 900, cat: 'vitaminas' },
+  { name: 'Hierro sérico',        unit: 'µg/dL', low: 60,  high: 170, cat: 'vitaminas' },
+  { name: 'Ferritina',            unit: 'ng/mL', low: 30,  high: 300, cat: 'vitaminas' },
+]
+const HEALTH_MARKER_BY_NAME = Object.fromEntries(HEALTH_MARKERS.map(m => [m.name, m]))
+// Marcadores rápidos para los botones de acceso directo
+const HEALTH_QUICK = ['Presión arterial', 'Peso', 'Glucosa en ayunas', 'Glucosa capilar']
+
 export async function renderHealth() {
   const root = document.getElementById('view-salud') || document.getElementById('health-root')
   if (!root) return
@@ -51,7 +117,7 @@ export async function renderHealth() {
       <div style="display:flex;align-items:start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
         <div>
           <h2 style="font-size:24px;font-weight:800;margin:0 0 4px;display:flex;align-items:center;gap:10px;">🩺 Salud</h2>
-          <p style="color:#94a3b8;font-size:13px;margin:0;">Tu copiloto físico — metas, hábitos y análisis. Nexus también te cuida.</p>
+          <p style="color:#94a3b8;font-size:13px;margin:0;">Mide para mejorar — análisis, presión, glucosa, peso y hábitos en un solo lugar.</p>
         </div>
         <button id="health-ai-btn" style="padding:9px 16px;background:linear-gradient(135deg,#34d399,#10b981);border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;font-size:13px;">✨ Analizar mis estudios con IA</button>
       </div>`
@@ -118,6 +184,21 @@ export async function renderHealth() {
       </div>
     </div>`
 
+  // ── Registro rápido (1 toque) ──
+  html += `
+    <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.18);border-radius:14px;padding:14px 16px;margin-bottom:18px;">
+      <div style="font-size:13px;font-weight:800;color:#e5e7eb;margin-bottom:10px;">⚡ Registro rápido</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${HEALTH_QUICK.map(name => {
+          const m = HEALTH_MARKER_BY_NAME[name]
+          const cat = m ? HEALTH_CAT_BY_ID[m.cat] : null
+          return `<button data-health-quick="${_esc(name)}" style="padding:9px 14px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">${cat?cat.emoji:'📈'} ${_esc(name)}</button>`
+        }).join('')}
+        <button data-health-quick="" style="padding:9px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;">+ Otro valor</button>
+        <button id="health-photo-ai" style="padding:9px 14px;background:linear-gradient(135deg,rgba(167,139,250,0.18),rgba(96,165,250,0.18));border:1px solid rgba(167,139,250,0.4);color:#c4b5fd;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">📷 Foto del estudio → IA</button>
+      </div>
+    </div>`
+
   // ── Tendencias de análisis ──
   const trendMarkers = Object.keys(trends)
   if (trendMarkers.length) {
@@ -144,10 +225,11 @@ export async function renderHealth() {
               <div style="padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;">
                 <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap;">
                   <div style="flex:1;min-width:140px;">
-                    <div style="font-size:13px;font-weight:700;color:#e5e7eb;">${_esc(marker)}</div>
+                    <div style="font-size:13px;font-weight:700;color:#e5e7eb;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${_esc(marker)}${last.source==='photo_ai'?'<span style="font-size:9px;background:rgba(167,139,250,0.15);color:#a78bfa;padding:1px 5px;border-radius:4px;">📷 IA</span>':''}</div>
                     <div style="font-size:18px;font-weight:800;color:${inRange?'#34d399':'#f87171'};font-family:'JetBrains Mono',monospace;">
-                      ${last.value} <span style="font-size:11px;color:#94a3b8;">${_esc(last.unit||'')}</span>
+                      ${last.value2 != null ? last.value + '/' + last.value2 : last.value} <span style="font-size:11px;color:#94a3b8;">${_esc(last.unit||'')}</span>
                       ${prev ? `<span style="font-size:12px;color:${arrowColor};margin-left:6px;">${arrow} ${Math.abs(delta).toFixed(1)}</span>` : ''}
+                      ${inRange ? '<span style="font-size:11px;color:#34d399;margin-left:6px;">✓ en rango</span>' : '<span style="font-size:11px;color:#f87171;margin-left:6px;">⚠ fuera</span>'}
                     </div>
                     <div style="font-size:10px;color:#94a3b8;">${last.ref_low!=null||last.ref_high!=null ? `Rango: ${last.ref_low??'?'}–${last.ref_high??'?'} · ` : ''}${_fmtDate(last.date)}</div>
                   </div>
@@ -230,10 +312,15 @@ function _bindHealth(root) {
     try { await _api('health_study_delete', { id: b.dataset.healthStudyDel }); renderHealth() }
     catch (e) { alert('⚠ ' + e.message) }
   }))
+  // Registro rápido (preselecciona marcador)
+  root.querySelectorAll('[data-health-quick]').forEach(b => b.addEventListener('click', () => {
+    _openReadingModal(b.dataset.healthQuick || undefined)
+  }))
   root.querySelector('#health-goal-add')?.addEventListener('click', _openGoalModal)
-  root.querySelector('#health-reading-add')?.addEventListener('click', _openReadingModal)
+  root.querySelector('#health-reading-add')?.addEventListener('click', () => _openReadingModal())
   root.querySelector('#health-study-add')?.addEventListener('click', _openStudyModal)
   root.querySelector('#health-ai-btn')?.addEventListener('click', _openAiModal)
+  root.querySelector('#health-photo-ai')?.addEventListener('click', _openPhotoAiModal)
 }
 
 function _modal(inner, maxW = 420) {
@@ -270,15 +357,35 @@ function _openGoalModal() {
   }
 }
 
-function _openReadingModal() {
+// preselectName: abre el modal con un marcador ya elegido (botones rápidos)
+function _openReadingModal(preselectName) {
   const today = new Date().toISOString().slice(0, 10)
-  const { close } = _modal(`
+  const pre = preselectName ? HEALTH_MARKER_BY_NAME[preselectName] : null
+  const preCat = pre ? pre.cat : 'vitales'
+
+  const catOpts = HEALTH_CATS.map(c => `<option value="${c.id}" ${c.id === preCat ? 'selected' : ''}>${c.emoji} ${c.label}</option>`).join('')
+
+  const { ov, close } = _modal(`
     <h3 style="margin:0 0 4px;font-size:16px;font-weight:800;">📈 Registrar valor</h3>
-    <p style="margin:0 0 12px;font-size:11px;color:#94a3b8;">Ej: Glucosa 95 mg/dL, rango 70–100</p>
-    <label style="font-size:12px;color:#94a3b8;">Marcador <input id="hr-marker" placeholder="Glucosa" style="${_inputCss}"/></label>
+    <p style="margin:0 0 12px;font-size:11px;color:#94a3b8;">Elige el estudio y el valor — la unidad y el rango se llenan solos.</p>
+
+    <label style="font-size:12px;color:#94a3b8;">Categoría</label>
+    <select id="hr-cat" style="${_inputCss}">${catOpts}</select>
+
+    <div id="hr-marker-wrap" style="margin-top:8px;">
+      <label style="font-size:12px;color:#94a3b8;">Marcador</label>
+      <select id="hr-marker-sel" style="${_inputCss}"></select>
+    </div>
+    <div id="hr-custom-wrap" style="margin-top:8px;display:none;">
+      <label style="font-size:12px;color:#94a3b8;">Nombre del marcador <input id="hr-marker-custom" placeholder="Ej: Proteína C reactiva" style="${_inputCss}"/></label>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
-      <label style="font-size:12px;color:#94a3b8;">Valor <input id="hr-value" type="number" step="any" placeholder="95" style="${_inputCss}"/></label>
+      <label style="font-size:12px;color:#94a3b8;"><span id="hr-value-lbl">Valor</span> <input id="hr-value" type="number" step="any" inputmode="decimal" placeholder="95" style="${_inputCss}"/></label>
       <label style="font-size:12px;color:#94a3b8;">Unidad <input id="hr-unit" placeholder="mg/dL" style="${_inputCss}"/></label>
+    </div>
+    <div id="hr-value2-wrap" style="margin-top:8px;display:none;">
+      <label style="font-size:12px;color:#94a3b8;"><span id="hr-value2-lbl">Diastólica</span> <input id="hr-value2" type="number" step="any" inputmode="decimal" placeholder="80" style="${_inputCss}"/></label>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
       <label style="font-size:12px;color:#94a3b8;">Rango mín <input id="hr-low" type="number" step="any" placeholder="70" style="${_inputCss}"/></label>
@@ -288,19 +395,71 @@ function _openReadingModal() {
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button id="hr-cancel" style="flex:1;padding:9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;">Cancelar</button>
       <button id="hr-save" style="flex:1;padding:9px;background:#22d3ee;border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;">Guardar</button>
-    </div>`)
-  document.getElementById('hr-cancel').onclick = close
-  document.getElementById('hr-save').onclick = async () => {
-    const marker = document.getElementById('hr-marker').value.trim()
-    const value = document.getElementById('hr-value').value
-    if (!marker || value === '') { alert('Marcador y valor requeridos'); return }
+    </div>`, 440)
+
+  const $ = id => ov.querySelector('#' + id)
+  const catSel = $('hr-cat'), markerSel = $('hr-marker-sel')
+
+  // Rellena el <select> de marcadores según la categoría
+  function fillMarkers() {
+    const cat = catSel.value
+    if (cat === 'otro') {
+      $('hr-marker-wrap').style.display = 'none'
+      $('hr-custom-wrap').style.display = 'block'
+      applyMarker(null)
+      return
+    }
+    $('hr-marker-wrap').style.display = 'block'
+    $('hr-custom-wrap').style.display = 'none'
+    const list = HEALTH_MARKERS.filter(m => m.cat === cat)
+    markerSel.innerHTML = list.map(m => `<option value="${_esc(m.name)}">${_esc(m.name)}</option>`).join('')
+    if (pre && pre.cat === cat) markerSel.value = pre.name
+    applyMarker(HEALTH_MARKER_BY_NAME[markerSel.value])
+  }
+
+  // Auto-llena unidad/rango y muestra 2do valor si es presión
+  function applyMarker(m) {
+    if (m) {
+      $('hr-unit').value = m.unit || ''
+      $('hr-low').value  = m.low != null ? m.low : ''
+      $('hr-high').value = m.high != null ? m.high : ''
+      if (m.dual) {
+        $('hr-value2-wrap').style.display = 'block'
+        $('hr-value-lbl').textContent = 'Sistólica'
+        $('hr-value2-lbl').textContent = m.label2 || 'Diastólica'
+      } else {
+        $('hr-value2-wrap').style.display = 'none'
+        $('hr-value-lbl').textContent = 'Valor'
+      }
+    } else {
+      $('hr-value2-wrap').style.display = 'none'
+      $('hr-value-lbl').textContent = 'Valor'
+    }
+  }
+
+  catSel.addEventListener('change', fillMarkers)
+  markerSel.addEventListener('change', () => applyMarker(HEALTH_MARKER_BY_NAME[markerSel.value]))
+  fillMarkers()
+
+  $('hr-cancel').onclick = close
+  $('hr-save').onclick = async () => {
+    const isCustom = catSel.value === 'otro'
+    const marker = isCustom ? $('hr-marker-custom').value.trim() : markerSel.value
+    const value = $('hr-value').value
+    if (!marker) { alert('Escribe el nombre del marcador'); return }
+    if (value === '') { alert('Falta el valor'); return }
+    const def = HEALTH_MARKER_BY_NAME[marker]
     try {
       await _api('health_reading_add', {
-        marker, value: Number(value),
-        unit: document.getElementById('hr-unit').value.trim(),
-        ref_low: document.getElementById('hr-low').value || null,
-        ref_high: document.getElementById('hr-high').value || null,
-        measured_at: document.getElementById('hr-date').value,
+        marker,
+        value: Number(value),
+        value2: $('hr-value2-wrap').style.display !== 'none' ? ($('hr-value2').value || null) : null,
+        unit: $('hr-unit').value.trim(),
+        category: isCustom ? 'otro' : catSel.value,
+        source: 'manual',
+        ref_low: $('hr-low').value || null,
+        ref_high: $('hr-high').value || null,
+        measured_at: $('hr-date').value,
       })
       close(); renderHealth()
     } catch (e) { alert('⚠ ' + e.message) }
@@ -334,6 +493,139 @@ function _openStudyModal() {
       close(); renderHealth()
     } catch (e) { alert('⚠ ' + e.message) }
   }
+}
+
+// Reescala una imagen a máx 1400px y la devuelve como base64 JPEG (q0.72).
+// Evita subir fotos de varios MB (límite de Vercel) y acelera la IA.
+function _downscaleImage(file, maxSide = 1400, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      let { width: w, height: h } = img
+      if (Math.max(w, h) > maxSide) {
+        const r = maxSide / Math.max(w, h)
+        w = Math.round(w * r); h = Math.round(h * r)
+      }
+      const c = document.createElement('canvas')
+      c.width = w; c.height = h
+      c.getContext('2d').drawImage(img, 0, 0, w, h)
+      resolve(c.toDataURL('image/jpeg', quality))
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No pude leer la imagen')) }
+    img.src = url
+  })
+}
+
+// ── Modal: Foto del estudio → IA extrae valores → revisión → guardar ──
+function _openPhotoAiModal() {
+  const today = new Date().toISOString().slice(0, 10)
+  const { ov, close } = _modal(`
+    <h3 style="margin:0 0 4px;font-size:16px;font-weight:800;">📷 Foto del estudio → IA</h3>
+    <p style="margin:0 0 12px;font-size:11px;color:#94a3b8;line-height:1.5;">Toma o sube la foto de tus resultados. La IA extrae los valores y <strong>tú revisas antes de guardar</strong>. No reemplaza a tu médico.</p>
+
+    <div id="pa-drop" style="border:1px dashed rgba(167,139,250,0.4);border-radius:12px;padding:18px;text-align:center;background:rgba(167,139,250,0.04);">
+      <input id="pa-file" type="file" accept="image/*" capture="environment" style="display:none;"/>
+      <button id="pa-pick" style="padding:10px 18px;background:linear-gradient(135deg,#a78bfa,#60a5fa);border:none;color:#000;font-weight:700;border-radius:10px;cursor:pointer;font-size:13px;">📷 Tomar / subir foto</button>
+      <div id="pa-fname" style="font-size:11px;color:#94a3b8;margin-top:8px;"></div>
+    </div>
+
+    <div id="pa-status" style="margin-top:12px;font-size:12px;color:#94a3b8;text-align:center;"></div>
+    <div id="pa-results"></div>
+
+    <label style="font-size:12px;color:#94a3b8;display:none;margin-top:10px;" id="pa-date-wrap">Fecha del estudio <input id="pa-date" type="date" value="${today}" style="${_inputCss}"/></label>
+
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button id="pa-cancel" style="flex:1;padding:9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;">Cancelar</button>
+      <button id="pa-save" style="flex:2;padding:9px;background:#34d399;border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;display:none;">✓ Guardar valores</button>
+    </div>`, 560)
+
+  const $ = id => ov.querySelector('#' + id)
+  let extracted = []
+
+  $('pa-cancel').onclick = close
+  $('pa-pick').onclick = () => $('pa-file').click()
+
+  $('pa-file').onchange = async () => {
+    const file = $('pa-file').files?.[0]
+    if (!file) return
+    $('pa-fname').textContent = file.name
+    const status = $('pa-status')
+    status.style.color = '#94a3b8'
+    status.textContent = '⏳ Procesando imagen…'
+    $('pa-results').innerHTML = ''
+    $('pa-save').style.display = 'none'
+    try {
+      const dataUrl = await _downscaleImage(file)
+      status.textContent = '🤖 La IA está leyendo tu estudio… (10-30s)'
+      const r = await _api('health_extract_labs', { image_base64: dataUrl })
+      extracted = r.readings || []
+      if (!extracted.length) {
+        status.style.color = '#fbbf24'
+        status.textContent = '⚠ No pude leer valores claros. Prueba con mejor luz o regístralos a mano.'
+        return
+      }
+      status.style.color = '#34d399'
+      status.textContent = `✓ Encontré ${extracted.length} valor(es). Revisa y corrige antes de guardar:`
+      _renderPaTable($, extracted)
+      $('pa-date-wrap').style.display = 'block'
+      $('pa-save').style.display = 'block'
+    } catch (e) {
+      status.style.color = '#f87171'
+      status.textContent = '⚠ ' + e.message
+    }
+  }
+
+  $('pa-save').onclick = async () => {
+    // Lee la tabla editada
+    const rows = [...ov.querySelectorAll('[data-pa-row]')].map(tr => ({
+      marker: tr.querySelector('[data-f="marker"]').value.trim(),
+      value:  tr.querySelector('[data-f="value"]').value,
+      value2: tr.querySelector('[data-f="value2"]')?.value || null,
+      unit:   tr.querySelector('[data-f="unit"]').value.trim(),
+      ref_low:  tr.querySelector('[data-f="low"]').value || null,
+      ref_high: tr.querySelector('[data-f="high"]').value || null,
+    })).filter(r => r.marker && r.value !== '')
+    if (!rows.length) { alert('No hay valores para guardar'); return }
+    const btn = $('pa-save'); btn.disabled = true; btn.textContent = '⏳ Guardando…'
+    try {
+      const r = await _api('health_readings_bulk', { readings: rows, measured_at: $('pa-date').value, source: 'photo_ai' })
+      close(); renderHealth()
+      if (window.showToast) window.showToast(`✅ ${r.inserted} valores guardados desde la foto`)
+    } catch (e) { alert('⚠ ' + e.message); btn.disabled = false; btn.textContent = '✓ Guardar valores' }
+  }
+}
+
+// Tabla editable de los valores extraídos por la IA
+function _renderPaTable($, readings) {
+  const rowCss = 'width:100%;padding:6px 8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;color:#e5e7eb;font-size:12px;box-sizing:border-box;'
+  $('pa-results').innerHTML = `
+    <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow-y:auto;">
+      ${readings.map((r, i) => {
+        const dual = r.value2 != null
+        return `
+        <div data-pa-row style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:8px;">
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+            <input data-f="marker" value="${_esc(r.marker)}" placeholder="Marcador" style="${rowCss};font-weight:700;flex:1;"/>
+            <button data-pa-del="${i}" title="Quitar" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;flex-shrink:0;">🗑</button>
+          </div>
+          <div style="display:grid;grid-template-columns:${dual ? '1fr 1fr 1.2fr' : '1fr 1.4fr'};gap:6px;">
+            <input data-f="value" type="number" step="any" inputmode="decimal" value="${r.value ?? ''}" placeholder="${dual ? 'Sistólica' : 'Valor'}" style="${rowCss}"/>
+            ${dual ? `<input data-f="value2" type="number" step="any" inputmode="decimal" value="${r.value2}" placeholder="Diastólica" style="${rowCss}"/>` : ''}
+            <input data-f="unit" value="${_esc(r.unit||'')}" placeholder="Unidad" style="${rowCss}"/>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+            <input data-f="low" type="number" step="any" value="${r.ref_low ?? ''}" placeholder="rango mín" style="${rowCss}"/>
+            <input data-f="high" type="number" step="any" value="${r.ref_high ?? ''}" placeholder="rango máx" style="${rowCss}"/>
+          </div>
+        </div>`
+      }).join('')}
+    </div>`
+  // Quitar fila
+  $('pa-results').querySelectorAll('[data-pa-del]').forEach(b => b.addEventListener('click', () => {
+    b.closest('[data-pa-row]').remove()
+  }))
 }
 
 function _openAiModal() {
