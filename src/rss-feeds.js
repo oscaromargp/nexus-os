@@ -194,14 +194,14 @@ export async function renderProjectRssTab(projectId) {
         <div>
           <h3 style="margin:0;font-size:18px;font-weight:800;color:#e5e7eb;">📡 RSS Feeds</h3>
           <p style="margin:4px 0 0;font-size:13px;color:#94a3b8;">
-            Rastrea contenido nuevo de artistas, canales y sitios. Se revisa cada 15 min.
+            Rastrea contenido nuevo de artistas, canales y sitios. Pulsa <b style="color:#34d399;">Actualizar ahora</b> para bajar lo último.
           </p>
         </div>
         <div style="display:flex;gap:6px;">
-          <button data-rss-act="reload" data-pid="${projectId}"
-            title="Recargar"
-            style="padding:8px 12px;background:rgba(255,255,255,0.05);border:1px solid #374151;color:#9ca3af;border-radius:8px;cursor:pointer;font-size:13px;">
-            🔄
+          <button data-rss-act="refresh-now" data-pid="${projectId}"
+            title="Baja los feeds ahora mismo (sin esperar al ciclo automático)"
+            style="padding:8px 14px;background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.35);color:#60a5fa;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">
+            🔄 Actualizar ahora
           </button>
           <button data-rss-act="add-source" data-pid="${projectId}"
             style="padding:8px 14px;background:linear-gradient(135deg,#34d399,#22c55e);border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;font-size:13px;">
@@ -354,6 +354,29 @@ function _attachHandlers(root, projectId) {
       el.addEventListener('click', () => _openAddSourceModal(projectId))
     } else if (act === 'reload') {
       el.addEventListener('click', () => renderProjectRssTab(projectId))
+    } else if (act === 'refresh-now') {
+      el.addEventListener('click', async () => {
+        const btn = el
+        const prev = btn.innerHTML
+        btn.disabled = true
+        btn.innerHTML = '⏳ Bajando feeds…'
+        try {
+          const r = await _api('refresh_now', { project_id: projectId })
+          const okN = r.ok_count || 0, total = r.source_count || 0, nuevos = r.total_new || 0
+          // Resumen de fuentes que fallaron (para que el usuario sepa cuál revisar)
+          const fallidas = (r.results || []).filter(x => !x.ok)
+          let msg = `✅ ${okN}/${total} fuentes OK · ${nuevos} nuevos`
+          if (fallidas.length) msg += ` · ⚠️ ${fallidas.length} con problema`
+          if (window.showToast) window.showToast(msg, 6000)
+          invalidateRssCache(projectId)
+          await renderProjectRssTab(projectId)
+        } catch (e) {
+          if (window.showToast) window.showToast('❌ No se pudo actualizar: ' + e.message, 7000)
+          else alert('Error: ' + e.message)
+          btn.disabled = false
+          btn.innerHTML = prev
+        }
+      })
     } else if (act === 'edit-source') {
       el.addEventListener('click', () => {
         const src = _state[projectId].sources.find(s => s.id === el.dataset.sid)

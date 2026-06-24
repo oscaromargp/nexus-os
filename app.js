@@ -1648,7 +1648,7 @@ async function insertDirectNode(type, content, metadata) {
   }
 }
 
-function showToast(msg) {
+function showToast(msg, ms = 3000) {
   const el = document.getElementById('node-msg')
   if (!el) return
   el.textContent = msg
@@ -1658,8 +1658,10 @@ function showToast(msg) {
   el._timeout = setTimeout(() => {
     el.style.opacity = '0'
     setTimeout(() => el.classList.add('hidden'), 500)
-  }, 3000)
+  }, ms)
 }
+// Exponer a window para módulos externos (rss-feeds.js, inmuebles.js, etc.)
+if (typeof window !== 'undefined') window.showToast = showToast
 
 /**
  * nxUndoToast — elimina un nodo de forma optimista con posibilidad de deshacer.
@@ -22995,29 +22997,16 @@ window.mvSaveMov = async () => {
     return
   }
 
-  // ── Auth robusto: usamos el UID REAL autenticado (no el cacheado) y
-  // refrescamos la sesión si está por expirar. Esto evita el fallo RLS
-  // "new row violates row-level security" cuando el token caducó. ──
+  // owner_id: tomamos el id de la sesión activa si está disponible, si no el
+  // cacheado. NO bloqueamos aquí — si el token caducó, el insert fallará con
+  // RLS y entonces refrescamos + reintentamos (más abajo). Tolerante a fallos.
   let authUid = currentUser?.id
   try {
     const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      showToast('⚠ Tu sesión expiró. Recarga la página e inicia sesión de nuevo.')
-      return
-    }
-    // Refresca si expira en menos de 60s
-    const expSoon = session.expires_at && (session.expires_at * 1000 - Date.now() < 60000)
-    if (expSoon) {
-      const { data: refreshed } = await supabase.auth.refreshSession()
-      authUid = refreshed?.user?.id || session.user?.id || authUid
-    } else {
-      authUid = session.user?.id || authUid
-    }
-  } catch (e) {
-    console.warn('[mvSaveMov] auth check', e)
-  }
-  if (!authUid || /admin-uuid-bypass/.test(authUid)) {
-    showToast('⚠ Sesión no válida para guardar. Recarga la página e inicia sesión.')
+    if (session?.user?.id) authUid = session.user.id
+  } catch { /* usamos currentUser.id */ }
+  if (!authUid) {
+    showToast('⚠ No detecté tu sesión. Recarga la página.')
     return
   }
 
@@ -23071,15 +23060,40 @@ window.mvSaveMov = async () => {
     updated_at: new Date().toISOString()
   }
 
+  // ¿El error viene de sesión caducada / RLS? Entonces refrescamos y reintentamos.
+  const _isAuthErr = (err) => {
+    if (!err) return false
+    const code = String(err.code || '')
+    const msg  = String(err.message || '').toLowerCase()
+    return code === '42501' || code === 'PGRST301' ||
+           msg.includes('row-level security') || msg.includes('jwt') ||
+           msg.includes('expired') || msg.includes('not authenticated')
+  }
+
   let movId = _mvEditingId
   try {
     if (_mvEditingId) {
-      const { error } = await supabase.from('movimientos').update(payload).eq('id', _mvEditingId)
-      if (error) { console.error('[mvSaveMov] update error:', error); showToast('❌ No se guardó: ' + error.message); return }
+      let { error } = await supabase.from('movimientos').update(payload).eq('id', _mvEditingId)
+      if (_isAuthErr(error)) {
+        const { data: r } = await supabase.auth.refreshSession()
+        if (r?.user?.id) payload.owner_id = r.user.id
+        ;({ error } = await supabase.from('movimientos').update(payload).eq('id', _mvEditingId))
+      }
+      if (error) { console.error('[mvSaveMov] update error:', error); showToast('❌ No se guardó: ' + error.message, 8000); return }
     } else {
-      const { data, error } = await supabase.from('movimientos').insert(payload).select().single()
-      if (error) { console.error('[mvSaveMov] insert error:', error, 'payload:', payload); showToast('❌ No se guardó: ' + error.message); return }
-      if (!data?.id) { console.error('[mvSaveMov] insert sin data:', data); showToast('❌ No se guardó (sin respuesta del servidor)'); return }
+      let { data, error } = await supabase.from('movimientos').insert(payload).select().single()
+      if (_isAuthErr(error)) {
+        // Token caducado → refresca sesión, corrige owner_id y reintenta UNA vez.
+        const { data: r } = await supabase.auth.refreshSession()
+        if (r?.user?.id) payload.owner_id = r.user.id
+        ;({ data, error } = await supabase.from('movimientos').insert(payload).select().single())
+      }
+      if (error) {
+        console.error('[mvSaveMov] insert error:', error, 'payload:', payload)
+        showToast('❌ No se guardó: ' + error.message, 8000)
+        return
+      }
+      if (!data?.id) { console.error('[mvSaveMov] insert sin data:', data); showToast('❌ No se guardó (sin respuesta del servidor)', 8000); return }
       movId = data.id
       // 💰 Disparar webhook de movement_created (best-effort, sin comprobante aún)
       if (window.nexusN8n?.dispatchMovement) {
@@ -23088,7 +23102,7 @@ window.mvSaveMov = async () => {
     }
   } catch (e) {
     console.error('[mvSaveMov] excepción:', e)
-    showToast('❌ Error al guardar: ' + (e.message || e))
+    showToast('❌ Error al guardar: ' + (e.message || e), 8000)
     return
   }
 

@@ -120,6 +120,150 @@ function buildFeedUrl(platform, handle) {
   }
 }
 
+// ── Instancias públicas de RSSHub (la oficial bloquea con 403 seguido) ──────
+// Probamos varias en orden hasta que una responda. Mantener corto: cada intento
+// suma latencia. Estas rotan; si todas fallan, devolvemos el último error.
+const RSSHUB_MIRRORS = [
+  RSSHUB_BASE,
+  'https://rsshub.rssforever.com',
+  'https://rss.shab.fun',
+  'https://rsshub.pseudoyu.com',
+  'https://hub.slarker.me',
+]
+
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+
+// fetch con User-Agent de navegador + timeout. Devuelve { ok, status, text }.
+async function fetchText(url, { timeout = 12000, accept } = {}) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), timeout)
+  try {
+    const r = await fetch(url, {
+      headers: {
+        'User-Agent': BROWSER_UA,
+        'Accept': accept || 'application/rss+xml, application/atom+xml, application/xml, text/xml, text/html;q=0.9, */*;q=0.8',
+        'Accept-Language': 'es-MX,es;q=0.9,en;q=0.8',
+      },
+      redirect: 'follow',
+      signal: ctrl.signal,
+    })
+    const text = await r.text()
+    return { ok: r.ok, status: r.status, text }
+  } catch (e) {
+    return { ok: false, status: 0, text: '', error: e.name === 'AbortError' ? 'timeout' : e.message }
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+// YouTube: resuelve @handle / user / c → channel_id (UC...) leyendo la página.
+// Con el channel_id usamos el feed NATIVO de YouTube (sin RSSHub → sin 403).
+async function resolveYouTubeChannelId(handle) {
+  if (!handle) return null
+  if (/^UC[\w-]{20,}$/.test(handle)) return handle
+  const tries = [
+    `https://www.youtube.com/${handle.startsWith('@') ? handle : '@' + handle}`,
+    `https://www.youtube.com/c/${handle.replace(/^@/, '')}`,
+    `https://www.youtube.com/user/${handle.replace(/^@/, '')}`,
+  ]
+  for (const u of tries) {
+    const r = await fetchText(u, { timeout: 9000, accept: 'text/html' })
+    if (!r.text) continue
+    const m = r.text.match(/"channelId":"(UC[\w-]{20,})"/)
+          || r.text.match(/<meta itemprop="(?:identifier|channelId)" content="(UC[\w-]{20,})"/)
+          || r.text.match(/channel\/(UC[\w-]{20,})/)
+    if (m) return m[1]
+  }
+  return null
+}
+
+// Decode mínimo de entidades XML/HTML comunes.
+function decodeEntities(s) {
+  if (!s) return ''
+  return String(s)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
+    .replace(/&amp;/g, '&')
+    .trim()
+}
+
+function stripTags(s) {
+  return decodeEntities(String(s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')).trim()
+}
+
+function pick(block, tag) {
+  const m = block.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, 'i'))
+  return m ? m[1] : ''
+}
+
+function pickAttr(block, tag, attr) {
+  const m = block.match(new RegExp(`<${tag}[^>]*\\b${attr}=["']([^"']+)["']`, 'i'))
+  return m ? m[1] : ''
+}
+
+// Parser RSS 2.0 + Atom → [{ external_id, title, url, description, author, published_at, thumbnail }]
+function parseFeed(xml) {
+  if (!xml) return []
+  const items = []
+  const isAtom = /<feed[\s>]/i.test(xml) && /<entry[\s>]/i.test(xml)
+  const blockRe = isAtom ? /<entry[\s>][\s\S]*?<\/entry>/gi : /<item[\s>][\s\S]*?<\/item>/gi
+  const blocks = xml.match(blockRe) || []
+  for (const b of blocks) {
+    let url = ''
+    if (isAtom) {
+      url = pickAttr(b, 'link', 'href') || pick(b, 'id')
+    } else {
+      url = stripTags(pick(b, 'link')) || pickAttr(b, 'atom:link', 'href')
+    }
+    const guid = stripTags(pick(b, 'guid')) || stripTags(pick(b, 'id')) || url
+    const title = stripTags(pick(b, 'title')) || '(sin título)'
+    const rawDesc = pick(b, 'description') || pick(b, 'summary') || pick(b, 'content') || pick(b, 'media:description')
+    const description = stripTags(rawDesc).slice(0, 600)
+    const author = stripTags(pick(b, 'dc:creator')) || stripTags(pick(pick(b, 'author'), 'name')) || stripTags(pick(b, 'author'))
+    const dateStr = stripTags(pick(b, 'pubDate')) || stripTags(pick(b, 'published')) || stripTags(pick(b, 'updated')) || stripTags(pick(b, 'dc:date'))
+    let published_at = null
+    if (dateStr) { const d = new Date(dateStr); if (!isNaN(d)) published_at = d.toISOString() }
+    // thumbnail: media:thumbnail / media:content / enclosure / primer <img> del HTML
+    let thumbnail = pickAttr(b, 'media:thumbnail', 'url') || pickAttr(b, 'media:content', 'url') || pickAttr(b, 'enclosure', 'url')
+    if (!thumbnail) { const im = rawDesc.match(/<img[^>]+src=["']([^"']+)["']/i); if (im) thumbnail = im[1] }
+    if (!guid && !url) continue
+    items.push({
+      external_id: (guid || url).slice(0, 500),
+      title: title.slice(0, 500),
+      url: url || null,
+      description: description || null,
+      author: author || null,
+      published_at,
+      thumbnail: thumbnail || null,
+    })
+  }
+  return items
+}
+
+// Dada una fuente, devuelve la lista de URLs candidatas a probar (con mirrors).
+async function candidateFeedUrls(source) {
+  const { platform, feed_url, handle } = source
+  // YouTube: intenta resolver a feed nativo (sin RSSHub)
+  if (platform === 'youtube') {
+    const chId = await resolveYouTubeChannelId(handle || feed_url)
+    if (chId) return [`https://www.youtube.com/feeds/videos.xml?channel_id=${chId}`]
+  }
+  // Si el feed_url apunta a RSSHub, generamos variantes con cada mirror
+  if (feed_url && /rsshub/i.test(feed_url)) {
+    try {
+      const u = new URL(feed_url)
+      const path = u.pathname + u.search
+      return RSSHUB_MIRRORS.map(base => base.replace(/\/$/, '') + path)
+    } catch { /* cae al default */ }
+  }
+  return feed_url ? [feed_url] : []
+}
+
 function getSupabase(authToken) {
   const url  = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
   const anon = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
@@ -134,6 +278,9 @@ function getAdminSupabase() {
   const key = process.env.NEXUS_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY
   return createClient(url, key, { auth: { persistSession: false } })
 }
+
+// refresh_now baja varios feeds → puede tardar; pedimos margen a Vercel.
+export const config = { maxDuration: 30 }
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -170,6 +317,74 @@ export default async function handler(req, res) {
         .order('created_at', { ascending: true })
       if (error) throw error
       return res.status(200).json({ ok: true, sources: data || [] })
+    }
+
+    // ── REFRESH NOW: baja y parsea los feeds DEL LADO DEL SERVIDOR ──
+    // Independiente de n8n. Resuelve YouTube a feed nativo, rota mirrors de
+    // RSSHub, parsea RSS/Atom y hace upsert de items nuevos. Devuelve un
+    // resumen por fuente para que el usuario vea cuál sirvió y cuál no.
+    if (action === 'refresh_now') {
+      const { project_id, source_id } = req.body
+      if (!project_id && !source_id) return res.status(400).json({ error: 'project_id o source_id requerido' })
+
+      let q = admin.from('project_rss_sources').select('*').eq('owner_id', userId).eq('enabled', true)
+      if (source_id) q = q.eq('id', source_id)
+      else q = q.eq('project_id', project_id)
+      const { data: sources, error: sErr } = await q
+      if (sErr) throw sErr
+
+      const nowIso = () => new Date().toISOString()
+
+      const processOne = async (src) => {
+        const urls = await candidateFeedUrls(src)
+        let fetched = null, lastErr = urls.length ? 'no respondió' : 'sin feed_url'
+        for (const u of urls) {
+          const r = await fetchText(u, { timeout: 8000 })
+          if (r.ok && r.text && /<(rss|feed|item|entry)[\s>]/i.test(r.text)) { fetched = r; break }
+          lastErr = r.error ? r.error : ('HTTP ' + r.status + (r.status === 403 ? ' (bloqueado)' : ''))
+        }
+
+        if (!fetched) {
+          await admin.from('project_rss_sources').update({
+            last_check_at: nowIso(), fail_count: 1, last_error: lastErr.slice(0, 280),
+          }).eq('id', src.id)
+          return { source_id: src.id, label: src.label || src.handle || src.platform, platform: src.platform, ok: false, error: lastErr, new: 0 }
+        }
+
+        const parsed = parseFeed(fetched.text)
+        let newCount = 0
+        if (parsed.length) {
+          const seen = new Set()
+          const rows = parsed.filter(it => { if (seen.has(it.external_id)) return false; seen.add(it.external_id); return true })
+            .slice(0, 40)
+            .map(it => ({
+              source_id: src.id, project_id: src.project_id, owner_id: userId,
+              external_id: it.external_id, title: it.title, url: it.url,
+              description: it.description, author: it.author,
+              published_at: it.published_at, thumbnail: it.thumbnail,
+            }))
+          const { data: up, error: upErr } = await admin
+            .from('project_rss_items')
+            .upsert(rows, { onConflict: 'source_id,external_id', ignoreDuplicates: true })
+            .select('id')
+          if (upErr) return { source_id: src.id, label: src.label || src.handle || src.platform, platform: src.platform, ok: false, error: 'DB: ' + upErr.message, new: 0 }
+          newCount = up ? up.length : 0
+        }
+
+        await admin.from('project_rss_sources').update({
+          last_check_at: nowIso(), last_seen_at: nowIso(), fail_count: 0, last_error: null,
+        }).eq('id', src.id)
+        return { source_id: src.id, label: src.label || src.handle || src.platform, platform: src.platform, ok: true, found: parsed.length, new: newCount }
+      }
+
+      // Procesamos en paralelo (cada fuente resuelve su propio feed).
+      const results = await Promise.all((sources || []).map(s => processOne(s).catch(e => ({
+        source_id: s.id, label: s.label || s.handle || s.platform, platform: s.platform, ok: false, error: e.message, new: 0,
+      }))))
+
+      const total_new = results.reduce((a, r) => a + (r.new || 0), 0)
+      const okCount = results.filter(r => r.ok).length
+      return res.status(200).json({ ok: true, results, total_new, ok_count: okCount, source_count: results.length })
     }
 
     // ── ADD source ──────────────────────────────────────────────
