@@ -27,6 +27,7 @@ import { renderProjectRssTab } from './src/rss-feeds.js'
 import { renderAFP } from './src/afp.js'
 import { renderCrypto } from './src/crypto.js'
 import { renderHealth } from './src/health.js'
+import { parseDecimalEs } from './src/health-calc.js'
 import { renderModulesPanel, applyModulesToSidebar } from './src/modules.js'
 import Sortable from 'sortablejs'
 import {
@@ -21860,15 +21861,8 @@ const _MV_BITSO_BOOKS = {
 const _MV_CRYPTO_SET = new Set(['USDT','BTC','ETH','XRP','SOL','LTC','USD'])
 
 // Parser numérico tolerante a coma decimal (teclados móviles en español).
-// "0,5"→0.5 · "1.900,50"→1900.50 · "$1,900,000"→1900000. Devuelve NaN si vacío.
-function _mvNum(v) {
-  let s = String(v ?? '').trim()
-  if (!s) return NaN
-  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.')
-  else s = s.replace(',', '.')
-  s = s.replace(/[^0-9.\-]/g, '')
-  return parseFloat(s)
-}
+// Implementación compartida y testeada en src/health-calc.js (parseDecimalEs).
+function _mvNum(v) { return parseDecimalEs(v) }
 
 // ── Lista de bancos mexicanos + entidades especiales ─────────────────────────
 const MX_BANKS = [

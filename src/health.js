@@ -8,6 +8,7 @@
 import { supabase } from './supabase.js'
 import { renderGymTab } from './health-gym.js'
 import { renderCycleTab } from './health-cycle.js'
+import { heatmapDays } from './health-calc.js'
 
 async function _api(action, payload = {}) {
   const { data: { session } } = await supabase.auth.getSession()
@@ -385,16 +386,9 @@ function _renderHabitHeatmaps(goals, logs) {
   const byKind = {}
   for (const l of logs) { (byKind[l.k] = byKind[l.k] || {})[l.d] = l.v }
 
-  // Aritmética en UTC: a prueba de cambios de horario (DST) y alineada con el
-  // formato de fecha que guardan los logs (new Date().toISOString().slice(0,10)).
-  const dayMs = 86400000
-  const now = new Date()
-  const endMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())  // hoy, medianoche UTC
+  // Días del grid (UTC, a prueba de DST) — lógica testeada en health-calc.js
   const WEEKS = 16
-  let startMs = endMs - (WEEKS * 7 - 1) * dayMs
-  startMs -= new Date(startMs).getUTCDay() * dayMs   // retrocede al domingo (UTC)
-  const daysSpan = Math.round((endMs - startMs) / dayMs) + 1
-  const totalCells = Math.ceil(daysSpan / 7) * 7
+  const { days } = heatmapDays(new Date(), WEEKS)
 
   let html = `
     <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;margin-bottom:18px;">
@@ -406,17 +400,14 @@ function _renderHabitHeatmaps(goals, logs) {
     const tgt = Number(g.target || 1)
     const cols = []
     let week = []
-    for (let i = 0; i < totalCells; i++) {
-      const ms = startMs + i * dayMs
-      const ds = new Date(ms).toISOString().slice(0, 10)
-      const v = done[ds]
-      const future = ms > endMs
+    days.forEach((day, i) => {
+      const v = done[day.ds]
       const has = v != null
       const did = has && tgt > 0 && v >= tgt
-      const bg = future ? 'transparent' : did ? '#34d399' : has ? 'rgba(52,211,153,0.28)' : 'rgba(255,255,255,0.05)'
-      week.push(`<div title="${ds}${has ? ' · ' + v : ''}" style="width:11px;height:11px;border-radius:2px;background:${bg};"></div>`)
+      const bg = day.future ? 'transparent' : did ? '#34d399' : has ? 'rgba(52,211,153,0.28)' : 'rgba(255,255,255,0.05)'
+      week.push(`<div title="${day.ds}${has ? ' · ' + v : ''}" style="width:11px;height:11px;border-radius:2px;background:${bg};"></div>`)
       if (i % 7 === 6) { cols.push(`<div style="display:flex;flex-direction:column;gap:3px;">${week.join('')}</div>`); week = [] }
-    }
+    })
     if (week.length) cols.push(`<div style="display:flex;flex-direction:column;gap:3px;">${week.join('')}</div>`)
     html += `
       <div>

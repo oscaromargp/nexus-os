@@ -6,6 +6,7 @@
 // Auth: JWT Bearer del usuario.
 
 import { createClient } from '@supabase/supabase-js'
+import { cyclePrediction, epley1RM } from '../src/health-calc.js'
 
 function getSupabase(authToken) {
   const url  = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
@@ -176,43 +177,6 @@ function computeStreaks(logs, goals) {
 
 // La extracción por foto (Gemini visión) puede tardar; pedimos margen a Vercel.
 export const config = { maxDuration: 60 }
-
-// Predicción de ciclo a partir de registros (compartida por cycle_dashboard + overview)
-function cyclePrediction(cycles) {
-  const sorted = [...(cycles || [])].sort((a, b) => a.start_date.localeCompare(b.start_date))
-  const cycleLengths = [], periodLengths = []
-  for (let i = 1; i < sorted.length; i++) {
-    const d = (new Date(sorted[i].start_date) - new Date(sorted[i - 1].start_date)) / 86400000
-    if (d > 0 && d < 90) cycleLengths.push(d)
-  }
-  for (const c of sorted) {
-    if (c.end_date) { const d = (new Date(c.end_date) - new Date(c.start_date)) / 86400000 + 1; if (d > 0 && d < 15) periodLengths.push(d) }
-  }
-  const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null
-  const avgCycle = avg(cycleLengths) || 28
-  const avgPeriod = avg(periodLengths) || 5
-  const last = sorted[sorted.length - 1] || null
-  let prediction = null
-  if (last) {
-    const lastStart = new Date(last.start_date + 'T00:00:00')
-    const today0 = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00')
-    const dayOfCycle = Math.floor((today0 - lastStart) / 86400000) + 1
-    const nextStart = new Date(lastStart); nextStart.setDate(nextStart.getDate() + avgCycle)
-    const ovulation = new Date(nextStart); ovulation.setDate(ovulation.getDate() - 14)
-    const daysToNext = Math.ceil((nextStart - today0) / 86400000)
-    const ovDay = avgCycle - 14
-    let phase = '—'
-    if (dayOfCycle >= 1 && dayOfCycle <= avgPeriod) phase = 'Menstruación'
-    else if (Math.abs(dayOfCycle - ovDay) <= 1) phase = 'Ovulación (fértil)'
-    else if (dayOfCycle < ovDay) phase = 'Folicular'
-    else phase = 'Lútea'
-    prediction = {
-      day_of_cycle: dayOfCycle, next_start: nextStart.toISOString().slice(0, 10),
-      ovulation: ovulation.toISOString().slice(0, 10), days_to_next: daysToNext, phase,
-    }
-  }
-  return { prediction, avg_cycle: avgCycle, avg_period: avgPeriod }
-}
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
@@ -484,10 +448,10 @@ export default async function handler(req, res) {
         if (s.weight == null || s.reps == null) continue
         const e = s.exercise
         const w = Number(s.weight), r = Number(s.reps)
-        const oneRM = w * (1 + r / 30)
+        const oneRM = epley1RM(w, r)
         if (!prs[e]) prs[e] = { exercise: e, muscle: s.muscle_group || null, max_weight: 0, reps_at_max: 0, best_1rm: 0 }
         if (w > prs[e].max_weight) { prs[e].max_weight = w; prs[e].reps_at_max = r }
-        if (oneRM > prs[e].best_1rm) prs[e].best_1rm = Math.round(oneRM)
+        if (oneRM > prs[e].best_1rm) prs[e].best_1rm = oneRM
       }
       // Volumen por músculo (últimos 30 días)
       const since30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
