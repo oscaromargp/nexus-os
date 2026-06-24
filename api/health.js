@@ -177,6 +177,43 @@ function computeStreaks(logs, goals) {
 // La extracción por foto (Gemini visión) puede tardar; pedimos margen a Vercel.
 export const config = { maxDuration: 60 }
 
+// Predicción de ciclo a partir de registros (compartida por cycle_dashboard + overview)
+function cyclePrediction(cycles) {
+  const sorted = [...(cycles || [])].sort((a, b) => a.start_date.localeCompare(b.start_date))
+  const cycleLengths = [], periodLengths = []
+  for (let i = 1; i < sorted.length; i++) {
+    const d = (new Date(sorted[i].start_date) - new Date(sorted[i - 1].start_date)) / 86400000
+    if (d > 0 && d < 90) cycleLengths.push(d)
+  }
+  for (const c of sorted) {
+    if (c.end_date) { const d = (new Date(c.end_date) - new Date(c.start_date)) / 86400000 + 1; if (d > 0 && d < 15) periodLengths.push(d) }
+  }
+  const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null
+  const avgCycle = avg(cycleLengths) || 28
+  const avgPeriod = avg(periodLengths) || 5
+  const last = sorted[sorted.length - 1] || null
+  let prediction = null
+  if (last) {
+    const lastStart = new Date(last.start_date + 'T00:00:00')
+    const today0 = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00')
+    const dayOfCycle = Math.floor((today0 - lastStart) / 86400000) + 1
+    const nextStart = new Date(lastStart); nextStart.setDate(nextStart.getDate() + avgCycle)
+    const ovulation = new Date(nextStart); ovulation.setDate(ovulation.getDate() - 14)
+    const daysToNext = Math.ceil((nextStart - today0) / 86400000)
+    const ovDay = avgCycle - 14
+    let phase = '—'
+    if (dayOfCycle >= 1 && dayOfCycle <= avgPeriod) phase = 'Menstruación'
+    else if (Math.abs(dayOfCycle - ovDay) <= 1) phase = 'Ovulación (fértil)'
+    else if (dayOfCycle < ovDay) phase = 'Folicular'
+    else phase = 'Lútea'
+    prediction = {
+      day_of_cycle: dayOfCycle, next_start: nextStart.toISOString().slice(0, 10),
+      ovulation: ovulation.toISOString().slice(0, 10), days_to_next: daysToNext, phase,
+    }
+  }
+  return { prediction, avg_cycle: avgCycle, avg_period: avgPeriod }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -243,6 +280,50 @@ export default async function handler(req, res) {
         studies, trends, trend_meta: trendMeta, streaks,
         next_checkup: nextCheckups[0] || null,
         today,
+      })
+    }
+
+    // ── OVERVIEW: resumen de todas las áreas para el dashboard de inicio ──
+    if (action === 'health_overview') {
+      const today = new Date().toISOString().slice(0, 10)
+      const since7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+      const since40 = new Date(Date.now() - 40 * 86400000).toISOString().slice(0, 10)
+      const [goalsR, logsR, readingsR, workoutsR, setsR, cyclesR] = await Promise.all([
+        sb.from('health_goals').select('*').eq('owner_id', userId).eq('is_active', true),
+        sb.from('health_logs').select('goal_kind,value,log_date').eq('owner_id', userId).gte('log_date', since40),
+        sb.from('health_readings').select('marker,value,value2,unit,ref_low,ref_high,measured_at').eq('owner_id', userId).order('measured_at', { ascending: false }).limit(200),
+        sb.from('health_workouts').select('id').eq('owner_id', userId).gte('workout_date', since7),
+        sb.from('health_workout_sets').select('exercise,weight').eq('owner_id', userId).not('weight', 'is', null).order('weight', { ascending: false }).limit(1),
+        sb.from('health_cycles').select('*').eq('owner_id', userId).order('start_date', { ascending: false }).limit(24),
+      ])
+      const goals = goalsR.data || [], logs = logsR.data || []
+      const todayDone = goals.filter(g => {
+        const l = logs.find(x => x.goal_kind === g.kind && x.log_date === today)
+        const t = Number(g.target || 1)
+        return l && t > 0 && Number(l.value) >= t
+      }).length
+      const streaks = computeStreaks(logs, goals)
+      const bestStreak = Math.max(0, ...Object.values(streaks).map(s => s.current))
+      // Última lectura por marcador
+      const latest = {}
+      for (const r of (readingsR.data || [])) if (!latest[r.marker]) latest[r.marker] = r
+      const vital = name => {
+        const r = latest[name]; if (!r) return null
+        const inR = (r.ref_low == null || r.value >= r.ref_low) && (r.ref_high == null || r.value <= r.ref_high)
+        return { value: r.value, value2: r.value2, unit: r.unit, date: r.measured_at, in_range: inR }
+      }
+      const topSet = (setsR.data || [])[0] || null
+      const { prediction } = cyclePrediction(cyclesR.data)
+      return res.status(200).json({
+        ok: true, today,
+        vitals: {
+          presion: vital('Presión arterial'), peso: vital('Peso'),
+          glucosa: vital('Glucosa en ayunas') || vital('Glucosa capilar'),
+          count: Object.keys(latest).length,
+        },
+        habits: { done: todayDone, total: goals.length, best_streak: bestStreak },
+        gym: { workouts_7d: (workoutsR.data || []).length, top: topSet ? { exercise: topSet.exercise, weight: topSet.weight } : null },
+        cycle: prediction, has_cycle: (cyclesR.data || []).length > 0,
       })
     }
 
@@ -458,39 +539,8 @@ export default async function handler(req, res) {
     // ═══════════════════════ CICLO MENSTRUAL ═══════════════════════
     if (action === 'cycle_dashboard') {
       const { data: cycles } = await sb.from('health_cycles').select('*').eq('owner_id', userId).order('start_date', { ascending: false }).limit(24)
-      const sorted = [...(cycles || [])].sort((a, b) => a.start_date.localeCompare(b.start_date))
-      const cycleLengths = [], periodLengths = []
-      for (let i = 1; i < sorted.length; i++) {
-        const d = (new Date(sorted[i].start_date) - new Date(sorted[i - 1].start_date)) / 86400000
-        if (d > 0 && d < 90) cycleLengths.push(d)
-      }
-      for (const c of sorted) {
-        if (c.end_date) { const d = (new Date(c.end_date) - new Date(c.start_date)) / 86400000 + 1; if (d > 0 && d < 15) periodLengths.push(d) }
-      }
-      const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null
-      const avgCycle = avg(cycleLengths) || 28
-      const avgPeriod = avg(periodLengths) || 5
-      const last = sorted[sorted.length - 1] || null
-      let prediction = null
-      if (last) {
-        const lastStart = new Date(last.start_date + 'T00:00:00')
-        const today0 = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00')
-        const dayOfCycle = Math.floor((today0 - lastStart) / 86400000) + 1
-        const nextStart = new Date(lastStart); nextStart.setDate(nextStart.getDate() + avgCycle)
-        const ovulation = new Date(nextStart); ovulation.setDate(ovulation.getDate() - 14)
-        const daysToNext = Math.ceil((nextStart - today0) / 86400000)
-        let phase = '—'
-        const ovDay = avgCycle - 14
-        if (dayOfCycle >= 1 && dayOfCycle <= avgPeriod) phase = 'Menstruación'
-        else if (Math.abs(dayOfCycle - ovDay) <= 1) phase = 'Ovulación (fértil)'
-        else if (dayOfCycle < ovDay) phase = 'Folicular'
-        else phase = 'Lútea'
-        prediction = {
-          day_of_cycle: dayOfCycle, next_start: nextStart.toISOString().slice(0, 10),
-          ovulation: ovulation.toISOString().slice(0, 10), days_to_next: daysToNext, phase,
-        }
-      }
-      return res.status(200).json({ ok: true, cycles: cycles || [], prediction, avg_cycle: avgCycle, avg_period: avgPeriod })
+      const { prediction, avg_cycle, avg_period } = cyclePrediction(cycles)
+      return res.status(200).json({ ok: true, cycles: cycles || [], prediction, avg_cycle, avg_period })
     }
     if (action === 'cycle_add') {
       const { start_date, end_date, flow, symptoms, notes } = req.body

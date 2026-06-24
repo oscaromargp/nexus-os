@@ -93,7 +93,7 @@ const HEALTH_MARKER_BY_NAME = Object.fromEntries(HEALTH_MARKERS.map(m => [m.name
 // Marcadores rápidos para los botones de acceso directo
 const HEALTH_QUICK = ['Presión arterial', 'Peso', 'Glucosa en ayunas', 'Glucosa capilar']
 
-let _healthTab = 'general'
+let _healthTab = 'inicio'
 
 export async function renderHealth() {
   const root = document.getElementById('view-salud') || document.getElementById('health-root')
@@ -102,10 +102,10 @@ export async function renderHealth() {
     <div style="padding:20px;max-width:1000px;margin:0 auto;">
       <h2 style="font-size:24px;font-weight:800;margin:0 0 4px;display:flex;align-items:center;gap:10px;">🩺 Salud</h2>
       <p style="color:#94a3b8;font-size:13px;margin:0 0 14px;">Mide para mejorar — análisis, hábitos, gym y ciclo en un solo lugar.</p>
-      <div style="display:flex;gap:6px;margin-bottom:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:4px;">
-        ${[['general', '📊 General'], ['gym', '🏋️ Gym'], ['ciclo', '🩸 Ciclo']].map(([t, lbl]) => {
+      <div style="display:flex;gap:4px;margin-bottom:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:4px;">
+        ${[['inicio', '🏠 Inicio'], ['general', '📊 General'], ['gym', '🏋️ Gym'], ['ciclo', '🩸 Ciclo']].map(([t, lbl]) => {
           const on = _healthTab === t
-          return `<button data-health-tab="${t}" style="flex:1;padding:9px;border:none;border-radius:9px;cursor:pointer;font-size:13px;font-weight:700;background:${on ? 'rgba(52,211,153,0.15)' : 'transparent'};color:${on ? '#34d399' : '#94a3b8'};">${lbl}</button>`
+          return `<button data-health-tab="${t}" style="flex:1;padding:9px 4px;border:none;border-radius:9px;cursor:pointer;font-size:12px;font-weight:700;background:${on ? 'rgba(52,211,153,0.15)' : 'transparent'};color:${on ? '#34d399' : '#94a3b8'};white-space:nowrap;">${lbl}</button>`
         }).join('')}
       </div>
       <div id="health-tab-body"><div style="padding:24px;color:#94a3b8;font-size:13px;">⏳ Cargando…</div></div>
@@ -117,7 +117,73 @@ export async function renderHealth() {
   const body = root.querySelector('#health-tab-body')
   if (_healthTab === 'gym')   { renderGymTab(body); return }
   if (_healthTab === 'ciclo') { renderCycleTab(body); return }
-  _renderGeneralTab(body)
+  if (_healthTab === 'general') { _renderGeneralTab(body); return }
+  _renderOverviewTab(body)
+}
+
+// Navega a otra pestaña desde el dashboard
+function _goHealthTab(tab) { _healthTab = tab; renderHealth() }
+
+// ── Dashboard de Inicio: resumen de todas las áreas ──
+async function _renderOverviewTab(body) {
+  body.innerHTML = '<div style="padding:24px;color:#94a3b8;font-size:13px;">⏳ Cargando tu resumen…</div>'
+  let d
+  try { d = await _api('health_overview') }
+  catch (e) { body.innerHTML = `<div style="padding:24px;color:#f87171;">⚠ ${_esc(e.message)}</div>`; return }
+
+  const { vitals, habits, gym, cycle, has_cycle } = d
+  const card = (tab, icon, title, bigHtml, subHtml, accent) => `
+    <div data-go-tab="${tab}" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;cursor:pointer;transition:border-color .2s;" onmouseover="this.style.borderColor='${accent}55'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
+      <div style="display:flex;align-items:center;gap:7px;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:8px;">${icon} ${title}<span style="margin-left:auto;color:#475569;">›</span></div>
+      <div style="font-size:22px;font-weight:800;color:#e5e7eb;font-family:'JetBrains Mono',monospace;line-height:1.1;">${bigHtml}</div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:3px;">${subHtml}</div>
+    </div>`
+
+  // Vitales
+  const v = vitals || {}
+  let vBig = '—', vSub = 'sin registros aún'
+  if (v.presion) { vBig = `${v.presion.value}/${v.presion.value2 ?? ''}`; vSub = `presión · <span style="color:${v.presion.in_range ? '#34d399' : '#f87171'}">${v.presion.in_range ? 'en rango' : 'fuera'}</span>` }
+  else if (v.peso) { vBig = `${v.peso.value} <span style="font-size:12px;color:#94a3b8;">kg</span>`; vSub = 'peso' }
+  else if (v.glucosa) { vBig = `${v.glucosa.value}`; vSub = `glucosa · <span style="color:${v.glucosa.in_range ? '#34d399' : '#f87171'}">${v.glucosa.in_range ? 'en rango' : 'fuera'}</span>` }
+  const vExtra = []
+  if (v.peso && v.presion) vExtra.push(`Peso ${v.peso.value}kg`)
+  if (v.glucosa && (v.presion || v.peso)) vExtra.push(`Gluc ${v.glucosa.value}`)
+  if (vExtra.length) vSub += ` · ${vExtra.join(' · ')}`
+
+  // Hábitos
+  const h = habits || { done: 0, total: 0, best_streak: 0 }
+  const hBig = `${h.done} / ${h.total || 0}`
+  const hSub = h.total ? `de hoy · 🔥 racha ${h.best_streak} días` : 'sin hábitos aún'
+
+  // Gym
+  const g = gym || { workouts_7d: 0, top: null }
+  const gBig = `${g.workouts_7d}`
+  const gSub = g.top ? `entrenos · 7d · 🏆 ${_esc(g.top.exercise)} ${g.top.weight}kg` : 'entrenos · últimos 7 días'
+
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">`
+  html += card('general', '🫀', 'Vitales', vBig, vSub, '#34d399')
+  html += card('general', '🔥', 'Hábitos', hBig, hSub, '#fb923c')
+  html += card('gym', '🏋️', 'Gym', gBig, gSub, '#60a5fa')
+  if (has_cycle && cycle) {
+    html += card('ciclo', '🩸', 'Ciclo', `Día ${cycle.day_of_cycle}`, `${_esc(cycle.phase)} · próximo en ${cycle.days_to_next}d`, '#f472b6')
+  } else {
+    html += card('ciclo', '🩸', 'Ciclo', '—', 'registra tu periodo', '#f472b6')
+  }
+  html += `</div>`
+
+  // Accesos rápidos
+  html += `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button data-ov-act="valor" style="flex:1;min-width:120px;padding:11px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);color:#22d3ee;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">+ Registrar valor</button>
+      <button data-ov-act="foto" style="flex:1;min-width:120px;padding:11px;background:linear-gradient(135deg,rgba(167,139,250,0.18),rgba(96,165,250,0.18));border:1px solid rgba(167,139,250,0.4);color:#c4b5fd;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">📷 Foto → IA</button>
+      <button data-ov-act="entreno" style="flex:1;min-width:110px;padding:11px;background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34d399;border-radius:10px;cursor:pointer;font-size:13px;font-weight:700;">🏋️ Entreno</button>
+    </div>`
+
+  body.innerHTML = html
+  body.querySelectorAll('[data-go-tab]').forEach(c => c.addEventListener('click', () => _goHealthTab(c.dataset.goTab)))
+  body.querySelector('[data-ov-act="valor"]')?.addEventListener('click', () => { _healthTab = 'general'; renderHealth().then(() => setTimeout(() => _openReadingModal(), 60)) })
+  body.querySelector('[data-ov-act="foto"]')?.addEventListener('click', () => { _healthTab = 'general'; renderHealth().then(() => setTimeout(() => _openPhotoAiModal(), 60)) })
+  body.querySelector('[data-ov-act="entreno"]')?.addEventListener('click', () => _goHealthTab('gym'))
 }
 
 async function _renderGeneralTab(body) {
@@ -612,6 +678,32 @@ function _openStudyModal() {
   }
 }
 
+// Consentimiento para enviar datos de salud a la IA (Groq/Gemini). Opt-in,
+// se recuerda en localStorage. Devuelve Promise<boolean>.
+function _aiConsent() {
+  return new Promise(resolve => {
+    try { if (localStorage.getItem('nexus_health_ai_consent') === '1') return resolve(true) } catch {}
+    const { ov, close } = _modal(`
+      <h3 style="margin:0 0 10px;font-size:16px;font-weight:800;">🔒 Antes de usar la IA</h3>
+      <p style="font-size:12px;color:#cbd5e1;line-height:1.6;margin:0 0 10px;">
+        Para leer o resumir tu estudio, Nexus envía <b>el texto o la imagen de ese análisis</b> a un proveedor de IA
+        (<b>Google Gemini</b> o <b>Groq</b>), que lo procesa y devuelve el resultado.
+      </p>
+      <ul style="font-size:12px;color:#94a3b8;line-height:1.7;margin:0 0 12px;padding-left:18px;">
+        <li>Solo se envía lo que tú subes en ese momento.</li>
+        <li>No se comparte con nadie más ni se publica.</li>
+        <li>Puedes seguir registrando todo <b>a mano</b>, sin IA.</li>
+      </ul>
+      <p style="font-size:11px;color:#64748b;margin:0 0 14px;">Las lecturas de la IA son estimaciones, no un diagnóstico médico.</p>
+      <div style="display:flex;gap:8px;">
+        <button id="aic-no" style="flex:1;padding:9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;">Cancelar</button>
+        <button id="aic-yes" style="flex:2;padding:9px;background:#34d399;border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;">Acepto, continuar</button>
+      </div>`, 440)
+    ov.querySelector('#aic-no').onclick = () => { close(); resolve(false) }
+    ov.querySelector('#aic-yes').onclick = () => { try { localStorage.setItem('nexus_health_ai_consent', '1') } catch {} ; close(); resolve(true) }
+  })
+}
+
 // Reescala una imagen a máx 1400px y la devuelve como base64 JPEG (q0.72).
 // Evita subir fotos de varios MB (límite de Vercel) y acelera la IA.
 function _downscaleImage(file, maxSide = 1400, quality = 0.72) {
@@ -667,6 +759,7 @@ function _openPhotoAiModal() {
   $('pa-file').onchange = async () => {
     const file = $('pa-file').files?.[0]
     if (!file) return
+    if (!(await _aiConsent())) { $('pa-file').value = ''; return }
     $('pa-fname').textContent = file.name
     const status = $('pa-status')
     status.style.color = '#94a3b8'
@@ -759,6 +852,7 @@ function _openAiModal() {
   document.getElementById('ha-run').onclick = async () => {
     const text = document.getElementById('ha-text').value.trim()
     if (text.length < 20) { alert('Pega más texto de tu análisis'); return }
+    if (!(await _aiConsent())) return
     const resEl = document.getElementById('ha-result')
     const btn = document.getElementById('ha-run')
     btn.disabled = true; btn.textContent = '⏳ Analizando…'
