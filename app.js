@@ -21857,6 +21857,17 @@ const _MV_BITSO_BOOKS = {
 // Monedas que aplican comisión por defecto (entradas)
 const _MV_CRYPTO_SET = new Set(['USDT','BTC','ETH','XRP','SOL','LTC','USD'])
 
+// Parser numérico tolerante a coma decimal (teclados móviles en español).
+// "0,5"→0.5 · "1.900,50"→1900.50 · "$1,900,000"→1900000. Devuelve NaN si vacío.
+function _mvNum(v) {
+  let s = String(v ?? '').trim()
+  if (!s) return NaN
+  if (s.includes(',') && s.includes('.')) s = s.replace(/\./g, '').replace(',', '.')
+  else s = s.replace(',', '.')
+  s = s.replace(/[^0-9.\-]/g, '')
+  return parseFloat(s)
+}
+
 // ── Lista de bancos mexicanos + entidades especiales ─────────────────────────
 const MX_BANKS = [
   'BBVA','Banorte','Santander','Banamex (Citibanamex)','HSBC','Scotiabank','Inbursa',
@@ -22899,8 +22910,8 @@ function _mvToggleComision() {
 }
 
 window.mvCalcMxn = () => {
-  const cant   = parseFloat(document.getElementById('mv-cantidad')?.value) || 0
-  const tc     = parseFloat(document.getElementById('mv-tc')?.value) || 1
+  const cant   = _mvNum(document.getElementById('mv-cantidad')?.value) || 0
+  const tc     = _mvNum(document.getElementById('mv-tc')?.value) || 1
   const prev   = document.getElementById('mv-mxn-preview')
   if (!prev) return
 
@@ -22915,7 +22926,7 @@ window.mvCalcMxn = () => {
     prev.style.display = 'block'
     const bruto = cant * tc
     if (showCom) {
-      const pct      = parseFloat(comEl.value) || 3      // % (ej. 3)
+      const pct      = _mvNum(comEl.value) || 3         // % (ej. 3)
       const factor   = 1 - (pct / 100)                  // factor (ej. 0.97)
       const ganancia = bruto * (pct / 100)               // tu comisión en MXN
       const net      = bruto * factor                    // cliente recibe
@@ -22984,7 +22995,7 @@ window.mvSaveMov = async () => {
   const g     = (id2) => document.getElementById(id2)
   const tipo  = g('mv-tipo')?.value
   const fecha = g('mv-fecha')?.value
-  const cant  = parseFloat(g('mv-cantidad')?.value)
+  const cant  = _mvNum(g('mv-cantidad')?.value)
 
   // Validaciones con mensajes específicos para que el usuario sepa QUÉ falta
   if (!cant || isNaN(cant) || cant <= 0) { showToast('⚠ Falta la CANTIDAD (mayor a 0)'); g('mv-cantidad')?.focus(); return }
@@ -23010,11 +23021,11 @@ window.mvSaveMov = async () => {
     return
   }
 
-  const tc     = parseFloat(g('mv-tc')?.value) || 1
+  const tc     = _mvNum(g('mv-tc')?.value) || 1
   const moneda = g('mv-moneda')?.value || 'MXN'
   // Comisión: campo ahora almacena % (ej. 3) — convertimos a factor (0.97) para BD
   const showCom     = tipo === 'entrada' && _MV_CRYPTO_SET.has(moneda)
-  const comisionPct = showCom ? parseFloat(g('mv-comision')?.value) : null
+  const comisionPct = showCom ? _mvNum(g('mv-comision')?.value) : null
   // Guardado como factor para compatibilidad: 3% → 0.97
   const comision    = (comisionPct != null && !isNaN(comisionPct) && comisionPct > 0)
                       ? Math.round((1 - comisionPct / 100) * 10000) / 10000
