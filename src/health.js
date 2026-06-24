@@ -109,7 +109,7 @@ export async function renderHealth() {
     return
   }
 
-  const { goals, today_progress, studies, trends, streaks, next_checkup } = d
+  const { goals, today_progress, studies, trends, streaks, next_checkup, logs = [] } = d
 
   // ── Header ──
   let html = `
@@ -161,28 +161,42 @@ export async function renderHealth() {
         ${goals.length ? goals.map(g => {
           const cur = Number(today_progress[g.kind] || 0)
           const tgt = Number(g.target || 1)
+          const tt  = g.target_type || 'count'
           const pct = Math.min(100, Math.round((cur / tgt) * 100))
           const done = cur >= tgt
           const color = done ? '#34d399' : '#22d3ee'
+          const step = tt === 'time' ? 5 : (g.kind==='steps' ? 500 : g.kind==='exercise' ? 5 : 1)
+          // Tipo de hábito determina los controles
+          let controls
+          if (tt === 'binary') {
+            controls = `
+              <button data-health-toggle="${g.kind}" data-done="${done?1:0}" style="flex:1;padding:8px;background:${done?'rgba(52,211,153,0.15)':'rgba(255,255,255,0.04)'};border:1px solid ${done?'rgba(52,211,153,0.4)':'rgba(255,255,255,0.12)'};color:${done?'#34d399':'#94a3b8'};border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">${done?'✓ Hecho hoy':'Marcar hecho'}</button>`
+          } else {
+            controls = `
+              <button data-health-inc="${g.kind}" data-step="${step}" data-cur="${cur}" style="padding:5px 12px;background:${color}20;border:1px solid ${color}50;color:${color};border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;">+ ${step}</button>
+              <button data-health-set="${g.kind}" data-tgt="${tgt}" data-cur="${cur}" style="padding:5px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:7px;cursor:pointer;font-size:12px;">✎ Ajustar</button>
+              ${!done ? `<button data-health-done="${g.kind}" data-tgt="${tgt}" style="padding:5px 10px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);color:#34d399;border-radius:7px;cursor:pointer;font-size:12px;">✓ Cumplir</button>` : ''}`
+          }
           return `
             <div style="padding:10px 12px;background:rgba(255,255,255,0.03);border:1px solid ${done?'rgba(52,211,153,0.3)':'rgba(255,255,255,0.06)'};border-radius:10px;">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
                 <div style="font-size:13px;font-weight:700;color:#e5e7eb;display:flex;align-items:center;gap:6px;">${_esc(g.emoji||'🎯')} ${_esc(g.label)} ${done?'<span style="font-size:11px;color:#34d399;">✓</span>':''}</div>
-                <div style="font-size:13px;font-weight:800;color:${color};font-family:'JetBrains Mono',monospace;">${cur} / ${tgt} <span style="font-size:10px;color:#94a3b8;">${_esc(g.unit||'')}</span></div>
+                <div style="font-size:13px;font-weight:800;color:${color};font-family:'JetBrains Mono',monospace;">${tt==='binary' ? (done?'Hecho':'Pendiente') : cur + ' / ' + tgt + ' <span style="font-size:10px;color:#94a3b8;">' + _esc(g.unit||'') + '</span>'}</div>
               </div>
-              <div style="height:8px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;margin-bottom:8px;">
-                <div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width 0.4s;"></div>
-              </div>
+              ${tt!=='binary' ? `<div style="height:8px;background:rgba(255,255,255,0.05);border-radius:4px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:${pct}%;background:${color};border-radius:4px;transition:width 0.4s;"></div></div>` : ''}
               <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-                <button data-health-inc="${g.kind}" data-step="${g.kind==='steps'?500:g.kind==='exercise'?5:1}" data-cur="${cur}" style="padding:5px 12px;background:${color}20;border:1px solid ${color}50;color:${color};border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;">+ ${g.kind==='steps'?500:g.kind==='exercise'?5:1}</button>
-                <button data-health-set="${g.kind}" data-tgt="${tgt}" data-cur="${cur}" style="padding:5px 10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:7px;cursor:pointer;font-size:12px;">✎ Ajustar</button>
-                ${!done ? `<button data-health-done="${g.kind}" data-tgt="${tgt}" style="padding:5px 10px;background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2);color:#34d399;border-radius:7px;cursor:pointer;font-size:12px;">✓ Cumplir</button>` : ''}
+                ${controls}
                 <button data-health-goal-del="${g.id}" title="Eliminar meta" style="margin-left:auto;background:none;border:none;color:#475569;cursor:pointer;font-size:13px;">🗑</button>
               </div>
             </div>`
         }).join('') : '<div style="font-size:12px;color:#6b7280;text-align:center;padding:14px;">Sin metas. Agrega una arriba.</div>'}
       </div>
     </div>`
+
+  // ── Constancia (heatmap estilo GitHub) ──
+  if (goals.length && logs.length) {
+    html += _renderHabitHeatmaps(goals, logs)
+  }
 
   // ── Registro rápido (1 toque) ──
   html += `
@@ -279,6 +293,60 @@ export async function renderHealth() {
   if (window.refreshIcons) window.refreshIcons()
 }
 
+// Heatmap estilo GitHub: una cuadrícula por meta (16 semanas). Verde = cumplido.
+function _renderHabitHeatmaps(goals, logs) {
+  const byKind = {}
+  for (const l of logs) { (byKind[l.k] = byKind[l.k] || {})[l.d] = l.v }
+
+  // Aritmética en UTC: a prueba de cambios de horario (DST) y alineada con el
+  // formato de fecha que guardan los logs (new Date().toISOString().slice(0,10)).
+  const dayMs = 86400000
+  const now = new Date()
+  const endMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())  // hoy, medianoche UTC
+  const WEEKS = 16
+  let startMs = endMs - (WEEKS * 7 - 1) * dayMs
+  startMs -= new Date(startMs).getUTCDay() * dayMs   // retrocede al domingo (UTC)
+  const daysSpan = Math.round((endMs - startMs) / dayMs) + 1
+  const totalCells = Math.ceil(daysSpan / 7) * 7
+
+  let html = `
+    <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:16px;margin-bottom:18px;">
+      <div style="font-size:13px;font-weight:800;color:#e5e7eb;margin-bottom:12px;">🔥 Tu constancia <span style="font-size:11px;color:#64748b;font-weight:500;">· últimas ${WEEKS} semanas</span></div>
+      <div style="display:flex;flex-direction:column;gap:14px;">`
+
+  for (const g of goals) {
+    const done = byKind[g.kind] || {}
+    const tgt = Number(g.target || 1)
+    const cols = []
+    let week = []
+    for (let i = 0; i < totalCells; i++) {
+      const ms = startMs + i * dayMs
+      const ds = new Date(ms).toISOString().slice(0, 10)
+      const v = done[ds]
+      const future = ms > endMs
+      const has = v != null
+      const did = has && tgt > 0 && v >= tgt
+      const bg = future ? 'transparent' : did ? '#34d399' : has ? 'rgba(52,211,153,0.28)' : 'rgba(255,255,255,0.05)'
+      week.push(`<div title="${ds}${has ? ' · ' + v : ''}" style="width:11px;height:11px;border-radius:2px;background:${bg};"></div>`)
+      if (i % 7 === 6) { cols.push(`<div style="display:flex;flex-direction:column;gap:3px;">${week.join('')}</div>`); week = [] }
+    }
+    if (week.length) cols.push(`<div style="display:flex;flex-direction:column;gap:3px;">${week.join('')}</div>`)
+    html += `
+      <div>
+        <div style="font-size:12px;color:#cbd5e1;margin-bottom:6px;font-weight:600;">${_esc(g.emoji || '🎯')} ${_esc(g.label)}</div>
+        <div style="display:flex;gap:3px;overflow-x:auto;padding-bottom:2px;">${cols.join('')}</div>
+      </div>`
+  }
+  html += `</div>
+      <div style="font-size:10px;color:#64748b;margin-top:10px;display:flex;align-items:center;gap:6px;">
+        Menos <span style="width:10px;height:10px;border-radius:2px;background:rgba(255,255,255,0.05);"></span>
+        <span style="width:10px;height:10px;border-radius:2px;background:rgba(52,211,153,0.28);"></span>
+        <span style="width:10px;height:10px;border-radius:2px;background:#34d399;"></span> Más · verde = cumplido
+      </div>
+    </div>`
+  return html
+}
+
 function _bindHealth(root) {
   // Incrementar progreso de meta
   root.querySelectorAll('[data-health-inc]').forEach(b => b.addEventListener('click', async () => {
@@ -291,6 +359,12 @@ function _bindHealth(root) {
   // Cumplir meta (poner al 100%)
   root.querySelectorAll('[data-health-done]').forEach(b => b.addEventListener('click', async () => {
     try { await _api('health_log_set', { goal_kind: b.dataset.healthDone, value: Number(b.dataset.tgt) }); renderHealth() }
+    catch (e) { alert('⚠ ' + e.message) }
+  }))
+  // Hábito binario: alterna hecho/no-hecho hoy
+  root.querySelectorAll('[data-health-toggle]').forEach(b => b.addEventListener('click', async () => {
+    const next = b.dataset.done === '1' ? 0 : 1
+    try { await _api('health_log_set', { goal_kind: b.dataset.healthToggle, value: next }); renderHealth() }
     catch (e) { alert('⚠ ' + e.message) }
   }))
   // Ajustar valor manual
@@ -334,24 +408,46 @@ function _modal(inner, maxW = 420) {
 const _inputCss = 'width:100%;padding:9px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e5e7eb;font-size:13px;margin-top:4px;box-sizing:border-box;'
 
 function _openGoalModal() {
-  const { close } = _modal(`
-    <h3 style="margin:0 0 12px;font-size:16px;font-weight:800;">🎯 Nueva meta</h3>
-    <label style="font-size:12px;color:#94a3b8;">Emoji <input id="hg-emoji" value="🎯" style="${_inputCss}"/></label>
-    <label style="font-size:12px;color:#94a3b8;display:block;margin-top:8px;">Nombre <input id="hg-label" placeholder="Meditar" style="${_inputCss}"/></label>
-    <label style="font-size:12px;color:#94a3b8;display:block;margin-top:8px;">Meta diaria <input id="hg-target" type="number" placeholder="10" style="${_inputCss}"/></label>
-    <label style="font-size:12px;color:#94a3b8;display:block;margin-top:8px;">Unidad <input id="hg-unit" placeholder="min" style="${_inputCss}"/></label>
+  const { ov, close } = _modal(`
+    <h3 style="margin:0 0 12px;font-size:16px;font-weight:800;">🎯 Nuevo hábito</h3>
+    <label style="font-size:12px;color:#94a3b8;">Tipo de hábito</label>
+    <select id="hg-type" style="${_inputCss}">
+      <option value="binary">✓ Sí / No (lo hice o no)</option>
+      <option value="count" selected>🔢 Contar (vasos, pasos…)</option>
+      <option value="time">⏱️ Tiempo (minutos)</option>
+    </select>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:8px;margin-top:8px;align-items:end;">
+      <label style="font-size:12px;color:#94a3b8;">Emoji <input id="hg-emoji" value="🎯" style="${_inputCss};width:64px;text-align:center;"/></label>
+      <label style="font-size:12px;color:#94a3b8;">Nombre <input id="hg-label" placeholder="Meditar" style="${_inputCss}"/></label>
+    </div>
+    <div id="hg-target-wrap" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+      <label style="font-size:12px;color:#94a3b8;">Meta diaria <input id="hg-target" type="number" inputmode="decimal" placeholder="10" style="${_inputCss}"/></label>
+      <label style="font-size:12px;color:#94a3b8;">Unidad <input id="hg-unit" placeholder="min" style="${_inputCss}"/></label>
+    </div>
     <div style="display:flex;gap:8px;margin-top:14px;">
       <button id="hg-cancel" style="flex:1;padding:9px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;">Cancelar</button>
       <button id="hg-save" style="flex:1;padding:9px;background:#34d399;border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;">Agregar</button>
     </div>`)
-  document.getElementById('hg-cancel').onclick = close
-  document.getElementById('hg-save').onclick = async () => {
-    const label = document.getElementById('hg-label').value.trim()
-    const target = Number(document.getElementById('hg-target').value)
-    if (!label || !target) { alert('Nombre y meta requeridos'); return }
+  const $ = id => ov.querySelector('#' + id)
+  // El tipo binario no necesita meta/unidad
+  $('hg-type').addEventListener('change', () => {
+    $('hg-target-wrap').style.display = $('hg-type').value === 'binary' ? 'none' : 'grid'
+  })
+  $('hg-cancel').onclick = close
+  $('hg-save').onclick = async () => {
+    const label = $('hg-label').value.trim()
+    const type = $('hg-type').value
+    const target = Number($('hg-target').value)
+    if (!label) { alert('Escribe el nombre del hábito'); return }
+    if (type !== 'binary' && !target) { alert('Pon la meta diaria'); return }
     const kind = 'custom_' + label.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 20)
     try {
-      await _api('health_goal_add', { kind, label, target, unit: document.getElementById('hg-unit').value.trim(), emoji: document.getElementById('hg-emoji').value.trim() || '🎯' })
+      await _api('health_goal_add', {
+        kind, label, target_type: type,
+        target: type === 'binary' ? 1 : target,
+        unit: type === 'binary' ? 'sí' : $('hg-unit').value.trim(),
+        emoji: $('hg-emoji').value.trim() || '🎯',
+      })
       close(); renderHealth()
     } catch (e) { alert('⚠ ' + e.message) }
   }

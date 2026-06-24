@@ -193,7 +193,8 @@ export default async function handler(req, res) {
     // ── DASHBOARD: todo lo necesario para pintar el módulo ──
     if (action === 'health_dashboard') {
       const today = new Date().toISOString().slice(0, 10)
-      const weekAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+      // 120 días: alimenta rachas + heatmap de constancia (16 semanas)
+      const weekAgo = new Date(Date.now() - 120 * 86400000).toISOString().slice(0, 10)
       const [goalsR, logsR, studiesR, readingsR] = await Promise.all([
         sb.from('health_goals').select('*').eq('owner_id', userId).eq('is_active', true).order('created_at'),
         sb.from('health_logs').select('*').eq('owner_id', userId).gte('log_date', weekAgo),
@@ -233,9 +234,12 @@ export default async function handler(req, res) {
 
       const streaks = computeStreaks(logs, goals)
 
+      // Logs compactos (120d) para el heatmap de constancia
+      const logsLite = logs.map(l => ({ k: l.goal_kind, d: l.log_date, v: Number(l.value) }))
+
       return res.status(200).json({
         ok: true,
-        goals, today_progress: todayLogs,
+        goals, today_progress: todayLogs, logs: logsLite,
         studies, trends, trend_meta: trendMeta, streaks,
         next_checkup: nextCheckups[0] || null,
         today,
@@ -244,10 +248,14 @@ export default async function handler(req, res) {
 
     // ── METAS ──
     if (action === 'health_goal_add') {
-      const { kind, label, target, unit, emoji } = req.body
+      const { kind, label, target, unit, emoji, target_type } = req.body
       if (!kind || !label) return res.status(400).json({ error: 'kind + label requeridos' })
+      const tt = ['binary', 'count', 'time'].includes(target_type) ? target_type : 'count'
       const { data, error } = await sb.from('health_goals').insert({
-        owner_id: userId, kind, label, target: Number(target || 0), unit: unit || null, emoji: emoji || '🎯',
+        owner_id: userId, kind, label,
+        target: tt === 'binary' ? 1 : Number(target || 0),
+        unit: tt === 'binary' ? 'sí' : (unit || null),
+        emoji: emoji || '🎯', target_type: tt,
       }).select().single()
       if (error) throw error
       return res.status(200).json({ ok: true, goal: data })
