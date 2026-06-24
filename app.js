@@ -29,6 +29,7 @@ import { renderCrypto } from './src/crypto.js'
 import { renderHealth } from './src/health.js'
 import { parseDecimalEs } from './src/health-calc.js'
 import { MV_BITSO_BOOKS as _MV_BITSO_BOOKS, MV_CRYPTO_SET as _MV_CRYPTO_SET, MX_BANKS } from './src/movimientos-data.js'
+import { mvNetAmount as _mvNetAmount, mvComisionMxn as _mvComisionMxn, mvNetoAmount as _mvNetoAmount, mvKpis as _mvKpis, mvWithBalance as _mvWithBalance } from './src/movimientos-calc.js'
 import { renderModulesPanel, applyModulesToSidebar } from './src/modules.js'
 import Sortable from 'sortablejs'
 import {
@@ -21908,52 +21909,8 @@ function _mvFiltered() {
   return list
 }
 
-/** Bruto MXN: USDT × TC — lo que Oscar recibe en equivalente MXN */
-function _mvNetAmount(m) {
-  return m.monto_mxn ?? Math.round((m.cantidad * (m.tc || 1)) * 100) / 100
-}
-
-/** Comisión de Oscar en MXN (uso interno — NO aparece en estado de cuenta del cliente) */
-function _mvComisionMxn(m) {
-  if (m.tipo !== 'entrada' || m.comision == null) return 0
-  const bruto = _mvNetAmount(m)
-  // comision almacenado como factor (ej. 0.97) → ganancia = bruto × (1 - factor)
-  return Math.round(bruto * (1 - m.comision) * 100) / 100
-}
-
-/** Neto MXN del cliente = bruto − comisión. Es lo que se abona/carga en el estado de cuenta.
- *  Para salidas no hay comisión → neto = bruto.
- */
-function _mvNetoAmount(m) {
-  return Math.round((_mvNetAmount(m) - _mvComisionMxn(m)) * 100) / 100
-}
-
-function _mvKpis(list) {
-  let entradas = 0, salidas = 0, pendiente = 0, comisiones = 0
-  for (const m of list) {
-    if (m.estado === 'cancelado') continue
-    // Usar neto (bruto − comisión) para reflejar el saldo real del cliente
-    const neto = _mvNetoAmount(m)
-    if (m.estado === 'pendiente') { pendiente += (m.tipo === 'entrada' ? neto : -neto); continue }
-    if (m.tipo === 'entrada') { entradas += neto; comisiones += _mvComisionMxn(m) }
-    else salidas += neto
-  }
-  return { entradas, salidas, net: entradas - salidas, pendiente, comisiones }
-}
-
-function _mvWithBalance(sorted) {
-  // sorted es newest-first — revertir para calcular balance acumulado oldest→newest
-  const asc     = [...sorted].reverse()
-  let   bal     = 0
-  const withBal = asc.map(m => {
-    // Pendiente y cancelado NO impactan saldo (sólo "hecho" se contabiliza)
-    if (m.estado === 'hecho' || (!m.estado && m.estado !== 'cancelado' && m.estado !== 'pendiente')) {
-      bal += m.tipo === 'entrada' ? _mvNetoAmount(m) : -_mvNetoAmount(m)
-    }
-    return { ...m, _balance: Math.round(bal * 100) / 100, _pending: m.estado === 'pendiente' }
-  })
-  return withBal.reverse()
-}
+// Cálculos puros (bruto/comisión/neto/KPIs/balance) extraídos a
+// src/movimientos-calc.js y cubiertos por tests. Importados arriba como _mv*.
 
 // ── Badge helpers ──────────────────────────────────────────────────────────────
 function _mvEstadoBadge(estado) {
