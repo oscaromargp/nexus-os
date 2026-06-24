@@ -28,6 +28,7 @@ import { renderAFP } from './src/afp.js'
 import { renderCrypto } from './src/crypto.js'
 import { renderHealth } from './src/health.js'
 import { parseDecimalEs } from './src/health-calc.js'
+import { MV_BITSO_BOOKS as _MV_BITSO_BOOKS, MV_CRYPTO_SET as _MV_CRYPTO_SET, MX_BANKS } from './src/movimientos-data.js'
 import { renderModulesPanel, applyModulesToSidebar } from './src/modules.js'
 import Sortable from 'sortablejs'
 import {
@@ -21852,32 +21853,10 @@ async function _mvLoadAllSummaries() {
   _mvOrqSummaries = summ
 }
 
-// ── Crypto → Bitso book mapping ───────────────────────────────────────────────
-const _MV_BITSO_BOOKS = {
-  USDT: 'usdt_mxn', BTC: 'btc_mxn', ETH: 'eth_mxn',
-  XRP:  'xrp_mxn',  SOL: 'sol_mxn', LTC: 'ltc_mxn',
-}
-// Monedas que aplican comisión por defecto (entradas)
-const _MV_CRYPTO_SET = new Set(['USDT','BTC','ETH','XRP','SOL','LTC','USD'])
-
-// Parser numérico tolerante a coma decimal (teclados móviles en español).
-// Implementación compartida y testeada en src/health-calc.js (parseDecimalEs).
+// ── Datos de Movimientos (extraídos a src/movimientos-data.js) ───────────────
+// _MV_BITSO_BOOKS, _MV_CRYPTO_SET y MX_BANKS ahora viven en un módulo aparte.
+// Parser numérico tolerante a coma decimal (compartido/testeado en health-calc).
 function _mvNum(v) { return parseDecimalEs(v) }
-
-// ── Lista de bancos mexicanos + entidades especiales ─────────────────────────
-const MX_BANKS = [
-  'BBVA','Banorte','Santander','Banamex (Citibanamex)','HSBC','Scotiabank','Inbursa',
-  'Banregio','BanBajío','Afirme','Multiva','Monexcb','Actinver','Bansí','Invex',
-  'Ixe','Compartamos','Inmobiliario Mexicano','The Royal Bank of Scotland','ABC Capital',
-  'Autofin','Azteca','Bancoppel','Bafin','Bajío','Bansí','CI Banco','Consubanco',
-  'Famsa','Hipotecaria Federal','Icbc','Inmobiliario Mexicano','J.P. Morgan','Mifel',
-  'Sabadell','Ve por Más','Ve-Por-Mas','Bbase','Bancrea','Bank of America','Barclays',
-  'CIBanco','Deutsche','Fondverde','GBM','HSBC','Impersa','InterBanco','Nafinsa',
-  'Nu (Nubank)','N26','Hey Banco','Spin by OXXO','Klar','Albo','Cuenca',
-  // Entidades para operaciones especiales
-  'STP (Tamsa)','Bancalizo','SPEI directo','Tether/TRX','Tether/ERC20','Tether/BEP20',
-  'Efectivo','OXXO Pay','Mercado Pago','PayPal','Otro',
-]
 
 async function _mvFetchCryptoTc(moneda) {
   if (moneda === 'MXN') return 1
