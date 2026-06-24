@@ -385,6 +385,130 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, summary: r.summary, provider: r.provider })
     }
 
+    // ═══════════════════════ GYM / RUTINAS ═══════════════════════
+    if (action === 'gym_dashboard') {
+      const [wR, sR] = await Promise.all([
+        sb.from('health_workouts').select('*').eq('owner_id', userId).order('workout_date', { ascending: false }).limit(60),
+        sb.from('health_workout_sets').select('*').eq('owner_id', userId).order('created_at', { ascending: false }).limit(2000),
+      ])
+      const workouts = wR.data || []
+      const sets = sR.data || []
+      const wDate = {}; for (const w of workouts) wDate[w.id] = w.workout_date
+      const setsByWorkout = {}
+      for (const s of sets) (setsByWorkout[s.workout_id] = setsByWorkout[s.workout_id] || []).push(s)
+
+      // Récords (PR) y 1RM estimado (Epley) por ejercicio
+      const prs = {}
+      for (const s of sets) {
+        if (s.weight == null || s.reps == null) continue
+        const e = s.exercise
+        const w = Number(s.weight), r = Number(s.reps)
+        const oneRM = w * (1 + r / 30)
+        if (!prs[e]) prs[e] = { exercise: e, muscle: s.muscle_group || null, max_weight: 0, reps_at_max: 0, best_1rm: 0 }
+        if (w > prs[e].max_weight) { prs[e].max_weight = w; prs[e].reps_at_max = r }
+        if (oneRM > prs[e].best_1rm) prs[e].best_1rm = Math.round(oneRM)
+      }
+      // Volumen por músculo (últimos 30 días)
+      const since30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+      const muscleVol = {}
+      let sets30 = 0
+      for (const s of sets) {
+        const d = wDate[s.workout_id]; if (!d || d < since30) continue
+        sets30++
+        if (s.weight == null || s.reps == null) continue
+        const mg = s.muscle_group || 'otro'
+        muscleVol[mg] = (muscleVol[mg] || 0) + Number(s.weight) * Number(s.reps)
+      }
+      const workoutsFull = workouts.slice(0, 20).map(w => ({ ...w, sets: setsByWorkout[w.id] || [] }))
+      return res.status(200).json({
+        ok: true,
+        workouts: workoutsFull,
+        prs: Object.values(prs).sort((a, b) => b.best_1rm - a.best_1rm).slice(0, 30),
+        muscle_volume: muscleVol,
+        sets_30d: sets30,
+        workouts_30d: workouts.filter(w => w.workout_date >= since30).length,
+      })
+    }
+    if (action === 'gym_workout_add') {
+      const { workout_date, title, notes, duration_min, sets } = req.body
+      if (!Array.isArray(sets) || !sets.filter(s => s && s.exercise).length) return res.status(400).json({ error: 'Agrega al menos una serie con ejercicio' })
+      const { data: w, error } = await sb.from('health_workouts').insert({
+        owner_id: userId, workout_date: workout_date || new Date().toISOString().slice(0, 10),
+        title: title || null, notes: notes || null,
+        duration_min: duration_min ? Number(duration_min) : null,
+      }).select().single()
+      if (error) throw error
+      const rows = sets.filter(s => s && s.exercise).slice(0, 80).map((s, i) => ({
+        owner_id: userId, workout_id: w.id,
+        exercise: String(s.exercise).slice(0, 120), muscle_group: s.muscle_group || null,
+        weight: s.weight != null && s.weight !== '' ? Number(s.weight) : null,
+        reps: s.reps != null && s.reps !== '' ? parseInt(s.reps, 10) : null,
+        set_order: i,
+      }))
+      if (rows.length) { const { error: e2 } = await sb.from('health_workout_sets').insert(rows); if (e2) throw e2 }
+      return res.status(200).json({ ok: true, workout: w, sets: rows.length })
+    }
+    if (action === 'gym_workout_delete') {
+      const { id } = req.body
+      const { error } = await sb.from('health_workouts').delete().eq('id', id).eq('owner_id', userId)
+      if (error) throw error
+      return res.status(200).json({ ok: true })
+    }
+
+    // ═══════════════════════ CICLO MENSTRUAL ═══════════════════════
+    if (action === 'cycle_dashboard') {
+      const { data: cycles } = await sb.from('health_cycles').select('*').eq('owner_id', userId).order('start_date', { ascending: false }).limit(24)
+      const sorted = [...(cycles || [])].sort((a, b) => a.start_date.localeCompare(b.start_date))
+      const cycleLengths = [], periodLengths = []
+      for (let i = 1; i < sorted.length; i++) {
+        const d = (new Date(sorted[i].start_date) - new Date(sorted[i - 1].start_date)) / 86400000
+        if (d > 0 && d < 90) cycleLengths.push(d)
+      }
+      for (const c of sorted) {
+        if (c.end_date) { const d = (new Date(c.end_date) - new Date(c.start_date)) / 86400000 + 1; if (d > 0 && d < 15) periodLengths.push(d) }
+      }
+      const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null
+      const avgCycle = avg(cycleLengths) || 28
+      const avgPeriod = avg(periodLengths) || 5
+      const last = sorted[sorted.length - 1] || null
+      let prediction = null
+      if (last) {
+        const lastStart = new Date(last.start_date + 'T00:00:00')
+        const today0 = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00')
+        const dayOfCycle = Math.floor((today0 - lastStart) / 86400000) + 1
+        const nextStart = new Date(lastStart); nextStart.setDate(nextStart.getDate() + avgCycle)
+        const ovulation = new Date(nextStart); ovulation.setDate(ovulation.getDate() - 14)
+        const daysToNext = Math.ceil((nextStart - today0) / 86400000)
+        let phase = '—'
+        const ovDay = avgCycle - 14
+        if (dayOfCycle >= 1 && dayOfCycle <= avgPeriod) phase = 'Menstruación'
+        else if (Math.abs(dayOfCycle - ovDay) <= 1) phase = 'Ovulación (fértil)'
+        else if (dayOfCycle < ovDay) phase = 'Folicular'
+        else phase = 'Lútea'
+        prediction = {
+          day_of_cycle: dayOfCycle, next_start: nextStart.toISOString().slice(0, 10),
+          ovulation: ovulation.toISOString().slice(0, 10), days_to_next: daysToNext, phase,
+        }
+      }
+      return res.status(200).json({ ok: true, cycles: cycles || [], prediction, avg_cycle: avgCycle, avg_period: avgPeriod })
+    }
+    if (action === 'cycle_add') {
+      const { start_date, end_date, flow, symptoms, notes } = req.body
+      if (!start_date) return res.status(400).json({ error: 'start_date requerido' })
+      const { data, error } = await sb.from('health_cycles').insert({
+        owner_id: userId, start_date, end_date: end_date || null,
+        flow: flow || null, symptoms: Array.isArray(symptoms) ? symptoms : [], notes: notes || null,
+      }).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, cycle: data })
+    }
+    if (action === 'cycle_delete') {
+      const { id } = req.body
+      const { error } = await sb.from('health_cycles').delete().eq('id', id).eq('owner_id', userId)
+      if (error) throw error
+      return res.status(200).json({ ok: true })
+    }
+
     return res.status(400).json({ error: 'acción desconocida: ' + action })
   } catch (e) {
     console.error('[api/health]', e)

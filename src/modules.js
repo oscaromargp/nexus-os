@@ -29,7 +29,7 @@ export const MODULES = [
   { id: 'crypto',       name: 'Cripto Portfolio',icon: '₿',  category: 'invest',  sidebar: 'crypto',     desc: 'Tracking manual con precios live + journal' },
 
   // Bienestar
-  { id: 'salud',        name: 'Salud Física',    icon: '🩺', category: 'wellness', sidebar: 'salud',     desc: 'Laboratorio personal: análisis, presión, glucosa y peso con tendencias · foto→IA · hábitos con rachas · resumen IA' },
+  { id: 'salud',        name: 'Salud Física',    icon: '🩺', category: 'wellness', sidebar: 'salud',     desc: 'Laboratorio personal: análisis/presión/glucosa con tendencias · foto→IA · hábitos+heatmap · gym (PR/1RM) · ciclo menstrual' },
 
   // Inmobiliario
   { id: 'inmuebles',    name: 'Inmuebles',       icon: '🏠', category: 'realestate', sidebar: 'inmuebles', desc: 'CRM inmobiliario + leads + reportes IA' },

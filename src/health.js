@@ -6,6 +6,8 @@
 // - Resumen IA de análisis (Groq/Gemini, sin costo extra)
 
 import { supabase } from './supabase.js'
+import { renderGymTab } from './health-gym.js'
+import { renderCycleTab } from './health-cycle.js'
 
 async function _api(action, payload = {}) {
   const { data: { session } } = await supabase.auth.getSession()
@@ -91,10 +93,35 @@ const HEALTH_MARKER_BY_NAME = Object.fromEntries(HEALTH_MARKERS.map(m => [m.name
 // Marcadores rápidos para los botones de acceso directo
 const HEALTH_QUICK = ['Presión arterial', 'Peso', 'Glucosa en ayunas', 'Glucosa capilar']
 
+let _healthTab = 'general'
+
 export async function renderHealth() {
   const root = document.getElementById('view-salud') || document.getElementById('health-root')
   if (!root) return
-  root.innerHTML = '<div style="padding:24px;color:#94a3b8;font-size:13px;">⏳ Cargando tu salud…</div>'
+  root.innerHTML = `
+    <div style="padding:20px;max-width:1000px;margin:0 auto;">
+      <h2 style="font-size:24px;font-weight:800;margin:0 0 4px;display:flex;align-items:center;gap:10px;">🩺 Salud</h2>
+      <p style="color:#94a3b8;font-size:13px;margin:0 0 14px;">Mide para mejorar — análisis, hábitos, gym y ciclo en un solo lugar.</p>
+      <div style="display:flex;gap:6px;margin-bottom:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:4px;">
+        ${[['general', '📊 General'], ['gym', '🏋️ Gym'], ['ciclo', '🩸 Ciclo']].map(([t, lbl]) => {
+          const on = _healthTab === t
+          return `<button data-health-tab="${t}" style="flex:1;padding:9px;border:none;border-radius:9px;cursor:pointer;font-size:13px;font-weight:700;background:${on ? 'rgba(52,211,153,0.15)' : 'transparent'};color:${on ? '#34d399' : '#94a3b8'};">${lbl}</button>`
+        }).join('')}
+      </div>
+      <div id="health-tab-body"><div style="padding:24px;color:#94a3b8;font-size:13px;">⏳ Cargando…</div></div>
+    </div>`
+  root.querySelectorAll('[data-health-tab]').forEach(b => b.addEventListener('click', () => {
+    _healthTab = b.dataset.healthTab
+    renderHealth()
+  }))
+  const body = root.querySelector('#health-tab-body')
+  if (_healthTab === 'gym')   { renderGymTab(body); return }
+  if (_healthTab === 'ciclo') { renderCycleTab(body); return }
+  _renderGeneralTab(body)
+}
+
+async function _renderGeneralTab(body) {
+  body.innerHTML = '<div style="padding:24px;color:#94a3b8;font-size:13px;">⏳ Cargando tu salud…</div>'
 
   let d
   try {
@@ -105,20 +132,15 @@ export async function renderHealth() {
       d = (await _api('health_dashboard'))
     }
   } catch (e) {
-    root.innerHTML = `<div style="padding:24px;color:#f87171;">⚠ ${_esc(e.message)}</div>`
+    body.innerHTML = `<div style="padding:24px;color:#f87171;">⚠ ${_esc(e.message)}</div>`
     return
   }
 
   const { goals, today_progress, studies, trends, streaks, next_checkup, logs = [] } = d
 
-  // ── Header ──
+  // ── Acción: analizar con IA ──
   let html = `
-    <div style="padding:20px;max-width:1000px;margin:0 auto;">
-      <div style="display:flex;align-items:start;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-        <div>
-          <h2 style="font-size:24px;font-weight:800;margin:0 0 4px;display:flex;align-items:center;gap:10px;">🩺 Salud</h2>
-          <p style="color:#94a3b8;font-size:13px;margin:0;">Mide para mejorar — análisis, presión, glucosa, peso y hábitos en un solo lugar.</p>
-        </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
         <button id="health-ai-btn" style="padding:9px 16px;background:linear-gradient(135deg,#34d399,#10b981);border:none;color:#000;font-weight:700;border-radius:8px;cursor:pointer;font-size:13px;">✨ Analizar mis estudios con IA</button>
       </div>`
 
@@ -285,11 +307,10 @@ export async function renderHealth() {
             ${s.ai_summary?`<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:11px;color:#34d399;font-weight:600;">✨ Resumen IA</summary><div style="font-size:12px;color:#cbd5e1;line-height:1.6;margin-top:6px;white-space:pre-wrap;">${_esc(s.ai_summary)}</div></details>`:''}
           </div>`).join('')}
       </div>` : '<div style="font-size:12px;color:#6b7280;text-align:center;padding:14px;">Sube tu primer estudio para guardarlo + analizarlo con IA.</div>'}
-    </div>
-  </div>`
+    </div>`
 
-  root.innerHTML = html
-  _bindHealth(root)
+  body.innerHTML = html
+  _bindHealth(body)
   if (window.refreshIcons) window.refreshIcons()
 }
 
