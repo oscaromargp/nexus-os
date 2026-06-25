@@ -17,6 +17,36 @@ function getSupabase(authToken) {
   })
 }
 
+// Cliente admin (service-role, bypassa RLS) — sólo para acciones de servicio
+// autenticadas con NEXUS_WEBHOOK_SECRET (cron de Meds + callback de Telegram).
+function getAdminSupabase() {
+  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+  const key = process.env.NEXUS_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY
+  return createClient(url, key, { auth: { persistSession: false } })
+}
+
+// Dosis "vencidas" de hoy aún sin registrar (para el recordatorio de Telegram).
+async function medDueForUser(admin, userId, nowHHMM) {
+  const today = new Date().toISOString().slice(0, 10)
+  const dow = new Date().getDay()
+  const [medsR, logsR] = await Promise.all([
+    admin.from('health_medications').select('*').eq('owner_id', userId).eq('active', true).eq('notify_telegram', true),
+    admin.from('health_medication_logs').select('medication_id,scheduled_time,status').eq('owner_id', userId).eq('scheduled_for', today),
+  ])
+  const logged = new Set((logsR.data || []).filter(l => l.status !== 'pendiente').map(l => l.medication_id + '|' + (l.scheduled_time || '')))
+  const due = []
+  for (const m of (medsR.data || [])) {
+    if (m.frequency === 'prn') continue
+    if (m.frequency === 'dias' && !(m.days_of_week || []).includes(dow)) continue
+    for (const t of (m.schedule_times && m.schedule_times.length ? m.schedule_times : [''])) {
+      if (t && nowHHMM && t > nowHHMM) continue   // aún no es su hora
+      if (logged.has(m.id + '|' + (t || ''))) continue
+      due.push({ medication_id: m.id, name: m.name, kind: m.kind, dose: m.dose, purpose: m.purpose, time: t || null, scheduled_for: today })
+    }
+  }
+  return due
+}
+
 // ── IA: resume un análisis médico con Groq (primary) o Gemini (fallback) ──
 async function summarizeWithAI(rawText) {
   const groqKey = process.env.GROQ_API_KEY
@@ -184,6 +214,38 @@ export default async function handler(req, res) {
 
   try {
     const { action } = req.body || {}
+
+    // ── Acciones de servicio (n8n cron + callback de Telegram) — auth por secret ──
+    const SERVICE_ACTIONS = new Set(['med_due', 'med_log_telegram'])
+    if (SERVICE_ACTIONS.has(action)) {
+      const svc = req.headers['x-nexus-service-secret']
+      const SECRET = process.env.NEXUS_WEBHOOK_SECRET
+      if (!svc || !SECRET || svc !== SECRET) return res.status(401).json({ error: 'service secret inválido' })
+      const admin = getAdminSupabase()
+      const uid = req.body?.user_id
+      if (!uid) return res.status(400).json({ error: 'user_id requerido' })
+
+      if (action === 'med_due') {
+        const due = await medDueForUser(admin, uid, req.body?.now || null)
+        return res.status(200).json({ ok: true, due, count: due.length })
+      }
+      if (action === 'med_log_telegram') {
+        const { medication_id, scheduled_for, scheduled_time, status, dose_taken } = req.body
+        if (!medication_id || !status) return res.status(400).json({ error: 'medication_id + status requeridos' })
+        const row = {
+          owner_id: uid, medication_id,
+          scheduled_for: scheduled_for || new Date().toISOString().slice(0, 10),
+          scheduled_time: scheduled_time || '',
+          status, dose_taken: dose_taken || null, source: 'telegram',
+          taken_at: status === 'tomado' ? new Date().toISOString() : null,
+        }
+        const { data, error } = await admin.from('health_medication_logs')
+          .upsert(row, { onConflict: 'owner_id,medication_id,scheduled_for,scheduled_time' }).select().single()
+        if (error) return res.status(500).json({ error: error.message })
+        return res.status(200).json({ ok: true, log: data })
+      }
+    }
+
     const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim()
     if (!token) return res.status(401).json({ error: 'Sin token' })
     const sb = getSupabase(token)

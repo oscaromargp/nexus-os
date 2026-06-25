@@ -1,0 +1,71 @@
+{
+  "name": "Nexus OS — Recordatorio de Medicamentos (Salud)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "*/30 7-22 * * *" }]
+        }
+      },
+      "id": "schedule",
+      "name": "Cada 30 min (7am-10pm)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NEXUS_API_BASE }}/api/health",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-nexus-service-secret", "value": "={{ $env.NEXUS_WEBHOOK_SECRET }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ action: 'med_due', user_id: $env.NEXUS_USER_ID, now: $now.format('HH:mm') }) }}",
+        "options": {}
+      },
+      "id": "get-due",
+      "name": "Obtener dosis vencidas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convierte cada dosis vencida en un payload de Telegram con botones ✅/❌\nconst body = $input.first().json;\nconst due = (body && body.due) || [];\nconst chatId = $env.NEXUS_TELEGRAM_CHAT_ID;\nconst out = [];\nfor (const d of due) {\n  const t = d.time || '';\n  const kindEmoji = d.kind === 'vitamina' ? '🟡' : d.kind === 'suplemento' ? '🥤' : '💊';\n  const lines = [\n    `${kindEmoji} *Hora de tu ${d.kind || 'medicamento'}*`,\n    ``,\n    `*${d.name}*${d.dose ? ' · ' + d.dose : ''}`,\n    d.purpose ? `_Para: ${d.purpose}_` : '',\n    t ? `🕐 ${t}` : '',\n  ].filter(Boolean).join('\\n');\n  out.push({ json: {\n    chat_id: chatId,\n    text: lines,\n    parse_mode: 'Markdown',\n    reply_markup: {\n      inline_keyboard: [[\n        { text: '✅ Lo tomé', callback_data: `med:${d.medication_id}:${t}:t` },\n        { text: '❌ No lo tomé', callback_data: `med:${d.medication_id}:${t}:n` }\n      ]]\n    }\n  }});\n}\nreturn out;"
+      },
+      "id": "build-messages",
+      "name": "Construir mensajes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "send-telegram",
+      "name": "Enviar a Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    }
+  ],
+  "connections": {
+    "Cada 30 min (7am-10pm)": { "main": [[{ "node": "Obtener dosis vencidas", "type": "main", "index": 0 }]] },
+    "Obtener dosis vencidas": { "main": [[{ "node": "Construir mensajes", "type": "main", "index": 0 }]] },
+    "Construir mensajes": { "main": [[{ "node": "Enviar a Telegram", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "_nexus_notes": "Workflow 1 de 2 (envío). El callback (cuando el usuario pulsa ✅/❌) se maneja en el bot existente: ante un callback_query con data que empieza en 'med:', parsear 'med:<medication_id>:<HH:mm>:<t|n>' y POST a /api/health con { action:'med_log_telegram', user_id: NEXUS_USER_ID, medication_id, scheduled_time, status: t?'tomado':'no_tomado' } y header x-nexus-service-secret; luego answerCallbackQuery + editMessageText para confirmar. Env requeridas en n8n: NEXUS_API_BASE, NEXUS_WEBHOOK_SECRET, NEXUS_USER_ID, NEXUS_TELEGRAM_CHAT_ID, TELEGRAM_BOT_TOKEN."
+}
