@@ -8,6 +8,7 @@
 import { supabase } from './supabase.js'
 import { renderGymTab } from './health-gym.js'
 import { renderCycleTab } from './health-cycle.js'
+import { renderMedsTab } from './health-meds.js'
 import { heatmapDays } from './health-calc.js'
 
 async function _api(action, payload = {}) {
@@ -103,10 +104,10 @@ export async function renderHealth() {
     <div style="padding:20px;max-width:1000px;margin:0 auto;">
       <h2 style="font-size:24px;font-weight:800;margin:0 0 4px;display:flex;align-items:center;gap:10px;">🩺 Salud</h2>
       <p style="color:#94a3b8;font-size:13px;margin:0 0 14px;">Mide para mejorar — análisis, hábitos, gym y ciclo en un solo lugar.</p>
-      <div style="display:flex;gap:4px;margin-bottom:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:4px;">
-        ${[['inicio', '🏠 Inicio'], ['general', '📊 General'], ['gym', '🏋️ Gym'], ['ciclo', '🩸 Ciclo']].map(([t, lbl]) => {
+      <div style="display:flex;gap:4px;margin-bottom:18px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+        ${[['inicio', '🏠 Inicio'], ['general', '📊 General'], ['meds', '💊 Meds'], ['gym', '🏋️ Gym'], ['ciclo', '🩸 Ciclo']].map(([t, lbl]) => {
           const on = _healthTab === t
-          return `<button data-health-tab="${t}" style="flex:1;padding:9px 4px;border:none;border-radius:9px;cursor:pointer;font-size:12px;font-weight:700;background:${on ? 'rgba(52,211,153,0.15)' : 'transparent'};color:${on ? '#34d399' : '#94a3b8'};white-space:nowrap;">${lbl}</button>`
+          return `<button data-health-tab="${t}" style="flex:1;min-width:72px;padding:9px 6px;border:none;border-radius:9px;cursor:pointer;font-size:12px;font-weight:700;background:${on ? 'rgba(52,211,153,0.15)' : 'transparent'};color:${on ? '#34d399' : '#94a3b8'};white-space:nowrap;">${lbl}</button>`
         }).join('')}
       </div>
       <div id="health-tab-body"><div style="padding:24px;color:#94a3b8;font-size:13px;">⏳ Cargando…</div></div>
@@ -116,6 +117,7 @@ export async function renderHealth() {
     renderHealth()
   }))
   const body = root.querySelector('#health-tab-body')
+  if (_healthTab === 'meds')  { renderMedsTab(body); return }
   if (_healthTab === 'gym')   { renderGymTab(body); return }
   if (_healthTab === 'ciclo') { renderCycleTab(body); return }
   if (_healthTab === 'general') { _renderGeneralTab(body); return }
@@ -132,7 +134,7 @@ async function _renderOverviewTab(body) {
   try { d = await _api('health_overview') }
   catch (e) { body.innerHTML = `<div style="padding:24px;color:#f87171;">⚠ ${_esc(e.message)}</div>`; return }
 
-  const { vitals, habits, gym, cycle, has_cycle } = d
+  const { vitals, habits, gym, cycle, has_cycle, meds } = d
   const card = (tab, icon, title, bigHtml, subHtml, accent) => `
     <div data-go-tab="${tab}" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;cursor:pointer;transition:border-color .2s;" onmouseover="this.style.borderColor='${accent}55'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
       <div style="display:flex;align-items:center;gap:7px;color:#94a3b8;font-size:12px;font-weight:600;margin-bottom:8px;">${icon} ${title}<span style="margin-left:auto;color:#475569;">›</span></div>
@@ -161,9 +163,15 @@ async function _renderOverviewTab(body) {
   const gBig = `${g.workouts_7d}`
   const gSub = g.top ? `entrenos · 7d · 🏆 ${_esc(g.top.exercise)} ${g.top.weight}kg` : 'entrenos · últimos 7 días'
 
+  // Meds
+  const md = meds || { due: 0, taken: 0, total: 0 }
+  const mdBig = md.due ? `${md.taken} / ${md.due}` : (md.total ? '—' : '—')
+  const mdSub = md.due ? 'dosis de hoy' : (md.total ? 'sin dosis hoy' : 'registra tus medicinas')
+
   let html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;">`
   html += card('general', '🫀', 'Vitales', vBig, vSub, '#34d399')
   html += card('general', '🔥', 'Hábitos', hBig, hSub, '#fb923c')
+  html += card('meds', '💊', 'Meds', mdBig, mdSub, '#34d399')
   html += card('gym', '🏋️', 'Gym', gBig, gSub, '#60a5fa')
   if (has_cycle && cycle) {
     html += card('ciclo', '🩸', 'Ciclo', `Día ${cycle.day_of_cycle}`, `${_esc(cycle.phase)} · próximo en ${cycle.days_to_next}d`, '#f472b6')

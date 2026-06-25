@@ -252,13 +252,15 @@ export default async function handler(req, res) {
       const today = new Date().toISOString().slice(0, 10)
       const since7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
       const since40 = new Date(Date.now() - 40 * 86400000).toISOString().slice(0, 10)
-      const [goalsR, logsR, readingsR, workoutsR, setsR, cyclesR] = await Promise.all([
+      const [goalsR, logsR, readingsR, workoutsR, setsR, cyclesR, medsR, medLogsR] = await Promise.all([
         sb.from('health_goals').select('*').eq('owner_id', userId).eq('is_active', true),
         sb.from('health_logs').select('goal_kind,value,log_date').eq('owner_id', userId).gte('log_date', since40),
         sb.from('health_readings').select('marker,value,value2,unit,ref_low,ref_high,measured_at').eq('owner_id', userId).order('measured_at', { ascending: false }).limit(200),
         sb.from('health_workouts').select('id').eq('owner_id', userId).gte('workout_date', since7),
         sb.from('health_workout_sets').select('exercise,weight').eq('owner_id', userId).not('weight', 'is', null).order('weight', { ascending: false }).limit(1),
         sb.from('health_cycles').select('*').eq('owner_id', userId).order('start_date', { ascending: false }).limit(24),
+        sb.from('health_medications').select('*').eq('owner_id', userId).eq('active', true),
+        sb.from('health_medication_logs').select('medication_id,scheduled_time,status').eq('owner_id', userId).eq('scheduled_for', today),
       ])
       const goals = goalsR.data || [], logs = logsR.data || []
       const todayDone = goals.filter(g => {
@@ -278,6 +280,17 @@ export default async function handler(req, res) {
       }
       const topSet = (setsR.data || [])[0] || null
       const { prediction } = cyclePrediction(cyclesR.data)
+      // Meds de hoy: cuántas dosis programadas y cuántas tomadas
+      const dowO = new Date().getDay()
+      const medLogs = medLogsR.data || []
+      const takenKeys = new Set(medLogs.filter(l => l.status === 'tomado').map(l => l.medication_id + '|' + (l.scheduled_time || '')))
+      let medsDue = 0, medsTaken = 0
+      for (const m of (medsR.data || [])) {
+        if (m.frequency === 'prn') continue
+        if (m.frequency === 'dias' && !(m.days_of_week || []).includes(dowO)) continue
+        const times = (m.schedule_times && m.schedule_times.length) ? m.schedule_times : ['']
+        for (const t of times) { medsDue++; if (takenKeys.has(m.id + '|' + (t || ''))) medsTaken++ }
+      }
       return res.status(200).json({
         ok: true, today,
         vitals: {
@@ -288,6 +301,7 @@ export default async function handler(req, res) {
         habits: { done: todayDone, total: goals.length, best_streak: bestStreak },
         gym: { workouts_7d: (workoutsR.data || []).length, top: topSet ? { exercise: topSet.exercise, weight: topSet.weight } : null },
         cycle: prediction, has_cycle: (cyclesR.data || []).length > 0,
+        meds: { due: medsDue, taken: medsTaken, total: (medsR.data || []).length },
       })
     }
 
@@ -428,6 +442,92 @@ export default async function handler(req, res) {
         await sb.from('health_studies').update({ ai_summary: r.summary }).eq('id', study_id).eq('owner_id', userId)
       }
       return res.status(200).json({ ok: true, summary: r.summary, provider: r.provider })
+    }
+
+    // ═══════════════════ MEDICAMENTOS / SUPLEMENTOS ═══════════════════
+    if (action === 'med_list') {
+      const today = new Date().toISOString().slice(0, 10)
+      const dow = new Date().getDay()   // 0=Dom..6=Sab
+      const [medsR, logsR] = await Promise.all([
+        sb.from('health_medications').select('*').eq('owner_id', userId).order('created_at'),
+        sb.from('health_medication_logs').select('*').eq('owner_id', userId).eq('scheduled_for', today),
+      ])
+      const meds = medsR.data || [], logs = logsR.data || []
+      const logByKey = {}
+      for (const l of logs) logByKey[l.medication_id + '|' + (l.scheduled_time || '')] = l
+      const todayDoses = []
+      for (const m of meds) {
+        if (!m.active || m.frequency === 'prn') continue
+        if (m.frequency === 'dias' && !(m.days_of_week || []).includes(dow)) continue
+        const times = (m.schedule_times && m.schedule_times.length) ? m.schedule_times : ['']
+        for (const t of times) {
+          const log = logByKey[m.id + '|' + (t || '')]
+          todayDoses.push({
+            medication_id: m.id, name: m.name, kind: m.kind, dose: m.dose, purpose: m.purpose,
+            time: t || null, status: log?.status || 'pendiente',
+            log_id: log?.id || null, dose_taken: log?.dose_taken || null,
+          })
+        }
+      }
+      todayDoses.sort((a, b) => (a.time || '~').localeCompare(b.time || '~'))
+      return res.status(200).json({ ok: true, medications: meds, today_doses: todayDoses, today })
+    }
+    if (action === 'med_add') {
+      const { name, kind, dose, purpose, schedule_times, frequency, days_of_week, notify_telegram } = req.body
+      if (!name) return res.status(400).json({ error: 'name requerido' })
+      const { data, error } = await sb.from('health_medications').insert({
+        owner_id: userId, name, kind: kind || 'medicamento', dose: dose || null, purpose: purpose || null,
+        schedule_times: Array.isArray(schedule_times) ? schedule_times : [],
+        frequency: ['diario', 'dias', 'prn'].includes(frequency) ? frequency : 'diario',
+        days_of_week: Array.isArray(days_of_week) ? days_of_week : [],
+        notify_telegram: notify_telegram !== false,
+      }).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, medication: data })
+    }
+    if (action === 'med_update') {
+      const { id, patch } = req.body
+      if (!id || !patch) return res.status(400).json({ error: 'id + patch requeridos' })
+      const allowed = ['name', 'kind', 'dose', 'purpose', 'schedule_times', 'frequency', 'days_of_week', 'active', 'notify_telegram']
+      const upd = {}
+      for (const k of allowed) if (k in patch) upd[k] = patch[k]
+      const { data, error } = await sb.from('health_medications').update(upd).eq('id', id).eq('owner_id', userId).select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, medication: data })
+    }
+    if (action === 'med_delete') {
+      const { id } = req.body
+      const { error } = await sb.from('health_medications').delete().eq('id', id).eq('owner_id', userId)
+      if (error) throw error
+      return res.status(200).json({ ok: true })
+    }
+    if (action === 'med_log_set') {
+      const { medication_id, scheduled_for, scheduled_time, status, dose_taken, notes } = req.body
+      if (!medication_id || !status) return res.status(400).json({ error: 'medication_id + status requeridos' })
+      const row = {
+        owner_id: userId, medication_id,
+        scheduled_for: scheduled_for || new Date().toISOString().slice(0, 10),
+        scheduled_time: scheduled_time || '',
+        status, dose_taken: dose_taken || null, notes: notes || null, source: 'app',
+        taken_at: status === 'tomado' ? new Date().toISOString() : null,
+      }
+      const { data, error } = await sb.from('health_medication_logs')
+        .upsert(row, { onConflict: 'owner_id,medication_id,scheduled_for,scheduled_time' })
+        .select().single()
+      if (error) throw error
+      return res.status(200).json({ ok: true, log: data })
+    }
+    if (action === 'med_history') {
+      const { medication_id, days = 30 } = req.body
+      const since = new Date(Date.now() - Math.min(days, 365) * 86400000).toISOString().slice(0, 10)
+      let q = sb.from('health_medication_logs')
+        .select('*, med:health_medications(name,kind,dose,purpose)')
+        .eq('owner_id', userId).gte('scheduled_for', since)
+        .order('scheduled_for', { ascending: false }).order('scheduled_time', { ascending: false }).limit(300)
+      if (medication_id) q = q.eq('medication_id', medication_id)
+      const { data, error } = await q
+      if (error) throw error
+      return res.status(200).json({ ok: true, logs: data || [] })
     }
 
     // ═══════════════════════ GYM / RUTINAS ═══════════════════════
