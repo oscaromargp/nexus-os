@@ -6,7 +6,26 @@
 // Auth: JWT Bearer del usuario.
 
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 import { cyclePrediction, epley1RM } from '../src/health-calc.js'
+
+// Firma/verifica un enlace de confirmación de toma (botones de Telegram sin
+// necesidad de tocar el bot). HMAC-SHA256 con NEXUS_WEBHOOK_SECRET.
+function medSign(payloadObj) {
+  const data = Buffer.from(JSON.stringify(payloadObj)).toString('base64url')
+  const sig = crypto.createHmac('sha256', process.env.NEXUS_WEBHOOK_SECRET || '').update(data).digest('base64url')
+  return data + '.' + sig
+}
+function medVerify(token) {
+  const [data, sig] = String(token || '').split('.')
+  if (!data || !sig) return null
+  const expect = crypto.createHmac('sha256', process.env.NEXUS_WEBHOOK_SECRET || '').update(data).digest('base64url')
+  if (sig.length !== expect.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expect))) return null
+  try { return JSON.parse(Buffer.from(data, 'base64url').toString()) } catch { return null }
+}
+function medConfirmPage(emoji, msg) {
+  return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nexus OS · Salud</title></head><body style="font-family:system-ui,-apple-system,sans-serif;background:#0f1419;color:#e5e7eb;display:grid;place-items:center;min-height:100vh;margin:0"><div style="text-align:center;padding:24px"><div style="font-size:56px">${emoji}</div><div style="font-size:18px;margin-top:14px;font-weight:700">${msg}</div><div style="font-size:13px;color:#94a3b8;margin-top:10px">Nexus OS · Salud · ya puedes cerrar esta ventana</div></div></body></html>`
+}
 
 function getSupabase(authToken) {
   const url  = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
@@ -210,6 +229,29 @@ export const config = { maxDuration: 60 }
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store')
+
+  // GET ?mc=<token> → confirmación de toma desde el enlace de Telegram (sin bot)
+  if (req.method === 'GET' && req.query?.mc) {
+    const sendHtml = (code, emoji, msg) => {
+      res.status(code); res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(medConfirmPage(emoji, msg))
+    }
+    const p = medVerify(req.query.mc)
+    if (!p || !p.u || !p.m) return sendHtml(400, '⚠️', 'Enlace inválido o alterado')
+    try {
+      const admin = getAdminSupabase()
+      await admin.from('health_medication_logs').upsert({
+        owner_id: p.u, medication_id: p.m,
+        scheduled_for: p.d || new Date().toISOString().slice(0, 10),
+        scheduled_time: p.t || '', status: p.s, source: 'telegram',
+        taken_at: p.s === 'tomado' ? new Date().toISOString() : null,
+      }, { onConflict: 'owner_id,medication_id,scheduled_for,scheduled_time' })
+      return sendHtml(200, p.s === 'tomado' ? '✅' : '☑️',
+        p.s === 'tomado' ? 'Registrado como TOMADO' : 'Registrado como NO tomado')
+    } catch (e) {
+      return sendHtml(500, '⚠️', 'No se pudo registrar: ' + (e.message || ''))
+    }
+  }
+
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
@@ -227,7 +269,15 @@ export default async function handler(req, res) {
 
       if (action === 'med_due') {
         const due = await medDueForUser(admin, uid, req.body?.now || null)
-        return res.status(200).json({ ok: true, due, count: due.length })
+        const base = process.env.NEXUS_API_BASE || ('https://' + (req.headers['x-forwarded-host'] || req.headers.host))
+        const withLinks = due.map(d => ({
+          ...d,
+          confirm: {
+            taken: base + '/api/health?mc=' + medSign({ u: uid, m: d.medication_id, t: d.time || '', s: 'tomado', d: d.scheduled_for }),
+            skip:  base + '/api/health?mc=' + medSign({ u: uid, m: d.medication_id, t: d.time || '', s: 'no_tomado', d: d.scheduled_for }),
+          },
+        }))
+        return res.status(200).json({ ok: true, due: withLinks, count: withLinks.length })
       }
       if (action === 'med_log_telegram') {
         const { medication_id, scheduled_for, scheduled_time, status, dose_taken } = req.body

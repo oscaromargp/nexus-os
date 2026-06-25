@@ -166,6 +166,71 @@ return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n') } }];
     },
   },
 
+  // ── Recordatorio de medicamentos (Salud) ────────────────────────
+  {
+    id: 'meds_reminder',
+    name: '💊 Recordatorio de medicamentos',
+    desc: 'Cada 30 min revisa tus tomas pendientes y te avisa por Telegram con botones ✅/❌ que marcan la toma al instante (sin abrir la app).',
+    category: 'wellness',
+    icon: '💊',
+    color: '#34d399',
+    paramsSchema: [
+      { key: 'from_hour', label: 'Desde la hora (24h)', type: 'number', min: 0, max: 23, default: 7 },
+      { key: 'to_hour', label: 'Hasta la hora (24h)', type: 'number', min: 0, max: 23, default: 22 },
+    ],
+    generateWorkflow(params, ctx) {
+      const { from_hour = 7, to_hour = 22 } = params
+      const { telegramChatId, userId, apiBase, serviceSecret } = ctx
+      // El default de apiBase puede venir mal; usamos el dominio real como fallback.
+      const API = (apiBase && !/nexus-os\.vercel\.app$/.test(apiBase)) ? apiBase : 'https://nexus-os-chi.vercel.app'
+      const code = `
+const API = ${JSON.stringify(API)};
+const SECRET = ${JSON.stringify(serviceSecret)};
+const helpers = this.helpers;
+// Hora local de México (UTC-6) para no recordar dosis futuras
+const nowMx = new Date(Date.now() - 6*3600000).toISOString().slice(11,16);
+let due = [];
+try {
+  const r = await helpers.httpRequest({
+    method: 'POST', url: API + '/api/health',
+    headers: { 'x-nexus-service-secret': SECRET, 'Content-Type': 'application/json' },
+    body: { action: 'med_due', user_id: ${JSON.stringify(userId)}, now: nowMx },
+    json: true,
+  });
+  due = (r && r.due) || [];
+} catch (e) { return [{ json: { skip: true } }]; }
+if (!due.length) return [{ json: { skip: true } }];
+const lines = ['💊 *Hora de tus tomas*', ''];
+for (const d of due) {
+  const kE = d.kind === 'vitamina' ? '🟡' : d.kind === 'suplemento' ? '🥤' : '💊';
+  lines.push(kE + ' *' + d.name + '*' + (d.dose ? ' · ' + d.dose : '') + (d.time ? ' (' + d.time + ')' : '') + (d.purpose ? ' — ' + d.purpose : ''));
+  lines.push('[✅ Lo tomé](' + d.confirm.taken + ')   ·   [❌ No lo tomé](' + d.confirm.skip + ')');
+  lines.push('');
+}
+return [{ json: { chatId: ${telegramChatId}, reply: lines.join('\\n'), skip: false } }];
+`.trim()
+      return {
+        name: '[Nexus Auto] 💊 Recordatorio de medicamentos',
+        nodes: [
+          cronNode('cron', 'Cada 30 min', [240, 300], `*/30 ${from_hour}-${to_hour} * * *`),
+          codeNode('check', 'Dosis pendientes', [460, 300], code),
+          {
+            parameters: { conditions: { string: [{ value1: '={{ $json.skip }}', operation: 'equal', value2: 'false' }] } },
+            id: 'gate', name: 'Si hay dosis', type: 'n8n-nodes-base.if',
+            typeVersion: 1, position: [680, 300],
+          },
+          tgSendNode('tg', 'Telegram Send', [900, 200], '={{ $json.chatId }}', '={{ $json.reply }}'),
+        ],
+        connections: mergeConns(
+          conn('Cada 30 min', 'Dosis pendientes'),
+          conn('Dosis pendientes', 'Si hay dosis'),
+          { 'Si hay dosis': { main: [[{ node: 'Telegram Send', type: 'main', index: 0 }], []] } },
+        ),
+        settings: { executionOrder: 'v1' },
+      }
+    },
+  },
+
   // ── 2. Cierre de jornada ─────────────────────────────────────────
   {
     id: 'evening_summary',

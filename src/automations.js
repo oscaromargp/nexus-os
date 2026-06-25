@@ -199,11 +199,12 @@ async function renderAutomations() {
   _active.forEach(a => { activeByRecipe[a.recipe_id] = a })
 
   const categories = [
-    { id: 'daily',   label: '☀️ Cotidiano',  color: '#fbbf24' },
-    { id: 'crm',     label: '👥 CRM',        color: '#22d3ee' },
-    { id: 'finance', label: '💰 Finanzas',   color: '#34d399' },
-    { id: 'content', label: '📡 Contenido',  color: '#a78bfa' },
-    { id: 'system',  label: '⚙️ Sistema',    color: '#94a3b8' },
+    { id: 'daily',    label: '☀️ Cotidiano',  color: '#fbbf24' },
+    { id: 'crm',      label: '👥 CRM',        color: '#22d3ee' },
+    { id: 'finance',  label: '💰 Finanzas',   color: '#34d399' },
+    { id: 'wellness', label: '🩺 Salud',      color: '#34d399' },
+    { id: 'content',  label: '📡 Contenido',  color: '#a78bfa' },
+    { id: 'system',   label: '⚙️ Sistema',    color: '#94a3b8' },
   ]
 
   const activeRecipes = _catalog.filter(r => activeByRecipe[r.id]?.enabled)
