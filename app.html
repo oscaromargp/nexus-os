@@ -3947,13 +3947,13 @@ nav#sidebar .nav-items {
 
           <!-- CALCULADORA INVERSA — recibí X crypto, cuánto tengo neto -->
           <div class="settings-card" style="border-color:rgba(167,139,250,0.3);">
-            <h2 style="font-size:15px; font-weight:800; color:#c084fc; margin-bottom:4px;">🔄 Calc. Inversa</h2>
-            <p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">Recibí X crypto — precio de mercado — comisión → ¿Cuánto me queda en MXN y USD?</p>
+            <h2 style="font-size:15px; font-weight:800; color:#c084fc; margin-bottom:4px;">🔄 Cotización de compra</h2>
+            <p style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">Tu cliente necesita X cripto → cuánto te debe pagar en MXN (valor de mercado + tu comisión).</p>
             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:10px;">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                 <div>
-                  <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">CANTIDAD RECIBIDA</label>
-                  <input type="number" id="inv-amount" class="modal-input" placeholder="Ej: 300" />
+                  <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">CANTIDAD QUE NECESITA</label>
+                  <input type="number" id="inv-amount" class="modal-input" placeholder="Ej: 443142" />
                 </div>
                 <div>
                   <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">MONEDA</label>
@@ -3968,16 +3968,16 @@ nav#sidebar .nav-items {
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                 <div>
-                  <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">PRECIO UNITARIO (USD)</label>
-                  <input type="number" id="inv-price" class="modal-input" placeholder="Precio en USD" />
+                  <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">TIPO DE CAMBIO (MXN)</label>
+                  <input type="number" id="inv-price" class="modal-input" placeholder="MXN x unidad. Ej: 17.46" />
                 </div>
                 <div>
                   <label style="font-size:9px;color:var(--text-muted);font-weight:700;display:block;margin-bottom:3px;">COMISIÓN (%)</label>
-                  <input type="number" id="inv-fee" class="modal-input" placeholder="Ej: 2.5" />
+                  <input type="number" id="inv-fee" class="modal-input" placeholder="Ej: 0.7" />
                 </div>
               </div>
             </div>
-            <button style="width:100%;padding:10px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.4);color:#c084fc;border-radius:10px;font-weight:800;cursor:pointer;margin-bottom:10px;" onclick="calculateInverse()">Calcular Neto</button>
+            <button style="width:100%;padding:10px;background:rgba(167,139,250,0.15);border:1px solid rgba(167,139,250,0.4);color:#c084fc;border-radius:10px;font-weight:800;cursor:pointer;margin-bottom:10px;" onclick="calculateInverse()">Calcular cotización</button>
             <div id="inv-result" style="min-height:20px;line-height:1.8;"></div>
           </div>
 

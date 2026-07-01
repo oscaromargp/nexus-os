@@ -29,7 +29,7 @@ import { renderCrypto } from './src/crypto.js'
 import { renderHealth } from './src/health.js'
 import { parseDecimalEs } from './src/health-calc.js'
 import { MV_BITSO_BOOKS as _MV_BITSO_BOOKS, MV_CRYPTO_SET as _MV_CRYPTO_SET, MX_BANKS } from './src/movimientos-data.js'
-import { mvNetAmount as _mvNetAmount, mvComisionMxn as _mvComisionMxn, mvNetoAmount as _mvNetoAmount, mvKpis as _mvKpis, mvWithBalance as _mvWithBalance } from './src/movimientos-calc.js'
+import { mvNetAmount as _mvNetAmount, mvComisionMxn as _mvComisionMxn, mvNetoAmount as _mvNetoAmount, mvKpis as _mvKpis, mvWithBalance as _mvWithBalance, otcQuote } from './src/movimientos-calc.js'
 import { renderModulesPanel, applyModulesToSidebar } from './src/modules.js'
 import Sortable from 'sortablejs'
 import {
@@ -7209,43 +7209,43 @@ window.convertUnified = async function convertUnified() {
   }
 }
 
-// ── CALCULADORA INVERSA — recibí X crypto → neto en MXN y USD ──────────────
+// ── CALCULADORA INVERSA — cliente necesita X cripto → cuánto paga en MXN ────
+// MXN base = cantidad × TC (MXN/unidad); + comisión% = lo que el cliente paga.
+// La comisión es NUESTRA ganancia. Fórmula pura y testeada en movimientos-calc.js.
 window.calculateInverse = async function calculateInverse() {
   const amount   = parseFloat(document.getElementById('inv-amount')?.value)
   const coin     = document.getElementById('inv-coin')?.value?.toUpperCase()
-  const price    = parseFloat(document.getElementById('inv-price')?.value)  // precio en USD
+  let   tc       = parseFloat(document.getElementById('inv-price')?.value)  // MXN por unidad
   const feePct   = parseFloat(document.getElementById('inv-fee')?.value) || 0
   const resultEl = document.getElementById('inv-result')
   if (!resultEl) return
-  if (isNaN(amount) || amount <= 0 || !coin) { resultEl.innerHTML = '<span style="color:#f87171;">Ingresa la cantidad y moneda</span>'; return }
+  if (isNaN(amount) || amount <= 0 || !coin) { resultEl.innerHTML = '<span style="color:#f87171;">Ingresa la cantidad y la moneda</span>'; return }
 
   resultEl.innerHTML = '⏳ Calculando...'
   try {
-    let priceUSD = price
-    // Si no ingresó precio, consultamos la API
-    if (!priceUSD || isNaN(priceUSD)) {
-      if (coin === 'USD' || coin === 'USDT') priceUSD = 1
-      else { priceUSD = await fetchCryptoRate(coin, 'usd') }
+    // Si no ingresó TC, lo buscamos (precio de mercado en MXN por unidad)
+    if (!tc || isNaN(tc) || tc <= 0) {
+      const usdMXN   = await fetchFiatRate('USD', 'MXN')
+      const priceUSD = (coin === 'USD' || coin === 'USDT') ? 1 : await fetchCryptoRate(coin, 'usd')
+      tc = (priceUSD || 0) * (usdMXN || 0)
     }
-    if (!priceUSD) throw new Error('No se pudo obtener el precio')
+    if (!tc || isNaN(tc) || tc <= 0) throw new Error('Ingresa el tipo de cambio (MXN por unidad)')
 
-    // Tipo de cambio USD → MXN
-    const usdMXN   = await fetchFiatRate('USD', 'MXN')
-    const grossUSD = amount * priceUSD
-    const feeUSD   = grossUSD * (feePct / 100)
-    const netUSD   = grossUSD - feeUSD
-    const netMXN   = netUSD * usdMXN
+    const q = otcQuote({ amount, tc, feePct })
+    const mx = n => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const cx = n => n.toLocaleString('es-MX', { maximumFractionDigits: 6 })
 
     resultEl.innerHTML = `
       <div style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);border-radius:12px;padding:14px;text-align:left;">
-        <div style="font-size:10px;font-weight:800;color:#a78bfa;letter-spacing:1px;margin-bottom:10px;">LIQUIDACIÓN</div>
+        <div style="font-size:10px;font-weight:800;color:#a78bfa;letter-spacing:1px;margin-bottom:10px;">COTIZACIÓN</div>
         <div style="display:grid;gap:6px;font-size:12px;">
-          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Recibido:</span><span style="font-weight:700;color:#fff;">${amount} ${coin} @ $${priceUSD.toFixed(coin==='BTC'?0:4)} USD</span></div>
-          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Bruto USD:</span><span style="font-weight:700;color:#fff;">$${grossUSD.toFixed(2)}</span></div>
-          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Comisión (${feePct}%):</span><span style="font-weight:700;color:#f87171;">-$${feeUSD.toFixed(2)} USD</span></div>
-          <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;display:flex;justify-content:space-between;"><span style="color:#4ade80;font-weight:800;">Neto USD:</span><span style="font-size:16px;font-weight:800;color:#4ade80;font-family:'JetBrains Mono',monospace;">$${netUSD.toFixed(2)} USD</span></div>
-          <div style="display:flex;justify-content:space-between;"><span style="color:#00f6ff;font-weight:800;">Neto MXN:</span><span style="font-size:16px;font-weight:800;color:#00f6ff;font-family:'JetBrains Mono',monospace;">$${netMXN.toFixed(2)} MXN</span></div>
-          <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:4px;">TC: 1 USD = $${usdMXN.toFixed(2)} MXN</div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Cliente necesita:</span><span style="font-weight:700;color:#fff;">${cx(q.amount)} ${coin} @ ${mx(q.tc)}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Valor de mercado (MXN):</span><span style="font-weight:700;color:#fff;">${mx(q.baseMXN)}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Tu comisión (${feePct}%):</span><span style="font-weight:700;color:#4ade80;">+${mx(q.feeMXN)}</span></div>
+          <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;display:flex;justify-content:space-between;align-items:center;"><span style="color:#00f6ff;font-weight:800;">El cliente te paga:</span><span style="font-size:17px;font-weight:800;color:#00f6ff;font-family:'JetBrains Mono',monospace;">${mx(q.totalMXN)}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:var(--text-dim);">Equivale a:</span><span style="color:var(--text-muted);">${cx(q.totalCrypto)} ${coin}</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;"><span style="color:#4ade80;">Tu ganancia:</span><span style="color:#4ade80;font-weight:700;">${mx(q.feeMXN)} · ${cx(q.feeCrypto)} ${coin}</span></div>
+          <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:4px;">TC: 1 ${coin} = ${mx(q.tc)} MXN</div>
         </div>
       </div>`
   } catch(e) {

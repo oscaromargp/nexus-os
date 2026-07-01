@@ -34,6 +34,29 @@ export function mvKpis(list) {
   return { entradas, salidas, net: entradas - salidas, pendiente, comisiones }
 }
 
+/** Cotización de compra de cripto (calculadora inversa).
+ *  El cliente necesita `amount` de una cripto a `tc` MXN por unidad, y le
+ *  cobramos el valor de mercado + nuestra comisión `feePct`.
+ *  Devuelve: baseMXN (mercado), feeMXN (nuestra comisión), totalMXN (lo que
+ *  paga el cliente), y sus equivalentes en cripto.
+ */
+export function otcQuote({ amount, tc, feePct = 0 }) {
+  const a = Number(amount) || 0
+  const rate = Number(tc) || 0
+  const fee = Number(feePct) || 0
+  const r2 = n => Math.round(n * 100) / 100
+  const r6 = n => Math.round(n * 1e6) / 1e6
+  const baseMXN = r2(a * rate)                 // valor de mercado
+  const feeMXN = r2(baseMXN * (fee / 100))     // nuestra comisión (ganancia)
+  const totalMXN = r2(baseMXN + feeMXN)        // lo que el cliente debe pagar
+  return {
+    amount: a, tc: rate, feePct: fee,
+    baseMXN, feeMXN, totalMXN,
+    feeCrypto: rate ? r6(feeMXN / rate) : 0,     // comisión expresada en cripto
+    totalCrypto: rate ? r6(totalMXN / rate) : 0, // total expresado en cripto
+  }
+}
+
 /** Añade saldo acumulado (_balance) a cada movimiento. Entra newest-first. */
 export function mvWithBalance(sorted) {
   const asc = [...sorted].reverse()   // oldest→newest para acumular

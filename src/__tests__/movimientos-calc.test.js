@@ -1,5 +1,33 @@
 import { describe, it, expect } from 'vitest'
-import { mvNetAmount, mvComisionMxn, mvNetoAmount, mvKpis, mvWithBalance } from '../movimientos-calc.js'
+import { mvNetAmount, mvComisionMxn, mvNetoAmount, mvKpis, mvWithBalance, otcQuote } from '../movimientos-calc.js'
+
+describe('otcQuote (calculadora inversa · compra de cripto)', () => {
+  // Ejemplo real del usuario: 443,142 USDT @ 17.46 MXN, comisión 0.7%
+  const q = otcQuote({ amount: 443142, tc: 17.46, feePct: 0.7 })
+  it('MXN base = cantidad × TC', () => {
+    expect(q.baseMXN).toBe(7737259.32)
+  })
+  it('comisión = base × %', () => {
+    expect(q.feeMXN).toBe(54160.82)
+  })
+  it('total a pagar = base + comisión', () => {
+    expect(q.totalMXN).toBe(7791420.14)
+  })
+  it('total expresado en cripto = total / TC', () => {
+    expect(Math.round(q.totalCrypto)).toBe(446244)
+  })
+  it('sin comisión: total = base', () => {
+    const z = otcQuote({ amount: 100, tc: 17.5, feePct: 0 })
+    expect(z.totalMXN).toBe(1750)
+    expect(z.feeMXN).toBe(0)
+  })
+  it('BTC: cantidad pequeña × TC grande', () => {
+    const b = otcQuote({ amount: 0.5, tc: 1900000, feePct: 1 })
+    expect(b.baseMXN).toBe(950000)
+    expect(b.feeMXN).toBe(9500)
+    expect(b.totalMXN).toBe(959500)
+  })
+})
 
 describe('mvNetAmount (bruto MXN)', () => {
   it('usa monto_mxn si está presente', () => {
