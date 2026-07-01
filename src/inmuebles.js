@@ -44,7 +44,52 @@ export const PROP_TIPOS = [
   { id: 'bodega',     label: 'Bodega',      icon: '🏭' },
   { id: 'local',      label: 'Local',       icon: '🏪' },
   { id: 'nave',       label: 'Nave',        icon: '🏗️' },
+  { id: 'prefab',     label: 'Prefabricada',icon: '🏡' },
 ]
+
+// Producto prefabricado (Stellar / PardeSantos): campos del PRODUCTO, no de un
+// inmueble ubicado. Se guardan en properties.metadata.prefab.
+export const PREFAB_FIELDS = [
+  { key: 'modelo',       label: 'Modelo / Línea',        ph: 'Residencia Modular Stellar COUVA' },
+  { key: 'fabricante',   label: 'Fabricante',            ph: 'Stellar' },
+  { key: 'distribuidor', label: 'Distribuidor',          ph: 'PardeSantos' },
+  { key: 'dimensiones',  label: 'Dimensiones',           ph: '3×6 m o 3×12 m' },
+  { key: 'area',         label: 'Área (m²)',             ph: '18 a 36 m²' },
+  { key: 'altura',       label: 'Altura interior',       ph: '2.55 m' },
+  { key: 'recamaras',    label: 'Recámaras',             ph: '1' },
+  { key: 'banos',        label: 'Baños',                 ph: '1' },
+  { key: 'entrega',      label: 'Tiempo de entrega',     ph: 'Menos de 30 días' },
+  { key: 'garantia',     label: 'Garantía',              ph: 'Estructural de fábrica Stellar' },
+  { key: 'zona',         label: 'Zona de cobertura',     ph: 'Puerto Escondido, Oaxaca' },
+  { key: 'terreno_apto', label: 'Terreno compatible',    ph: 'Arena, firme, rocoso o pendiente' },
+  { key: 'estatus_legal',label: 'Estatus legal',         ph: 'Bien mueble (desmontable/reubicable)' },
+]
+
+// Ficha técnica precargada del modelo Stellar COUVA (PardeSantos).
+export const COUVA_FICHA = {
+  titulo: 'Residencia Modular Stellar COUVA',
+  precio: null,
+  prefab: {
+    modelo: 'Residencia Modular Stellar COUVA',
+    fabricante: 'Stellar',
+    distribuidor: 'PardeSantos',
+    dimensiones: '3×6 m o 3×12 m',
+    area: '18 a 36 m²',
+    altura: '2.55 m',
+    recamaras: '1',
+    banos: '1',
+    entrega: 'Menos de 30 días (fabricación) + montaje en días',
+    garantia: 'Respaldo estructural directo de fábrica Stellar, coordinado en Oaxaca por PardeSantos',
+    zona: 'Puerto Escondido, Oaxaca (Costa)',
+    terreno_apto: 'Arena, terreno firme, rocoso o cerro con pendiente pronunciada',
+    estatus_legal: 'Bien mueble: estructura desmontable y reubicable. Ideal para terrenos ejidales o con Constancia de Posesión.',
+    materiales: 'Chasis de acero galvanizado estructural con tratamiento anticorrosivo grado marino. Muros de paneles sándwich termoacústicos (reducen hasta 35% el uso de A/C). Cubierta con pendiente para desagüe pluvial y anclajes anti-huracán. Cancelería de aluminio reforzado con cristal templado de control solar.',
+    ingenierias: 'Eléctrica oculta con centro de carga listo para CFE o paneles solares. Hidrosanitaria oculta (PPR/CPVC) lista para toma local y fosa/biodigestor/drenaje. Preparaciones para Mini-Split y calentador eléctrico.',
+    cimentacion: 'No requiere plancha masiva de concreto: se monta sobre pilotes o dados aislados. Menos impacto ambiental y permisos más ágiles (obra menor).',
+    usos: 'Desarrollos vacacionales, suites de Airbnb, casas de playa o residencial en terrenos con topografía compleja o régimen ejidal/comunal.',
+  },
+  descripcion: 'La Stellar COUVA es una solución habitacional de alta ingeniería con sistema estructural modular industrializado. Combina el minimalismo arquitectónico europeo con la máxima eficiencia de espacio. Distribución: recámara máster (cama Queen/King), estancia/cocineta integrada y baño completo. Fabricación industrializada y montaje en sitio en días — frente a los ~12 meses de una obra tradicional en la costa. Envío marítimo a Salina Cruz y traslado terrestre a Puerto Escondido.',
+}
 
 const PROP_STATUS = [
   { id: 'captacion',    label: 'Captación',    color: '#60a5fa' },
@@ -63,6 +108,7 @@ const TIPO_FIELDS = {
   bodega:  ['sup_construida','sup_terreno','pisos'],
   local:   ['sup_construida','pisos','amueblado'],
   nave:    ['sup_construida','sup_terreno','pisos'],
+  prefab:  [],   // producto: usa su propia sección (metadata.prefab)
 }
 
 // ─── Utilidades ───────────────────────────────────────────────────────────────
@@ -879,6 +925,7 @@ export function openPropModal(id = null) {
   const isNew = !prop
   const tipo  = prop?.tipo || 'casa'
   const fields = TIPO_FIELDS[tipo] || TIPO_FIELDS.casa
+  const pf    = prop?.metadata?.prefab || {}   // datos del producto prefabricado
 
   const show  = (f) => fields.includes(f)
   const val   = (k, def = '') => prop ? (_esc(prop[k] ?? def)) : def
@@ -1103,6 +1150,29 @@ export function openPropModal(id = null) {
               </select>
             </div>
             ${_field('prop-clave-catastral','Clave catastral / folio real','text',val('clave_catastral'),'III-001-234-567')}
+          </div>
+
+          <div id="prefab-section" style="display:${tipo==='prefab'?'block':'none'};">
+          <!-- Específico producto prefabricado (Stellar / PardeSantos) -->
+          <div style="background:rgba(52,211,153,0.05);border:1px solid rgba(52,211,153,0.22);border-radius:10px;padding:12px;margin-top:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+              <div style="font-size:10px;font-weight:700;color:#34d399;text-transform:uppercase;letter-spacing:0.05em;">🏡 Producto prefabricado</div>
+              <button type="button" onclick="window.prefillCouvaForm && window.prefillCouvaForm()" style="font-size:11px;padding:6px 12px;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);color:#34d399;border-radius:7px;cursor:pointer;font-weight:700;">⚡ Cargar ficha Stellar COUVA</button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              ${PREFAB_FIELDS.map(f => `
+                <div>
+                  <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:4px;">${f.label}</label>
+                  <input type="text" id="prop-prefab-${f.key}" value="${_esc(pf[f.key] || '')}" placeholder="${f.ph}" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;box-sizing:border-box;"/>
+                </div>`).join('')}
+            </div>
+            ${[['materiales','Materiales y estructura'],['ingenierias','Ingenierías e instalaciones'],['cimentacion','Cimentación y montaje'],['usos','Usos ideales']].map(([k,lbl]) => `
+              <div style="margin-top:10px;">
+                <label style="font-size:11px;color:#7a8899;display:block;margin-bottom:4px;">${lbl}</label>
+                <textarea id="prop-prefab-${k}" rows="2" style="width:100%;padding:9px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#e8f0f9;font-size:13px;box-sizing:border-box;resize:vertical;">${_esc(pf[k] || '')}</textarea>
+              </div>`).join('')}
+            <div style="font-size:10px;color:#64748b;margin-top:8px;line-height:1.5;">💡 El precio NO se muestra en público (la ficha lleva botón "Solicitar cotización"). La ubicación es opcional. El precio interno lo pones en la sección de precio.</div>
+          </div>
           </div>
 
           ${(tipo==='terreno' || tipo==='lote') ? `
@@ -2083,6 +2153,17 @@ export async function saveProp(id) {
     giros_permitidos:  gv('prop-giros') ? gv('prop-giros').split(',').map(s=>s.trim()).filter(Boolean) : null,
   }
 
+  // Producto prefabricado → guarda todos sus campos en metadata.prefab
+  if (tipo === 'prefab') {
+    const prefab = {}
+    for (const f of PREFAB_FIELDS) { const v = gv('prop-prefab-' + f.key); if (v) prefab[f.key] = v }
+    for (const k of ['materiales', 'ingenierias', 'cimentacion', 'usos']) { const v = g('prop-prefab-' + k)?.value?.trim(); if (v) prefab[k] = v }
+    payload.metadata = { prefab }
+    // Reflejar recámaras/baños en columnas estándar para las tarjetas
+    if (prefab.recamaras && !isNaN(parseInt(prefab.recamaras))) payload.recamaras = parseInt(prefab.recamaras)
+    if (prefab.banos && !isNaN(parseInt(prefab.banos))) payload.banos = parseInt(prefab.banos)
+  }
+
   // Generar slug si es nuevo
   if (!id) {
     payload.slug = _buildSlug(payload) + '-' + Date.now().toString(36).slice(-4)
@@ -2274,6 +2355,16 @@ window.openPropDetail   = (id) => openPropDetail(id)
 window.closePropModal   = ()   => closePropModal()
 window.saveProp         = (id) => saveProp(id)
 
+// Precarga la ficha del modelo Stellar COUVA en el formulario (tipo prefab)
+window.prefillCouvaForm = () => {
+  const c = COUVA_FICHA
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v }
+  set('prop-titulo', c.titulo)
+  set('prop-descripcion', c.descripcion)
+  for (const [k, v] of Object.entries(c.prefab || {})) set('prop-prefab-' + k, v)
+  try { window.showToast?.('⚡ Ficha Stellar COUVA cargada — revisa y guarda') } catch {}
+}
+
 // GPS directo: usa geolocalización del navegador + reverse geocoding
 window.propUseCurrentGPS = async () => {
   const g = (id) => document.getElementById(id)
@@ -2387,6 +2478,9 @@ window.propClearFilters = () => {
 
 window.propSelectTipo = (tipo) => {
   document.getElementById('prop-tipo').value = tipo
+  // Muestra/oculta la sección de producto prefabricado
+  const pfSec = document.getElementById('prefab-section')
+  if (pfSec) pfSec.style.display = tipo === 'prefab' ? 'block' : 'none'
   PROP_TIPOS.forEach(t => {
     const btn = document.getElementById('tipo-btn-' + t.id)
     if (!btn) return
