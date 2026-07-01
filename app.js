@@ -29,7 +29,7 @@ import { renderCrypto } from './src/crypto.js'
 import { renderHealth } from './src/health.js'
 import { parseDecimalEs } from './src/health-calc.js'
 import { MV_BITSO_BOOKS as _MV_BITSO_BOOKS, MV_CRYPTO_SET as _MV_CRYPTO_SET, MX_BANKS } from './src/movimientos-data.js'
-import { mvNetAmount as _mvNetAmount, mvComisionMxn as _mvComisionMxn, mvNetoAmount as _mvNetoAmount, mvKpis as _mvKpis, mvWithBalance as _mvWithBalance, otcQuote } from './src/movimientos-calc.js'
+import { mvNetAmount as _mvNetAmount, mvComisionMxn as _mvComisionMxn, mvNetoAmount as _mvNetoAmount, mvKpis as _mvKpis, mvWithBalance as _mvWithBalance, otcQuote, directQuote } from './src/movimientos-calc.js'
 import { renderModulesPanel, applyModulesToSidebar } from './src/modules.js'
 import Sortable from 'sortablejs'
 import {
