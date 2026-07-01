@@ -57,6 +57,22 @@ export function otcQuote({ amount, tc, feePct = 0 }) {
   }
 }
 
+/** Cálculo directo: ¿cuánto enviar para recibir `netTarget` MXN netos tras
+ *  descontar la comisión `feePct`? `tc` = MXN por unidad de la moneda a enviar.
+ *  Modelo: neto = bruto × (1 − fee%) → bruto = neto / (1 − fee%).
+ */
+export function directQuote({ netTarget, tc, feePct = 0 }) {
+  const net = Number(netTarget) || 0
+  const rate = Number(tc) || 0
+  const fee = Number(feePct) || 0
+  const r2 = n => Math.round(n * 100) / 100
+  const r6 = n => Math.round(n * 1e6) / 1e6
+  const grossMXN = fee < 100 ? r2(net / (1 - fee / 100)) : 0  // bruto en MXN
+  const feeMXN = r2(grossMXN - net)                           // comisión
+  const sendUnits = rate ? r6(grossMXN / rate) : 0            // cuánto enviar (en la moneda)
+  return { netTarget: net, tc: rate, feePct: fee, grossMXN, feeMXN, sendUnits }
+}
+
 /** Añade saldo acumulado (_balance) a cada movimiento. Entra newest-first. */
 export function mvWithBalance(sorted) {
   const asc = [...sorted].reverse()   // oldest→newest para acumular

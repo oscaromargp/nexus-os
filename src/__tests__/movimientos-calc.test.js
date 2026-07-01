@@ -1,5 +1,24 @@
 import { describe, it, expect } from 'vitest'
-import { mvNetAmount, mvComisionMxn, mvNetoAmount, mvKpis, mvWithBalance, otcQuote } from '../movimientos-calc.js'
+import { mvNetAmount, mvComisionMxn, mvNetoAmount, mvKpis, mvWithBalance, otcQuote, directQuote } from '../movimientos-calc.js'
+
+describe('directQuote (cálculo directo · cuánto enviar para recibir X neto)', () => {
+  it('bruto = neto / (1 − fee%)', () => {
+    const q = directQuote({ netTarget: 993, tc: 1, feePct: 0.7 })
+    expect(q.grossMXN).toBe(1000)
+    expect(q.feeMXN).toBe(7)
+    expect(q.sendUnits).toBe(1000)
+  })
+  it('convierte el bruto a la moneda con el TC manual', () => {
+    const q = directQuote({ netTarget: 1000, tc: 20, feePct: 0 })
+    expect(q.grossMXN).toBe(1000)
+    expect(q.sendUnits).toBe(50)
+  })
+  it('USDT: recibir 1,000,000 neto con TC 17.46 y 0.7%', () => {
+    const q = directQuote({ netTarget: 1000000, tc: 17.46, feePct: 0.7 })
+    expect(q.grossMXN).toBe(1007049.35)   // 1000000/0.993
+    expect(Math.round(q.sendUnits)).toBe(57678)
+  })
+})
 
 describe('otcQuote (calculadora inversa · compra de cripto)', () => {
   // Ejemplo real del usuario: 443,142 USDT @ 17.46 MXN, comisión 0.7%

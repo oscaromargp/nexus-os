@@ -3934,12 +3934,13 @@ nav#sidebar .nav-items {
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                 <input type="number" id="finance-fee" class="modal-input" placeholder="Comisión (%)" />
                 <select id="finance-from" class="modal-input">
-                  <option value="USD">USD</option><option value="MXN">MXN</option><option value="EUR">EUR</option>
-                  <option value="CNY">CNY</option><option value="USDT">USDT</option>
+                  <option value="USDT">USDT</option><option value="USD">USD</option><option value="MXN">MXN</option>
+                  <option value="EUR">EUR</option><option value="CNY">CNY</option>
                   <option value="BTC">BTC</option><option value="XRP">XRP</option>
                   <option value="TRX">TRX</option><option value="DOGE">DOGE</option>
                 </select>
               </div>
+              <input type="number" id="finance-tc" class="modal-input" placeholder="Tipo de cambio (MXN x unidad). Ej: 17.46" />
             </div>
             <button class="btn-ghost" style="width:100%; margin-bottom:10px;" onclick="calculateFinance()">Calcular</button>
             <div id="finance-result" style="font-size:13px; color:var(--accent-cyan); text-align:center; min-height:20px; line-height:1.8;"></div>

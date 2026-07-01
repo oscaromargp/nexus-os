@@ -4618,34 +4618,40 @@ window.convertCrypto = convertCrypto;
 async function calculateFinance() {
   const netTarget = parseFloat(document.getElementById('finance-net')?.value)
   const feePct    = parseFloat(document.getElementById('finance-fee')?.value) || 0
-  const from      = document.getElementById('finance-from')?.value
+  const from      = (document.getElementById('finance-from')?.value || '').toUpperCase()
+  let   tc        = parseFloat(document.getElementById('finance-tc')?.value)  // TC manual (MXN/unidad)
   const resultEl  = document.getElementById('finance-result')
   if (!resultEl) return
   if (isNaN(netTarget) || netTarget <= 0 || !from) { resultEl.textContent = 'Ingresa objetivo neto y moneda'; return }
+  if (feePct >= 100) { resultEl.textContent = 'La comisión debe ser menor a 100%'; return }
   resultEl.textContent = '⏳ Calculando...'
   try {
-    const isCrypto = CRYPTO_SYMBOLS.includes(from.toLowerCase())
-    let rateFROMtoMXN
-    if (from.toUpperCase() === 'MXN') {
-      rateFROMtoMXN = 1
-    } else if (isCrypto) {
-      rateFROMtoMXN = await fetchCryptoRate(from, 'mxn')
-    } else {
-      rateFROMtoMXN = await fetchFiatRate(from, 'MXN')
+    // TC manual si lo pusiste; si lo dejas vacío, lo consultamos.
+    if (!tc || isNaN(tc) || tc <= 0) {
+      if (from === 'MXN') tc = 1
+      else if (CRYPTO_SYMBOLS.includes(from.toLowerCase())) tc = await fetchCryptoRate(from, 'mxn')
+      else tc = await fetchFiatRate(from, 'MXN')
     }
-    // gross = neto / (1 - fee%)
-    const grossMXN      = netTarget / (1 - feePct / 100)
-    const requiredFrom  = grossMXN / rateFROMtoMXN
-    const feeMXN        = grossMXN - netTarget
-    const decimals      = isCrypto ? 6 : 2
+    if (!tc || isNaN(tc) || tc <= 0) throw new Error('Ingresa el tipo de cambio (MXN por unidad)')
+
+    const q = directQuote({ netTarget, tc, feePct })
+    const isCrypto = CRYPTO_SYMBOLS.includes(from.toLowerCase())
+    const mx = n => '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const units = q.sendUnits.toLocaleString('es-MX', { maximumFractionDigits: isCrypto ? 6 : 2 })
     resultEl.innerHTML = `
-      Enviar: <b>${requiredFrom.toFixed(decimals)} ${from}</b><br>
-      Bruto MXN: <b>$${grossMXN.toFixed(2)}</b> &nbsp;|&nbsp; Comisión: <b>$${feeMXN.toFixed(2)}</b><br>
-      Neto recibido: <b>$${netTarget.toFixed(2)} MXN</b>
+      <div style="background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.25);border-radius:12px;padding:14px;text-align:left;">
+        <div style="display:grid;gap:6px;font-size:12px;">
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Bruto (antes de comisión):</span><span style="font-weight:700;color:#fff;">${mx(q.grossMXN)}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Comisión (${feePct}%):</span><span style="font-weight:700;color:#4ade80;">${mx(q.feeMXN)}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--text-muted);">Neto que recibe:</span><span style="font-weight:700;color:#fff;">${mx(q.netTarget)}</span></div>
+          <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:8px;display:flex;justify-content:space-between;align-items:center;"><span style="color:#00f6ff;font-weight:800;">Debe enviar:</span><span style="font-size:17px;font-weight:800;color:#00f6ff;font-family:'JetBrains Mono',monospace;">${units} ${from}</span></div>
+          <div style="font-size:9px;color:var(--text-dim);text-align:right;margin-top:4px;">TC: 1 ${from} = ${mx(q.tc)} MXN</div>
+        </div>
+      </div>
     `
   } catch(e) {
     console.warn('calculateFinance error', e)
-    resultEl.textContent = '⚠️ Error al obtener tipo de cambio'
+    resultEl.innerHTML = `<span style="color:#f87171;">⚠️ ${e.message || 'Error al calcular'}</span>`
   }
 }
 window.calculateFinance = calculateFinance;
