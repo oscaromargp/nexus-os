@@ -8,6 +8,21 @@
 // - Mini-journal (motivo de cada compra)
 
 import { supabase } from './supabase.js'
+import { swr, get as storeGet } from './store.js'
+
+// Acciones de solo-lectura (no invalidan la cache local del portfolio)
+const _CRYPTO_READS = new Set([
+  'crypto_list', 'crypto_transactions', 'journal_list', 'crypto_account_list',
+  'crypto_news', 'crypto_wallet_list', 'crypto_strategy', 'crypto_dispersion', 'crypto_disperse',
+])
+function _clearCryptoBundles() {
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i)
+      if (k && k.startsWith('nexus_store_crypto:bundle:')) localStorage.removeItem(k)
+    }
+  } catch {}
+}
 
 async function _api(action, payload = {}) {
   const { data: { session } } = await supabase.auth.getSession()
@@ -19,6 +34,8 @@ async function _api(action, payload = {}) {
   })
   const j = await r.json()
   if (!r.ok || !j.ok) throw new Error(j.error || 'API fail')
+  // Tras cualquier ESCRITURA, invalida la cache para que el cambio se vea al instante
+  if (!_CRYPTO_READS.has(action)) _clearCryptoBundles()
   return j
 }
 
@@ -160,16 +177,22 @@ function _cryptoScore(items, summary) {
 export async function renderCrypto() {
   const root = document.getElementById('crypto-root')
   if (!root) return
-  root.innerHTML = `<div style="padding:24px;color:#94a3b8;">⏳ Calculando portfolio y consultando precios…</div>`
+  // Local-first: si hay cache, pintamos al instante (sin spinner) y revalidamos.
+  const bundleKey = 'crypto:bundle:' + _cryptoAccountId
+  if (!storeGet(bundleKey)) root.innerHTML = `<div style="padding:24px;color:#94a3b8;">⏳ Calculando portfolio y consultando precios…</div>`
 
   let data, txData, journalData, accountsData, newsData = { items: [] }
   try {
-    [data, txData, journalData, accountsData] = await Promise.all([
-      _api('crypto_list', { account_id: _cryptoAccountId }),
-      _api('crypto_transactions', { account_id: _cryptoAccountId }),
-      _api('journal_list'),
-      _api('crypto_account_list'),
-    ])
+    const b = await swr(bundleKey, async () => {
+      const [d, t, j, a] = await Promise.all([
+        _api('crypto_list', { account_id: _cryptoAccountId }),
+        _api('crypto_transactions', { account_id: _cryptoAccountId }),
+        _api('journal_list'),
+        _api('crypto_account_list'),
+      ])
+      return { d, t, j, a }
+    }, { ttl: 30000, onUpdate: () => renderCrypto() })   // repinta al llegar lo fresco (no-op si saliste de Cripto)
+    data = b.d; txData = b.t; journalData = b.j; accountsData = b.a
   } catch (e) {
     root.innerHTML = `<div style="padding:24px;color:#f87171;">⚠ ${e.message}</div>`
     return
