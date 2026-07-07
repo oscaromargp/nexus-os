@@ -356,6 +356,7 @@ const COIN_MAP = {
   DOT:   'polkadot',
   LINK:  'chainlink',
   LTC:   'litecoin',
+  POL:   'polygon-ecosystem-token',
   MATIC: 'matic-network',
   ATOM:  'cosmos',
   XLM:   'stellar',

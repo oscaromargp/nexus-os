@@ -41,7 +41,7 @@ function _fmtQty(n) {
 const COIN_COLORS = {
   BTC: '#f7931a', ETH: '#627eea', XRP: '#23292f', USDT: '#26a17b', DAI: '#f5ac37',
   TRX: '#ff0027', USDC: '#2775ca', SOL: '#14f195', ADA: '#0033ad',
-  DOGE: '#c2a633', BNB: '#f3ba2f', AVAX: '#e84142', MATIC: '#8247e5',
+  DOGE: '#c2a633', BNB: '#f3ba2f', AVAX: '#e84142', MATIC: '#8247e5', POL: '#8247e5',
   DOT: '#e6007a', LINK: '#2a5ada', LTC: '#bfbbbb', XLM: '#7d00ff', XMR: '#ff6600',
   BCH: '#0ac18e', ETC: '#33ff33', ATOM: '#2e3148', NEAR: '#000000', APT: '#000000',
   SUI: '#6fbcf0', ARB: '#28a0f0', OP: '#ff0420', INJ: '#00d2ff', TIA: '#7b2bf9',
@@ -53,7 +53,7 @@ const COIN_COLORS = {
 const COIN_NAMES = {
   BTC: 'Bitcoin', ETH: 'Ethereum', XRP: 'Ripple', BNB: 'BNB', SOL: 'Solana',
   ADA: 'Cardano', DOGE: 'Dogecoin', AVAX: 'Avalanche', TRX: 'Tron', DOT: 'Polkadot',
-  LINK: 'Chainlink', LTC: 'Litecoin', MATIC: 'Polygon', ATOM: 'Cosmos', XLM: 'Stellar',
+  LINK: 'Chainlink', LTC: 'Litecoin', POL: 'Polygon', MATIC: 'Polygon (MATIC)', ATOM: 'Cosmos', XLM: 'Stellar',
   XMR: 'Monero', BCH: 'Bitcoin Cash', ETC: 'Ethereum Classic',
   USDT: 'Tether', USDC: 'USD Coin', DAI: 'DAI',
   NEAR: 'NEAR Protocol', APT: 'Aptos', SUI: 'Sui', ARB: 'Arbitrum', OP: 'Optimism',
@@ -974,7 +974,7 @@ function _openTxModal(existingTx) {
     ['BNB','BNB · BNB'],['SOL','SOL · Solana'],['ADA','ADA · Cardano'],
     ['DOGE','DOGE · Dogecoin'],['AVAX','AVAX · Avalanche'],['TRX','TRX · Tron'],
     ['DOT','DOT · Polkadot'],['LINK','LINK · Chainlink'],['LTC','LTC · Litecoin'],
-    ['MATIC','MATIC · Polygon'],['ATOM','ATOM · Cosmos'],['XLM','XLM · Stellar'],
+    ['POL','POL · Polygon'],['MATIC','MATIC · Polygon (anterior)'],['ATOM','ATOM · Cosmos'],['XLM','XLM · Stellar'],
     ['XMR','XMR · Monero'],['BCH','BCH · Bitcoin Cash'],['ETC','ETC · Ethereum Classic'],
     // Stables
     ['USDT','USDT · Tether'],['USDC','USDC · USD Coin'],['DAI','DAI · Dai'],

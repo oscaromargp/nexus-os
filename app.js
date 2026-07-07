@@ -4007,13 +4007,21 @@ function renderFinance(nodes) {
   const initBalance = activeAccount !== 'all' ? (activeAcc?.metadata?.balance || 0) : 0
   const accBalance  = activeAccount !== 'all' ? initBalance + income - expense : net
 
+  // Saldo total EXISTENTE = suma del saldo real de cada cuenta
+  // (saldo inicial + ingresos − gastos de esa cuenta). Es lo que TIENES, no el flujo.
+  const consolidatedExistente = accounts.reduce((s, a) => {
+    const aInc = nodes.filter(n => n.type === 'income'  && n.metadata?.account_id === a.id).reduce((x, n) => x + (n.metadata?.amount || 0), 0)
+    const aExp = nodes.filter(n => n.type === 'expense' && n.metadata?.account_id === a.id).reduce((x, n) => x + (n.metadata?.amount || 0), 0)
+    return s + (a.metadata?.balance || 0) + aInc - aExp
+  }, 0)
+
   // ── Reactive finance-hero ──────────────────────────────────────
   const heroLabel = document.getElementById('dominance-label')
   const heroBalance = document.getElementById('dominance-balance')
   if (heroLabel && heroBalance) {
     if (activeAccount === 'all') {
-      heroLabel.textContent = 'Balance Neto Consolidado'
-      heroBalance.textContent = `$${net.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2})}`
+      heroLabel.textContent = 'Saldo total — lo que tienes'
+      heroBalance.textContent = `$${consolidatedExistente.toLocaleString('es-MX', {minimumFractionDigits:2, maximumFractionDigits:2})}`
     } else {
       const accName = activeAcc?.metadata?.label || activeAcc?.content || 'Cuenta'
       heroLabel.textContent = `Balance • ${accName}`
@@ -4107,9 +4115,9 @@ function renderFinance(nodes) {
           <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${allTxs.filter(n=>n.type==='expense').length} transacciones</div>
         </div>
         <div style="flex:1;padding:16px 14px;">
-          <div style="${NX_LBL(consolidatedNet>=0?'#2dd4bf':'#fb923c')}"><span style="color:${consolidatedNet>=0?'#2dd4bf':'#fb923c'};">${FI.net}</span>Neto consolidado</div>
-          <div id="fin-kpi-net" style="${NX_VAL(consolidatedNet>=0?'#2dd4bf':'#fb923c')}">${consolidatedNet>=0?'+':''}\$${consolidatedNet.toLocaleString()}</div>
-          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">${consolidatedNet>=0?'Flujo positivo':'Déficit acumulado'}</div>
+          <div style="${NX_LBL('#00f6ff')}"><span style="color:#00f6ff;">${FI.card}</span>Saldo total (existente)</div>
+          <div id="fin-kpi-net" style="${NX_VAL(consolidatedExistente>=0?'#00f6ff':'#f87171')}">${consolidatedExistente>=0?'':'-'}\$${Math.abs(consolidatedExistente).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">lo que tienes en todas las cuentas · flujo ${consolidatedNet>=0?'+':'−'}$${Math.abs(consolidatedNet).toLocaleString()}</div>
         </div>
       </div>
       ${topTags.length > 0 ? `<div style="margin-top:14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:14px 16px;">
